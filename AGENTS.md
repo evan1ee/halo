@@ -29,7 +29,7 @@ Composition roots: Halo app target, HaloNotificationService (NSE) target
 
 ## 3. Technology stack
 Swift 6 (strict concurrency), SwiftUI, Observation; upstream `MatrixRustSDK` (matrix-rust-components-swift, pinned exact version + checksum);
-GRDB (exact version); Apple frameworks only otherwise. Infrastructure: Synapse (native sliding sync), MAS, Sygnal. Rust: none of our own unless gate G-FFI fails (then `core/halo-ffi` with UniFFI).
+GRDB (exact version); Apple frameworks only otherwise. Infrastructure: Synapse (native sliding sync), MAS (from M5, D64), Sygnal with Halo's pushkin (`infra/sygnal/`, Python, server-side only, ADR-0015). Rust: none of our own unless gate G-FFI fails (then `core/halo-ffi` with UniFFI).
 
 ## 4. Non-negotiable principles
 1. **Single source of truth.** Matrix state (events, receipts, room state, counts) lives on the server and in the SDK's replica. Halo stores only *derived, rebuildable* data and explicit *intents* (pending receipts) — never a second copy of Matrix sync state. **Never introduce a second source of truth for Matrix synchronization state.**
@@ -40,6 +40,7 @@ GRDB (exact version); Apple frameworks only otherwise. Infrastructure: Synapse (
 6. **Privacy.** No content, tokens or raw Matrix IDs in logs; no third-party analytics/crash SDKs.
 7. **Clean room.** No Element X code/assets/strings, nothing from the old fork, no AGPL/GPL code in prompts ([CONTRIBUTING.md](CONTRIBUTING.md)).
 8. **Small surface.** No new dependency, abstraction layer or framework without a documented justification.
+9. **Pushes are hints, not truth (D65).** A push only triggers work: the NSE fetches the event through the SDK, or the app reconciles from sync. The local unread engine, backed by Matrix sync state, is the sole authority for unread counts and the badge. **No push may set `aps.badge`** (ADR-0015).
 
 ## 5. Directory and module ownership
 | Path | Contents | Rules |
@@ -117,7 +118,7 @@ never commit secrets or binaries; never rewrite shared history.
 ## 17. Forbidden implementation patterns
 - Importing `MatrixRustSDK` outside `HaloMatrixAdapter`; upstream types in public/port signatures.
 - Storing Matrix events, receipts, room state or counts in `halo.sqlite` as truth; badge increments; computing attention outside `ReadStatePolicy`.
-- Using the push payload's `counts.unread` for the badge.
+- Using any push payload field (`counts.unread`, `unread_count`, `aps.badge`) as a count, a read position or the badge; letting any push reach the device with `aps.badge`; creating attention from a payload without fetching the event through the SDK.
 - Sending receipts from the NSE; starting `SyncService` in the NSE.
 - Hidden bot commands or new bot APIs; reacting to a todo-list message (D23); treating reaction delivery as completion.
 - Feature → feature imports; business logic in SwiftUI views.

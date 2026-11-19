@@ -26,6 +26,7 @@ halo/
 │   └── scenario-driver/      Swift (Linux) CLI driving Synapse for scenario tests
 ├── infra/
 │   ├── dev/                  docker-compose: Synapse (native password login) + Postgres + Sygnal; MAS added in M5 (D64) (+ .env.example)
+│   ├── sygnal/               Halo's Sygnal pushkin + tests (ADR-0015), mounted into the pinned Sygnal image
 │   └── test/                 docker-compose for CI scenarios (+ fault-injection proxy)
 ├── scripts/                  validate-docs.sh, check-boundaries.sh, rust-license-inventory.py, notices generator
 ├── core/                     (only if gate G-FFI fails) Rust workspace for halo-ffi

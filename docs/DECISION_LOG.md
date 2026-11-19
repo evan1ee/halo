@@ -38,6 +38,7 @@ Legend: ✅ active · ⛔ superseded (see the replacing entry)
 | D8 | Own unread engine in Rust | ⛔ by D47 |
 | D47 | **Read-state reconciliation layer in Swift** (`HaloDomain.ReadState`): a pure policy over SDK and server signals; it never recounts events itself in the MVP. Upgrade to an independent recount only if gate G-UNREAD fails | ✅ ADR-0007 |
 | D9 | The badge is never incremented; it is always recomputed by one function used by both the app and the NSE | ✅ |
+| D65 | **Push notifications are synchronisation hints, never the source of truth.** The local unread engine (`ReadStatePolicy` / `BadgeCalculator`), fed by Matrix sync state through the SDK, is the sole authority for unread counts and the app badge. No push may set `aps.badge`; no payload field is read as a count or a read position; a push only triggers work (NSE fetch through the SDK, or an app reconcile). Founder decision 2026-11-19 | ✅ ADR-0015 |
 | D10 | Self-hosted Sygnal, `event_id_only`; request the notification-filtering entitlement | ✅ ADR-0010 |
 | D11 | Read-elsewhere clearing: best effort via background pushes + full reconcile on foreground | ✅ |
 | D17 | Until threads ship: thread events inline, unthreaded receipts | ✅ |

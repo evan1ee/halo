@@ -20,7 +20,7 @@ None is added yet; each gets its exact version pinned in this table when it's in
 | SwiftLint | MIT **[VERIFIED F-LIC-7]** | Lint |
 | gitleaks | MIT **[VERIFIED F-LIC-7]** | Secret scanning |
 | cargo-deny, cargo-about (only if building the SDK or `core/`) | MIT OR Apache-2.0 **[VERIFIED F-LIC-7]** | Licence gate, notices |
-| Docker images: Synapse, MAS, Sygnal, Postgres | AGPL-3.0 / AGPL-3.0 / Apache-2.0 **[VERIFIED F-LIC-8]** / PostgreSQL | Dev and test infrastructure (not distributed) |
+| Docker images: Synapse, MAS, Sygnal, Postgres | AGPL-3.0 / AGPL-3.0 / Apache-2.0 **[VERIFIED F-LIC-8]** / PostgreSQL | Dev and test infrastructure (not distributed). Sygnal is extended by Halo's pushkin in `infra/sygnal/` (ADR-0015), server-side only |
 
 ## 3. Apple frameworks used
 SwiftUI, Observation, Foundation, UserNotifications, BackgroundTasks, PhotosUI, AVKit, ImageIO, CryptoKit, Security (Keychain), AuthenticationServices, Intents (communication notifications), MetricKit, OSLog.

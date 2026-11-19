@@ -11,6 +11,7 @@ Decision: D36 (Linux CI for everything that can run on Linux; Apple builds on th
 | `boundaries.yml` | PR | ubuntu | `scripts/check-boundaries.sh` (forbidden imports, upstream types in public API) | M0 |
 | `scenarios.yml` | PR touching read state / nightly | ubuntu + Docker Compose (`infra/test`) | start Synapse → `tools/scenario-driver` S01–S22 + feature scenarios | M3 |
 | `secrets.yml` | PR | ubuntu | gitleaks | M0 |
+| `pushkin.yml` | PR touching `infra/sygnal/` or the pinned Sygnal version | ubuntu + Python | pushkin unit tests over Synapse notification fixtures: count-only → background push; **no payload contains `aps.badge`**; no counts in event payloads (ADR-0015) | M1 |
 | `licenses.yml` | PR touching `Package.resolved`, `ios/SDKVERSION.md` or `core/` | ubuntu (+ Rust) | inventory for the pinned SDK commit, allowlist check, diff report | M0 |
 
 macOS runners aren't used by default (cost on private repos). Optional manual `ios-build.yml` (workflow_dispatch) on `macos-latest` for release candidates **[OPEN Q-CI-MAC]**.

@@ -18,5 +18,5 @@ Full records are in [../adr/](../adr/README.md). Product-level decisions are in 
 | [0012](../adr/0012-bot-integration.md) | Bot integration without bot changes | Accepted |
 | [0013](../adr/0013-clean-room-and-licensing.md) | Clean-room development and licence gate | Accepted |
 | [0014](../adr/0014-minimum-ios-26.md) | Minimum iOS 26 | Accepted |
-| [0015](../adr/0015-count-only-pushes.md) | Count-only pushes must not set the app badge | Proposed |
+| [0015](../adr/0015-count-only-pushes.md) | Count-only pushes must not set the app badge | Accepted with conditions (V-PUSH-5) |
 | [0016](../adr/0016-nse-budget-gate.md) | Treat the NSE budget as its own gate (G-NSE) | Proposed |

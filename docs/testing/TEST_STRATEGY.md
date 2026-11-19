@@ -24,6 +24,7 @@ flowchart TB
 | Matrix scenarios (sync / unread / offline / reconnect / races) | Real Synapse + scripted "other clients" | **Headless driver** (see §3) | Linux CI (Docker) | Every PR touching read state, nightly full |
 | UI | Login, open room, send, sticker send, mark read | XCUITest | Local Mac | Before TestFlight |
 | Performance | Cold start, room open, scrolling, NSE duration | XCTest `measure` + signposts | Local Mac (fixed device) | Weekly + before release |
+| Push gateway | Halo's Sygnal pushkin (ADR-0015): payloads for every Synapse notification kind; never `aps.badge`; never server counts | Python unit tests against the pinned Sygnal | Linux CI (`pushkin.yml`) | PRs touching `infra/sygnal/` |
 | Regression | Every fixed bug → a test at the lowest possible layer | — | — | With the fix (mandatory) |
 
 ## 2. Making Swift domain tests run on Linux

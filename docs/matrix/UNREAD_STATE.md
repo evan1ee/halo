@@ -25,6 +25,11 @@ self-healing, and make that correctness **testable**.
 | **Room attention** | Halo derived: should the room count towards the badge? | not stored (recomputed) | Room-list indicator, badge |
 | **App badge** | Halo derived: number of rooms with attention (D5) | last value cached for the NSE fallback | Icon badge |
 
+**Pushes are hints (D65).** No row above is ever taken from a push payload. A `notification_record` is written only after the
+NSE has fetched (and decrypted) the event from the homeserver through the SDK's `NotificationClient` (`NotificationStatus.Event`,
+[PUSH_NOTIFICATIONS.md](PUSH_NOTIFICATIONS.md) §3), so E4 rests on Matrix state the SDK retrieved, not on the payload; it is provisional
+and is superseded as soon as sync delivers the event.
+
 ## 3. Why indicators go wrong (root causes the design addresses)
 
 | # | Cause | Addressed by |

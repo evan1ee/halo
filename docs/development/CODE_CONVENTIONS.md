@@ -18,6 +18,10 @@
 - Errors with `thiserror`; no `unwrap()`/`expect()` in non-test code without a `// SAFETY:`-style justification.
 - Async with the SDK's tokio runtime; no `block_on` inside async code.
 
+## 2b. Python (only `infra/sygnal/`, ADR-0015)
+- Follows Sygnal's own style and typing; depends only on the pinned Sygnal; no other packages without AGENTS.md §11.
+- Every payload rule is covered by a unit test; no secrets in code or config (APNs keys stay on the server).
+
 ## 3. FFI conventions (adapter)
 - One adapter type per port (`MatrixSessionAdapter: SessionPort` …).
 - Upstream → domain mapping in `Mapping/` files with unit tests per type.
