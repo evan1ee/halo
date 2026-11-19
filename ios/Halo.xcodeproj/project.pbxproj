@@ -52,6 +52,7 @@
 		3E813B4DC62204A281544127 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		42E309E4074E74D663AD652D /* HaloNotificationService.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HaloNotificationService.entitlements; sourceTree = "<group>"; };
 		44F03E7FED6CB68D3D556B1D /* HaloMatrixAdapter */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HaloMatrixAdapter; path = Packages/HaloMatrixAdapter; sourceTree = SOURCE_ROOT; };
+		60075C67A871701F70F07285 /* Info-Debug.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "Info-Debug.plist"; sourceTree = "<group>"; };
 		6F93CB45B41FD65E85481DAC /* Halo.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Halo.entitlements; sourceTree = "<group>"; };
 		7062871F2640DF75FF141840 /* HaloApplication */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HaloApplication; path = Packages/HaloApplication; sourceTree = SOURCE_ROOT; };
 		76ED106E261A2A8948DB12F6 /* HaloNotificationService.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = HaloNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -147,6 +148,7 @@
 				97AB108BB6E92BAD05A9F942 /* AppRoot.swift */,
 				6F93CB45B41FD65E85481DAC /* Halo.entitlements */,
 				26BC78D89D8CCE4267C675AB /* HaloApp.swift */,
+				60075C67A871701F70F07285 /* Info-Debug.plist */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -461,6 +463,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = App/Halo.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = "App/Info-Debug.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Halo;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

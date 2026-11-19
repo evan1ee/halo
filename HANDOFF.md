@@ -22,6 +22,9 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   it; the process stays running and the NSE is embedded. NOT verified: what the screen shows (no screenshot tool for the device), Keychain access group / app group at runtime, sign-in,
   and anything about pushes. The dev Synapse listens on 127.0.0.1 only and Debug.xcconfig points at 127.0.0.1, so signing in from the phone needs Synapse exposed on the LAN (and an ATS
   exception for http) — not done.
+- Signing in from the phone is now possible: `HALO_DEV_BIND=0.0.0.0 docker compose -f infra/dev/docker-compose.yml up -d synapse` (done; the dev server is reachable on the LAN, so it must only
+  run on a trusted network) and enter `http://<mac-lan-ip>:8008` in the Server field. Debug builds only carry `App/Info-Debug.plist` (`NSAllowsLocalNetworking` + the local-network usage text);
+  Beta/Release keep ATS fully on. Not yet tried by a person on the device.
 - G-NSE still open: needs a push path (Sygnal + APNs key) to measure the NSE budget on this device.
 
 **2026-11-19 (latest+10) — M2: formatted-body rendering**

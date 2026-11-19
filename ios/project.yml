@@ -45,6 +45,9 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: Halo
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.social-networking
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+      configs:
+        Debug:
+          INFOPLIST_FILE: App/Info-Debug.plist
   HaloNotificationService:
     type: app-extension
     platform: iOS
