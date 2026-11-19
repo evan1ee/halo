@@ -18,6 +18,7 @@ final class AppRoot {
     let recovery: RecoveryViewModel
     /// `nil` when no push gateway is configured (Beta/Release until one is deployed).
     let push: PushCoordinator?
+    let badge: BadgeCoordinator
     private let timelinePort: MatrixTimelinePort
     private let media: MediaLoader
 
@@ -32,6 +33,7 @@ final class AppRoot {
         let session = MatrixSessionPort(baseDirectory: HaloShared.storeDirectory())
         let sessionCoordinator = SessionCoordinator(port: session, keychain: keychain)
         let roomCoordinator = RoomListCoordinator(port: MatrixRoomListPort(session: session))
+        badge = BadgeCoordinator(rooms: roomCoordinator, port: SystemBadge(suiteName: "group.\(HaloShared.namespace())"))
 
         timelinePort = MatrixTimelinePort(session: session)
         media = MediaLoader(port: MatrixMediaPort(session: session))

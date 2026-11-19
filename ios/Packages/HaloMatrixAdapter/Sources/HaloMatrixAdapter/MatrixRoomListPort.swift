@@ -31,6 +31,7 @@ public final class MatrixRoomListPort: RoomListPort {
             do {
                 let kind = try Self.kind(for: filter)
                 let service = try await session.roomListService()
+                let settings = try await session.signedInClient().getNotificationSettings()
                 let list = try await service.allRooms()
                 let result = list.entriesWithDynamicAdapters(pageSize: pageSize, listener: Listener(rawContinuation))
                 let controller = result.controller()
@@ -40,7 +41,7 @@ public final class MatrixRoomListPort: RoomListPort {
                 let handle = result.entriesStream()
                 defer { handle.cancel() }
                 for await updates in raw {
-                    for update in updates { continuation.yield(try await Self.map(update)) }
+                    for update in updates { continuation.yield(try await Self.map(update, settings: settings)) }
                 }
             } catch {
                 // The stream ends; the consumer resubscribes (RoomListCoordinator) and gets a fresh `.reset`.
@@ -79,39 +80,66 @@ public final class MatrixRoomListPort: RoomListPort {
         }
     }
 
-    static func map(_ update: RoomListEntriesUpdate) async throws(HaloError) -> RoomListDiff {
+    static func map(_ update: RoomListEntriesUpdate, settings: NotificationSettings) async throws(HaloError) -> RoomListDiff {
         switch update {
-        case .append(let rooms): .append(try await summaries(rooms))
+        case .append(let rooms): .append(try await summaries(rooms, settings))
         case .clear: .clear
-        case .pushFront(let room): .pushFront(try await summary(room))
-        case .pushBack(let room): .pushBack(try await summary(room))
+        case .pushFront(let room): .pushFront(try await summary(room, settings))
+        case .pushBack(let room): .pushBack(try await summary(room, settings))
         case .popFront: .popFront
         case .popBack: .popBack
-        case .insert(let index, let room): .insert(index: Int(index), try await summary(room))
-        case .set(let index, let room): .set(index: Int(index), try await summary(room))
+        case .insert(let index, let room): .insert(index: Int(index), try await summary(room, settings))
+        case .set(let index, let room): .set(index: Int(index), try await summary(room, settings))
         case .remove(let index): .remove(index: Int(index))
         case .truncate(let length): .truncate(length: Int(length))
-        case .reset(let rooms): .reset(try await summaries(rooms))
+        case .reset(let rooms): .reset(try await summaries(rooms, settings))
         }
     }
 
-    private static func summaries(_ rooms: [Room]) async throws(HaloError) -> [RoomSummary] {
+    private static func summaries(_ rooms: [Room], _ settings: NotificationSettings) async throws(HaloError) -> [RoomSummary] {
         var result: [RoomSummary] = []
         result.reserveCapacity(rooms.count)
-        for room in rooms { result.append(try await summary(room)) }
+        for room in rooms { result.append(try await summary(room, settings)) }
         return result
     }
 
-    static func summary(_ room: Room) async throws(HaloError) -> RoomSummary {
+    static func summary(_ room: Room, _ settings: NotificationSettings) async throws(HaloError) -> RoomSummary {
         // An unparseable ID is a contract break with the SDK: fail the subscription instead of dropping a
         // row, which would shift every later index.
-        try RoomSummary(
+        let isDirect = await room.isDirect()
+        let isEncrypted = await room.isEncrypted()
+        return try RoomSummary(
             id: RoomID(room.id()),
             name: room.displayName(),
-            isDirect: await room.isDirect(),
-            isEncrypted: await room.isEncrypted(),
-            membership: membership(room.membership())
+            isDirect: isDirect,
+            isEncrypted: isEncrypted,
+            membership: membership(room.membership()),
+            read: await readCounts(of: room, settings: settings, isEncrypted: isEncrypted, isOneToOne: isDirect)
         )
+    }
+
+    /// The room's unread counts and effective notification mode. A mode that can't be read counts as "all messages":
+    /// showing too much attention is the safe error (a missed message is worse than an extra dot).
+    static func readCounts(of room: Room, settings: NotificationSettings, isEncrypted: Bool, isOneToOne: Bool) async -> RoomReadCounts {
+        let info = try? await room.roomInfo()
+        var mode = NotificationMode.allMessages
+        if let effective = try? await settings.getRoomNotificationSettings(roomId: room.id(), isEncrypted: isEncrypted, isOneToOne: isOneToOne) {
+            mode = Self.mode(effective.mode)
+        }
+        guard let info else { return RoomReadCounts(mode: mode, server: .zero, sdk: .zero, isMarkedUnread: false) }
+        return RoomReadCounts(
+            mode: mode,
+            server: ServerCounts(notification: Int(info.notificationCount), highlight: Int(info.highlightCount)),
+            sdk: SDKCounts(unreadMessages: Int(info.numUnreadMessages), unreadNotifications: Int(info.numUnreadNotifications), unreadMentions: Int(info.numUnreadMentions)),
+            isMarkedUnread: info.isMarkedUnread)
+    }
+
+    static func mode(_ mode: RoomNotificationMode) -> NotificationMode {
+        switch mode {
+        case .allMessages: .allMessages
+        case .mentionsAndKeywordsOnly: .mentionsAndKeywords
+        case .mute: .mute
+        }
     }
 
     static func membership(_ value: MatrixRustSDK.Membership) -> HaloDomain.Membership {

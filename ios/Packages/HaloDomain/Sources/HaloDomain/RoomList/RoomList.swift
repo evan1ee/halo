@@ -9,8 +9,11 @@ public struct RoomSummary: Sendable, Equatable, Identifiable {
     public let isDirect: Bool
     public let isEncrypted: Bool
     public let membership: Membership
+    /// Unread inputs for the read-state policy (`ReadStatePolicy`); `.none` until known.
+    public let read: RoomReadCounts
 
-    public init(id: RoomID, name: String?, isDirect: Bool, isEncrypted: Bool, membership: Membership) {
+    public init(id: RoomID, name: String?, isDirect: Bool, isEncrypted: Bool, membership: Membership, read: RoomReadCounts = .none) {
+        self.read = read
         self.id = id
         self.name = name
         self.isDirect = isDirect

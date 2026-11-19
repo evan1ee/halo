@@ -48,6 +48,7 @@ private struct RootView: View {
         .task {
             PushDelegate.coordinator = root.push
             await root.push?.begin()
+            await root.badge.begin()
             await root.sync.begin()
             await root.recovery.start()  // before the banner exists: a hidden banner view runs no task
             await root.auth.start()
@@ -55,7 +56,7 @@ private struct RootView: View {
         // Ask for notification permission once signed in; the token then arrives in `PushDelegate`.
         .task(id: root.auth.screen) {
             guard root.push != nil, case .signedIn = root.auth.screen else { return }
-            if (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])) == true {
+            if (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) == true {
                 UIApplication.shared.registerForRemoteNotifications()
             }
         }

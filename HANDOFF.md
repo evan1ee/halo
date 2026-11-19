@@ -6,14 +6,25 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
 
 ## 1. Current status
 - **Milestone:** M0 Foundation, split because no Mac is available yet (docs/ROADMAP.md → "M0 without a Mac").
-  **M0a done. M0b started** on a Mac (Xcode 27.2, Swift 6.4.2).
+  **M0 done; M1 and M2 largely done on a Mac (Xcode 27.2, Swift 6.4.2) and a physical iPhone 16 (see the newest entries).**
 - **Phase 0 documentation:** approved by the founder (2026-11-19).
 - **CI:** workflows `docs`, `swift-linux`, `boundaries`, `secrets`, `handoff` run on PR #1 (first run there; results not yet
   reviewed in a session). `licenses` runs only when SDK/inventory files change.
 - **Local checks at this push:** `scripts/prepush.sh` — handoff, docs, boundaries, 4 Swift packages (Swift 6.2.4 Linux), gitleaks
-  pass; SwiftLint skipped (not configured). Nothing iOS-specific has been built anywhere.
+  pass; SwiftLint skipped (not configured). Apple-only packages, the adapter (iOS simulator) and the signed app for a physical device have all been built and run.
 
 ## 2. Completed work
+**2026-11-19 (latest+15) — Badge: read-state policy, BadgeCalculator, badge on the icon**
+- `HaloDomain/ReadState`: `RoomReadInputs`/`RoomReadCounts`/`ServerCounts`/`SDKCounts`, `ReadStatePolicy.evaluate` (rules E0, E1/E1b, E2/E2x, E3a/b/c, E4, E5, modes, `hasUnread`, display, confidence, reason codes) and
+  `BadgeCalculator` (= rooms with attention). 11 unit tests: one per rule/mode plus a determinism/totality grid. E3c also accepts a server highlight without a notification (accepted superset of UNREAD_STATE E3c).
+  Not wired yet: `localIntent` (needs `read_intent` persistence), `latestEvent` (the adapter doesn't read it yet), `unconfirmedNotified` (needs `notification_record`); those inputs are optional and default to none.
+- `RoomSummary.read` (adapter: `RoomInfo` counts + effective `NotificationSettings` mode; unknown mode → all messages); `RoomListCoordinator.readStates()`; `BadgeCoordinator` (first evaluation always writes so an
+  extension-added room can be cleared); `BadgePort` (+`FakeBadgePort`), `SystemBadge` (sets `setBadgeCount` and stores the attention set in the App Group), `AttentionCache`. NSE: after a fetched notifying event
+  it adds the room to the cached set and sets `badge` to the set size (a fallback per V-NSE-2; no payload count is used, ADR-0015 holds). The app requests `.badge` authorisation too.
+- Checked: prepush passes (Domain 17, Application 47, Platform 5, adapter 20 incl. against infra/dev). NOT verified on the device yet. **Note: notification permission was first requested without `.badge`, so on the
+  founder's phone Badges must be enabled in Settings → Notifications → Halo (or the app reinstalled).** Limits: only the loaded room-list page counts toward the badge (first 50 rooms); invites count as attention;
+  `AC-U*`/G-UNREAD scenarios (S01–S22) and the auditor are not built; clearing delivered notifications when read elsewhere is not built.
+
 **2026-11-19 (latest+14) — NSE spike: fetch + decrypt + content, with metrics**
 - `NotificationFetchPort` (domain) + `MatrixNotificationPort` (adapter: `NotificationClient` in `MultipleProcesses` mode; `NotificationMapper`: DM → sender as title, group → room title and "Sender: text",
   encrypted → "Encrypted message", filtered/redacted → suppressed, not found → `.notFound`). `MatrixSessionPort` gained `sendsMessages` and `lightweightRuntime` (the NSE uses `sendsMessages: false`,
@@ -95,104 +106,20 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   Adapter 16 tests pass vs infra/dev (contract includes interactions); Application 42; verified in the simulator (menu, 👍 chip). Edit and delete from the UI were not tapped through by hand; covered by VM tests + the adapter contract.
 - Not done: replies, a full emoji picker, formatted-body rendering, typing indicators.
 
-**2026-11-19 (latest+6) — M2 started: sending text**
-- `SendState` (sent/sending/failed(recoverable)) on `TimelineEvent`; `TimelineSession.send(text:)` (blank → `invalidInput("EMPTY_MESSAGE")`); `FakeTimelinePort` echo+confirm,
-  `TimelinePortContract.verifySend`; `TimelineCoordinator.send`; adapter `MatrixTimelineSession.send` (`timeline.send` + `messageEventContentFromMarkdown`), `enableAllSendQueues(true)`
-  after login/restore, `TimelineMapper.sendState`; `FeatureTimeline` composer (draft kept on failure), "Sending…/Not sent" under unconfirmed own messages, scroll to the newest row.
-  Adapter 16 tests pass vs infra/dev (the timeline contract now sends a message into the contract room each run; the contract allows later events). Verified by hand in the simulator.
-- Not done: reply/edit/delete/reactions/typing/media send; message *rendering* of formatted bodies (`**bold**` shows literally); offline/kill-and-relaunch send (AC-M1) untested.
-- `xcodebuild` on the app project re-resolves the whole package graph, including GRDB through the adapter's test-only HaloPersistence dependency; it ignores the user-level mirror and can
-  stall or fail on GitHub clones (retrying works; a successful resolve is then cached).
-
-**2026-11-19 (latest+5) — M1: UTD reasons**
-- `UTDReason` (unknown / sentBeforeJoining / keysNotShared / senderVerificationProblem / backupDisabled); `.undecryptable(UTDReason)`; `TimelineMapper.reason(of:)`
-  from the SDK's `UtdCause` (unit-tested, adapter 16 tests); distinct explanatory rows in `FeatureTimeline`. Not tested: a real UTD turning into text when keys arrive
-  (AC-E2EE-3) — needs sending into an encrypted room (M2).
-
-**2026-11-19 (latest+4) — M1: recovery-key verification**
-- `VerificationState`/`RecoveryState`/`EncryptionStatus` (+`needsRecovery`), `EncryptionPort` (+`FakeEncryptionPort`, `EncryptionPortContract`), `EncryptionCoordinator`
-  (follows session; recovery attempts; key trimmed, never kept), `MatrixEncryptionPort`, `ErrorMapper` for `RecoveryError` (wrong key → `invalidInput("RECOVERY_KEY")`),
-  `ClientBuilder` now sets `autoEnableCrossSigning`/`autoEnableBackups` (ENCRYPTION FR-1). FeatureAuth: `RecoveryViewModel`, `RecoveryBanner`, `RecoveryView`.
-- Adapter contract (15 tests pass; the encryption one needs a throwaway account `HALO_DEV_E2EE_USER/PASSWORD`, created with `infra/dev/create-user.sh`; it enables
-  recovery on device 1 and recovers on device 2; `HALO_DEV_E2EE_KEY_OUT` writes the key for a manual UI check). Verified by hand in the simulator: banner for an unverified
-  device, wrong key → message, right key → sheet closes and banner disappears.
-- Bugs found by the UI check: a hidden banner (empty `Group`) never ran its `.task` (model now started from `HaloApp`); `AuthViewModel` kept the previous error while busy
-  (fixed + test). V-E2EE-1 resolved. Application tests: 40.
-
-**2026-11-19 (latest+3) — M1: inline images**
-- `MediaRef` (opaque token = SDK `MediaSource` JSON), `MediaAttachment` (replaces `.media(kind, body)`), `MediaPort` (+ `FakeMediaPort`, `MediaPortContract`),
-  `MediaLoader` (in-memory cache with byte-limit LRU, one download per key, failures not cached; 4 tests), `MatrixMediaPort` (client `getMediaThumbnail`/`getMediaContent`),
-  `FeatureTimeline` image rows (`ThumbnailView`, 600 px thumbnails). Adapter: 14 tests pass vs infra/dev (media contract finds the image through the timeline
-  room: needs an `m.image` event named blue.png, 64×48, uploaded as the contract user). Verified by eye in the simulator.
-- Video/audio/file rows still show `[Kind] name`; stickers show `[Sticker] body` (no rendering until M4).
-
-**2026-11-19 (latest+2) — M1: HaloPersistence and V-SQL-1**
-- `HaloPersistence` package (GRDB 7.12.0 exact): `HaloDatabase` (WAL pool + append-only migrator, `v1-meta`), 2 tests on macOS. **V-SQL-1 resolved**: adapter test
-  `SQLiteCoexistenceTests` runs a syncing SDK client and Halo's database in one simulator process (adapter now 13 tests, all pass against infra/dev).
-- GRDB's full `git clone` stalls on this network; worked around with a shallow bare mirror in `/tmp/grdb-mirror.git` and a **user-level**
-  `~/.swiftpm/configuration/mirrors.json` (outside the repo; DEVELOPMENT_SETUP §6). If `/tmp` is cleaned, recreate the mirror. Not yet in the Xcode app project.
-- `TimelinePortContract` now requires the expected bodies to be the room's first events (later events allowed).
-
-**2026-11-19 (latest+1) — M1: sync lifecycle owner**
-- `SyncPort` (domain, `FakeSyncPort`, `SyncPortContract`), `MatrixSyncPort` (adapter), `SyncCoordinator` (runs while session ready ∧ foreground; backoff
-  1…60 s with an injected sleeper; 5 tests, stable over repeated runs). Room list no longer starts sync (`MatrixSessionPort.roomListService()` only creates the
-  service). App: `AppRoot.sync` + scene phase in `HaloApp`. Verified in the simulator: list loads, a message sent from another device shows up live.
-- Adapter contract tests are now `.serialized`: run in parallel against one account they hung (cause not investigated). 11 adapter tests pass against infra/dev
-  (`SyncPortContract` added). Application tests: 32.
-
-**2026-11-19 (earlier+) — M1 started: read-only timeline**
-- Domain: generic `ListDiff`/`ListReducer` (room list now a typealias over it), `TimelineItem`/`TimelineEvent`/`TimelineEventKind`, `TimelinePort` +
-  `TimelineSession`. TestSupport: `FakeTimelinePort`, `TimelinePortContract` (paginates like a real client). Application: `TimelineCoordinator`.
-  Adapter: `MatrixTimelinePort`, `TimelineMapper` (SDK-qualified names), `MatrixSessionPort.room(_:)`. Feature: `FeatureTimeline`; room tap pushes it
-  from `ios/App/HaloApp.swift`; `RoomListViewModel` rows now carry `RoomID`.
-- Contracts: all 10 adapter tests pass against infra/dev (env: `TEST_RUNNER_HALO_DEV_SERVER/USER/PASSWORD/ROOMS=3/TIMELINE_ROOM`), incl. the timeline
-  contract with 60 s deadlines. Found by running it: a synced room holds only its newest event; pagination returns false once more before true; the SDK
-  adds a `timelineStart` item (coordinator treats it as the start signal). Verified by eye in the simulator: messages, notice, emote, deleted
-  placeholder, date divider, membership row, state rows collapsed, auto-load to the start.
-- Boundary rule: no upstream type in `HaloMatrixAdapter` public signatures (reads the resolved SDK checkout; prints SKIPPED without one). V-APPLE-1 resolved
-  (SOURCES F-APPLE-1). V-SQL-1 half verified: SDK's sqlite3 symbols are local; runtime check needs GRDB, whose download stalled → do it with HaloPersistence.
-- Tests now: Domain 5, Foundation 13, TestSupport 5, Application 27, Platform 4, FeatureAuth 3, FeatureRoomList 2, FeatureTimeline 6, adapter 10 (7 run
-  without a server; 3 contract tests skipped unless env is set).
-
-**2026-11-19 (earlier) — M0b done on the simulator: login → room count**
-- `FeatureAuth` (AuthViewModel + SignInView) and `FeatureRoomList` (RoomListViewModel + RoomListView) packages; `ios/App/AppRoot.swift` wires
-  `KeychainStore` + `OSLogSink` + `MatrixSessionPort` + `MatrixRoomListPort` into the coordinators. Tests: FeatureAuth 3, FeatureRoomList 2.
-- **Exit criterion run by hand in the iPhone 17 simulator against `infra/dev`:** server `http://127.0.0.1:8008` → discovery → password login →
-  "Rooms: 2" with both room names; terminate + relaunch restores the session straight to the list. Not automated (no UI tests yet).
-- First launch failed with Keychain `-34018`: fully unsigned simulator builds have no entitlements. Fix is the ad-hoc signed build command in
-  DEVELOPMENT_SETUP §3. HaloFoundation (incl. HaloLog) also passes on Linux Swift 6.2.4 in the swift:6.2-noble container.
-- Xcode project regenerated with XcodeGen to add packages (spec outside the repo); raised as Q-XCODEGEN (ADR-0008 conflict) rather than decided.
-- `HaloLog` facade in HaloFoundation (static event text + `HaloError` code + salted hashed IDs only; injected `LogSink`; `OSLogSink` on
-  Apple, no global instance). `HaloPlatform` package with `KeychainStore` (generic password, `afterFirstUnlockThisDeviceOnly`, non-sync,
-  versioned names, account items keyed by SHA-256 prefix). Tests: Foundation 13, Platform 4 pass on macOS. Platform tests run on the
-  macOS login keychain with no access group: the shared access group and data-protection keychain are untested until a signed device/sim run.
-- `scripts/prepush.sh` now also runs HaloPlatform and the adapter (xcodebuild, simulator) on macOS.
-- `ios/Halo.xcodeproj` (targets Halo app + HaloNotificationService, configs Debug/Beta/Release from `ios/Config/*.xcconfig`, bundle IDs
-  `one.mbm.halo` / `.nse`); builds for the iPhone 17 simulator with `CODE_SIGNING_ALLOWED=NO` and embeds the NSE. App shows a bare
-  `Text("Halo")`; the NSE delivers notifications unchanged (pipeline = M1). Generated once with XcodeGen from a throwaway spec (ADR-0008:
-  no generator in the workflow). Not built for a device; signing, team ID, capabilities beyond entitlements files untested.
-- `HaloMatrixAdapter`: `ErrorMapper`, `MatrixBootstrap`, `MatrixSessionPort` (actor; discovery, password login, restore, logout, token-refresh
-  events; payload JSON holds SDK session + per-login store dir + random store passphrase, Keychain-only), `MatrixRoomListPort`
-  (dynamic adapters, ordered mapping, `.unread` filter → `.unsupported` until M1). SDK API names verified in the pinned package source.
-- OrbStack installed; `infra/dev` up, `smoke.sh` passes. **9 adapter tests pass against it** (`SessionPortContract` and
-  `RoomListPortContract` with 2 rooms), run with `TEST_RUNNER_HALO_DEV_SERVER/USER/PASSWORD/ROOMS` set for `xcodebuild … test`.
-  Bug found by the contract and fixed with a regression test: Synapse answers a wrong password with `M_FORBIDDEN`, now mapped to
-  `unauthorized(soft: false)` for the login call only (`ErrorMapper.mapLogin`).
-- V-CI-2 resolved (CI 6.2.4 floor vs Xcode Swift 6.4.2; all packages pass on both).
-- `HaloMatrixAdapter` package added; pinned SDK 26.11.17 resolves, links and builds for the iOS Simulator; 1 smoke test passes via
-  `xcodebuild -scheme HaloMatrixAdapter -destination 'platform=iOS Simulator,name=iPhone 17' test`. The xcframework has no macOS
-  slice, so `swift build` fails for this package by design; use xcodebuild.
-- `scripts/prepush.sh` passes (gitleaks, swiftlint not installed → skipped).
-
-**2026-11-19 — documentation review, founder decisions, M0a, handoff rule**
-- Phase 0 review: read-position vs notification-coverage split in the unread engine (UNREAD_STATE §5), Synapse count-only pushes
-  (ADR-0015), separate NSE gate (ADR-0016), contradictions and citations fixed, validator extended.
-- `infra/dev`: Synapse v1.165.0 + Postgres, native password login, native sliding sync; `smoke.sh` passes.
-- `ios/Packages`: HaloFoundation, HaloDomain (SessionPort, RoomListPort, KeychainPort, RoomListReducer), HaloTestSupport (fakes +
-  port contract suites), HaloApplication (SessionCoordinator, RoomListCoordinator). Tests: 10 + 4 + 3 + 21 pass.
-- Tooling: `check-boundaries.sh`, `rust-license-inventory.py` (licence gate), `prepush.sh`, gitleaks 8.30.1, CI workflows.
-- Validation resolved: V-CI-1 (GRDB on Linux), V-SDK-1 (prebuilt 26.11.17 ← SDK `b93751e`), V-PUSH-2 (false), V-TL-1.
-- Session Handoff Rule (this push): `HANDOFF.md`, AGENTS.md §18, pre-push hook, `handoff.yml`, validator check.
+**2026-11-19 (earlier sessions, condensed — details in `git log` and the docs they link)**
+- M0a/M0b: docs review and founder decisions, `infra/dev` (Synapse + Postgres), `HaloFoundation`/`Domain`/`TestSupport`/`Application`/`Platform`/`MatrixAdapter` packages, `FeatureAuth`/`FeatureRoomList`,
+  the Halo app and NSE targets, ports with fakes and shared contract suites that also run against the real adapter on `infra/dev`. Exit criterion (login → room count, session restore) verified on the simulator.
+- M1: read-only timeline (lossless diffs, `ListReducer`, back-pagination with the `timelineStart` item as the start signal), sync lifecycle (`SyncCoordinator`, backoff with an injected sleeper), `HaloPersistence`
+  (GRDB, V-SQL-1 resolved), inline images (`MediaPort`, `MediaLoader`), recovery-key verification (`EncryptionPort`; a hidden banner's `.task` never runs, so models start from `HaloApp`), UTD reasons.
+- M2 so far: sending with local echo (send queues enabled after login/restore), reactions, edit, delete, replies, typing, HTML-subset rendering, emoji picker (entries above).
+- Operational notes kept from those sessions:
+  - Adapter tests need the iOS simulator (`xcodebuild -scheme HaloMatrixAdapter -destination 'platform=iOS Simulator,name=iPhone 17' test`): the SDK xcframework has no macOS slice. Contract tests need
+    `TEST_RUNNER_HALO_DEV_SERVER/USER/PASSWORD/ROOMS=3/TIMELINE_ROOM` (plus `HALO_DEV_E2EE_USER/PASSWORD/KEY_OUT` for the encryption test); they are `.serialized` (parallel runs hung, cause not investigated).
+  - Unsigned simulator builds need the ad-hoc signed build command (DEVELOPMENT_SETUP §3) or Keychain fails with -34018.
+  - GRDB's full clone stalls here: a shallow mirror in `/tmp/grdb-mirror.git` plus a user-level `~/.swiftpm/configuration/mirrors.json` (recreate if `/tmp` is cleaned). `xcodebuild` on the app project ignores
+    that mirror and can stall or fail on first resolve; retrying works.
+  - A synced room holds only its newest event; pagination reports "more" once more before the start; a wrong password is `M_FORBIDDEN` mapped to `unauthorized(soft: false)` for login only.
+  - Not done from M1/M2: video/audio/file display, QR/emoji verification, offline/kill-relaunch send (AC-M1), media sending, mentions, quote tap-to-jump, a real UTD turning into text (AC-E2EE-3).
 
 ## 3. Key decisions
 Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all accepted).
@@ -224,8 +151,9 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 ## 6. Next steps
 1. Push this branch / open a PR; check CI.
 2. (Done) contracts pass on infra/dev. Keep running them after every adapter change.
-3. M2 next (docs/features/MESSAGING.md): offline send test (AC-M1). M1 remaining: first real persisted data (read-intent/notification stores arrive with M3), video/audio/file display, QR/emoji verification, NSE spike and G-NSE.
-4. Without a Mac: V-APPLE-1 from Apple docs; M1 prep — Halo's Sygnal pushkin in `infra/sygnal/` with tests and `pushkin.yml` (ADR-0015).
+3. Verify the badge on the phone (enable Badges for Halo in iOS Settings first), then G-NSE hardening: true peak memory, an encrypted room (decrypt/UTD in the NSE), timeout and termination injection (AC-NSE-3/4), 100 pushes, Release build.
+4. Unread engine (M3): `read_intent`/`notification_record` persistence, `latestEvent`, clearing delivered notifications when read elsewhere, the scenario tests S01–S22, paging all rooms for the badge, `delete_pusher` on logout.
+5. M2 left: offline send test (AC-M1), media sending, mentions. M1 left: video/audio/file display, QR/emoji verification. A push gateway for Beta/Release (the Debug one is Sygnal in `infra/dev`).
 
 ## 7. Next Session Prompt
 ```text

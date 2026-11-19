@@ -38,7 +38,8 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
     private func run(room: RoomID, event: EventID, request: UNNotificationRequest) async {
         var metrics = NSEMetrics()
         let content = (request.content.mutableCopy() as? UNMutableNotificationContent) ?? UNMutableNotificationContent()
-        content.badge = nil  // the badge is never taken from a push (ADR-0015)
+        content.badge = nil  // the badge is never taken from a push (ADR-0015); it is set below from local state
+        let attention = AttentionCache(suiteName: "group.\(HaloShared.namespace())")
         do {
             guard let data = try await HaloShared.keychain().read(.session) else { return deliver(request.content, outcome: "no-session", metrics: metrics) }
             let stored = try JSONDecoder().decode(StoredSession.self, from: data)
@@ -53,11 +54,13 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
                 content.title = display.title
                 content.body = display.body
                 content.threadIdentifier = room.rawValue
+                content.badge = NSNumber(value: attention.adding(room))
                 deliver(content, outcome: "display", metrics: metrics)
             case .encrypted(let roomName):
                 content.title = roomName ?? "Halo"
                 content.body = "Encrypted message"
                 content.threadIdentifier = room.rawValue
+                content.badge = NSNumber(value: attention.adding(room))
                 deliver(content, outcome: "encrypted", metrics: metrics)
             case .suppressed:
                 // Suppression needs Apple's filtering entitlement (V-PUSH-3); until then show the generic alert.
