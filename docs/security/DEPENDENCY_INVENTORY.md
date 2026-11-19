@@ -18,7 +18,7 @@ None is added yet; each gets its exact version pinned in this table when it's in
 |---|---|---|
 | `pointfreeco/swift-snapshot-testing` | MIT **[VERIFIED F-LIC-7]** | Snapshot tests |
 | SwiftLint | MIT **[VERIFIED F-LIC-7]** | Lint |
-| gitleaks | MIT **[VERIFIED F-LIC-7]** | Secret scanning |
+| gitleaks `8.30.1` (sha256 pinned in `.github/workflows/secrets.yml`) | MIT **[VERIFIED F-LIC-7]** | Secret scanning |
 | cargo-deny, cargo-about (only if building the SDK or `core/`) | MIT OR Apache-2.0 **[VERIFIED F-LIC-7]** | Licence gate, notices |
 | Docker images: Synapse, MAS, Sygnal, Postgres | AGPL-3.0 / AGPL-3.0 / Apache-2.0 **[VERIFIED F-LIC-8]** / PostgreSQL | Dev and test infrastructure (not distributed). Sygnal is extended by Halo's pushkin in `infra/sygnal/` (ADR-0015), server-side only |
 
@@ -35,6 +35,6 @@ SwiftUI, Observation, Foundation, UserNotifications, BackgroundTasks, PhotosUI, 
 | Any analytics / crash SaaS SDK | Privacy principle (revisit Q-CRASH before public release) |
 
 ## 5. Inventory regeneration
-`cargo metadata --format-version 1 --filter-platform aarch64-apple-ios --features sentry --manifest-path bindings/matrix-sdk-ffi/Cargo.toml`
-on the SDK commit that matches the shipped package, then walk normal+build dependencies from `matrix-sdk-ffi` (the walk used for F-LIC-2; a script
-`scripts/rust-license-inventory.py` will be added in M0).
+`scripts/rust-license-inventory.py --sdk <checkout at sdk_commit from ios/SDKVERSION.md> --write <csv>` runs `cargo metadata`
+(`--filter-platform aarch64-apple-ios`, with and without `--features sentry`), walks normal + build dependencies from `matrix-sdk-ffi`
+and checks every licence expression against the allowlist (LICENSE_COMPLIANCE §4). `--check <csv>` is the CI gate (`licenses.yml`).

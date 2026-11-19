@@ -29,7 +29,7 @@ don't collide with milestones (M0–M10), priorities (P0–P2), test properties 
 | L4 | Missing attribution in a shipped build | Med | Med | Generated notices + release checklist |
 | L5 | Export compliance / App Store problems with encryption | Med | Med | Legal review (V-LEGAL) |
 | L6 | Trademark confusion (Matrix/Element) | Low | Med | Neutral name and icon |
-| L7 | Prebuilt binary contents differ from the inventory (features, commit) | Med | Med | V-SDK-1; build from source before external testers (Q-SDK-BUILD) |
+| L7 | Prebuilt binary contents differ from the inventory (features, commit) | Low | Med | V-SDK-1 resolved: the release commit names the SDK commit and the inventory is checked there by `licenses.yml`; the binary is still built by Element, so build from source before external testers (Q-SDK-BUILD) |
 
 ## Matrix compatibility
 | ID | Risk | L | I | Mitigation |

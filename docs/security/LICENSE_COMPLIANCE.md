@@ -44,7 +44,7 @@ Don't assume an SDK's licence covers its dependencies: the inventory checks **ev
 - [x] Proprietary LICENSE in the repository.
 - [x] Clean-room policy (CONTRIBUTING.md, ADR-0013).
 - [x] Rust inventory for the SDK at the pinned rev (with the sentry feature) — no GPL/LGPL/AGPL.
-- [ ] Map the prebuilt package version → SDK commit and confirm the prebuilt feature set (sentry included?) — V-SDK-1, done in M0 (blocks M0) and re-checked before every TestFlight.
+- [x] Map the prebuilt package version → SDK commit and confirm the prebuilt feature set — V-SDK-1: `26.11.17` ← `b93751e`, `sentry` included (`ios/SDKVERSION.md`); re-checked at every bump by `licenses.yml`.
 - [ ] Notices generator + Acknowledgements screen (M5).
 - [ ] Apache NOTICE files collected (crates that ship `NOTICE`).
 - [ ] MPL source pointers listed.

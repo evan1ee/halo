@@ -7,7 +7,7 @@
 
 | ID | Assumption | Exact validation | When | Blocks |
 |---|---|---|---|---|
-| V-SDK-1 | Each prebuilt `matrix-rust-components-swift` release maps to an identifiable upstream SDK commit and feature set (incl. `sentry`) | Inspect the release notes/workflow of the components repo; or compare the bundled Swift bindings with `uniffi-bindgen` output at candidate commits | M0 | M0 (licence inventory accuracy) |
+| V-SDK-1 | ~~Each prebuilt release maps to an identifiable SDK commit and feature set~~ **Resolved** — the release commit names it: `26.11.17` ← SDK `b93751e`, features `sentry`, profile `small-release-stripped` (`ios/SDKVERSION.md`); facts and inventory re-checked there [VERIFIED SOURCES pinned refs, F-LIC-2] | — | — | — |
 | V-SQL-1 | The SDK's bundled SQLite (inside the dynamic framework) and GRDB's system SQLite coexist without symbol interposition issues | M0 smoke test: open the SDK client and a GRDB DB in one process, run both, check `sqlite3_libversion()` from each side | M0 | M0 |
 | V-SQL-2 | GRDB `DatabasePool` shared by app + NSE works without `0xdead10cc` terminations when following GRDB's suspension guidance | NSE spike: 100 pushes while the app is backgrounded and writing | M1 | M3 |
 | V-CI-1 | ~~GRDB builds and tests on Linux with system SQLite~~ **Resolved** — yes, with `libsqlite3-dev` in the `swift` image [VERIFIED F-CI-1] | — | — | — |

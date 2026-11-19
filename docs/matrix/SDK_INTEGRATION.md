@@ -12,7 +12,7 @@ Decisions: D44, ADR-0002. All API names below are **[VERIFIED]** at rev `7ff8855
 | If G-FFI fails | Halo-owned crate `core/halo-ffi` over `matrix-sdk` + `matrix-sdk-ui` | ADR-0003 |
 
 **Version mapping.** The prebuilt package version is date-based; record the matching upstream SDK commit
-in `ios/SDKVERSION.md` (planned for M0) at each bump **[OPEN V-SDK-1: confirm how prebuilt releases map to SDK commits]**.
+in `ios/SDKVERSION.md` at each bump: the components repo's release commit names the SDK commit (V-SDK-1 resolved).
 
 ## 2. Ownership and lifecycle
 

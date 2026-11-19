@@ -7,8 +7,8 @@ Re-verify at every SDK bump (see [development/BUILD_AND_RELEASE.md](development/
 
 | Item | Value | How verified |
 |---|---|---|
-| matrix-rust-sdk | `7ff88556d856b6cb52fc44f14a9cb31af7799c3f` (2026-11-18), crate version 0.19.1, `rust-version = "1.96"` | Git checkout of https://github.com/matrix-org/matrix-rust-sdk |
-| Prebuilt Swift package | `element-hq/matrix-rust-components-swift`, release `26.11.17`, product `MatrixRustSDK` (dynamic library), binary target `MatrixSDKFFI.xcframework` | `Package.swift` at https://github.com/element-hq/matrix-rust-components-swift |
+| matrix-rust-sdk | `b93751e93da6949a6a8ef8ff0b2c1c8faacaf677` (2026-11-16) — the commit the prebuilt `26.11.17` ships (V-SDK-1, `ios/SDKVERSION.md`); crate version 0.19.1, `rust-version = "1.96"`. Facts were first collected at `7ff8855` (2026-11-18) and re-checked at `b93751e`: every F-FFI name exists there and the licence inventory is identical | Git checkout of https://github.com/matrix-org/matrix-rust-sdk |
+| Prebuilt Swift package | `element-hq/matrix-rust-components-swift`, release `26.11.17` (checksum `d4d202da…6263`, built from SDK `b93751e` per its release commit), product `MatrixRustSDK` (dynamic library), binary target `MatrixSDKFFI.xcframework` | `Package.swift` at https://github.com/element-hq/matrix-rust-components-swift |
 | UniFFI | Workspace pins `0.32.1`; crates.io latest stable `0.32.2` | SDK `Cargo.toml`; crates.io API |
 | ruma (used by the SDK) | 0.17.2 git rev `5133d4ec` | SDK `Cargo.lock` |
 | Matrix spec | Latest release **v1.19** | Tags of https://github.com/matrix-org/matrix-spec |
@@ -22,7 +22,7 @@ Re-verify at every SDK bump (see [development/BUILD_AND_RELEASE.md](development/
 
 ### F-LIC — licences
 - F-LIC-1 matrix-rust-sdk is Apache-2.0 (root `LICENSE`); `bindings/matrix-sdk-ffi/Cargo.toml` declares `license = "Apache-2.0"`, `publish = false`.
-- F-LIC-2 The iOS dependency tree of `matrix-sdk-ffi` (`cargo metadata --filter-platform aarch64-apple-ios`, normal + build deps) has 552 crates with default features and **564 with `--features sentry`** — the feature set the upstream Swift build uses (`FFI_FEATURES = "sentry"` in `xtask/src/swift.rs`); the 12 extra crates are MIT/Apache-2.0. **No GPL/LGPL/AGPL** in either. MPL-2.0: `uniffi*`, `eyeball-im`, `imbl`, `imbl-sized-chunks`. Full list: [security/inventory/rust-deps-matrix-sdk-ffi.csv](security/inventory/rust-deps-matrix-sdk-ffi.csv).
+- F-LIC-2 The iOS dependency tree of `matrix-sdk-ffi` (`cargo metadata --filter-platform aarch64-apple-ios`, normal + build deps) has 552 crates with default features and **564 with `--features sentry`** — the feature set the upstream Swift build uses (`FFI_FEATURES = "sentry"` in `xtask/src/swift.rs`); the 12 extra crates are MIT/Apache-2.0. **No GPL/LGPL/AGPL** in either. MPL-2.0: `uniffi*`, `eyeball-im`, `imbl`, `imbl-sized-chunks`. Counts include `matrix-sdk-ffi` itself. Full list: [security/inventory/rust-deps-matrix-sdk-ffi.csv](security/inventory/rust-deps-matrix-sdk-ffi.csv), generated and checked by `scripts/rust-license-inventory.py`.
 - F-LIC-3 Element X iOS: `LICENSE` = AGPL-3.0, plus `LICENSE-COMMERCIAL` (https://github.com/element-hq/element-x-ios). Only these two files were opened.
 - F-LIC-4 `matrix-rust-components-swift` is Apache-2.0.
 - F-LIC-5 GRDB.swift is MIT.
