@@ -27,7 +27,7 @@ needs, made of Halo value types, and independent of the SDK version underneath.
 | `EncryptionPort` | E2EE & devices | `verificationState`, `startVerification`, `recover(recoveryKey)`, `backupState`, `devices` | Adapter |
 | `NotificationFetchPort` | NSE | `notification(room, event) -> FetchedNotification` | Adapter |
 | `PusherPort` | Pushers | `register(token, gateway)`, `unregister()` | Adapter |
-| `ReadIntentStore`, `NotificationRecordStore`, `AuditStore`, `StickerPrefsCache`, `BotTaskStore` | Halo persistence | CRUD with monotonic guards | HaloPersistence |
+| `ReadIntentStore`, `NotificationRecordStore`, `AuditStore`, `StickerPackCache`, `BotTaskStore` | Halo persistence | CRUD with monotonic guards (sticker favourites/recents are account data via `AccountDataPort`, not a store) | HaloPersistence |
 | `SystemNotificationsPort`, `BadgePort`, `KeychainPort`, `BackgroundTaskPort` | OS | deliver/remove notifications, set badge, secrets, BG scheduling | HaloPlatform |
 
 Exact signatures are written in code in M0–M1 and must match the intent of this table; any deviation updates this document.

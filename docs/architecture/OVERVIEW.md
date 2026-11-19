@@ -34,7 +34,7 @@ flowchart TB
   D["3 · Domain<br/>HaloDomain: models · ports · pure policies (ReadState, Badge, BotTemplates)"]
   M["4 · Matrix integration<br/>HaloMatrixAdapter → MatrixRustSDK (upstream matrix-sdk-ffi binary)"]
   S["5 · Persistence & sync<br/>HaloPersistence (GRDB) · SDK stores (owned by the SDK) · sync orchestration"]
-  I["6 · Infrastructure<br/>HaloPlatform (APNs, BGTasks, Keychain) · HaloFoundation (logging) · servers"]
+  I["6 · Infrastructure<br/>HaloPlatform (APNs, BGTasks, Keychain) · servers"]
   P --> A --> D
   M -. implements ports .-> D
   S -. implements ports .-> D
@@ -42,7 +42,8 @@ flowchart TB
 ```
 
 Arrows point in the direction of dependency. Layers 4–6 **implement** protocols (ports) defined in the
-domain; the domain depends on none of them. Layer 2 uses ports and never imports layers 4–6 directly. Only
+domain; the domain depends on none of them. `HaloFoundation` (logging facade, `HaloError` base, clocks, ids) sits outside the
+layers: it is a cross-cutting base that every module may import and that imports nothing from Halo. Layer 2 uses ports and never imports layers 4–6 directly. Only
 the composition roots (app target, NSE target) see every layer. Details:
 [MODULE_BOUNDARIES.md](MODULE_BOUNDARIES.md).
 
@@ -56,7 +57,7 @@ the composition roots (app target, NSE target) see every layer. Details:
 | Matrix protocol, sync, E2EE, crypto store, event cache, media encryption | **Rust — matrix-rust-sdk (upstream)** | The hardest code to get right and to secure; maintained upstream |
 | Sync service, room list, timeline diffing, send queue, notification client | **Rust — matrix-sdk-ui (upstream)** | Already solved upstream |
 | Read-state reconciliation policy, badge, attention | **Swift — HaloDomain** | Pure logic on values; must run identically in the app and the NSE; testable on Linux (D47) |
-| Receipt outbox, sticker favourites/recents, bot task index, auditor log | **Swift — HaloPersistence** | App-owned data (D46) |
+| Receipt outbox, notification records, sticker pack cache, bot task index, auditor log | **Swift — HaloPersistence** | App-owned data (D46). Sticker favourites/recents are **not** here: they are account data (`app.halo.sticker_prefs`, [DATA_FLOW.md](DATA_FLOW.md) §1) read and written through `AccountDataPort` |
 | Sticker pack model and parsing (image packs), bot template parsing | **Swift — HaloDomain** | Pure parsing of JSON / HTML from the adapter |
 | UI, navigation, OS integration | **Swift** | Native |
 | Future Halo-owned FFI (if gate G-FFI fails) | **Rust — `core/halo-ffi`** | Direct access to SDK internals behind the *same* ports (ADR-0003) |

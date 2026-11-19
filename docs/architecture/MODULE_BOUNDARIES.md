@@ -9,7 +9,7 @@ import what it doesn't declare) and by `scripts/check-boundaries.sh` (planned fo
 
 | Module | Layer | Responsibility | May depend on | Builds on Linux |
 |---|---|---|---|---|
-| `HaloFoundation` | 6 | Logging facade, redaction, `HaloError` base, clocks, IDs | — | ✅ |
+| `HaloFoundation` | base (cross-cutting) | Logging facade, redaction, `HaloError` base, clocks, IDs | — | ✅ |
 | `HaloDomain` | 3 | Value models, **ports** (protocols), pure policies: `ReadStatePolicy`, `BadgeCalculator`, `ImagePackParser`, `BotTemplateParser` registry | HaloFoundation | ✅ |
 | `HaloApplication` | 2 | Use cases and coordinators (session, sync, read state, outbox, notifications, stickers, bot index) | HaloDomain, HaloFoundation | ✅ (no UIKit/UserNotifications) |
 | `HaloMatrixAdapter` | 4 | Implements Matrix ports using `MatrixRustSDK`; maps upstream types ⇄ domain values | HaloDomain, HaloFoundation, **MatrixRustSDK** | ❌ |
@@ -47,7 +47,8 @@ flowchart BT
 | Rule | Reason |
 |---|---|
 | ❌ Anything except `HaloMatrixAdapter` imports `MatrixRustSDK` | Keeps the FFI replaceable (D44) |
-| ❌ `HaloDomain` imports any other Halo module, SwiftUI, UIKit, GRDB, UserNotifications | Pure, portable, testable on Linux |
+| ❌ `HaloDomain` imports any Halo module other than `HaloFoundation`, or SwiftUI, UIKit, GRDB, UserNotifications | Pure, portable, testable on Linux |
+| ❌ `HaloFoundation` imports any other Halo module | It is the base every module may use |
 | ❌ `Feature*` imports `HaloMatrixAdapter`, `HaloPersistence`, `HaloPlatform` | Features talk to use cases, not infrastructure |
 | ❌ `Feature*` imports another `Feature*` | Independent development; navigation goes through routes in `HaloApplication` |
 | ❌ `HaloApplication` imports SwiftUI/UIKit | Keeps use cases UI-independent |

@@ -44,6 +44,8 @@
 |---|---|---|---|---|
 | Q-BUNDLE | Bundle ID prefix, App Group, account-data namespace (`app.halo.*` assumes the domain `halo.app`) | Owned domain (reverse-DNS) | Use a domain the founder controls; rename `app.halo.*` accordingly before M0 code | **Before M0** |
 | Q-PUSH-BADGE | How to stop Synapse's count-only pushes from setting the icon badge (ADR-0015) | Halo Sygnal pushkin (background push) / filtering relay (drop) / accept the server badge | Pushkin; relay if V-PUSH-5 fails | **Before M1** |
+| Q-DEV-AUTH | How M0's password login works when `infra/dev` includes MAS (with MAS, Synapse delegates login to it) | Run M0 without MAS (Synapse's built-in password login) and add MAS in M5 behind a compose profile / run MAS from M0 with its password compatibility login enabled | Without MAS until M5 (fewer moving parts in M0); verify the chosen setup against the MAS docs when writing `infra/dev` | **Before M0** |
+| Q-NSE-GATE | Should the NSE budget be its own gate at the end of M1 instead of a G-FFI criterion (ADR-0016)? | Keep in G-FFI / separate G-NSE | Separate G-NSE | Before M1 |
 | Q-SDK-BUILD | When to switch from the prebuilt SDK to building from source | M0 / before external TestFlight / never | Before the first external TestFlight | M5 |
 | Q-MAS-ACCOUNT | Device/session management for OIDC accounts: native list or MAS account page | Native via SDK / web (`account_url`) | Web page in the MVP | M5 |
 | Q-E2EE-STRATEGY | Room key recipient strategy (share keys with unverified devices?) | SDK default / identity-based / error-on-unverified | SDK default in the MVP; revisit with verification UX | M2 |

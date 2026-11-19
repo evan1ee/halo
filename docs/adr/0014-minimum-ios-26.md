@@ -3,7 +3,7 @@
 - **Status:** Accepted · **Date:** 2026-11-19 · **Decision IDs:** D25 · **Validation:** none
 
 ## Context
-Personal phase first (D1); newest SwiftUI and Observation; optional on-device AI later (D18).
+Personal phase first (D1); newest SwiftUI and Observation. (An in-app LLM is out of scope by D18; on-device AI would need a new decision.)
 
 ## Problem
 Which deployment target?

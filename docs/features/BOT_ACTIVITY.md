@@ -22,7 +22,7 @@ The tab must therefore **label freshness**: each item shows "as of <time of the 
 
 ## 4. Functional requirements
 - FR-1 `BotTaskIndexer` consumes timeline events of allowlisted bots from rooms as they are synced or paginated (no extra network) and updates `bot_task` idempotently:
-  `TaskAddedV1` → upsert (open, source event); `TodoListV1` rows → update title/status for **known** ids; completion confirmations → completed; delete confirmations → deleted; edits → re-parse; redactions of the source → mark `source_redacted`.
+  `TaskAddedV1` → upsert (open, source event); `TodoListV1` rows → update title/status for known ids, and upsert rows for **unknown** ids without a source event (`source_event_id` NULL → read-only, "Not available" for ticking, D23); completion confirmations → completed; delete confirmations → deleted; edits → re-parse; redactions of the source → mark `source_redacted`.
 - FR-2 Optional "Refresh from bot" button sends the bot's list command as a visible message (**only with explicit user action**; D18 says no hidden commands) — **[OPEN Q-ACT-REFRESH]**: confirm whether this is wanted (it's a visible text command, which D22 avoids for checkboxes).
 - FR-3 Sections: Open, Pending (local action in progress), Reminders (by time), Completed (last 7 days).
 - FR-4 Item actions: open source message, tick (BOT_MESSAGES FR-3), copy.

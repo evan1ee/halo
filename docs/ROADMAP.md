@@ -34,7 +34,7 @@ gantt
 
 | # | Milestone | Scope | Exit criteria | Gates |
 |---|---|---|---|---|
-| M0 | Foundation | Repo layout, Xcode project + local packages, `infra/dev` Synapse/MAS/Sygnal, prebuilt SDK pinned, adapter skeleton behind ports, licence gate, CI (docs + Linux Swift domain tests), logging | Password login against the dev Synapse shows the room count via ports; CI green | V-SDK-1, V-SQL-1 |
+| M0 | Foundation | Repo layout, Xcode project + local packages, `infra/dev` Synapse/Sygnal (+ MAS per Q-DEV-AUTH), prebuilt SDK pinned, adapter skeleton behind ports, licence gate, CI (docs + Linux Swift domain tests), logging | Password login against the dev Synapse shows the room count via ports; CI green | V-SDK-1, V-SQL-1, V-CI-1, V-APPLE-1, Q-DEV-AUTH |
 | M1 | Read-only client | Session restore, `SyncService`, room list, timeline (text, notices, images, UTD), verification + recovery, NSE spike | All rooms readable; encrypted push shown | V-NSE-1, V-NSE-2 |
 | M2 | Messaging | Composer, replies, edits, deletes, reactions, typing, receipts display, send queue, media display, image send | Daily use alongside Element X; AC-M* | — |
 | M3 | Read-state engine | `ReadState` policy, receipt outbox, visibility tracking, badge, clearing, marked-unread, modes, auditor, Synapse scenario suite | AC-U1–U7 automated green | **G-UNREAD, G-FFI** |
@@ -51,6 +51,7 @@ gantt
 | Gate | When | Question | Pass → | Fail → |
 |---|---|---|---|---|
 | **G-FFI** | End of M3 | Are the upstream FFI APIs enough for unread correctness, stickers (custom room state) and NSE performance? | Stay on the upstream binary framework | Build Halo-owned UniFFI bindings over `matrix-sdk`/`matrix-sdk-ui` in `core/` behind the same ports (ADR-0003); budget 6–10 weeks |
+| **G-NSE** *(proposed, ADR-0016)* | End of M1 | Does the NSE decrypt and compute the badge within its memory/time budget (V-NSE-1/2)? | Keep the NSE pipeline | Lightweight runtime, cached badge, SDK built without unneeded features (Q-SDK-BUILD moves to M2); Halo-owned bindings only if the binding layer is the measured cost |
 | **G-UNREAD** | End of M3 | Does the reconciliation policy over SDK + server signals meet AC-U1–U7 in scenario tests? | Keep the policy layer | Add an independent recount (needs G-FFI fail path, or upstream fixes) |
 
 ## Dependencies

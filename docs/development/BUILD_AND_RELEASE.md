@@ -37,4 +37,4 @@ Archive from Xcode or `xcodebuild archive` on the founder's Mac; upload with Xco
 TestFlight/App Store crash reports + MetricKit + the diagnostics export ([../architecture/LOGGING_AND_DIAGNOSTICS.md](../architecture/LOGGING_AND_DIAGNOSTICS.md)). No third-party crash SDK (Q-CRASH before public release).
 
 ## 6. Rollback
-Expire the bad TestFlight build and re-promote the previous one. Database migrations are forward-only; a rollback build must accept the newer schema (read-only degrade) or rebuild `halo.sqlite` (derived data) — never drop intents silently.
+Expire the bad TestFlight build. Re-promote the previous build **only if it ships the same SDK version** — SDK stores can't be downgraded ([../data/MIGRATIONS.md](../data/MIGRATIONS.md) §3). Otherwise ship a fix-forward build: the previous app code with the current (or newer) SDK, under a new build number. Database migrations are forward-only; a rollback build must accept the newer schema (read-only degrade) or rebuild `halo.sqlite` (derived data) — never drop intents silently.

@@ -47,7 +47,7 @@ Gaps in history · an event-focused jump to a very old event · own message from
 ## 11. Acceptance criteria
 - AC-TL-1 Opening a room with unread messages positions at the read-marker line.
 - AC-TL-2 Viewing the newest message clears the room's attention (AC-U1).
-- AC-TL-3 The timeline and the list agree: if the list shows attention, the timeline has at least one event newer than the read position, and vice versa (R-P0-3).
+- AC-TL-3 The timeline and the list agree (R-P0-3): if the list shows attention, the room is an invite, is marked unread, or the timeline has at least one event newer than `readPosTs` that notifies under the room's mode; conversely, if the timeline has such a notifying event, the list shows attention. Events that don't notify under the mode affect only `hasUnread` ([../matrix/UNREAD_STATE.md](../matrix/UNREAD_STATE.md) §5).
 - AC-TL-4 No dropped frames in the scroll performance test (≥ 95 % frames on time).
 
 ## 12. Test requirements

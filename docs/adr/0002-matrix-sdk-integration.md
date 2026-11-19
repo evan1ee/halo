@@ -1,6 +1,6 @@
 # ADR-0002: Integrate matrix-rust-sdk through the upstream FFI binary, behind an adapter
 
-- **Status:** Accepted · **Date:** 2026-11-19 · **Decision IDs:** D3 (superseded), D27 (superseded), D44 · **Validation:** gate G-FFI (end of M3), V-SDK-1
+- **Status:** Accepted (G-FFI criterion (c): see ADR-0016, proposed) · **Date:** 2026-11-19 · **Decision IDs:** D3 (superseded), D27 (superseded), D44 · **Validation:** gate G-FFI (end of M3), V-SDK-1
 
 ## Context
 Halo needs a production-grade Matrix implementation (E2EE, sliding sync, timeline, notifications). matrix-rust-sdk provides it, with UniFFI bindings in `matrix-sdk-ffi`.
