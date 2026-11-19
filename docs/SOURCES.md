@@ -59,6 +59,7 @@ Re-verify at every SDK bump (see [development/BUILD_AND_RELEASE.md](development/
 ### F-BOT — evan1ee/matrix-bot
 - F-BOT-1 Matrix output is `body` + an HTML subset (`b i u code pre p ul ol li blockquote a br`, plus `del` in todo views). `Content.actions` (buttons) aren't sent on Matrix.
 - F-BOT-2 Reactions 👍 done, 👎 delete, 😝 +1 day, 🎉 celebrate; only on messages registered in `reaction_targets`, which are parsed from `Added Task <b>#N</b>` and `Reminder #N set!` confirmations.
+- F-BOT-4 On a processed reaction the bot reacts on the **target event** with an ack emoji (`✅` done, `🗑️` delete, `⏰` delay, `🎉` celebrate) and replies, e.g. `✅ Marked task as done: <i>"{title}"</i>`, `🗑️ Deleted task: <i>"{title}"</i>`; the reply is registered as a further reaction target (except for deletes). Reactions are processed only from the task owner (`reaction.rs`).
 - F-BOT-3 Todo list format: `📋 <b>{title}:</b><br/>• [<b>#{id}</b>] {text} ...<br/>`; completed rows use `<del>…</del> ✅`.
 
 ## Unverified (tracked in OPEN_QUESTIONS.md)
