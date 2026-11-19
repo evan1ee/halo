@@ -11,8 +11,11 @@ public actor TimelineCoordinator {
         public var reachedStart: Bool
         /// The last back-pagination failed; shown with a retry button (TIMELINE §9).
         public var paginationError: HaloError?
+        /// Other people currently typing.
+        public var typing: [UserID]
 
-        public init(items: [TimelineItem], isPaginating: Bool, reachedStart: Bool, paginationError: HaloError?) {
+        public init(items: [TimelineItem], isPaginating: Bool, reachedStart: Bool, paginationError: HaloError?, typing: [UserID] = []) {
+            self.typing = typing
             self.items = items
             self.isPaginating = isPaginating
             self.reachedStart = reachedStart
@@ -43,13 +46,23 @@ public actor TimelineCoordinator {
     private var consecutiveFailures = 0
     private var diffsInSubscription = 0
     private var snapshot = Snapshot(items: [], isPaginating: false, reachedStart: false, paginationError: nil)
+    private var typingSubscription: Task<Void, Never>?
+    private var typingSentAt: ContinuousClock.Instant?
+    private let now: @Sendable () -> ContinuousClock.Instant
 
-    public init(port: any TimelinePort, room: RoomID) {
+    /// A typing notice is repeated at most this often while the user keeps typing (MESSAGING FR-4).
+    public static let typingInterval: Duration = .seconds(4)
+
+    public init(port: any TimelinePort, room: RoomID, now: @escaping @Sendable () -> ContinuousClock.Instant = { .now }) {
         self.port = port
         self.room = room
+        self.now = now
     }
 
-    deinit { subscription?.cancel() }
+    deinit {
+        subscription?.cancel()
+        typingSubscription?.cancel()
+    }
 
     /// The current status, then its changes; latest value wins (CONCURRENCY §3).
     public func statuses() -> AsyncStream<Status> { broadcaster.subscribe(current: status) }
@@ -65,12 +78,17 @@ public actor TimelineCoordinator {
         }
         consecutiveFailures = 0
         subscribe()
+        subscribeTyping()
     }
 
     public func close() async {
         generation += 1
         subscription?.cancel()
         subscription = nil
+        typingSubscription?.cancel()
+        typingSubscription = nil
+        if typingSentAt != nil { try? await session?.setTyping(false) }
+        typingSentAt = nil
         let closing = session
         session = nil
         snapshot = Snapshot(items: [], isPaginating: false, reachedStart: false, paginationError: nil)
@@ -101,6 +119,21 @@ public actor TimelineCoordinator {
     public func send(_ text: String) async throws(HaloError) {
         guard let session, case .live = status else { throw .cancelled }
         try await session.send(text: text)
+    }
+
+    /// The user started, kept up or stopped typing. `true` is sent at most every `typingInterval`; `false` goes out at
+    /// once, but only if a `true` was sent. Failures are ignored: a missed typing notice isn't worth an error.
+    public func setTyping(_ isTyping: Bool) async {
+        guard let session, case .live = status else { return }
+        if isTyping {
+            let instant = now()
+            if let last = typingSentAt, instant - last < Self.typingInterval { return }
+            typingSentAt = instant
+        } else {
+            guard typingSentAt != nil else { return }
+            typingSentAt = nil
+        }
+        try? await session.setTyping(isTyping)
     }
 
     /// Replies to a confirmed event of the open timeline.
@@ -142,6 +175,20 @@ public actor TimelineCoordinator {
                 guard let self, await self.apply(diff, generation: current) else { return }
             }
         }
+    }
+
+    private func subscribeTyping() {
+        guard let session else { return }
+        let updates = session.typingUsers()
+        typingSubscription = Task { [weak self] in
+            for await users in updates { await self?.applyTyping(users) }
+        }
+    }
+
+    private func applyTyping(_ users: [UserID]) {
+        guard session != nil, snapshot.typing != users else { return }
+        snapshot.typing = users
+        if case .live = status { publish() }
     }
 
     private func apply(_ diff: TimelineDiff, generation: Int) -> Bool {

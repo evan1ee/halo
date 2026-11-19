@@ -13,6 +13,9 @@ public final class FakeTimelinePort: TimelinePort {
         var openSessions = 0
         var sent: [String] = []
         var paginateCalls = 0
+        var typing: [UserID] = []
+        var typingContinuations: [UUID: AsyncStream<[UserID]>.Continuation] = [:]
+        var typingCalls: [Bool] = []
     }
 
     private let rooms = Mutex<[RoomID: Room]>([:])
@@ -32,6 +35,18 @@ public final class FakeTimelinePort: TimelinePort {
         }
         for continuation in continuations { continuation.yield(diff) }
     }
+
+    /// Sets who is typing in the room and tells every open session.
+    public func setTypingUsers(_ users: [UserID], in id: RoomID) {
+        let continuations = rooms.withLock { rooms -> [AsyncStream<[UserID]>.Continuation] in
+            rooms[id]?.typing = users
+            return Array(rooms[id]?.typingContinuations.values ?? [:].values)
+        }
+        for continuation in continuations { continuation.yield(users) }
+    }
+
+    /// The `setTyping` values received, in order.
+    public func typingCalls(in id: RoomID) -> [Bool] { rooms.withLock { $0[id]?.typingCalls ?? [] } }
 
     public func sentTexts(in id: RoomID) -> [String] { rooms.withLock { $0[id]?.sent ?? [] } }
     public func openSessions(in id: RoomID) -> Int { rooms.withLock { $0[id]?.openSessions ?? 0 } }
@@ -83,6 +98,23 @@ public final class FakeTimelinePort: TimelinePort {
                 for continuation in continuations { continuation.yield(.insert(index: offset, item)) }
             }
             return reachedStart
+        }
+
+        func typingUsers() -> AsyncStream<[UserID]> {
+            let (stream, continuation) = AsyncStream<[UserID]>.makeStream(bufferingPolicy: .bufferingNewest(1))
+            let id = UUID()
+            let room = self.room
+            let current = port.rooms.withLock { rooms -> [UserID] in
+                rooms[room]?.typingContinuations[id] = continuation
+                return rooms[room]?.typing ?? []
+            }
+            continuation.yield(current)
+            continuation.onTermination = { [port] _ in port.rooms.withLock { _ = $0[room]?.typingContinuations.removeValue(forKey: id) } }
+            return stream
+        }
+
+        func setTyping(_ isTyping: Bool) async throws(HaloError) {
+            port.rooms.withLock { $0[room]?.typingCalls.append(isTyping) }
         }
 
         func send(text: String) async throws(HaloError) { try await send(text: text, replyTo: nil) }

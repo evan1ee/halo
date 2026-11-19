@@ -20,6 +20,13 @@ public protocol TimelineSession: Sendable {
     /// `.sent` when the server confirms. Throws `.invalidInput("EMPTY_MESSAGE")` for blank text.
     func send(text: String) async throws(HaloError)
 
+    /// Who else is typing in the room, as the current set and then every change (latest value wins). Never contains
+    /// the signed-in user.
+    func typingUsers() -> AsyncStream<[UserID]>
+
+    /// Tells the room the signed-in user is (or has stopped) typing. Callers throttle; the server expires a notice itself.
+    func setTyping(_ isTyping: Bool) async throws(HaloError)
+
     /// Sends `text` as a reply to the confirmed event `event`. Same local-echo and error rules as `send(text:)`;
     /// an unknown event throws `.notFound`.
     func reply(to event: EventID, text: String) async throws(HaloError)

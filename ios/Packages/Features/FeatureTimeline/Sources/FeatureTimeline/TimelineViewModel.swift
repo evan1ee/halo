@@ -69,7 +69,15 @@ public final class TimelineViewModel {
 
     public private(set) var content: Content = .opening
     /// The message being typed. Cleared only once the send was accepted, so a failure never loses the text.
-    public var draft = ""
+    public var draft = "" {
+        didSet {
+            guard draft != oldValue, editing == nil else { return }
+            let isTyping = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            Task { [coordinator] in await coordinator.setTyping(isTyping) }
+        }
+    }
+    /// "Alice is typing…", or `nil` when nobody else is.
+    public private(set) var typingText: String?
     public private(set) var isSending = false
     public private(set) var sendError: String?
     /// The own message being edited, or `nil` when the composer writes a new message.
@@ -190,6 +198,7 @@ public final class TimelineViewModel {
         case .idle, .opening:
             content = .opening
         case .live(let snapshot):
+            typingText = Self.typingText(snapshot.typing, items: snapshot.items)
             content = .live(
                 rows: Self.collapsingStateRuns(snapshot.items.map(row), items: snapshot.items),
                 isPaginating: snapshot.isPaginating,
@@ -197,6 +206,21 @@ public final class TimelineViewModel {
                 paginationError: snapshot.paginationError.map { _ in "Couldn't load earlier messages." })
         case .failed(let error):
             content = .failed(error == .notFound ? "This room isn't available." : "The timeline couldn't be loaded.")
+        }
+    }
+
+    /// Names come from the timeline's senders; a user without one is shown by user ID (never invented).
+    static func typingText(_ users: [UserID], items: [TimelineItem]) -> String? {
+        guard !users.isEmpty else { return nil }
+        var names: [UserID: String] = [:]
+        for item in items {
+            if case .event(let event) = item.content, let sender = event.sender, let name = event.senderName { names[sender] = name }
+        }
+        let labels = users.map { names[$0] ?? $0.rawValue }
+        switch labels.count {
+        case 1: return "\(labels[0]) is typing…"
+        case 2: return "\(labels[0]) and \(labels[1]) are typing…"
+        default: return "Several people are typing…"
         }
     }
 

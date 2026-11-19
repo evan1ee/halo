@@ -13,15 +13,17 @@ public final class MatrixTimelinePort: TimelinePort {
     public func open(room id: RoomID) async throws(HaloError) -> any TimelineSession {
         let room = try await session.room(id)
         let own = try await session.ownUserID()
-        do { return MatrixTimelineSession(timeline: try await room.timeline(), ownUserID: own) } catch { throw ErrorMapper.map(error) }
+        do { return MatrixTimelineSession(room: room, timeline: try await room.timeline(), ownUserID: own) } catch { throw ErrorMapper.map(error) }
     }
 }
 
 final class MatrixTimelineSession: TimelineSession {
+    private let room: Room
     private let timeline: Timeline
     private let ownUserID: String
 
-    init(timeline: Timeline, ownUserID: String) {
+    init(room: Room, timeline: Timeline, ownUserID: String) {
+        self.room = room
         self.timeline = timeline
         self.ownUserID = ownUserID
     }
@@ -54,6 +56,17 @@ final class MatrixTimelineSession: TimelineSession {
         } catch { throw ErrorMapper.map(error) }
     }
 
+    func typingUsers() -> AsyncStream<[UserID]> {
+        let (output, continuation) = AsyncStream<[UserID]>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        let handle = room.subscribeToTypingNotifications(listener: TypingListener(own: ownUserID, continuation: continuation))
+        continuation.onTermination = { _ in handle.cancel() }
+        return output
+    }
+
+    func setTyping(_ isTyping: Bool) async throws(HaloError) {
+        do { try await room.typingNotice(isTyping: isTyping) } catch { throw ErrorMapper.map(error) }
+    }
+
     func reply(to event: EventID, text: String) async throws(HaloError) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw .invalidInput("EMPTY_MESSAGE") }
         do { _ = try await timeline.sendReply(msg: messageEventContentFromMarkdown(md: text), eventId: event.rawValue) } catch { throw ErrorMapper.map(error) }
@@ -83,4 +96,18 @@ private final class Listener: TimelineListener {
     private let continuation: AsyncStream<[MatrixRustSDK.TimelineDiff]>.Continuation
     init(_ continuation: AsyncStream<[MatrixRustSDK.TimelineDiff]>.Continuation) { self.continuation = continuation }
     func onUpdate(diff: [MatrixRustSDK.TimelineDiff]) { continuation.yield(diff) }
+}
+
+/// Forwards the SDK's typing set, without the signed-in user.
+private final class TypingListener: TypingNotificationsListener {
+    let own: String
+    let continuation: AsyncStream<[UserID]>.Continuation
+    init(own: String, continuation: AsyncStream<[UserID]>.Continuation) {
+        self.own = own
+        self.continuation = continuation
+    }
+
+    func call(typingUserIds: [String]) {
+        continuation.yield(typingUserIds.filter { $0 != own }.compactMap { try? UserID($0) })
+    }
 }

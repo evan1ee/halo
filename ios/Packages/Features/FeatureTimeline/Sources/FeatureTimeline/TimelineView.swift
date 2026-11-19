@@ -59,6 +59,7 @@ private struct Composer: View {
 
     var body: some View {
         VStack(spacing: 4) {
+            if let typing = model.typingText { Text(typing).font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading) }
             if let error = model.sendError { Text(error).font(.caption).foregroundStyle(.red) }
             if model.editing != nil {
                 HStack {

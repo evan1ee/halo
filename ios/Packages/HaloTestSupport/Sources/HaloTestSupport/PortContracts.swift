@@ -197,6 +197,9 @@ public enum TimelinePortContract {
         try await session.toggleReaction(on: id, key: "👍")
         _ = try await wait("the reaction removed", body: text) { $0.reactions.isEmpty }
 
+        // Typing notices are accepted (the stream of others typing only fires on change, so nothing is awaited here).
+        do { try await session.setTyping(true); try await session.setTyping(false) } catch { throw ContractViolation("setTyping failed with \(error.code)") }
+
         let replyText = text + " (reply)"
         try await session.reply(to: id, text: replyText)
         _ = try await wait("the reply quoting the original", body: replyText) { $0.sendState == .sent && $0.replyTo?.eventID == id }

@@ -2,6 +2,7 @@ import Foundation
 import HaloDomain
 import HaloFoundation
 import HaloTestSupport
+import Synchronization
 import Testing
 @testable import HaloApplication
 
@@ -115,6 +116,36 @@ struct TimelineCoordinatorTests {
         }
         #expect(items(done) == ["one", "hello"])
         await #expect(throws: HaloError.invalidInput("EMPTY_MESSAGE")) { try await coordinator.send("  ") }
+    }
+
+    @Test("typing: others' typing shows in the snapshot; our notices are throttled and stopped on false and close")
+    func typing() async throws {
+        let port = FakeTimelinePort()
+        let room = try RoomID("!r:x.org")
+        port.addRoom(room)
+        let clock = Mutex(ContinuousClock.now)
+        let coordinator = TimelineCoordinator(port: port, room: room, now: { clock.withLock { $0 } })
+        await coordinator.setTyping(true)  // not open yet
+        #expect(port.typingCalls(in: room).isEmpty)
+        await coordinator.open()
+        _ = await wait(coordinator) { if case .live = $0 { true } else { false } }
+
+        let bob = try UserID("@bob:x.org")
+        port.setTypingUsers([bob], in: room)
+        let shown = await wait(coordinator) { if case .live(let s) = $0 { s.typing == [bob] } else { false } }
+        #expect(shown != nil)
+
+        await coordinator.setTyping(true)
+        await coordinator.setTyping(true)  // within 4 s: dropped
+        clock.withLock { $0 += .seconds(5) }
+        await coordinator.setTyping(true)
+        await coordinator.setTyping(false)
+        await coordinator.setTyping(false)  // already stopped: dropped
+        #expect(port.typingCalls(in: room) == [true, true, false])
+
+        await coordinator.setTyping(true)
+        await coordinator.close()
+        #expect(port.typingCalls(in: room) == [true, true, false, true, false])
     }
 
     @Test("reaction, edit and delete go through the open timeline and refuse when it is closed")

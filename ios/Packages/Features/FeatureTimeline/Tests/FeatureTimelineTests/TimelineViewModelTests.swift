@@ -182,6 +182,18 @@ struct TimelineViewModelTests {
         #expect(model.replyingTo == nil)
     }
 
+    @Test("typing text uses known names, falls back to the user ID, and collapses for many people")
+    func typingText() throws {
+        let alice = try UserID("@alice:x.org")
+        let bob = try UserID("@bob:x.org")
+        let carol = try UserID("@carol:x.org")
+        let items = [event(.text("hi", isEdited: false))]  // sender @alice:x.org named "Alice"
+        #expect(TimelineViewModel.typingText([], items: items) == nil)
+        #expect(TimelineViewModel.typingText([alice], items: items) == "Alice is typing…")
+        #expect(TimelineViewModel.typingText([alice, bob], items: items) == "Alice and @bob:x.org are typing…")
+        #expect(TimelineViewModel.typingText([alice, bob, carol], items: items) == "Several people are typing…")
+    }
+
     @Test("someone else's message can't be edited or deleted from the UI")
     func foreign() throws {
         let model = try model()
