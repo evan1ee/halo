@@ -5,7 +5,7 @@ Halo is an independent, proprietary Matrix client for iOS built with SwiftUI on 
 and engineering process. Code that contradicts these documents is a bug in either the code or
 the document: fix one of them in the same change.
 
-**Phase:** 0 — documentation complete, implementation not started. See [PHASE0_REPORT.md](PHASE0_REPORT.md).
+**Phase:** 0 — documentation complete and approved (2026-11-19); next is M0. See [PHASE0_REPORT.md](PHASE0_REPORT.md).
 
 ## Statement labels
 

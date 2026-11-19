@@ -14,7 +14,7 @@
 | Delivered notifications | iOS Notification Center | — | `notification_record` (what Halo delivered, for de-duplication and clearing) |
 | Crypto keys, sessions | SDK crypto store + Keychain passphrase | — | — |
 | Image packs | Room state `m.room.image_pack` + account data `m.image_pack.rooms` | SDK | Parsed pack view model (cache) |
-| Sticker favourites / recents | Account data `app.halo.sticker_prefs` (synced) | SDK | — |
+| Sticker favourites / recents | Account data `one.mbm.halo.sticker_prefs` (synced) | SDK | — |
 | Bot task state | **Bot backend** (D18) | Bot messages in rooms | `bot_task` index (derived, P2) |
 | UI preferences | `UserDefaults` (App Group) | — | — |
 

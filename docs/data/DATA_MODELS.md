@@ -87,12 +87,12 @@ CREATE TABLE bot_action (
 
 | Type | Content | Spec |
 |---|---|---|
-| `app.halo.sticker_prefs` | favourites, recents (v1 schema in STICKERS §3) | STICKERS |
-| `app.halo.sticker_rooms` | rooms created by Halo for personal packs | STICKERS |
-| `app.halo.bot_allowlist` | `{ version: 1, bots: [userId] }` (synced allowlist) | BOT_MESSAGES |
+| `one.mbm.halo.sticker_prefs` | favourites, recents (v1 schema in STICKERS §3) | STICKERS |
+| `one.mbm.halo.sticker_rooms` | rooms created by Halo for personal packs | STICKERS |
+| `one.mbm.halo.bot_allowlist` | `{ version: 1, bots: [userId] }` (synced allowlist) | BOT_MESSAGES |
 
 Rules: every Halo account-data type has a `version` field; unknown fields are preserved on write; readers ignore unknown versions gracefully.
-The `app.halo.*` namespace follows the spec's Java-package-style naming for custom types **[DECISION D54, D63; `app.halo` stands in for the namespace root]**.
+The `one.mbm.halo.*` namespace follows the spec's Java-package-style naming for custom types **[DECISION D54, D63]**.
 
 ## 5. Repository interfaces (ports, sketch)
 `ReadIntentStore { upsertIfNewer(_:) ; markSent(room:) ; delete(room:, ifEventId:) ; all() ; observe() }`

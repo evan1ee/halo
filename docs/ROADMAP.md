@@ -5,11 +5,11 @@ to be re-planned after M0. Each milestone ends with its exit criteria **verified
 
 ## Implementation entry criteria (before M0 starts)
 
-- [ ] Phase 0 documentation approved by the founder.
-- [ ] Apple Developer Program membership active; namespace root `N` recorded (D63, DEVELOPMENT_SETUP §3).
+- [x] Phase 0 documentation approved by the founder (2026-11-19).
+- [ ] Apple Developer Program membership active; namespace root `one.mbm.halo` recorded (D63, DEVELOPMENT_SETUP §3).
 - [ ] Domain for the homeserver available; DNS control.
 - [ ] Mac with Xcode supporting iOS 26 SDK; Rust toolchain installable (only needed on the G-FFI or G-NSE fail paths, or for Q-SDK-BUILD).
-- [ ] Open questions marked "blocks M0" in [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) resolved.
+- [ ] Open questions marked "blocks M0" in [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) resolved (the remaining ones are M0 validation items, done during M0).
 
 ## Milestones
 

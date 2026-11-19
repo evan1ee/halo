@@ -23,7 +23,7 @@ sequenceDiagram
 
 ## 2. Pusher registration
 - `Client.set_pusher(identifiers, kind, app_display_name, device_display_name, profile_tag, lang, append)` **[VERIFIED F-FFI-4]**; kind HTTP with `url = https://<sygnal>/_matrix/push/v1/notify`, `format = event_id_only`, `PusherKind.Http{data: HttpPusherData{url, format: .eventIdOnly, default_payload}}` **[VERIFIED F-FFI-16]**, with `default_payload` setting `aps.mutable-content = 1` and a generic `aps.alert` **[ASSUMPTION V-PUSH-1: Sygnal's APNs payload mapping of `default_payload`; verify against the Sygnal docs at M1]**.
-- `app_id` = bundle ID `N` (+ `.dev` for the sandbox APNs environment, D63) → Sygnal config.
+- `app_id` = bundle ID `one.mbm.halo` (`one.mbm.halo.dev` for the sandbox APNs environment, D63) → Sygnal config.
 - Re-register on every launch if the APNs token changed; `delete_pusher` on logout.
 - Synapse also sends **count-only** pushes to this pusher (no event id) whenever the badge changes; stock Sygnal would set them as `aps.badge` **[VERIFIED F-PUSH-1, F-PUSH-2]**. Halo's Sygnal deployment converts them into background pushes with Halo's pushkin and strips `aps.badge` and server counts from every payload (ADR-0015, accepted); the relay is only a fallback.
 - `default_payload` never contains `badge`.

@@ -48,26 +48,27 @@ dependencies: [../architecture/MODULE_BOUNDARIES.md](../architecture/MODULE_BOUN
 
 ## 3. Xcode project configuration
 - Targets: `Halo` (iOS app), `HaloNotificationService` (NSE). Deployment target iOS 26.0.
-- Capabilities (both targets): App Groups `group.N`, Keychain Sharing `<TeamID>.N.shared` (identifiers below); app: Push Notifications, Background Modes (remote notifications, background fetch), Communication Notifications; NSE: the filtering entitlement once granted (V-PUSH-3).
+- Capabilities (both targets): App Groups `group.one.mbm.halo`, Keychain Sharing `<TeamID>.one.mbm.halo.shared` (identifiers below); app: Push Notifications, Background Modes (remote notifications, background fetch), Communication Notifications; NSE: the filtering entitlement once granted (V-PUSH-3).
 - Build configurations: `Debug` (dev Synapse, verbose logs, auditor on), `Beta` (TestFlight: auditor on, logs info), `Release` (auditor off unless enabled in Diagnostics).
 - Settings in `ios/Config/*.xcconfig`: bundle IDs, App Group, default homeserver, Sygnal app id, log level. No secrets. `N` is defined once
-  (`HALO_NAMESPACE` in `Base.xcconfig`) and every other identifier is derived from it, so the app and its extensions can't diverge.
+  (`HALO_NAMESPACE = one.mbm.halo` in `Base.xcconfig`) and every other identifier is derived from it, so the app and its extensions can't diverge.
 
 ### Identifiers (D63)
-`N` = the project-owned namespace root, reverse-DNS of a domain the founder controls. **Value: _not yet recorded_** — fill in here
-before the Xcode project is created; other documents write `app.halo` as a stand-in for `N`.
+`N` = the project-owned namespace root, reverse-DNS of a domain the founder controls. **Value: `one.mbm.halo`** (founder,
+2026-11-19). This table is the one place the identifiers are defined; changing `N` later means new bundle IDs and new account-data
+types, so it is treated as fixed.
 
 | Identifier | Value |
 |---|---|
-| App bundle ID | `N` |
-| NSE bundle ID | `N.nse` (future extensions: `N.<extension>`) |
-| App Group | `group.N` |
-| Keychain access group | `<TeamID>.N.shared` |
-| BG task identifier | `N.refresh` |
-| Log subsystem | `N` |
-| Darwin notification (DB changed) | `N.db.changed` |
-| Sygnal / pusher `app_id` | `N` (production APNs), `N.dev` (sandbox) |
-| Halo account-data types | `N.sticker_prefs`, `N.sticker_rooms`, `N.bot_allowlist` |
+| App bundle ID | `one.mbm.halo` |
+| NSE bundle ID | `one.mbm.halo.nse` (future extensions: `one.mbm.halo.<extension>`) |
+| App Group | `group.one.mbm.halo` |
+| Keychain access group | `<TeamID>.one.mbm.halo.shared` |
+| BG task identifier | `one.mbm.halo.refresh` |
+| Log subsystem | `one.mbm.halo` |
+| Darwin notification (DB changed) | `one.mbm.halo.db.changed` |
+| Sygnal / pusher `app_id` | `one.mbm.halo` (production APNs), `one.mbm.halo.dev` (sandbox) |
+| Halo account-data types | `one.mbm.halo.sticker_prefs`, `one.mbm.halo.sticker_rooms`, `one.mbm.halo.bot_allowlist` |
 - Swift settings: `SWIFT_VERSION = 6`, strict concurrency `complete`, warnings as errors in CI.
 
 ## 4. Environments

@@ -33,7 +33,7 @@ that opens both]**.
 ## 4. Multi-process access (app + NSE)
 - One `DatabasePool` per process, WAL mode, `busy_timeout` 5 s; writes in short `IMMEDIATE` transactions.
 - Monotonic upserts (e.g. `read_intent` only moves forward: `ON CONFLICT … DO UPDATE … WHERE excluded.event_ts > read_intent.event_ts`).
-- After an NSE write, a Darwin notification `N.db.changed` (D63) tells the app to re-read.
+- After an NSE write, a Darwin notification `one.mbm.halo.db.changed` (D63) tells the app to re-read.
 - **[ASSUMPTION V-SQL-2]** GRDB's guidance for sharing a database between an app and extensions (suspension handling: close/suspend the pool on background to avoid `0xdead10cc` terminations) is followed; verify in M1 with the NSE spike.
 
 ## 5. Cache strategy
@@ -48,7 +48,7 @@ that opens both]**.
 | Data | Conflict rule |
 |---|---|
 | Read intents | Monotonic (the newest event wins); the server's receipt is final |
-| Account data (`app.halo.*`, `m.image_pack.rooms`) | Read-modify-write with a merge function (favourites: union then trim; recents: merge by ts; preserve unknown keys); retry once on concurrent change |
+| Account data (`one.mbm.halo.*`, `m.image_pack.rooms`) | Read-modify-write with a merge function (favourites: union then trim; recents: merge by ts; preserve unknown keys); retry once on concurrent change |
 | Room state (packs) | Last writer wins (Matrix state semantics); the editor reloads before writing |
 | Bot tasks | The bot is the truth; the latest bot message (by `origin_server_ts`) wins |
 

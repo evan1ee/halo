@@ -43,7 +43,7 @@
 
 | ID | Question | Options | Recommendation | Decide by |
 |---|---|---|---|---|
-| Q-BUNDLE | Bundle ID prefix, App Group, account-data namespace | — | **Decided D63**: one project-owned namespace root for app and extensions. Only the value (the founder's domain) remains to be recorded in DEVELOPMENT_SETUP §3 | Value: before the Xcode project is created (M0) |
+| Q-BUNDLE | Bundle ID prefix, App Group, account-data namespace | — | **Decided D63**: namespace root `one.mbm.halo` for app and extensions (identifiers in DEVELOPMENT_SETUP §3) | — |
 | Q-PUSH-BADGE | How to stop Synapse's count-only pushes from setting the icon badge | — | **Decided: ADR-0015 accepted with conditions, D65** — Halo pushkin; relay only as fallback | — |
 | Q-DEV-AUTH | How M0's password login works when `infra/dev` includes MAS | — | **Decided D64**: native Synapse password login in M0; MAS from M5 | — |
 | Q-NSE-GATE | NSE budget as its own gate? | — | **Decided: ADR-0016 accepted, D66** — G-NSE at the end of M1 with AC-NSE-1…6 | — |

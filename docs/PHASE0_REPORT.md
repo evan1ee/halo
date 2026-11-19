@@ -1,6 +1,6 @@
 # Phase 0 — Documentation Completeness Report
 
-Date: 2026-11-19 · Branch: `claude/blissful-galileo-3400g9` · Status: **complete and reviewed (§9); founder decisions recorded (§10)**. Remaining before the Xcode project is created: the value of the namespace root `N` (D63).
+Date: 2026-11-19 · Branch: `claude/blissful-galileo-3400g9` · Status: **approved by the founder (2026-11-19)**; reviewed (§9); founder decisions recorded (§10).
 
 ## 1. Files created
 
@@ -53,7 +53,6 @@ D/ADR/F/V/Q/AC/S, ADR sections, statement labels and code fences).
 ## 4. Outstanding questions (decisions for the founder)
 | ID | Question | Needed by |
 |---|---|---|
-| Q-BUNDLE | Decided (D63): one project-owned namespace root. **Value of `N` still to record** in DEVELOPMENT_SETUP §3 | before the Xcode project (M0) |
 | Q-SDK-BUILD | When to build the SDK from source instead of the prebuilt package | M5 |
 | Q-E2EE-STRATEGY | Room-key sharing strategy with unverified devices | M2 |
 | Q-MAS-ACCOUNT | Native session list vs MAS account page | M5 |
@@ -77,7 +76,7 @@ Full list: [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md).
 T-NSE, T-RECEIPTS, T-FFI, T-STATE, T-XPROC, L1/L3 (licence drift / upstream relicensing), PROJ-1 (solo capacity). See [RISK_REGISTER.md](RISK_REGISTER.md).
 
 ## 7. Recommended implementation order
-1. **M0 Foundation** — decide Q-BUNDLE; repo skeleton per DEVELOPMENT_SETUP; `infra/dev`; packages with empty-but-compiling targets only where needed by real code; adapter `SessionPort` + `RoomListPort` (password login, room count); V-SQL-1, V-CI-1, V-SDK-1, V-APPLE-1; boundaries + Linux CI.
+1. **M0 Foundation** — repo skeleton per DEVELOPMENT_SETUP; `infra/dev`; packages with empty-but-compiling targets only where needed by real code; adapter `SessionPort` + `RoomListPort` (password login, room count); V-SQL-1, V-CI-1, V-SDK-1, V-APPLE-1; boundaries + Linux CI.
 2. **M1 Read-only client** + **NSE spike** (V-NSE-*), and submit the filtering-entitlement request.
 3. **M2 Messaging.**
 4. **M3 Read-state engine** (policy, outbox, NSE pipeline, scenario driver, auditor) → **gates G-UNREAD and G-FFI**. (G-NSE closes M1.)
@@ -85,8 +84,8 @@ T-NSE, T-RECEIPTS, T-FFI, T-STATE, T-XPROC, L1/L3 (licence drift / upstream reli
 6. P2: M6 bot cards → M7 Activity → M8 search/saved → M9 gallery/export → M10 threads.
 
 ## 8. Entry criteria for Phase 1
-- [ ] Founder approves this documentation set (or requests changes).
-- [x] Q-BUNDLE decided (D63) — [ ] value of `N` recorded in DEVELOPMENT_SETUP §3.
+- [x] Founder approves this documentation set (2026-11-19).
+- [x] Q-BUNDLE decided (D63): namespace root `one.mbm.halo`, identifiers in DEVELOPMENT_SETUP §3.
 - [x] Q-DEV-AUTH decided (D64: native password login in M0, MAS in M5).
 - [x] ADR-0015 accepted with conditions (D65) and ADR-0016 accepted (D66).
 - [ ] Apple Developer membership and a Mac with the iOS 26 SDK available.
@@ -110,11 +109,11 @@ A full read of the documentation before Phase 1 found the issues below; each is 
 | Hygiene | 21 `[DECISION]` labels without IDs; risk IDs colliding with milestones/properties; stale `AGENTS.md §9` refs | D49–D62; risk prefixes `COMPAT-`/`PERF-`/`PROJ-`; refs fixed; validator now checks decision IDs and AGENTS § references |
 
 ## 10. Founder decisions (2026-11-19)
-Approved by the founder; they don't block M0.
+Approved by the founder; they don't block M0. The documentation set as a whole was approved the same day.
 
 | Item | Decision | Recorded in |
 |---|---|---|
-| Q-BUNDLE | One consistent, project-owned namespace root for the app and all extensions; finalised before M0 | D63; identifiers in [development/DEVELOPMENT_SETUP.md](development/DEVELOPMENT_SETUP.md) §3 |
+| Q-BUNDLE | One consistent, project-owned namespace root for the app and all extensions: `one.mbm.halo` | D63; identifiers in [development/DEVELOPMENT_SETUP.md](development/DEVELOPMENT_SETUP.md) §3 |
 | Q-DEV-AUTH | Native Matrix username/password login in M0; MAS deferred to M5 | D64; ROADMAP M0/M5; V-AUTH-1 |
 | ADR-0015 | Accepted with conditions: custom Sygnal module converts count pushes into silent background pushes; the server never controls the badge; the local unread engine is the sole badge authority; the relay is a fallback only | ADR-0015, D65, AGENTS.md §4 principle 9 and §17 |
 | ADR-0016 | Accepted: NSE evaluated at the end of M1, independently of G-FFI; acceptance criteria cover timeout handling, memory, extension termination, network failures and fallback behaviour | ADR-0016, D66, AC-NSE-1…6 (NOTIFICATIONS §11), ROADMAP G-NSE |

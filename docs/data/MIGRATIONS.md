@@ -7,7 +7,7 @@
 - `eraseDatabaseOnSchemaChange` only in debug builds.
 - Failure → recovery per [../architecture/ERROR_HANDLING.md](../architecture/ERROR_HANDLING.md) §4 (move aside, recreate; derived data rebuilds; unsent intents may be lost — logged).
 
-## 2. Account data (`app.halo.*`)
+## 2. Account data (`one.mbm.halo.*`)
 Versioned JSON (`version` field). Readers accept `version ≤ current`, upgrade in memory, and write back the current version only when changing something. Unknown higher versions → read-only mode for that feature with a notice ("Update Halo to edit stickers").
 
 ## 3. SDK stores

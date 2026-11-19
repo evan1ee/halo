@@ -57,7 +57,7 @@ the composition roots (app target, NSE target) see every layer. Details:
 | Matrix protocol, sync, E2EE, crypto store, event cache, media encryption | **Rust — matrix-rust-sdk (upstream)** | The hardest code to get right and to secure; maintained upstream |
 | Sync service, room list, timeline diffing, send queue, notification client | **Rust — matrix-sdk-ui (upstream)** | Already solved upstream |
 | Read-state reconciliation policy, badge, attention | **Swift — HaloDomain** | Pure logic on values; must run identically in the app and the NSE; testable on Linux (D47) |
-| Receipt outbox, notification records, sticker pack cache, bot task index, auditor log | **Swift — HaloPersistence** | App-owned data (D46). Sticker favourites/recents are **not** here: they are account data (`app.halo.sticker_prefs`, [DATA_FLOW.md](DATA_FLOW.md) §1) read and written through `AccountDataPort` |
+| Receipt outbox, notification records, sticker pack cache, bot task index, auditor log | **Swift — HaloPersistence** | App-owned data (D46). Sticker favourites/recents are **not** here: they are account data (`one.mbm.halo.sticker_prefs`, [DATA_FLOW.md](DATA_FLOW.md) §1) read and written through `AccountDataPort` |
 | Sticker pack model and parsing (image packs), bot template parsing | **Swift — HaloDomain** | Pure parsing of JSON / HTML from the adapter |
 | UI, navigation, OS integration | **Swift** | Native |
 | Future Halo-owned FFI (if gate G-FFI fails) | **Rust — `core/halo-ffi`** | Direct access to SDK internals behind the *same* ports (ADR-0003) |

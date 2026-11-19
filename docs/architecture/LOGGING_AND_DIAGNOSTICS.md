@@ -2,7 +2,7 @@
 
 ## 1. Logging
 - **[DECISION D58]** Swift: Apple `os.Logger` through a thin `HaloLog` facade in `HaloFoundation`, with subsystem
-  `N` (`app.halo` as stand-in, D63) and categories `session`, `sync`, `readstate`, `outbox`, `push`, `nse`,
+  `one.mbm.halo` (D63) and categories `session`, `sync`, `readstate`, `outbox`, `push`, `nse`,
   `stickers`, `bot`, `db`, `ui`.
 - SDK logs: the adapter calls `init_platform(config: TracingConfiguration, use_lightweight_tokio_runtime:)`
   **once per process** **[VERIFIED F-FFI-13]**. `TracingConfiguration` has `log_level`, `trace_log_packs`,

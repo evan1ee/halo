@@ -16,5 +16,5 @@ iOS gives no persistent background connection. Halo relies on four mechanisms:
 4. On every foreground: full reconcile (see [DATA_FLOW.md](DATA_FLOW.md) §5) — the guarantee that catches up whatever best-effort background work missed.
 
 ## Identifiers (to register in Info.plist in M0)
-- `BGTaskSchedulerPermittedIdentifiers`: `N.refresh` (D63; written `app.halo.refresh` elsewhere as a stand-in).
+- `BGTaskSchedulerPermittedIdentifiers`: `one.mbm.halo.refresh` (D63).
 - `UIBackgroundModes`: `remote-notification`, `fetch`.
