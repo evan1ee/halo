@@ -11,9 +11,9 @@ Sign in to a Matrix homeserver, keep the session safe and restore it silently.
 - As a user, when my session expires, I re-authenticate without losing my local data.
 
 ## 3. Functional requirements
-- FR-1 Server discovery from a server name, a URL or a user ID (`server_name_or_homeserver_url`, `server_name_from_user_id`) **[VERIFIED F-FFI-4 builder names]**.
+- FR-1 Server discovery from a server name, a URL or a user ID (`server_name_or_homeserver_url`, `server_name_from_user_id`) **[VERIFIED F-FFI-4, F-FFI-22]**.
 - FR-2 Show the login methods the server offers (`homeserver_login_details`).
-- FR-3 OIDC via `url_for_oauth` + `ASWebAuthenticationSession` + `login_with_oauth_callback`; abort with `abort_oauth_auth`.
+- FR-3 OIDC via `url_for_oauth` + `ASWebAuthenticationSession` + `login_with_oauth_callback`; abort with `abort_oauth_auth` **[VERIFIED F-FFI-22]**.
 - FR-4 Password login with `login(username, password, deviceName, deviceId)`.
 - FR-5 Reject servers without native sliding sync with a clear message (`sliding_sync_version_builder(.discoverNative)` failure).
 - FR-6 Persist the session (`Client.session()`) in the Keychain, access group shared with the NSE, accessibility `afterFirstUnlockThisDeviceOnly`.

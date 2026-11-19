@@ -1,6 +1,6 @@
 # Sources and Verified Facts
 
-Every **[VERIFIED]** statement in the documentation points here. Verification date: **2026-11-19**.
+Every **[VERIFIED]** statement in the documentation points here. Verification date: **2026-11-19** (F-FFI-21/22 and F-PUSH-* added in the Phase 0 review, same date and revisions).
 Re-verify at every SDK bump (see [development/BUILD_AND_RELEASE.md](development/BUILD_AND_RELEASE.md)).
 
 ## Pinned references
@@ -50,6 +50,15 @@ Re-verify at every SDK bump (see [development/BUILD_AND_RELEASE.md](development/
 - F-FFI-18 Further FFI names that exist (signatures to confirm when used): `ClientBuilder::{auto_enable_cross_signing, auto_enable_backups, room_key_recipient_strategy, backup_download_strategy, disable_ssl_verification}`; `Client::{get_session_verification_controller, create_room, get_dm_room, get_dm_rooms, join_room_by_id, join_room_by_id_or_alias, get_room_preview_from_room_id, account_url, homeserver_login_details, get_notification_settings, get_media_preview_display_policy, set_media_retention_policy, get_max_media_upload_size, get_url_preview, ignored_users, unignore_user, display_name, set_display_name, avatar_url, upload_avatar, remove_avatar, subscribe_to_own_profile, enable_all_send_queues}`; `Room::{set_is_favourite, get_power_levels, subscribe_to_identity_status_changes, withdraw_verification_and_resend, ignore_device_trust_and_resend}`; types `RoomListEntriesDynamicFilterKind`, `RoomMembersIterator`, `ComposerDraft`.
 - F-FFI-19 `matrix-rust-components-swift` `Package.swift`: `platforms: [.iOS(.v16)]`, product `MatrixRustSDK` `type: .dynamic`, binary target `MatrixSDKFFI` downloaded by URL + checksum.
 - F-FFI-20 UniFFI: the SDK workspace pins `uniffi = "0.32.1"`; crates.io latest stable is `0.32.2`.
+- F-FFI-21 Runtime and subscriptions: async work in the bindings runs on a tokio runtime the crate obtains itself (`runtime.rs`
+  `get_runtime_handle`, via `async_compat`), so the app creates none. Subscriptions return `TaskHandle` (`task_handle.rs`) with
+  `cancel()` (aborts the task) and `is_finished()`; dropping the handle also cancels it.
+- F-FFI-22 Further names that exist (found during the Phase 0 review; signatures to confirm when used): `ClientBuilder::server_name_from_user_id`;
+  `Client::{restore_session_with, abort_oauth_auth, subscribe_to_send_queue_updates}`; `Room::{timeline_with_configuration,
+  subscribe_to_send_queue_updates}`; `Timeline::{subscribe_to_back_pagination_status, load_reply_details, edit_revisions}`; record
+  `MediaUploadProgress` (`timeline/mod.rs`; how `send_image` reports it is confirmed at M2); `MsgLikeKind::Sticker { body, info, source }`
+  (`timeline/msg_like.rs`); `TimelineFocus = Live{…} | Event{event_id, num_context_events, thread_mode} | Thread{…} | PinnedEvents`
+  (`timeline/configuration.rs`).
 - F-FFI-12 The doc comment of `Client::mark_all_rooms_as_read` refers to wrong iOS badges caused by the backend: https://github.com/element-hq/element-x-ios/issues/3151.
 
 ### F-SDK — SDK internals

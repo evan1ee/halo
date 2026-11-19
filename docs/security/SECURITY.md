@@ -34,7 +34,7 @@ Screenshots in the app switcher: a privacy blur when backgrounding (setting, def
 
 ## 5. Network security
 - TLS via the SDK (rustls with aws-lc-rs, F-FFI-1); system trust store plus the SDK's built-in roots.
-- **Never** call `disable_ssl_verification` (exists in the builder, F-FFI-4) outside a debug-only local-CA setup; a build check fails release builds that reference it.
+- **Never** call `disable_ssl_verification` (exists in the builder, F-FFI-18) outside a debug-only local-CA setup; a build check fails release builds that reference it.
 - ATS stays enabled with no exceptions; the Sygnal and homeserver endpoints use HTTPS.
 - Halo makes direct HTTP calls only for documented exceptions (sticker state fetch, option B in STICKERS §9), through the same TLS settings, with the access token in the `Authorization` header only.
 

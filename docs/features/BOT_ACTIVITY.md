@@ -32,7 +32,7 @@ The tab must therefore **label freshness**: each item shows "as of <time of the 
 The index adds ≤ 1 ms per bot event; the tab opens from the DB in < 200 ms.
 
 ## 6. User flows
-Tab → list → tap → timeline at the event (event-focused timeline, V-TL-1) → back.
+Tab → list → tap → timeline at the event (event-focused timeline, F-FFI-22) → back.
 
 ## 7. State transitions
 `bot_task.status`: `open → pending(local) → completed | deleted`; `pending` lives in `BotActionCoordinator` (memory + `bot_action` table for crash safety), not in the index's status.

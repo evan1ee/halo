@@ -15,7 +15,7 @@
 | `HaloPersistence` | GRDB `DatabasePool` (thread-safe); repository methods are `async` |
 
 ## 3. Rust async runtime and FFI callbacks
-- **[VERIFIED F-FFI-2]** matrix-sdk-ffi runs its own tokio runtime; UniFFI exposes Rust `async fn`s as Swift `async` functions. Halo creates **no** runtime.
+- **[VERIFIED F-FFI-21]** matrix-sdk-ffi runs its own tokio runtime; UniFFI exposes Rust `async fn`s as Swift `async` functions. Halo creates **no** runtime.
 - FFI listener callbacks (e.g. `TimelineListener.on_update`) arrive on a **Rust thread**. Each adapter listener must:
   1. copy or map the payload into Swift value types right away (no upstream object kept outside the adapter);
   2. `yield` it into an `AsyncStream.Continuation` (thread-safe), with `bufferingPolicy` set per stream (see below);
@@ -26,7 +26,7 @@
   `sequence` per room id); dropping across keys would lose another room's update and cause a missed unread (R-P0-2).
 
 ## 4. Cancellation and lifetimes
-- Upstream subscriptions return a `TaskHandle` **[VERIFIED F-FFI-4]**. The adapter wraps each in a Swift
+- Upstream subscriptions return a `TaskHandle` **[VERIFIED F-FFI-21]**. The adapter wraps each in a Swift
   type that calls `cancel()` on `deinit` and when its `AsyncStream` ends (`onTermination`).
 - Coordinators run long-lived work in `Task`s stored in the coordinator and cancelled on sign-out/deinit.
   No fire-and-forget `Task {}` except where a comment explains why.

@@ -25,7 +25,7 @@
 | V-RS-4 | Receipts on the latest *visible* event (skipping hidden state events) clear server counts | Scenario with hidden state events after the last message | M3 | M3 |
 | V-RS-5 | Which sliding-sync extensions `RoomListService` enables for which rooms (receipts coverage) | Log the SSS request bodies from the SDK on the dev Synapse | M1 | M3 |
 | V-SYNC-2 | The SDK send queue persists unsent events across app restarts | Kill during send offline; relaunch; observe | M2 | M2 |
-| V-TL-1 | An event-focused timeline (jump to an old event) is available via `timeline_with_configuration` | Inspect `TimelineConfiguration`/focus types at M2 | M2 | — |
+| V-TL-1 | ~~An event-focused timeline is available via `timeline_with_configuration`~~ **Resolved** — `TimelineFocus.Event` exists [VERIFIED F-FFI-22] | — | — | — |
 | V-RL-1 | Room tags beyond favourite are reachable | `set_is_favourite` exists **[VERIFIED F-FFI-18]**; other tags unknown → not needed in the MVP | M2 | — |
 | V-E2EE-1 | Encryption API names for recovery and backup | Inspect `encryption.rs` at M1 | M1 | M1 |
 | V-MEDIA-1 | Media retention policy can be configured as planned | Inspect `set_media_retention_policy` parameters | M2 | — |

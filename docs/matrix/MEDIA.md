@@ -8,7 +8,7 @@
 - Memory: an in-memory LRU of decoded thumbnails (cap 64 MB), evicted on memory warnings.
 
 ## 2. Upload
-- Images: `Timeline.send_image(...)` with progress (`MediaUploadProgress`) **[VERIFIED F-FFI-8]**; strip location EXIF by default; convert HEIC → JPEG for compatibility **[DECISION]**; max dimension 4096 px, quality 0.85.
+- Images: `Timeline.send_image(...)` with progress (`MediaUploadProgress`) **[VERIFIED F-FFI-8, F-FFI-22]**; strip location EXIF by default; convert HEIC → JPEG for compatibility **[DECISION]**; max dimension 4096 px, quality 0.85.
 - Sticker pack images: `Client.upload_media(mime, data)` → `mxc://` (F-FFI-4), then written into the pack state event.
 
 ## 3. Privacy

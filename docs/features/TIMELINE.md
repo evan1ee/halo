@@ -18,8 +18,8 @@ Show a room's history correctly and smoothly, and report what the user has actua
 - FR-5 **Visibility tracking** → `ReadStateCoordinator.markRead` per D6 ([../matrix/READ_RECEIPTS.md](../matrix/READ_RECEIPTS.md) §1).
 - FR-6 Read receipts: up to 3 avatars + count under the newest message each user has read.
 - FR-7 Reactions row; tap toggles (`toggle_reaction`).
-- FR-8 Reply preview (`load_reply_details`), tap to jump (paginate around the event if needed — `timeline_with_configuration` focus **[ASSUMPTION V-TL-1: event-focused timeline config available in FFI]**).
-- FR-9 Edits show "(edited)"; long-press → "View edit history" (`edit_revisions`) (P2).
+- FR-8 Reply preview (`load_reply_details`), tap to jump (paginate around the event if needed — `timeline_with_configuration` with `TimelineFocus.Event` **[VERIFIED F-FFI-22]**).
+- FR-9 Edits show "(edited)"; long-press → "View edit history" (`edit_revisions`, F-FFI-22) (P2).
 - FR-10 Bot messages from allowlisted senders go through `BotMessageRenderer` ([BOT_MESSAGES.md](BOT_MESSAGES.md)); all messages get "View source".
 - FR-11 Threads: thread replies inline as replies (D17).
 
@@ -54,4 +54,4 @@ Gaps in history · an event-focused jump to a very old event · own message from
 Unit: diff application (randomised diff sequences vs a reference model), visibility tracker (dwell time, scene phase, partial visibility). Snapshot: every item type. Integration: S-TL-1..3.
 
 ## 13. Open questions
-V-TL-1.
+— (V-TL-1 resolved by F-FFI-22.)

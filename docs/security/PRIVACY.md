@@ -18,6 +18,12 @@ gateway and Apple (APNs metadata), and through explicit user actions (export, sh
 | Diagnostics export | Only where the user shares it | Debugging | Recipient |
 | Bot conversations | The bot's room (normal Matrix) | Bot features | The bot backend (by the user's choice to talk to it) |
 
+## 2b. Dormant Sentry code in the prebuilt SDK
+The prebuilt `MatrixSDKFFI` binary is built with the `sentry` feature, so the Sentry crates are linked into the app
+**[VERIFIED F-LIC-2]**. Halo passes `sentry_config = nil` to `init_platform` and never calls `enable_sentry_logging`
+([../architecture/LOGGING_AND_DIAGNOSTICS.md](../architecture/LOGGING_AND_DIAGNOSTICS.md) §1), so no data is sent. The code is still
+shipped: say so in the App Store privacy review, and prefer an SDK build without `sentry` (Q-SDK-BUILD).
+
 ## 3. Bot privacy (D18)
 Halo never sends data to a bot or AI service on its own. Rendering and indexing of bot messages happen on the device, from
 messages already in the user's rooms. Any future feature that sends content to a bot must be an explicit user action and be documented here first.

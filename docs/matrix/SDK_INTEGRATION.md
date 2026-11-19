@@ -1,7 +1,7 @@
 # matrix-rust-sdk Integration
 
 Decisions: D44, ADR-0002. All API names below are **[VERIFIED]** at rev `7ff8855` unless labelled otherwise
-(see [../SOURCES.md](../SOURCES.md) F-FFI-*).
+(see [../SOURCES.md](../SOURCES.md) F-FFI-1…22).
 
 ## 1. How the SDK is consumed
 
