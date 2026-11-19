@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Debug builds only (project.yml): lets the app talk plain http to the dev homeserver on the local network
+	     (infra/dev, HALO_DEV_BIND). ATS stays fully on for Beta and Release. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>HaloNamespace</key>
+	<string>$(HALO_NAMESPACE)</string>
+	<key>HaloKeychainAccessGroup</key>
+	<string>$(HALO_KEYCHAIN_GROUP)</string>
+	<key>HaloPushAppID</key>
+	<string>$(HALO_PUSH_APP_ID)</string>
+	<key>HaloPushGatewayURL</key>
+	<string>$(HALO_PUSH_GATEWAY_URL)</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Halo connects to your development homeserver on the local network.</string>
+</dict>
+</plist>

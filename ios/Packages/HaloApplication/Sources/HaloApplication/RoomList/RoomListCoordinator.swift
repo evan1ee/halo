@@ -23,6 +23,8 @@ public actor RoomListCoordinator {
 
     private let port: any RoomListPort
     private var broadcaster = SnapshotBroadcaster<Status>()
+    private var readBroadcaster = SnapshotBroadcaster<[RoomReadInputs]>()
+    private var readInputsCache: [RoomReadInputs] = []
     private var subscription: Task<Void, Never>?
     private var generation = 0
     private var consecutiveFailures = 0
@@ -40,6 +42,10 @@ public actor RoomListCoordinator {
     public func statuses() -> AsyncStream<Status> {
         broadcaster.subscribe(current: status)
     }
+
+    /// The read inputs of every loaded room, now and after each change; latest value wins. Only the rooms the list has
+    /// loaded so far are included (the first page until the list pages further). `BadgeCoordinator` evaluates them.
+    public func readInputs() -> AsyncStream<[RoomReadInputs]> { readBroadcaster.subscribe(current: readInputsCache) }
 
     public func start(filter: RoomListFilter = .all) {
         consecutiveFailures = 0
@@ -73,6 +79,13 @@ public actor RoomListCoordinator {
         }
     }
 
+    private func publishReadInputs() {
+        let inputs = rooms.map { RoomReadInputs(roomID: $0.id, membership: $0.membership, isEncrypted: $0.isEncrypted, counts: $0.read) }
+        guard inputs != readInputsCache else { return }
+        readInputsCache = inputs
+        readBroadcaster.publish(inputs)
+    }
+
     /// Applies one diff; returns `false` when this subscription must stop.
     private func apply(_ diff: RoomListDiff, generation: Int, filter: RoomListFilter) -> Bool {
         guard generation == self.generation else { return false }
@@ -83,6 +96,7 @@ public actor RoomListCoordinator {
             // applies; only a later diff proves the stream is healthy again.
             if diffsInSubscription > 1 { consecutiveFailures = 0 }
             status = .loaded(roomCount: rooms.count)
+            publishReadInputs()
             return true
         } catch {
             consecutiveFailures += 1

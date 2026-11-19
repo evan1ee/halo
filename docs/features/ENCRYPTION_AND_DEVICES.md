@@ -13,7 +13,7 @@ Read and send encrypted messages from a verified device and recover history on a
 ## 3. Functional requirements
 - FR-1 Cross-signing bootstrap via `ClientBuilder.auto_enable_cross_signing(true)` and key backup via `auto_enable_backups(true)` **[VERIFIED F-FFI-18]**.
 - FR-2 Verification flows through `get_session_verification_controller` (emoji/SAS) and the QR login/verify handlers **[VERIFIED F-FFI-18; flow details at M1]**.
-- FR-3 Recovery: enter the recovery key → restore secrets and the backup (`client.encryption()` API **[ASSUMPTION V-E2EE-1: method names of the Encryption object; verify at M1]**).
+- FR-3 Recovery: enter the recovery key → restore secrets and the backup (`client.encryption()` API **[VERIFIED V-E2EE-1]**; in code (M1): `EncryptionPort`/`EncryptionCoordinator`, the "Verify this device" banner and recovery-key sheet in FeatureAuth. UTD placeholders with a reason (FR-5: `UTDReason`, mapped from the SDK's `UtdCause`; the SDK retries by itself when keys arrive) are in code; QR/emoji verification (FR-2) and the device list (FR-6) are still to do. The reason mapping is unit-tested; the live retry (AC-E2EE-3) is not yet tested end to end (needs an encrypted room with sending, M2).).
 - FR-4 Show the verification state (verified / unverified / no recovery set up) in Settings, with a banner until verified.
 - FR-5 UTD placeholder with a reason from the timeline item (unknown keys, unverified sender, withheld) and an automatic retry when keys arrive (`retry_decryption`) **[VERIFIED F-FFI-8]**.
 - FR-6 Session list: MAS account management URL (`account_url`) for OIDC accounts; native list for password accounts **[OPEN Q-MAS-ACCOUNT]**.

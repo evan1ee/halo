@@ -15,16 +15,16 @@ needs, made of Halo value types, and independent of the SDK version underneath.
 | Port | Purpose | Key operations (sketch) | Implemented by |
 |---|---|---|---|
 | `SessionPort` | Auth & session | `loginDetails(server:)`, `loginPassword(_:on:)`, `restore(_:)`, `logout()`, `sessionUpdates() -> AsyncStream<SessionEvent>` (lossless) — **in code since M0**; `oauthURL`, `completeOAuth(callback)` added in M5 (MINOR) | Adapter |
-| `SyncPort` | Sync lifecycle | `start()`, `stop()`, `status: AsyncStream<SyncStatus>` (snapshot) | Adapter |
+| `SyncPort` | Sync lifecycle | `start()` (idempotent), `stop()` (idempotent), `statuses() -> AsyncStream<SyncStatus>` (snapshot; `idle/running/offline/failed/stopped`) — **in code since M1**; only `SyncCoordinator` calls it, room list and timeline never start sync | Adapter |
 | `RoomListPort` | Room list | `rooms(filter:) -> AsyncStream<RoomListDiff>` (lossless; every subscription starts from a known state), `loadMore()`, `setFilter(_:)` — **in code since M0**; `RoomListDiff` mirrors upstream `RoomListEntriesUpdate` | Adapter |
 | `RoomReadStatePort` | Inputs for read state | `updates() -> AsyncStream<RoomReadInputsPart>` (lossless; one full per-room snapshot per change, coalesced by the consumer per room id), `allInputs() async -> [RoomReadInputsPart]` (initial load and reconcile), `ownReceipt(room)` | Adapter |
 | `ReadMarkerPort` | Outbound read state | `sendReceipt(room, event, private:)`, `setFullyRead(room, event)`, `markRoomRead(room, private:) -> EventRef`, `setMarkedUnread(room, Bool)`, `markAllRead()` | Adapter |
-| `TimelinePort` | Timeline of one room | `open(room) -> TimelineSession`; `TimelineSession.items: AsyncStream<TimelineDiff>`, `paginateBackwards(n)`, `send(_ draft)`, `reply`, `edit`, `redact`, `toggleReaction`, `sendImage`, `sendRawMessage(type, contentJSON)` | Adapter |
-| `MediaPort` | Media | `thumbnail(source, size)`, `content(source)`, `file(source) -> URL`, `upload(data, mime)` | Adapter |
+| `TimelinePort` | Timeline of one room | `open(room) -> TimelineSession`; `TimelineSession.items() -> AsyncStream<TimelineDiff>` (lossless diffs), `paginateBackwards(count) -> Bool`, `close()` — **read-only part in code since M1**; `send(text:)` (Markdown → message content by the SDK, local echo as `SendState.sending` → `.sent`/`.failed`) — **in code since M2 start**; `toggleReaction(on:key:)`, `edit(event:newText:)`, `delete(event:)` on confirmed events (event ID, not the local echo) — **in code**; `typingUsers()`/`setTyping(_:)` — **in code**; `reply(to:text:)` quoting the original via `ReplyPreview` — **in code**; `sendImage`, `sendRawMessage(type, contentJSON)` follow | Adapter |
+| `MediaPort` | Media | `thumbnail(ref, width, height)`, `content(ref)` — **in code since M1** (`MediaRef` is an opaque token only the adapter can read); `file(ref) -> URL`, `upload(data, mime)` follow in M2 | Adapter |
 | `RoomPort` | Room management | `details(room)`, `members(room)`, `leave`, `invite`, `createDM(user)`, `createRoom(opts)`, `setNotificationMode`, `state(room, type)`, `sendState(room, type, key, json)` | Adapter |
 | `ProfilePort` | Profiles | `ownProfile`, `setDisplayName`, `setAvatar`, `profile(user)`, `ignore(user)` | Adapter |
 | `AccountDataPort` | Account data | `get(type) -> JSON?`, `set(type, JSON)`, `observe(type)` | Adapter |
-| `EncryptionPort` | E2EE & devices | `verificationState`, `startVerification`, `recover(recoveryKey)`, `backupState`, `devices` | Adapter |
+| `EncryptionPort` | E2EE & devices | `statuses() -> AsyncStream<EncryptionStatus>` (verification + recovery state, snapshot), `recover(recoveryKey:)`, `enableRecovery() -> key` — **in code since M1**; `startVerification`, `backupState`, `devices` follow | Adapter |
 | `NotificationFetchPort` | NSE | `notification(room, event) -> FetchedNotification` | Adapter |
 | `PusherPort` | Pushers | `register(token, gateway)`, `unregister()` | Adapter |
 | `ReadIntentStore`, `NotificationRecordStore`, `AuditStore`, `StickerPackCache`, `BotTaskStore` | Halo persistence | CRUD with monotonic guards (sticker favourites/recents are account data via `AccountDataPort`, not a store) | HaloPersistence |
@@ -32,7 +32,9 @@ needs, made of Halo value types, and independent of the SDK version underneath.
 
 Exact signatures are written in code in M0–M1 and must match the intent of this table; any deviation updates this document.
 Ports live in `ios/Packages/HaloDomain/Sources/HaloDomain/Ports/` and use typed throws (`throws(HaloError)`), so the compiler enforces
-rule 3. Fakes and the contract suites (`SessionPortContract`, `RoomListPortContract`) are in `HaloTestSupport`.
+rule 3. Fakes and the contract suites (`SessionPortContract`, `RoomListPortContract`, `TimelinePortContract`, `SyncPortContract`, `MediaPortContract`, `EncryptionPortContract`) are in `HaloTestSupport`.
+
+**Verified against the dev Synapse (M1 slice):** a freshly synced room holds only its newest event, so a timeline consumer must back-paginate; `paginateBackwards` returns `false` until one call past the last page, and the SDK puts a `timelineStart` virtual item on top when the start is loaded (the coordinator treats that item as authoritative). Room list and timeline diffs share one `ListDiff`/`ListReducer`.
 
 ## 3. Mapping responsibilities (adapter)
 - Upstream `RoomInfo` → `RoomReadInputsPart` and `RoomSummary`. `RoomReadInputsPart` is the adapter's share of `RoomReadInputs`

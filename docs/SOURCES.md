@@ -105,6 +105,13 @@ Re-verify at every SDK bump (see [development/BUILD_AND_RELEASE.md](development/
 - F-BOT-2 Reactions 👍 done, 👎 delete, 😝 +1 day, 🎉 celebrate; only on messages registered in `reaction_targets`, which are parsed from `Added Task <b>#N</b>` and `Reminder #N set!` confirmations.
 - F-BOT-4 On a processed reaction the bot reacts on the **target event** with an ack emoji (`✅` done, `🗑️` delete, `⏰` delay, `🎉` celebrate) and replies, e.g. `✅ Marked task as done: <i>"{title}"</i>`, `🗑️ Deleted task: <i>"{title}"</i>`; the reply is registered as a further reaction target (except for deletes). Reactions are processed only from the task owner (`reaction.rs`).
 - F-BOT-3 Todo list format: `📋 <b>{title}:</b><br/>• [<b>#{id}</b>] {text} ...<br/>`; completed rows use `<del>…</del> ✅`.
+- F-APPLE-1 (V-APPLE-1, checked 2026-11-19 against Apple's documentation JSON at `developer.apple.com/tutorials/data/documentation/…`):
+  `Observation` framework is available from iOS 17.0; `UNNotificationServiceExtension` is the entry point of a notification service
+  extension (iOS 10.0+); the entitlement `com.apple.developer.usernotifications.filtering` (iOS 13.3+) is added to the NSE target's
+  entitlements after Apple grants it and lets the NSE suppress a notification by returning empty content; `FileProtectionType.completeUntilFirstUserAuthentication`
+  keeps a file inaccessible only until the first unlock after boot; `BGTaskScheduler` (iOS 13.0+) schedules background work for a suspended app.
+  **Not verified from documentation:** the NSE execution-time and memory limits (Apple publishes no numbers; measured under G-NSE, AC-NSE-1…6) and
+  ImageIO animated GIF/APNG/WebP decoding (checked in M4).
 
 ## Unverified (tracked in OPEN_QUESTIONS.md)
 Statements about iOS NSE memory limits, APNs/background push throttling, filtering-entitlement

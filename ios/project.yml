@@ -1,0 +1,77 @@
+# Source of truth for ios/Halo.xcodeproj (ADR-0017). Regenerate after editing: `cd ios && xcodegen --spec project.yml --project .`
+# The development team is deliberately not set here: pass DEVELOPMENT_TEAM=<id> to xcodebuild or choose it in Xcode.
+name: Halo
+options:
+  bundleIdPrefix: one.mbm
+  createIntermediateGroups: true
+configFiles:
+  Debug: Config/Debug.xcconfig
+  Beta: Config/Beta.xcconfig
+  Release: Config/Release.xcconfig
+configs:
+  Debug: debug
+  Beta: release
+  Release: release
+packages:
+  HaloMatrixAdapter: {path: Packages/HaloMatrixAdapter}
+  HaloApplication: {path: Packages/HaloApplication}
+  HaloDomain: {path: Packages/HaloDomain}
+  HaloFoundation: {path: Packages/HaloFoundation}
+  HaloPlatform: {path: Packages/HaloPlatform}
+  FeatureAuth: {path: Packages/Features/FeatureAuth}
+  FeatureRoomList: {path: Packages/Features/FeatureRoomList}
+  FeatureTimeline: {path: Packages/Features/FeatureTimeline}
+targets:
+  Halo:
+    type: application
+    platform: iOS
+    sources: [App]
+    dependencies:
+      - package: HaloMatrixAdapter
+      - package: HaloApplication
+      - package: HaloDomain
+      - package: HaloFoundation
+      - package: HaloPlatform
+      - package: FeatureAuth
+      - package: FeatureRoomList
+      - package: FeatureTimeline
+      - target: HaloNotificationService
+        embed: true
+    settings:
+      base:
+        CODE_SIGN_ENTITLEMENTS: App/Halo.entitlements
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Halo
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.social-networking
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+      configs:
+        Debug:
+          INFOPLIST_FILE: App/Info-Debug.plist
+        Beta:
+          INFOPLIST_FILE: App/Info.plist
+        Release:
+          INFOPLIST_FILE: App/Info.plist
+  HaloNotificationService:
+    type: app-extension
+    platform: iOS
+    sources: [NotificationService]
+    dependencies:
+      - package: HaloMatrixAdapter
+      - package: HaloDomain
+      - package: HaloFoundation
+      - package: HaloPlatform
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(HALO_NSE_BUNDLE_ID)
+        CODE_SIGN_ENTITLEMENTS: NotificationService/HaloNotificationService.entitlements
+        INFOPLIST_KEY_CFBundleDisplayName: Halo Notifications
+        INFOPLIST_FILE: NotificationService/Info.plist
+schemes:
+  Halo-Debug:
+    build: {targets: {Halo: all}}
+    run: {config: Debug}
+    test: {config: Debug}
+    profile: {config: Release}
+    analyze: {config: Debug}
+    archive: {config: Release}

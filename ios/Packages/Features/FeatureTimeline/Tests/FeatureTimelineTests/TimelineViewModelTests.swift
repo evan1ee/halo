@@ -1,0 +1,242 @@
+import Foundation
+import HaloApplication
+import HaloDomain
+import HaloFoundation
+import HaloTestSupport
+import Testing
+@testable import FeatureTimeline
+
+@MainActor
+@Suite("TimelineViewModel")
+struct TimelineViewModelTests {
+    private func model() throws -> TimelineViewModel {
+        TimelineViewModel(
+            coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: try RoomID("!r:x.org")),
+            locale: Locale(identifier: "en_US"), timeZone: TimeZone(identifier: "UTC") ?? .gmt)
+    }
+
+    private func event(_ kind: TimelineEventKind, own: Bool = false, name: String? = "Alice") -> TimelineItem {
+        TimelineItem(
+            id: TimelineItemID("id"),
+            content: .event(TimelineEvent(
+                eventID: nil, sender: try? UserID("@alice:x.org"), senderName: name, timestamp: Date(timeIntervalSince1970: 0),
+                isOwn: own, kind: kind)))
+    }
+
+    @Test("text, notice, emote and media rows carry the sender and a readable label")
+    func messages() throws {
+        let model = try model()
+        #expect(model.row(event(.text("hi", isEdited: false))) == TimelineRow(id: "id", style: .message, sender: "Alice", text: "hi"))
+        #expect(model.row(event(.text("hi", isEdited: true), own: true)).text == "hi (edited)")
+        #expect(model.row(event(.text("hi", isEdited: false), own: true)).style == .ownMessage)
+        #expect(model.row(event(.emote("waves", isEdited: false))).text == "Alice waves")
+        #expect(model.row(event(.media(MediaAttachment(kind: .file, body: "a.pdf", source: nil)))).text == "[File] a.pdf")
+        let image = model.row(event(.media(MediaAttachment(kind: .image, body: "cat.png", source: MediaRef(token: "t"), width: 200, height: 100))))
+        #expect(image.text == "cat.png" && image.image == .init(ref: MediaRef(token: "t"), aspectRatio: 2))
+        #expect(model.row(event(.media(MediaAttachment(kind: .image, body: "x.png", source: nil)))).text == "[Image] x.png")
+        #expect(model.row(event(.notice("fyi", isEdited: false))).style == .notice)
+    }
+
+    @Test("undecryptable, deleted and unsupported events are shown honestly, never hidden")
+    func placeholders() throws {
+        let model = try model()
+        #expect(model.row(event(.undecryptable(.unknown))).text.hasPrefix("Unable to decrypt this message"))
+        // Every reason has its own explanation, and none is empty.
+        let reasons: [UTDReason] = [.unknown, .sentBeforeJoining, .keysNotShared, .senderVerificationProblem, .backupDisabled]
+        #expect(Set(reasons.map(TimelineViewModel.text(for:))).count == reasons.count)
+        #expect(TimelineViewModel.text(for: .backupDisabled).contains("recovery key"))
+        #expect(model.row(event(.redacted)).text == "Message deleted")
+        #expect(model.row(event(.unsupported)).text == "Unsupported event")
+    }
+
+    @Test("a sender without a display name falls back to the user ID, not an empty label")
+    func senderFallback() throws {
+        #expect(try model().row(event(.text("x", isEdited: false), name: nil)).sender == "@alice:x.org")
+    }
+
+    @Test("membership and date rows")
+    func stateAndDates() throws {
+        let model = try model()
+        #expect(model.row(event(.membership(user: nil, displayName: "Bob", change: .joined))).text == "Bob joined")
+        let divider = TimelineItem(id: TimelineItemID("d"), content: .virtual(.dateDivider(Date(timeIntervalSince1970: 0))))
+        #expect(model.row(divider).text == "Jan 1, 1970")
+    }
+
+    @Test("statuses map to opening, live and failed content")
+    func statuses() throws {
+        let model = try model()
+        model.apply(.opening)
+        #expect(model.content == .opening)
+        model.apply(.failed(.notFound))
+        #expect(model.content == .failed("This room isn't available."))
+        model.apply(.live(.init(items: [event(.redacted)], isPaginating: false, reachedStart: true, paginationError: nil)))
+        guard case .live(let rows, _, let canLoadEarlier, _) = model.content else { Issue.record("not live"); return }
+        #expect(rows.count == 1 && !canLoadEarlier)
+    }
+
+    @Test("consecutive room-setting rows collapse into one; other rows are kept")
+    func collapses() throws {
+        let model = try model()
+        let items = [event(.otherState), event(.otherState), event(.text("hi", isEdited: false)), event(.otherState)]
+        let rows = TimelineViewModel.collapsingStateRuns(items.map(model.row), items: items)
+        #expect(rows.map(\.text) == ["The room was updated", "hi", "The room was updated"])
+    }
+
+    @Test("unconfirmed own messages say so; sent ones carry no status")
+    func sendStatus() throws {
+        let model = try model()
+        func own(_ state: SendState) -> TimelineItem {
+            TimelineItem(id: TimelineItemID("o"), content: .event(TimelineEvent(
+                eventID: nil, sender: nil, senderName: "Me", timestamp: Date(timeIntervalSince1970: 0), isOwn: true,
+                kind: .text("hi", isEdited: false), sendState: state)))
+        }
+        #expect(model.row(own(.sent)).status == nil)
+        #expect(model.row(own(.sending)).status == "Sending…")
+        #expect(model.row(own(.failed(recoverable: true))).status?.contains("retry") == true)
+        #expect(model.row(own(.failed(recoverable: false))).status == "Not sent")
+    }
+
+    @Test("a successful send clears the draft; a failed send keeps it and explains")
+    func composer() async throws {
+        let port = FakeTimelinePort()
+        let room = try RoomID("!r:x.org")
+        port.addRoom(room, items: [event(.text("one", isEdited: false))])
+        let model = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room))
+        await model.start()
+        for _ in 0..<500_000 { if case .live = model.content { break }; await Task.yield() }
+
+        model.draft = "  "
+        #expect(!model.canSend)
+        model.draft = "hello"
+        #expect(model.canSend)
+        await model.send()
+        #expect(model.draft.isEmpty && model.sendError == nil)
+        #expect(port.sentTexts(in: room) == ["hello"])
+
+        await model.stop()  // closed timeline: the send is refused, the text must survive
+        model.draft = "kept"
+        await model.send()
+        #expect(model.draft == "kept" && model.sendError != nil)
+    }
+
+    @Test("reactions, edit and delete drive the timeline through the coordinator; edit mode round-trips the text")
+    func interactions() async throws {
+        let port = FakeTimelinePort()
+        let room = try RoomID("!r:x.org")
+        port.addRoom(room)
+        let model = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room))
+        await model.start()
+        func rows() -> [TimelineRow] { if case .live(let rows, _, _, _) = model.content { rows } else { [] } }
+        for _ in 0..<500_000 { if case .live = model.content { break }; await Task.yield() }
+
+        model.draft = "my message"
+        await model.send()
+        for _ in 0..<500_000 where rows().first?.eventID == nil { await Task.yield() }
+        let sent = try #require(rows().first)
+        #expect(sent.isOwn && sent.eventID != nil)
+
+        await model.toggleReaction(on: sent, key: "👍")
+        for _ in 0..<500_000 where rows().first?.reactions.isEmpty != false { await Task.yield() }
+        #expect(rows().first?.reactions == [.init(key: "👍", count: 1, reactedByMe: true)])
+
+        model.beginEdit(rows()[0])
+        #expect(model.editing != nil && model.draft == "my message")
+        model.draft = "changed"
+        await model.send()
+        #expect(model.editing == nil && model.draft.isEmpty)
+        for _ in 0..<500_000 where rows().first?.text != "changed (edited)" { await Task.yield() }
+        #expect(rows().first?.text == "changed (edited)")
+
+        await model.delete(rows()[0])
+        for _ in 0..<500_000 where rows().first?.text != "Message deleted" { await Task.yield() }
+        #expect(rows().first?.text == "Message deleted")
+    }
+
+    @Test("a reply quotes the original, and cancelling or editing drops the reply target")
+    func replies() async throws {
+        let port = FakeTimelinePort()
+        let room = try RoomID("!r:x.org")
+        port.addRoom(room)
+        let model = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room))
+        await model.start()
+        func rows() -> [TimelineRow] { if case .live(let rows, _, _, _) = model.content { rows } else { [] } }
+        for _ in 0..<500_000 { if case .live = model.content { break }; await Task.yield() }
+
+        model.draft = "original"
+        await model.send()
+        for _ in 0..<500_000 where rows().first?.eventID == nil { await Task.yield() }
+        let original = try #require(rows().first)
+
+        model.beginReply(original)
+        model.cancelReply()
+        #expect(model.replyingTo == nil)
+        model.beginReply(original)
+        model.draft = "answer"
+        await model.send()
+        #expect(model.replyingTo == nil && model.draft.isEmpty)
+        for _ in 0..<500_000 where rows().count < 2 || rows()[1].eventID == nil { await Task.yield() }
+        #expect(rows()[1].text == "answer" && rows()[1].reply?.snippet == "original")
+
+        // An unconfirmed row can't be replied to.
+        model.beginReply(TimelineRow(id: "x", style: .ownMessage, sender: nil, text: "pending"))
+        #expect(model.replyingTo == nil)
+    }
+
+    @Test("a text message with an HTML body gets styled text; a plain one doesn't; edits keep the suffix")
+    func styledText() throws {
+        let model = try model()
+        func message(html: String?, edited: Bool) -> TimelineItem {
+            TimelineItem(id: TimelineItemID("id"), content: .event(TimelineEvent(
+                eventID: nil, sender: nil, senderName: "Alice", timestamp: Date(timeIntervalSince1970: 0), isOwn: false,
+                kind: .text("**b**", isEdited: edited), formattedBody: html)))
+        }
+        #expect(model.row(message(html: nil, edited: false)).styled == nil)
+        let styled = model.row(message(html: "<strong>b</strong>", edited: true)).styled
+        #expect(styled.map { String($0.characters) } == "b (edited)")
+    }
+
+    @Test("the emoji picker reacts to its target, closes, and is unavailable for unconfirmed rows")
+    func picker() async throws {
+        let port = FakeTimelinePort()
+        let room = try RoomID("!r:x.org")
+        port.addRoom(room)
+        let model = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room))
+        await model.start()
+        func rows() -> [TimelineRow] { if case .live(let rows, _, _, _) = model.content { rows } else { [] } }
+        for _ in 0..<500_000 { if case .live = model.content { break }; await Task.yield() }
+        model.draft = "pick"
+        await model.send()
+        for _ in 0..<500_000 where rows().first?.eventID == nil { await Task.yield() }
+
+        model.beginReactionPicker(TimelineRow(id: "x", style: .message, sender: nil, text: "pending"))
+        #expect(model.reactionTarget == nil)
+        model.beginReactionPicker(try #require(rows().first))
+        #expect(model.reactionTarget != nil)
+        await model.pickReaction("🎉")
+        #expect(model.reactionTarget == nil)
+        for _ in 0..<500_000 where rows().first?.reactions.isEmpty != false { await Task.yield() }
+        #expect(rows().first?.reactions == [.init(key: "🎉", count: 1, reactedByMe: true)])
+        #expect(Set(TimelineViewModel.pickerEmoji).count == TimelineViewModel.pickerEmoji.count)
+        #expect(TimelineViewModel.quickReactions.allSatisfy(TimelineViewModel.pickerEmoji.contains))
+    }
+
+    @Test("typing text uses known names, falls back to the user ID, and collapses for many people")
+    func typingText() throws {
+        let alice = try UserID("@alice:x.org")
+        let bob = try UserID("@bob:x.org")
+        let carol = try UserID("@carol:x.org")
+        let items = [event(.text("hi", isEdited: false))]  // sender @alice:x.org named "Alice"
+        #expect(TimelineViewModel.typingText([], items: items) == nil)
+        #expect(TimelineViewModel.typingText([alice], items: items) == "Alice is typing…")
+        #expect(TimelineViewModel.typingText([alice, bob], items: items) == "Alice and @bob:x.org are typing…")
+        #expect(TimelineViewModel.typingText([alice, bob, carol], items: items) == "Several people are typing…")
+    }
+
+    @Test("someone else's message can't be edited or deleted from the UI")
+    func foreign() throws {
+        let model = try model()
+        let row = model.row(event(.text("theirs", isEdited: false)))
+        model.beginEdit(row)
+        #expect(model.editing == nil)
+    }
+}

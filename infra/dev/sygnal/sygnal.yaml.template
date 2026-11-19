@@ -1,0 +1,35 @@
+# Sygnal (push gateway) for local development, rendered by `infra/dev/sygnal-config.sh` into
+# secrets/sygnal.yaml (gitignored) with the APNs key id and team id filled in. Contains no secret itself;
+# the .p8 key is mounted from infra/dev/secrets/ and never leaves your machine.
+log:
+  setup:
+    version: 1
+    formatters:
+      normal:
+        format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: normal
+    root:
+      handlers: [console]
+      level: INFO
+  access:
+    x_forwarded_for: false
+
+http:
+  bind_addresses: ["0.0.0.0"]
+  port: 5000
+
+# The app id is what the app registers as the pusher's app_id (HALO_PUSH_APP_ID in Debug.xcconfig);
+# `topic` is the bundle id. Debug builds installed from Xcode use the APNs sandbox.
+apps:
+  one.mbm.halo.dev:
+    type: apns
+    keyfile: /secrets/__KEY_FILE__
+    key_id: __KEY_ID__
+    team_id: __TEAM_ID__
+    topic: one.mbm.halo
+    platform: sandbox
+    # Halo registers the hex device token as the pushkey (Sygnal's default expects base64).
+    convert_device_token_to_hex: false

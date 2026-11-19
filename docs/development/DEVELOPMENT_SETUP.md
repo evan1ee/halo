@@ -41,7 +41,7 @@ dependencies: [../architecture/MODULE_BOUNDARIES.md](../architecture/MODULE_BOUN
 |---|---|---|
 | macOS + Xcode | Xcode with the iOS 26 SDK (D25) | Swift 6 language mode |
 | Docker Desktop / Colima | current | `infra/dev`, `infra/test` |
-| Swift toolchain on Linux (CI) | same Swift minor as Xcode — currently `swift:6.2-noble` (Swift 6.2.4), to be confirmed against Xcode (V-CI-2) | Docker image |
+| Swift toolchain on Linux (CI) | same Swift minor as Xcode — `swift:6.2-noble` (Swift 6.2.4) is the floor; local Xcode 27.2 has Swift 6.4.2 and both pass (V-CI-2) | Docker image |
 | Rust (rustup) | ≥ 1.96 (SDK `rust-version`, F-FFI-17 context) | Only for building the SDK from source or `core/` |
 | SwiftLint | pinned in `.swiftlint.yml` comment | Lint |
 | gitleaks | current | Pre-commit + CI |
@@ -50,6 +50,8 @@ dependencies: [../architecture/MODULE_BOUNDARIES.md](../architecture/MODULE_BOUN
 - Targets: `Halo` (iOS app), `HaloNotificationService` (NSE). Deployment target iOS 26.0.
 - Capabilities (both targets): App Groups `group.one.mbm.halo`, Keychain Sharing `<TeamID>.one.mbm.halo.shared` (identifiers below); app: Push Notifications, Background Modes (remote notifications, background fetch), Communication Notifications; NSE: the filtering entitlement once granted (V-PUSH-3).
 - Build configurations: `Debug` (dev Synapse, verbose logs, auditor on), `Beta` (TestFlight: auditor on, logs info), `Release` (auditor off unless enabled in Diagnostics).
+- `ios/Halo.xcodeproj` is generated from `ios/project.yml` (ADR-0017): edit the spec, then `brew install xcodegen` (once) and `cd ios && xcodegen --spec project.yml --project .`; commit both. Debug builds allow plain http to local-network addresses (`ios/App/Info-Debug.plist`) so a physical device can reach `infra/dev` started with `HALO_DEV_BIND=0.0.0.0` (enter `http://<mac-ip>:8008` as the server). The development team isn't in the spec; pass `DEVELOPMENT_TEAM=<id>` to xcodebuild or pick it in Xcode.
+- Simulator builds without a team need an ad-hoc signature, otherwise the Keychain fails with -34018: `xcodebuild -project ios/Halo.xcodeproj -scheme Halo-Debug -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO build`.
 - Settings in `ios/Config/*.xcconfig`: bundle IDs, App Group, default homeserver, Sygnal app id, log level. No secrets. `N` is defined once
   (`HALO_NAMESPACE = one.mbm.halo` in `Base.xcconfig`) and every other identifier is derived from it, so the app and its extensions can't diverge.
 
@@ -85,4 +87,4 @@ types, so it is treated as fixed.
 4. Before pushing: `scripts/validate-docs.sh`, `scripts/check-boundaries.sh`, SwiftLint, unit tests.
 
 ## 6. Dependency management
-SwiftPM only. Versions pinned **exactly** (`exact:`) and `Package.resolved` committed. Adding/upgrading a dependency follows AGENTS.md §11.
+SwiftPM only. If `git clone` of GRDB's full history stalls, make a shallow bare mirror of the tag (`git clone --bare --depth 1 --branch v7.12.0 https://github.com/groue/GRDB.swift /tmp/grdb-mirror.git`) and point SwiftPM at it with a *user-level* `~/.swiftpm/configuration/mirrors.json` (`original`: the GRDB URL, `mirror`: `file:///tmp/grdb-mirror.git`); manifests and `Package.resolved` keep the public URL and the exact pin. Versions pinned **exactly** (`exact:`) and `Package.resolved` committed. Adding/upgrading a dependency follows AGENTS.md §11.

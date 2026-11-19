@@ -1,0 +1,3 @@
+# False positive: a UserDefaults key *name* ("notificationRecords.v1") matched generic-api-key because the Swift
+# constant was called `key`. The constant is renamed; the fingerprint stays because history scans still see the old commit.
+9237cfa2c82e2fa1750ecaff1a52a8c5778e1e94:ios/Packages/HaloPlatform/Sources/HaloPlatform/NotificationRecordStore.swift:generic-api-key:11

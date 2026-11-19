@@ -53,6 +53,18 @@ services:
       timeout: 3s
       retries: 60
 
+  # Push gateway (ADR-0010): optional, enable with `--profile push` after `./sygnal-config.sh`. Reads the APNs key from
+  # secrets/ (gitignored), published on the LAN only if HALO_DEV_BIND says so (the phone never talks to it; Synapse does).
+  sygnal:
+    profiles: [push]
+    image: matrixdotorg/sygnal:${SYGNAL_VERSION:-v0.15.1}
+    environment:
+      SYGNAL_CONF: /secrets/sygnal.yaml
+    volumes:
+      - ./secrets:/secrets:ro
+    ports:
+      - "127.0.0.1:5000:5000"
+
 volumes:
   postgres-data:
   synapse-data:

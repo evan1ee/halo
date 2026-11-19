@@ -1,0 +1,369 @@
+import Foundation
+import HaloApplication
+import HaloDomain
+import HaloFoundation
+import Observation
+
+/// One displayed row. Text is prepared here so the view only lays it out.
+public struct TimelineRow: Equatable, Identifiable, Sendable {
+    public enum Style: Equatable, Sendable { case message, ownMessage, notice, emote, placeholder, state, divider, marker }
+    public let id: String
+    public let style: Style
+    public let sender: String?
+    public let text: String
+    /// An image to show above the text (the filename or caption), loaded through the view model.
+    public let image: Image?
+    /// "Sending…" or "Not sent" for an own message that the server hasn't confirmed; `nil` once it is sent.
+    public let status: String?
+    /// Set for confirmed events only: reactions, edits and deletes need it.
+    public let eventID: EventID?
+    public let isOwn: Bool
+    public let reactions: [Chip]
+    /// The quoted message, shown above the text of a reply.
+    public let reply: Reply?
+    /// Styled text for a message that came with an HTML body; the view shows `text` otherwise.
+    public let styled: AttributedString?
+
+    public struct Reply: Equatable, Sendable {
+        public let sender: String?
+        /// `nil` when the original isn't available; the view then says so.
+        public let snippet: String?
+    }
+
+    public struct Chip: Equatable, Sendable, Identifiable {
+        public var id: String { key }
+        public let key: String
+        public let count: Int
+        public let reactedByMe: Bool
+    }
+
+    public struct Image: Equatable, Sendable {
+        public let ref: MediaRef
+        /// Width / height, when the sender gave dimensions; the view falls back to 4:3.
+        public let aspectRatio: Double?
+    }
+
+    init(
+        id: String, style: Style, sender: String?, text: String, image: Image? = nil, status: String? = nil,
+        eventID: EventID? = nil, isOwn: Bool = false, reactions: [Chip] = [], reply: Reply? = nil, styled: AttributedString? = nil
+    ) {
+        self.styled = styled
+        self.reply = reply
+        self.eventID = eventID
+        self.isOwn = isOwn
+        self.reactions = reactions
+        self.status = status
+        self.id = id
+        self.style = style
+        self.sender = sender
+        self.text = text
+        self.image = image
+    }
+}
+
+/// Presents one room's timeline from `TimelineCoordinator` (docs/features/TIMELINE.md). M1: read-only.
+@MainActor @Observable
+public final class TimelineViewModel {
+    public enum Content: Equatable {
+        case opening
+        case live(rows: [TimelineRow], isPaginating: Bool, canLoadEarlier: Bool, paginationError: String?)
+        case failed(String)
+    }
+
+    public private(set) var content: Content = .opening
+    /// The message being typed. Cleared only once the send was accepted, so a failure never loses the text.
+    public var draft = "" {
+        didSet {
+            guard draft != oldValue, editing == nil else { return }
+            let isTyping = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            Task { [coordinator] in await coordinator.setTyping(isTyping) }
+        }
+    }
+    /// "Alice is typing…", or `nil` when nobody else is.
+    public private(set) var typingText: String?
+    public private(set) var isSending = false
+    public private(set) var sendError: String?
+    /// The own message being edited, or `nil` when the composer writes a new message.
+    public private(set) var editing: EventID?
+    /// The message an emoji is being picked for, or `nil` when the picker is closed.
+    public private(set) var reactionTarget: TimelineRow?
+    /// The emoji offered by the picker (a fixed set; the quick row of the menu is `quickReactions`).
+    public static let quickReactions = ["👍", "❤️", "😂"]
+    public static let pickerEmoji = [
+        "👍", "👎", "❤️", "😂", "😮", "😢", "😡", "🎉", "🙏", "👏", "🔥", "💯", "✅", "❌", "👀", "🤔",
+        "😀", "😅", "😉", "😍", "😘", "😎", "🥳", "😴", "🤯", "😬", "🙄", "🤗", "😇", "🤝", "💪", "🙌",
+        "👋", "✌️", "👌", "🤞", "🫡", "🫶", "💔", "💙", "💚", "⭐️", "✨", "🚀", "☕️", "🍕", "🎂", "🌈",
+    ]
+    /// The message the next send replies to, or `nil`.
+    public private(set) var replyingTo: TimelineRow?
+
+    public var canSend: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending }
+
+    private let coordinator: TimelineCoordinator
+    private let media: MediaLoader?
+    private var observation: Task<Void, Never>?
+    private let dateFormatter: DateFormatter
+
+    public init(coordinator: TimelineCoordinator, media: MediaLoader? = nil, locale: Locale = .current, timeZone: TimeZone = .current) {
+        self.coordinator = coordinator
+        self.media = media
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        dateFormatter = formatter
+    }
+
+    isolated deinit { observation?.cancel() }
+
+    /// Opens the timeline and follows it. Call when the screen appears.
+    public func start() async {
+        guard observation == nil else { return }
+        let statuses = await coordinator.statuses()
+        observation = Task { [weak self] in
+            for await status in statuses { self?.apply(status) }
+        }
+        await coordinator.open()
+    }
+
+    /// Closes the timeline. Call when the screen disappears.
+    public func stop() async {
+        observation?.cancel()
+        observation = nil
+        await coordinator.close()
+    }
+
+    public func loadEarlier() async { await coordinator.paginateBackwards() }
+
+    /// Sends the draft (MESSAGING FR-2). The message shows up in the timeline as a local echo.
+    public func send() async {
+        guard canSend else { return }
+        let text = draft
+        isSending = true
+        sendError = nil
+        defer { isSending = false }
+        do {
+            if let editing {
+                try await coordinator.edit(event: editing, newText: text)
+                self.editing = nil
+            } else if let id = replyingTo?.eventID {
+                try await coordinator.reply(to: id, text: text)
+                replyingTo = nil
+            } else {
+                try await coordinator.send(text)
+            }
+            draft = ""
+        } catch {
+            sendError = error == .network(retryable: true) ? "Can't reach the server. Your message was kept." : "The message couldn't be sent."
+        }
+    }
+
+    /// Reacts to a confirmed message, or removes the user's reaction.
+    public func toggleReaction(on row: TimelineRow, key: String) async {
+        guard let id = row.eventID else { return }
+        await perform { try await coordinator.toggleReaction(on: id, key: key) }
+    }
+
+    /// Opens the emoji picker for a confirmed message.
+    public func beginReactionPicker(_ row: TimelineRow) {
+        guard row.eventID != nil else { return }
+        reactionTarget = row
+    }
+
+    public func cancelReactionPicker() { reactionTarget = nil }
+
+    /// Reacts with `key` to the picker's message and closes the picker.
+    public func pickReaction(_ key: String) async {
+        guard let target = reactionTarget else { return }
+        reactionTarget = nil
+        await toggleReaction(on: target, key: key)
+    }
+
+    /// Deletes the user's own confirmed message.
+    public func delete(_ row: TimelineRow) async {
+        guard let id = row.eventID, row.isOwn else { return }
+        await perform { try await coordinator.delete(event: id) }
+    }
+
+    /// Loads an own, confirmed text message into the composer for editing.
+    public func beginEdit(_ row: TimelineRow) {
+        guard let id = row.eventID, row.isOwn, row.style == .ownMessage, row.image == nil else { return }
+        editing = id
+        replyingTo = nil
+        draft = row.text.replacingOccurrences(of: " (edited)", with: "")
+    }
+
+    /// Makes the next send a reply to a confirmed message.
+    public func beginReply(_ row: TimelineRow) {
+        guard row.eventID != nil else { return }
+        editing = nil
+        replyingTo = row
+    }
+
+    public func cancelReply() { replyingTo = nil }
+
+    public func cancelEdit() {
+        editing = nil
+        draft = ""
+    }
+
+    private func perform(_ action: () async throws -> Void) async {
+        do { try await action() } catch {
+            sendError = (error as? HaloError) == .forbidden ? "You can only change your own messages." : "That didn't work. Try again."
+        }
+    }
+
+    /// Thumbnail bytes for an image row, or `nil` if it can't be loaded (the row then shows a placeholder).
+    public func thumbnail(for image: TimelineRow.Image) async -> Data? {
+        guard let media else { return nil }
+        return try? await media.thumbnail(image.ref, width: 600, height: 600)
+    }
+
+    func apply(_ status: TimelineCoordinator.Status) {
+        switch status {
+        case .idle, .opening:
+            content = .opening
+        case .live(let snapshot):
+            typingText = Self.typingText(snapshot.typing, items: snapshot.items)
+            content = .live(
+                rows: Self.collapsingStateRuns(snapshot.items.map(row), items: snapshot.items),
+                isPaginating: snapshot.isPaginating,
+                canLoadEarlier: !snapshot.reachedStart,
+                paginationError: snapshot.paginationError.map { _ in "Couldn't load earlier messages." })
+        case .failed(let error):
+            content = .failed(error == .notFound ? "This room isn't available." : "The timeline couldn't be loaded.")
+        }
+    }
+
+    /// Names come from the timeline's senders; a user without one is shown by user ID (never invented).
+    static func typingText(_ users: [UserID], items: [TimelineItem]) -> String? {
+        guard !users.isEmpty else { return nil }
+        var names: [UserID: String] = [:]
+        for item in items {
+            if case .event(let event) = item.content, let sender = event.sender, let name = event.senderName { names[sender] = name }
+        }
+        let labels = users.map { names[$0] ?? $0.rawValue }
+        switch labels.count {
+        case 1: return "\(labels[0]) is typing…"
+        case 2: return "\(labels[0]) and \(labels[1]) are typing…"
+        default: return "Several people are typing…"
+        }
+    }
+
+    /// A run of unnamed room-setting changes (creation, power levels, join rules …) becomes one row
+    /// (TIMELINE FR-2: state events grouped). Membership changes stay visible.
+    static func collapsingStateRuns(_ rows: [TimelineRow], items: [TimelineItem]) -> [TimelineRow] {
+        var result: [TimelineRow] = []
+        for (row, item) in zip(rows, items) {
+            let isSettings: Bool = { if case .event(let e) = item.content, e.kind == .otherState { true } else { false } }()
+            if isSettings, let last = result.last, last.style == .state, last.text == Self.settingsText { continue }
+            result.append(row)
+        }
+        return result
+    }
+
+    static let settingsText = "The room was updated"
+
+    func row(_ item: TimelineItem) -> TimelineRow {
+        let id = item.id.rawValue
+        switch item.content {
+        case .virtual(.dateDivider(let date)):
+            return TimelineRow(id: id, style: .divider, sender: nil, text: dateFormatter.string(from: date))
+        case .virtual(.readMarker):
+            return TimelineRow(id: id, style: .marker, sender: nil, text: "New messages")
+        case .virtual(.timelineStart):
+            return TimelineRow(id: id, style: .state, sender: nil, text: "This is the start of the conversation.")
+        case .event(let event):
+            let name = event.senderName ?? event.sender.map { $0.rawValue } ?? "Unknown"
+            switch event.kind {
+            case .text(let body, let edited):
+                return TimelineRow(
+                    id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: edited ? "\(body) (edited)" : body,
+                    status: Self.status(of: event.sendState), eventID: event.eventID, isOwn: event.isOwn,
+                    reactions: Self.chips(event.reactions), reply: Self.reply(event.replyTo),
+                    styled: event.formattedBody.map { HTMLText.attributed($0) + AttributedString(edited ? " (edited)" : "") })
+            case .notice(let body, _):
+                return TimelineRow(id: id, style: .notice, sender: name, text: body)
+            case .emote(let body, _):
+                return TimelineRow(id: id, style: .emote, sender: nil, text: "\(name) \(body)")
+            case .media(let attachment):
+                let style: TimelineRow.Style = event.isOwn ? .ownMessage : .message
+                if attachment.kind == .image, let source = attachment.source {
+                    let ratio: Double? = {
+                    guard let width = attachment.width, let height = attachment.height, height > 0 else { return nil }
+                    return Double(width) / Double(height)
+                }()
+                    return TimelineRow(
+                        id: id, style: style, sender: name, text: attachment.body, image: .init(ref: source, aspectRatio: ratio),
+                        eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions))
+                }
+                return TimelineRow(id: id, style: style, sender: name, text: "[\(Self.label(attachment.kind))] \(attachment.body)")
+            case .sticker(let body, _):
+                return TimelineRow(id: id, style: .message, sender: name, text: "[Sticker] \(body)")
+            case .redacted:
+                return TimelineRow(id: id, style: .placeholder, sender: name, text: "Message deleted")
+            case .undecryptable(let reason):
+                return TimelineRow(id: id, style: .placeholder, sender: name, text: Self.text(for: reason))
+            case .membership(_, let displayName, let change):
+                let who = displayName ?? name
+                return TimelineRow(id: id, style: .state, sender: nil, text: "\(who) \(Self.phrase(change))")
+            case .otherState:
+                return TimelineRow(id: id, style: .state, sender: nil, text: Self.settingsText)
+            case .unsupported:
+                return TimelineRow(id: id, style: .placeholder, sender: name, text: "Unsupported event")
+            }
+        }
+    }
+
+    static func reply(_ preview: ReplyPreview?) -> TimelineRow.Reply? {
+        preview.map { TimelineRow.Reply(sender: $0.senderName, snippet: $0.snippet) }
+    }
+
+    static func chips(_ reactions: [ReactionSummary]) -> [TimelineRow.Chip] {
+        reactions.map { TimelineRow.Chip(key: $0.key, count: $0.count, reactedByMe: $0.reactedByMe) }
+    }
+
+    static func status(of state: SendState) -> String? {
+        switch state {
+        case .sent: nil
+        case .sending: "Sending…"
+        case .failed(let recoverable): recoverable ? "Not sent yet — will retry" : "Not sent"
+        }
+    }
+
+    /// The reason is shown honestly; where the user can do something about it, the text says what.
+    static func text(for reason: UTDReason) -> String {
+        switch reason {
+        case .unknown: "Unable to decrypt this message. It will appear if the keys arrive."
+        case .sentBeforeJoining: "This message was sent before you joined, so you can't read it."
+        case .keysNotShared: "Unable to decrypt: the sender's device hasn't shared its keys with this device yet."
+        case .senderVerificationProblem: "Unable to decrypt: the sender's identity has changed or isn't verified."
+        case .backupDisabled: "Unable to decrypt this older message. Verify this device with your recovery key to load your key backup."
+        }
+    }
+
+    private static func label(_ kind: MediaKind) -> String {
+        switch kind {
+        case .image: "Image"
+        case .video: "Video"
+        case .audio: "Audio"
+        case .file: "File"
+        }
+    }
+
+    private static func phrase(_ change: MembershipChange) -> String {
+        switch change {
+        case .joined: "joined"
+        case .left: "left"
+        case .invited: "was invited"
+        case .kicked: "was removed"
+        case .banned: "was banned"
+        case .unbanned: "was unbanned"
+        case .invitationRejected: "declined the invitation"
+        case .invitationRevoked: "had the invitation withdrawn"
+        case .knocked: "asked to join"
+        case .other: "changed their membership"
+        }
+    }
+}

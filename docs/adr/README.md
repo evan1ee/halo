@@ -20,3 +20,4 @@ Format: [TEMPLATE.md](TEMPLATE.md). Numbering is sequential and never reused. An
 | [0014](0014-minimum-ios-26.md) | Minimum iOS 26 | Accepted |
 | [0015](0015-count-only-pushes.md) | Count-only pushes must not set the app badge | Accepted with conditions (V-PUSH-5) |
 | [0016](0016-nse-budget-gate.md) | Treat the NSE budget as its own gate (G-NSE) | Accepted (AC-NSE-1…6) |
+| [0017](0017-xcodegen-for-the-app-project.md) | XcodeGen generates the app project | Accepted |

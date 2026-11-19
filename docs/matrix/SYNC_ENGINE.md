@@ -27,6 +27,8 @@ stateDiagram-v2
 4. BG refresh: start → wait for `upToDate` or 20 s → reconcile → stop.
 5. The NSE never starts `SyncService`.
 
+**In code (M1):** `SyncCoordinator` (HaloApplication) implements rules 1 and the restart backoff (1, 2, 4 … 60 s, reset once running); it follows `SessionCoordinator` (runs only while a session is ready) and the scene phase (`ios/App/HaloApp.swift`). Rules 2–4 (reconcile, outbox, `SyncStatus` in the UI, BG refresh) arrive with the read-state work (M3). Verified on the simulator: a message sent from another device appears in an open timeline.
+
 ## 3. Offline behaviour
 - Cached rooms and timelines are readable (SDK stores + event cache).
 - Sends go to the SDK send queue (survives restarts) **[ASSUMPTION V-SYNC-2: the send queue persists unsent events across app restarts]**; receipts go to Halo's outbox.

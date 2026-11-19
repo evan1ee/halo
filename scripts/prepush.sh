@@ -22,6 +22,20 @@ else
   skipped+=("swift tests (no swift toolchain or docker)")
 fi
 
+# Apple-only packages (not Linux-buildable). The adapter is built for the iOS Simulator because the
+# prebuilt SDK has no macOS slice; its contract tests are skipped unless HALO_DEV_* is exported as
+# TEST_RUNNER_HALO_DEV_* (docs/testing/INTEGRATION_TESTS.md).
+if [[ "$(uname)" == Darwin ]] && command -v swift >/dev/null; then
+  for p in HaloPlatform HaloPersistence Features/FeatureAuth Features/FeatureRoomList Features/FeatureTimeline; do
+    step "swift test $p" swift test --package-path "ios/Packages/$p" -Xswiftc -warnings-as-errors
+  done
+  if command -v xcodebuild >/dev/null; then
+    sim="${HALO_SIM:-iPhone 17}"
+    step "xcodebuild test HaloMatrixAdapter (iOS Simulator)" bash -c \
+      'cd ios/Packages/HaloMatrixAdapter && xcodebuild -scheme HaloMatrixAdapter -destination "platform=iOS Simulator,name=$1" test -quiet' _ "${HALO_SIM:-iPhone 17}"
+  else skipped+=("adapter tests (no xcodebuild)"); fi
+else skipped+=("HaloPlatform and adapter tests (not macOS)"); fi
+
 if command -v gitleaks >/dev/null; then step "gitleaks" gitleaks git --redact --no-banner .; else skipped+=("gitleaks (not installed)"); fi
 if command -v swiftlint >/dev/null && [[ -f .swiftlint.yml ]]; then step "swiftlint" swiftlint --strict; else skipped+=("swiftlint (not installed or not configured yet)"); fi
 
