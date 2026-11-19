@@ -20,15 +20,20 @@ Defined as asset-catalogue colours with light/dark variants; code uses semantic 
 | `text.primary` | #111317 | #F2F3F5 | Body |
 | `text.secondary` | #5B616E | #A3A9B6 | Meta, timestamps |
 | `accent` | #5B4BDB (Halo indigo) | #8C7FF0 | Primary actions, own bubbles, links |
-| `attention` | #E8590C (amber-orange) | #FF7A33 | Unread badge |
-| `mention` | #D6336C | #F06595 | Mention badge `@` |
-| `success` | #2B8A3E | #51CF66 | Bot completed, sent |
-| `warning` | #E67700 | #FFA94D | Pending, unverified |
+| `onAccent` | #FFFFFF | #111317 | Text/glyphs on an `accent` fill (6.04:1 / 5.68:1) |
+| `attention` | #C2410C (burnt orange) | #FF7A33 | Unread badge fill |
+| `onAttention` | #FFFFFF | #111317 | Count on the unread badge (5.18:1 / 7.16:1) |
+| `mention` | #D6336C | #F06595 | Mention badge fill `@` |
+| `onMention` | #FFFFFF | #111317 | Count on the mention badge (4.62:1 / 6.20:1) |
+| `success` | #237A35 | #51CF66 | Bot completed, sent |
+| `warning` | #8A6100 (amber) | #FCC419 | Pending, unverified — a yellow-amber hue, kept clearly apart from `attention` so "pending" never reads as "unread" |
 | `danger` | #C92A2A | #FF6B6B | Failed, destructive |
 | `bubble.own` | accent at 14 % on bg | accent at 28 % | Own messages |
 | `bubble.other` | `bg.secondary` | `bg.secondary` | Others' messages |
 
-All pairs are checked for contrast by a unit test over the asset catalogue (M0).
+A unit test over the asset catalogue (M0) checks every foreground/background pair used: `text.*`, `accent`, `success`, `warning`, `danger`
+on `bg.primary`, `bg.secondary` and `bg.elevated` (≥ 4.5:1), and each `on*` token on its fill (≥ 4.5:1), in light and dark. The values
+above were chosen to pass it (ratios computed with the WCAG 2.x formula; badge pairs shown in the table).
 
 ## 3. Typography
 Text styles map to Dynamic Type: `title` (.title2 semibold), `headline` (.headline), `body` (.body), `bodyEmphasis` (.body semibold),
