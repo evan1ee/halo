@@ -46,6 +46,7 @@
 |---|---|---|---|---|
 | Q-BUNDLE | Bundle ID prefix, App Group, account-data namespace | — | **Decided D63**: namespace root `one.mbm.halo` for app and extensions (identifiers in DEVELOPMENT_SETUP §3) | — |
 | Q-PUSH-BADGE | How to stop Synapse's count-only pushes from setting the icon badge | — | **Decided: ADR-0015 accepted with conditions, D65** — Halo pushkin; relay only as fallback | — |
+| Q-XCODEGEN | ADR-0008 rejected a project generator, but adding packages to `ios/Halo.xcodeproj` by hand is error-prone: it was regenerated twice with XcodeGen from a spec kept outside the repo | Founder: adopt XcodeGen with a committed `project.yml` (new ADR), or hand-edit the project | Open — raise before the next package is added to the app | M0 |
 | Q-DEV-AUTH | How M0's password login works when `infra/dev` includes MAS | — | **Decided D64**: native Synapse password login in M0; MAS from M5 | — |
 | Q-NSE-GATE | NSE budget as its own gate? | — | **Decided: ADR-0016 accepted, D66** — G-NSE at the end of M1 with AC-NSE-1…6 | — |
 | Q-SDK-BUILD | When to switch from the prebuilt SDK to building from source | M0 / before external TestFlight / never | Before the first external TestFlight | M5 |

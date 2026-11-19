@@ -50,8 +50,8 @@ dependencies: [../architecture/MODULE_BOUNDARIES.md](../architecture/MODULE_BOUN
 - Targets: `Halo` (iOS app), `HaloNotificationService` (NSE). Deployment target iOS 26.0.
 - Capabilities (both targets): App Groups `group.one.mbm.halo`, Keychain Sharing `<TeamID>.one.mbm.halo.shared` (identifiers below); app: Push Notifications, Background Modes (remote notifications, background fetch), Communication Notifications; NSE: the filtering entitlement once granted (V-PUSH-3).
 - Build configurations: `Debug` (dev Synapse, verbose logs, auditor on), `Beta` (TestFlight: auditor on, logs info), `Release` (auditor off unless enabled in Diagnostics).
-- `ios/Halo.xcodeproj` was produced once with XcodeGen from a throwaway spec and is committed and edited as a normal Xcode project from now on; no generator is part of the workflow (ADR-0008).
-- Simulator builds without a team: `xcodebuild -project ios/Halo.xcodeproj -scheme Halo-Debug -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGNING_ALLOWED=NO build`.
+- `ios/Halo.xcodeproj` was produced with XcodeGen from a spec that is not in the repository (ADR-0008 rejected a generator; Q-XCODEGEN asks whether to adopt one). Until that is decided, treat the project as hand-maintained.
+- Simulator builds without a team need an ad-hoc signature, otherwise the Keychain fails with -34018: `xcodebuild -project ios/Halo.xcodeproj -scheme Halo-Debug -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO build`.
 - Settings in `ios/Config/*.xcconfig`: bundle IDs, App Group, default homeserver, Sygnal app id, log level. No secrets. `N` is defined once
   (`HALO_NAMESPACE = one.mbm.halo` in `Base.xcconfig`) and every other identifier is derived from it, so the app and its extensions can't diverge.
 

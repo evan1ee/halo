@@ -14,7 +14,14 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   pass; SwiftLint skipped (not configured). Nothing iOS-specific has been built anywhere.
 
 ## 2. Completed work
-**2026-11-19 (later) — M0b: adapter, Xcode project, HaloPlatform Keychain, HaloLog**
+**2026-11-19 (later) — M0b done on the simulator: login → room count**
+- `FeatureAuth` (AuthViewModel + SignInView) and `FeatureRoomList` (RoomListViewModel + RoomListView) packages; `ios/App/AppRoot.swift` wires
+  `KeychainStore` + `OSLogSink` + `MatrixSessionPort` + `MatrixRoomListPort` into the coordinators. Tests: FeatureAuth 3, FeatureRoomList 2.
+- **Exit criterion run by hand in the iPhone 17 simulator against `infra/dev`:** server `http://127.0.0.1:8008` → discovery → password login →
+  "Rooms: 2" with both room names; terminate + relaunch restores the session straight to the list. Not automated (no UI tests yet).
+- First launch failed with Keychain `-34018`: fully unsigned simulator builds have no entitlements. Fix is the ad-hoc signed build command in
+  DEVELOPMENT_SETUP §3. HaloFoundation (incl. HaloLog) also passes on Linux Swift 6.2.4 in the swift:6.2-noble container.
+- Xcode project regenerated with XcodeGen to add packages (spec outside the repo); raised as Q-XCODEGEN (ADR-0008 conflict) rather than decided.
 - `HaloLog` facade in HaloFoundation (static event text + `HaloError` code + salted hashed IDs only; injected `LogSink`; `OSLogSink` on
   Apple, no global instance). `HaloPlatform` package with `KeychainStore` (generic password, `afterFirstUnlockThisDeviceOnly`, non-sync,
   versioned names, account items keyed by SHA-256 prefix). Tests: Foundation 13, Platform 4 pass on macOS. Platform tests run on the
@@ -58,16 +65,16 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 - **D47** read state: `readPosTs` (true read position) is separate from `notifiedThroughTs` (notification coverage).
 
 ## 4. Modified files (this push)
-- New: `ios/Halo.xcodeproj`, `ios/App/`, `ios/NotificationService/`, `ios/Config/`; `ios/Packages/HaloMatrixAdapter/` (Package.swift, ErrorMapper, Bootstrap, MatrixSessionPort, MatrixRoomListPort, unit + gated contract tests).
+- New: `ios/Packages/Features/{FeatureAuth,FeatureRoomList}`, `ios/App/AppRoot.swift`, `ios/Packages/HaloPlatform`; `ios/Halo.xcodeproj`, `ios/App/`, `ios/NotificationService/`, `ios/Config/`; `ios/Packages/HaloMatrixAdapter/` (Package.swift, ErrorMapper, Bootstrap, MatrixSessionPort, MatrixRoomListPort, unit + gated contract tests).
 - Docs: `docs/OPEN_QUESTIONS.md` (V-CI-2), `docs/development/DEVELOPMENT_SETUP.md` §2, `docs/ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
+- The shared Keychain access group, app-group container and a signed device build are untested (simulator, ad-hoc signing only).
 - Contract tests are env-gated and are reported as skipped (not passed) without a homeserver; `prepush.sh` doesn't build/test the adapter.
 - Docker CLI on this Mac hangs on the `osxkeychain` credential helper (image pulls fail with "error getting credentials"). Workaround used: a throwaway `DOCKER_CONFIG` plus a stub `docker-credential-osxkeychain` first in PATH; the user's config was not touched. Native Synapse via pip doesn't load on macOS 27. `prepush.sh` doesn't build/test the adapter (needs xcodebuild).
 - `RefreshDelegate.saveSessionInKeychain` uses `try?` when encoding a refreshed session (no logger yet); add `HaloLog` + a test when HaloPlatform lands.
 - Sync service is started on first room-list use and stopped only at logout (no lifecycle owner yet).
 - PR #1 CI results haven't been checked yet — first task of the next session.
-- M0 exit criterion (password login against `infra/dev` shows the room count via ports) needs the Mac (M0b).
 - Not yet run anywhere: Xcode/simulator builds, the adapter contract tests, SwiftLint (no `.swiftlint.yml` yet).
 - Open validation items for M0b: V-CI-2 (Xcode Swift version = CI 6.2?), V-SQL-1, V-APPLE-1. For M1: V-NSE-*, V-PUSH-1/3/5, V-RS-1/5.
 - Synapse advertises spec versions only up to v1.17 (SOURCES F-SYN-2); relevant to sticker interop (risk COMPAT-2), not to M0.
@@ -76,7 +83,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 ## 6. Next steps
 1. Push this branch / open a PR; check CI.
 2. (Done) contracts pass on infra/dev. Keep running them after every adapter change.
-3. M0b continued — sign-in + room-count screen (Feature package) wired in `ios/App` (wire `KeychainStore` + `OSLogSink` + `MatrixSessionPort` in `ios/App`) → adapter public-API rule in `check-boundaries` → V-SQL-1, V-APPLE-1 → exit criterion.
+3. Finish M0: adapter public-API rule in `check-boundaries` (no SDK types in public signatures), V-SQL-1, V-APPLE-1; answer Q-XCODEGEN; optionally a UI test of the exit flow. Then M1 (docs/ROADMAP.md).
 4. Without a Mac: V-APPLE-1 from Apple docs; M1 prep — Halo's Sygnal pushkin in `infra/sygnal/` with tests and `pushkin.yml` (ADR-0015).
 
 ## 7. Next Session Prompt
