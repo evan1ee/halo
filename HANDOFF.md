@@ -14,7 +14,12 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   pass; SwiftLint skipped (not configured). Nothing iOS-specific has been built anywhere.
 
 ## 2. Completed work
-**2026-11-19 (later) — M0b start**
+**2026-11-19 (later) — M0b: adapter implemented, contract run pending**
+- `HaloMatrixAdapter`: `ErrorMapper`, `MatrixBootstrap`, `MatrixSessionPort` (actor; discovery, password login, restore, logout, token-refresh
+  events; payload JSON holds SDK session + per-login store dir + random store passphrase, Keychain-only), `MatrixRoomListPort`
+  (dynamic adapters, ordered mapping, `.unread` filter → `.unsupported` until M1). SDK API names verified in the pinned package source.
+- 8 adapter tests pass in `xcodebuild … test` (6 run, 2 contract tests skipped: need env `HALO_DEV_SERVER/USER/PASSWORD/ROOMS`).
+  **Docker isn't installed on this Mac, so the contracts have NOT run against infra/dev.**
 - V-CI-2 resolved (CI 6.2.4 floor vs Xcode Swift 6.4.2; all packages pass on both).
 - `HaloMatrixAdapter` package added; pinned SDK 26.11.17 resolves, links and builds for the iOS Simulator; 1 smoke test passes via
   `xcodebuild -scheme HaloMatrixAdapter -destination 'platform=iOS Simulator,name=iPhone 17' test`. The xcframework has no macOS
@@ -42,11 +47,13 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 - **D47** read state: `readPosTs` (true read position) is separate from `notifiedThroughTs` (notification coverage).
 
 ## 4. Modified files (this push)
-- New: `ios/Packages/HaloMatrixAdapter/` (Package.swift, SDK import, smoke test).
+- New: `ios/Packages/HaloMatrixAdapter/` (Package.swift, ErrorMapper, Bootstrap, MatrixSessionPort, MatrixRoomListPort, unit + gated contract tests).
 - Docs: `docs/OPEN_QUESTIONS.md` (V-CI-2), `docs/development/DEVELOPMENT_SETUP.md` §2, `docs/ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
-- Adapter has no port implementations yet; `prepush.sh` doesn't build the adapter (needs xcodebuild).
+- Contract suites unrun against a real homeserver (no Docker here). `prepush.sh` doesn't build/test the adapter (needs xcodebuild).
+- `RefreshDelegate.saveSessionInKeychain` uses `try?` when encoding a refreshed session (no logger yet); add `HaloLog` + a test when HaloPlatform lands.
+- Sync service is started on first room-list use and stopped only at logout (no lifecycle owner yet).
 - PR #1 CI results haven't been checked yet — first task of the next session.
 - M0 exit criterion (password login against `infra/dev` shows the room count via ports) needs the Mac (M0b).
 - Not yet run anywhere: Xcode/simulator builds, the adapter contract tests, SwiftLint (no `.swiftlint.yml` yet).
@@ -56,10 +63,10 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 
 ## 6. Next steps
 1. Push this branch / open a PR; check CI.
-2. M0b in order — Xcode project (`one.mbm.halo`, `HALO_NAMESPACE` in `ios/Config/Base.xcconfig`) →
-   HaloMatrixAdapter (`SessionPort`, `RoomListPort`, `ErrorMapper`) passing `SessionPortContract` / `RoomListPortContract` on
-   `infra/dev` → HaloPlatform Keychain + log sink → adapter public-API rule in `check-boundaries` → V-SQL-1, V-APPLE-1 → exit criterion.
-3. Without a Mac: V-APPLE-1 from Apple docs; M1 prep — Halo's Sygnal pushkin in `infra/sygnal/` with tests and `pushkin.yml` (ADR-0015).
+2. Install Docker (or use another machine), `infra/dev` up, create a user, then run the adapter tests with `HALO_DEV_*` set; fix what the contracts find.
+3. M0b continued — Xcode project (`one.mbm.halo`, `HALO_NAMESPACE` in `ios/Config/Base.xcconfig`) →
+   HaloPlatform Keychain + log sink → adapter public-API rule in `check-boundaries` → V-SQL-1, V-APPLE-1 → exit criterion.
+4. Without a Mac: V-APPLE-1 from Apple docs; M1 prep — Halo's Sygnal pushkin in `infra/sygnal/` with tests and `pushkin.yml` (ADR-0015).
 
 ## 7. Next Session Prompt
 ```text
@@ -67,7 +74,7 @@ Continue development of Halo (repository evan1ee/halo).
 
 1. Read AGENTS.md completely, then HANDOFF.md (sections 1–6). Run scripts/install-hooks.sh once.
    Trust HANDOFF.md for the project state; read other docs only as the task needs them.
-2. Branch claude/m0b-adapter-scaffold: push/open PR if not done; check CI.
+2. Branch claude/m0b-adapter-scaffold: push/open PR if not done; check CI. Adapter code exists; run its contract tests against infra/dev first.
 3. Then do HANDOFF.md section 6 "Next steps":
    - On a Mac with Xcode for the iOS 26 SDK: finish M0 (M0b) in the order listed there. Key references:
      docs/matrix/PORTS_CONTRACT.md, docs/matrix/SDK_INTEGRATION.md, docs/development/DEVELOPMENT_SETUP.md §3,
