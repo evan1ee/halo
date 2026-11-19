@@ -21,8 +21,13 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   Info keys `HaloNamespace`/`HaloKeychainAccessGroup`. **Consequence: the session moved to the shared Keychain group, so the phone must sign in once more.**
 - `ios/NotificationService`: reads the session from the Keychain, restores a client, fetches the event, rewrites title/body/thread id, delivers; on error or `serviceExtensionTimeWillExpire` delivers the
   generic payload content; never sets a badge. `NSEMetrics` appends one JSON line per push (`outcome`, step durations, `phys_footprint` MB, no content) to `nse-metrics.jsonl` in the App Group container.
-- Checked: prepush passes (adapter 16+ tests incl. mapper tests; app and NSE build signed for the device). NOT yet measured or verified on the device: sign-in under the shared group, that the NSE decrypts,
-  memory and time numbers (G-NSE AC-NSE-1/2), timeout/termination behaviour (AC-NSE-3/4), 100-push run. Not implemented: `notification_record` de-duplication, read-state suppression, badge
+- Checked: prepush passes (adapter tests incl. mapper tests; app and NSE build signed for the device). **First on-device run (iPhone 16, Debug build, APNs sandbox, unencrypted room, app in foreground/background mix,
+  signed-in session was picked up from the shared Keychain without signing in again): 21 of 21 pushes → outcome `display`; `didReceive` → handler: median 248 ms, p95 316 ms, max 328 ms (restore ≈120 ms,
+  fetch ≈100 ms); footprint median 4.6 MB, max 5.8 MB.** Caveats: the footprint is sampled when the line is written (near the end of the run), not a true peak, and it looks low for the Rust SDK — treat it as
+  unverified until sampled during the fetch and compared with the extension's real limit; the room is not encrypted (decryption/UTD in the NSE untested); no timeout/termination injection (AC-NSE-3/4), no
+  100-push run, no cold-device or poor-network run; a Debug build, not Release. The metrics file is copied into the app's Documents at launch in DEBUG builds so
+  `xcrun devicectl device copy from --domain-type appDataContainer --domain-identifier one.mbm.halo --source Documents/nse-metrics.jsonl …` can read it (the App Group container itself is not readable from the Mac).
+  No badge appears on the icon (not implemented; see below). NOT yet done: Not implemented: `notification_record` de-duplication, read-state suppression, badge
   recomputation (`BadgeCalculator`), communication-notification intents, suppression entitlement (V-PUSH-3), sender avatars.
 
 **2026-11-19 (latest+13) — Push groundwork: Sygnal in infra/dev, pusher registration**

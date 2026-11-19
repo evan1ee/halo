@@ -42,6 +42,9 @@ final class AppRoot {
         }
         auth = AuthViewModel(coordinator: sessionCoordinator)
         roomList = RoomListViewModel(session: sessionCoordinator, rooms: roomCoordinator)
+        #if DEBUG
+        Self.exportNSEMetrics(namespace: namespace)
+        #endif
         log.info("app launched")
     }
 
@@ -56,6 +59,19 @@ final class AppRoot {
     func makeTimeline(room: RoomID) -> TimelineViewModel {
         TimelineViewModel(coordinator: TimelineCoordinator(port: timelinePort, room: room), media: media)
     }
+
+    #if DEBUG
+    /// Debug only: copies the extension's G-NSE metrics (App Group container) into the app's Documents folder, where
+    /// `devicectl device copy from --domain-type appDataContainer` can read them.
+    private static func exportNSEMetrics(namespace: String) {
+        let fileManager = FileManager.default
+        guard let group = fileManager.containerURL(forSecurityApplicationGroupIdentifier: "group.\(namespace)") else { return }
+        let source = group.appendingPathComponent("nse-metrics.jsonl")
+        let target = URL.documentsDirectory.appendingPathComponent("nse-metrics.jsonl")
+        try? fileManager.removeItem(at: target)
+        try? fileManager.copyItem(at: source, to: target)
+    }
+    #endif
 
     private static var minimumLogLevel: LogLevel {
         #if DEBUG
