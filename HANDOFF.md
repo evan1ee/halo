@@ -14,7 +14,14 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   pass; SwiftLint skipped (not configured). Nothing iOS-specific has been built anywhere.
 
 ## 2. Completed work
-**2026-11-19 (latest) — M1 started: read-only timeline**
+**2026-11-19 (latest+1) — M1: sync lifecycle owner**
+- `SyncPort` (domain, `FakeSyncPort`, `SyncPortContract`), `MatrixSyncPort` (adapter), `SyncCoordinator` (runs while session ready ∧ foreground; backoff
+  1…60 s with an injected sleeper; 5 tests, stable over repeated runs). Room list no longer starts sync (`MatrixSessionPort.roomListService()` only creates the
+  service). App: `AppRoot.sync` + scene phase in `HaloApp`. Verified in the simulator: list loads, a message sent from another device shows up live.
+- Adapter contract tests are now `.serialized`: run in parallel against one account they hung (cause not investigated). 11 adapter tests pass against infra/dev
+  (`SyncPortContract` added). Application tests: 32.
+
+**2026-11-19 (earlier+) — M1 started: read-only timeline**
 - Domain: generic `ListDiff`/`ListReducer` (room list now a typealias over it), `TimelineItem`/`TimelineEvent`/`TimelineEventKind`, `TimelinePort` +
   `TimelineSession`. TestSupport: `FakeTimelinePort`, `TimelinePortContract` (paginates like a real client). Application: `TimelineCoordinator`.
   Adapter: `MatrixTimelinePort`, `TimelineMapper` (SDK-qualified names), `MatrixSessionPort.room(_:)`. Feature: `FeatureTimeline`; room tap pushes it
@@ -83,6 +90,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 - Docs: `docs/OPEN_QUESTIONS.md` (V-CI-2), `docs/development/DEVELOPMENT_SETUP.md` §2, `docs/ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
+- Parallel contract tests against one account hang (suite is serialized as a workaround; cause unknown).
 - The shared Keychain access group, app-group container and a signed device build are untested (simulator, ad-hoc signing only).
 - Contract tests are env-gated and are reported as skipped (not passed) without a homeserver; `prepush.sh` doesn't build/test the adapter.
 - Docker CLI on this Mac hangs on the `osxkeychain` credential helper (image pulls fail with "error getting credentials"). Workaround used: a throwaway `DOCKER_CONFIG` plus a stub `docker-credential-osxkeychain` first in PATH; the user's config was not touched. Native Synapse via pip doesn't load on macOS 27. `prepush.sh` doesn't build/test the adapter (needs xcodebuild).
@@ -97,7 +105,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 ## 6. Next steps
 1. Push this branch / open a PR; check CI.
 2. (Done) contracts pass on infra/dev. Keep running them after every adapter change.
-3. M1 remaining (docs/ROADMAP.md): `SyncPort` lifecycle owner (sync is started on first room-list use and never stopped before logout), HaloPersistence (GRDB; run the V-SQL-1 runtime check there), media display, verification + recovery, NSE spike and G-NSE. Answer Q-XCODEGEN before adding the next package to the app.
+3. M1 remaining (docs/ROADMAP.md): HaloPersistence (GRDB; run the V-SQL-1 runtime check there), media display, verification + recovery, NSE spike and G-NSE. Answer Q-XCODEGEN before adding the next package to the app.
 4. Without a Mac: V-APPLE-1 from Apple docs; M1 prep — Halo's Sygnal pushkin in `infra/sygnal/` with tests and `pushkin.yml` (ADR-0015).
 
 ## 7. Next Session Prompt

@@ -14,6 +14,7 @@ import HaloPlatform
 final class AppRoot {
     let auth: AuthViewModel
     let roomList: RoomListViewModel
+    let sync: SyncCoordinator
     private let timelinePort: MatrixTimelinePort
 
     init() {
@@ -29,6 +30,7 @@ final class AppRoot {
         let roomCoordinator = RoomListCoordinator(port: MatrixRoomListPort(session: session))
 
         timelinePort = MatrixTimelinePort(session: session)
+        sync = SyncCoordinator(port: MatrixSyncPort(session: session), session: sessionCoordinator)
         auth = AuthViewModel(coordinator: sessionCoordinator)
         roomList = RoomListViewModel(session: sessionCoordinator, rooms: roomCoordinator)
         log.info("app launched")

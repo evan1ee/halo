@@ -24,7 +24,7 @@ private func within<T: Sendable>(seconds: Double, _ operation: @escaping @Sendab
     }
 }
 
-@Suite("Adapter contracts against infra/dev", .enabled(if: configured, "needs HALO_DEV_SERVER/USER/PASSWORD"))
+@Suite("Adapter contracts against infra/dev", .serialized, .enabled(if: configured, "needs HALO_DEV_SERVER/USER/PASSWORD"))
 struct AdapterContractTests {
     private func port() -> MatrixSessionPort {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("halo-contract-\(UUID().uuidString)")
@@ -49,6 +49,7 @@ struct AdapterContractTests {
             on: details)
         _ = stored
         let expected = Int(env["HALO_DEV_ROOMS"] ?? "0") ?? 0
+        try await MatrixSyncPort(session: session).start()
         try await within(seconds: 60) { try await RoomListPortContract.verify(MatrixRoomListPort(session: session), expectedRoomCount: expected) }
         try await session.logout()
     }
@@ -63,11 +64,25 @@ struct AdapterContractTests {
             on: details)
         // The client only knows a room once sync has delivered it.
         let rooms = Int(env["HALO_DEV_ROOMS"] ?? "0") ?? 0
+        try await MatrixSyncPort(session: session).start()
         try await within(seconds: 60) { try await RoomListPortContract.verify(MatrixRoomListPort(session: session), expectedRoomCount: rooms) }
         let timeline = MatrixTimelinePort(session: session)
         let room = try RoomID(env["HALO_DEV_TIMELINE_ROOM"] ?? "")
         try await within(seconds: 60) { try await TimelinePortContract.verify(timeline, room: room, expectedBodies: ["first", "second", "a notice", "waves"]) }
         try await TimelinePortContract.verifyUnknownRoom(timeline, room: try RoomID("!does-not-exist:localhost"))
+        try await session.logout()
+    }
+
+    @Test("SyncPortContract")
+    func sync() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(
+                username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
+            on: details)
+        let sync = MatrixSyncPort(session: session)
+        try await within(seconds: 60) { try await SyncPortContract.verify(sync) }
         try await session.logout()
     }
 }

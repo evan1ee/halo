@@ -132,15 +132,32 @@ public actor MatrixSessionPort: SessionPort {
 
     // MARK: Shared with the room list
 
-    /// The synchronising room list service; starts `SyncService` on first use.
-    func roomListService() async throws(HaloError) -> RoomListService {
+    /// The SDK sync service, created on first use but not started: only `MatrixSyncPort` starts and stops it.
+    private func sdkSyncService() async throws(HaloError) -> SyncService {
         guard let client else { throw .unauthorized(soft: false) }
+        if let syncService { return syncService }
         do {
-            if syncService == nil { syncService = try await client.syncService().finish() }
-            guard let syncService else { throw HaloError.internal(code: "SYNC_SERVICE") }
-            await syncService.start()
-            return syncService.roomListService()
+            let service = try await client.syncService().finish()
+            syncService = service
+            return service
         } catch { throw ErrorMapper.map(error) }
+    }
+
+    /// The room list service. It delivers data once the sync loop runs (`SyncCoordinator`).
+    func roomListService() async throws(HaloError) -> RoomListService {
+        try await sdkSyncService().roomListService()
+    }
+
+    func startSync() async throws(HaloError) {
+        let service = try await sdkSyncService()
+        await service.start()
+    }
+
+    func stopSync() async { await syncService?.stop() }
+
+    /// Subscribes to the sync service's state; the handle must be kept alive by the caller.
+    func observeSync(_ onUpdate: @escaping @Sendable (SyncServiceState) -> Void) async throws(HaloError) -> TaskHandle {
+        try await sdkSyncService().state(listener: SyncStateListener(onUpdate))
     }
 
     /// The SDK room for `id`; `.notFound` if the client doesn't know it.
@@ -233,4 +250,10 @@ private final class RefreshDelegate: ClientSessionDelegate, Sendable {
             onRefresh(stored)
         }
     }
+}
+
+private final class SyncStateListener: SyncServiceStateObserver {
+    private let onUpdate: @Sendable (SyncServiceState) -> Void
+    init(_ onUpdate: @escaping @Sendable (SyncServiceState) -> Void) { self.onUpdate = onUpdate }
+    func onUpdate(state: SyncServiceState) { onUpdate(state) }
 }

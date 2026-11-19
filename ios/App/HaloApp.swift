@@ -18,6 +18,7 @@ struct HaloApp: App {
 
 private struct RootView: View {
     let root: AppRoot
+    @Environment(\.scenePhase) private var scenePhase
     @State private var path: [RoomID] = []
 
     var body: some View {
@@ -39,7 +40,12 @@ private struct RootView: View {
                 SignInView(model: root.auth)
             }
         }
-        .task { await root.auth.start() }
+        .task {
+            await root.sync.begin()
+            await root.auth.start()
+        }
+        // Sync runs only in the foreground (SYNC_ENGINE §2 rule 1).
+        .task(id: scenePhase) { await root.sync.setForeground(scenePhase == .active) }
     }
 }
 

@@ -134,3 +134,20 @@ public enum TimelinePortContract {
         }
     }
 }
+
+/// Behaviour every `SyncPort` implementation must show (with a signed-in session behind it).
+public enum SyncPortContract {
+    /// start → `.running` is reported; start again is harmless; stop ends the loop and is idempotent.
+    public static func verify(_ port: any SyncPort) async throws {
+        do { try await port.start() } catch { throw ContractViolation("start() failed with \(error.code)") }
+        do { try await port.start() } catch { throw ContractViolation("a second start() must be harmless, got \(error.code)") }
+        var sawRunning = false
+        for await status in port.statuses() {
+            if status == .running { sawRunning = true; break }
+            if status == .failed { throw ContractViolation("sync failed instead of running") }
+        }
+        guard sawRunning else { throw ContractViolation("the status stream ended before .running") }
+        await port.stop()
+        await port.stop()
+    }
+}
