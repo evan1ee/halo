@@ -109,6 +109,25 @@ public actor ReadReceiptCoordinator {
         schedule(room, after: dueIn(room))
     }
 
+    /// "Mark as read" from the room list: reads the whole room on the server, clears the unread flag and records the
+    /// position at `latestEventTime` (the room list's newest event), already sent. A room without events only loses its flag.
+    public func markRoomRead(_ room: RoomID, latestEventTime: Date?) async throws(HaloError) {
+        let event = try await port.markRoomRead(room: room, isPrivate: isPrivate)
+        try await port.setMarkedUnread(room: room, false)
+        guard let event, let latestEventTime, latestEventTime > (intents[room]?.timestamp ?? .distantPast) else { return }
+        intents[room] = Intent(event: event, timestamp: latestEventTime, sent: true)
+        created[room] = wallClock()
+        scheduled[room]?.cancel()
+        scheduled[room] = nil
+        positionBroadcaster.publish(currentPositions())
+        persist(room)
+    }
+
+    /// "Mark as unread" from the room list.
+    public func markRoomUnread(_ room: RoomID) async throws(HaloError) {
+        try await port.setMarkedUnread(room: room, true)
+    }
+
     /// Sends every unsent intent now (foreground, reconnect, background flush); backoff is bypassed.
     public func flush() async {
         for room in intents.keys where intents[room]?.sent == false {

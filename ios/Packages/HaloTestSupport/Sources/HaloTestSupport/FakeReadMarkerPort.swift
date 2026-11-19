@@ -20,10 +20,18 @@ public final class FakeReadMarkerPort: ReadMarkerPort {
         var receipts: [Sent] = []
         var markers: [Sent] = []
         var failures: [HaloError] = []
+        var latest: [RoomID: EventID] = [:]
+        var flags: [RoomID: Bool] = [:]
     }
     private let state = Mutex(State())
 
     public init() {}
+
+    /// The latest event `markRoomRead` resolves for `room`; rooms without one resolve to `nil`.
+    public func setLatestEvent(_ event: EventID, in room: RoomID) { state.withLock { $0.latest[room] = event } }
+
+    /// The last "marked unread" value set per room.
+    public var unreadFlags: [RoomID: Bool] { state.withLock { $0.flags } }
 
     public var receipts: [Sent] { state.withLock { $0.receipts } }
     public var markers: [Sent] { state.withLock { $0.markers } }
@@ -39,5 +47,16 @@ public final class FakeReadMarkerPort: ReadMarkerPort {
 
     public func setFullyRead(room: RoomID, event: EventID) async throws(HaloError) {
         state.withLock { $0.markers.append(Sent(room: room, event: event, isPrivate: false)) }
+    }
+
+    public func markRoomRead(room: RoomID, isPrivate: Bool) async throws(HaloError) -> EventID? {
+        guard let event = state.withLock({ $0.latest[room] }) else { return nil }
+        try await sendReceipt(room: room, event: event, isPrivate: isPrivate)
+        try await setFullyRead(room: room, event: event)
+        return event
+    }
+
+    public func setMarkedUnread(room: RoomID, _ value: Bool) async throws(HaloError) {
+        state.withLock { $0.flags[room] = value }
     }
 }

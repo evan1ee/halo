@@ -120,4 +120,28 @@ struct ReadReceiptCoordinatorTests {
         #expect(port.receipts.isEmpty)
         #expect(await c.readPosition(of: other) == at(2))
     }
+
+    @Test func markRoomReadSendsClearsTheFlagAndRecordsASentPosition() async throws {
+        let (c, port, _) = make()
+        port.setLatestEvent(event(7), in: room)
+        try await c.markRoomUnread(room)
+        #expect(port.unreadFlags[room] == true)
+        try await c.markRoomRead(room, latestEventTime: at(70))
+        #expect(port.receipts == [.init(room: room, event: event(7), isPrivate: false)])
+        #expect(port.unreadFlags[room] == false)
+        #expect(await c.readPosition(of: room) == at(70))
+        // Already sent: nothing further goes out, and an older event doesn't move the position back.
+        await c.flush()
+        #expect(port.receipts.count == 1)
+        await c.reportSeen(room: room, event: event(3), timestamp: at(30))
+        #expect(await c.readPosition(of: room) == at(70))
+    }
+
+    @Test func markRoomReadInARoomWithoutEventsOnlyClearsTheFlag() async throws {
+        let (c, port, _) = make()
+        try await c.markRoomRead(room, latestEventTime: nil)
+        #expect(port.receipts.isEmpty)
+        #expect(port.unreadFlags[room] == false)
+        #expect(await c.readPosition(of: room) == nil)
+    }
 }

@@ -22,10 +22,19 @@ public struct RoomListView: View {
                     Section("Rooms: \(count)") {
                         ForEach(rows) { row in
                             Button(row.name) { onSelect(row.id) }.foregroundStyle(.primary)
+                                .swipeActions(edge: .leading) {
+                                    Button("Read") { Task { await model.markRead(row.id) } }.tint(.blue)
+                                }
+                                .swipeActions(edge: .trailing) {
+                                    Button("Unread") { Task { await model.markUnread(row.id) } }.tint(.orange)
+                                }
                         }
                     }
                 }
                 .accessibilityIdentifier("room-list")
+                .safeAreaInset(edge: .bottom) {
+                    if let message = model.actionError { Text(message).font(.footnote).foregroundStyle(.red).padding() }
+                }
             case .failed(let message):
                 Text(message).foregroundStyle(.red)
             }

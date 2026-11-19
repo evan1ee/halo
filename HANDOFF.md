@@ -16,6 +16,9 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   constants and a one-line `.gitleaksignore` for the old commit's fingerprint (history scans see it).
 
 ## 2. Completed work
+**2026-11-20 (latest+22) — Mark as read / unread in the room list**
+- `ReadMarkerPort.markRoomRead(room:isPrivate:)` (adapter: latest event id from a short-lived `Room.timeline()`, receipt + fully-read marker) and `setMarkedUnread` (`Room.setUnreadFlag`). `ReadReceiptCoordinator.markRoomRead/markRoomUnread` clear/set the flag and record a sent position. The room list rows have swipe actions (leading "Read", trailing "Unread") through `RoomListViewModel`; failures show a short message.
+- Checked: HaloApplication 62 tests (2 new), FeatureRoomList tests, app build. NOT checked: the adapter calls against infra/dev (no contract test yet) and the swipe UI on a device; the room list still shows names only (no unread indicator), so the effect shows through the badge.
 **2026-11-20 (latest+21) — File protection on halo.sqlite**
 - `HaloDatabase` sets `completeUntilFirstUserAuthentication` on the database, its `-wal`/`-shm` files and the directory (PERSISTENCE §3). Checked: HaloPersistence tests pass on macOS and the iOS Simulator. NOT checked: the simulator returns no protection class, so the attribute itself still needs a check on a device.
 **2026-11-20 (latest+20) — Receipts from the user's other devices clear the badge here**
@@ -188,7 +191,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 - Docker Hub rate-limited pulls in the last session (Sygnal image not pulled; Swift 6.3 tag unchecked).
 
 ## 6. Next steps
-0. Receipts: check halo.sqlite file protection on a device, verify V-RS-1 on a device (own-receipt updates), intent confirmation rules (a)–(c), true ≥ 50 % visibility, mark as read/unread in the room list.
+0. Receipts: check halo.sqlite file protection on a device, verify V-RS-1 on a device (own-receipt updates), intent confirmation rules (a)–(c), true ≥ 50 % visibility, a contract test for mark read/unread and an unread indicator in the room list.
 1. Push this branch / open a PR; check CI.
 2. (Done) contracts pass on infra/dev. Keep running them after every adapter change.
 3. Verify the badge on the phone (enable Badges for Halo in iOS Settings first), then G-NSE hardening: true peak memory, an encrypted room (decrypt/UTD in the NSE), timeout and termination injection (AC-NSE-3/4), 100 pushes, Release build.

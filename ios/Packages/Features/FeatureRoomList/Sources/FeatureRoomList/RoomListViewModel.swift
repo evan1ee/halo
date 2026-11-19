@@ -25,11 +25,33 @@ public final class RoomListViewModel {
 
     private let session: SessionCoordinator
     private let rooms: RoomListCoordinator
+    private let receipts: ReadReceiptCoordinator?
     private var tasks: [Task<Void, Never>] = []
 
-    public init(session: SessionCoordinator, rooms: RoomListCoordinator) {
+    /// Set when a swipe action fails; the view shows it and the next successful action clears it.
+    public private(set) var actionError: String?
+
+    public init(session: SessionCoordinator, rooms: RoomListCoordinator, receipts: ReadReceiptCoordinator? = nil) {
         self.session = session
         self.rooms = rooms
+        self.receipts = receipts
+    }
+
+    /// "Mark as read" (swipe, ROOM_LIST FR-6).
+    public func markRead(_ room: RoomID) async {
+        guard let receipts else { return }
+        let latest = await rooms.rooms.first { $0.id == room }?.latestEvent?.timestamp
+        await perform { () async throws(HaloError) in try await receipts.markRoomRead(room, latestEventTime: latest) }
+    }
+
+    /// "Mark as unread" (swipe, ROOM_LIST FR-6).
+    public func markUnread(_ room: RoomID) async {
+        guard let receipts else { return }
+        await perform { () async throws(HaloError) in try await receipts.markRoomUnread(room) }
+    }
+
+    private func perform(_ action: () async throws(HaloError) -> Void) async {
+        do { try await action(); actionError = nil } catch { actionError = "That didn't work. Try again." }
     }
 
     isolated deinit { tasks.forEach { $0.cancel() } }

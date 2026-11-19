@@ -52,7 +52,7 @@ final class AppRoot {
             PushCoordinator(port: MatrixPushPort(session: session), session: sessionCoordinator, appID: $0.appID, gatewayURL: $0.gateway)
         }
         auth = AuthViewModel(coordinator: sessionCoordinator)
-        roomList = RoomListViewModel(session: sessionCoordinator, rooms: roomCoordinator)
+        roomList = RoomListViewModel(session: sessionCoordinator, rooms: roomCoordinator, receipts: receipts)
         #if DEBUG
         Self.exportNSEMetrics(namespace: namespace)
         #endif

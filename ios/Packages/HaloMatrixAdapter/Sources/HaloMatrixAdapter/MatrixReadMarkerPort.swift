@@ -21,4 +21,22 @@ public final class MatrixReadMarkerPort: ReadMarkerPort {
         let sdkRoom = try await session.room(room)
         do { try await sdkRoom.markAsFullyReadUnchecked(eventId: event.rawValue) } catch { throw ErrorMapper.map(error) }
     }
+
+    public func markRoomRead(room: RoomID, isPrivate: Bool) async throws(HaloError) -> EventID? {
+        let sdkRoom = try await session.room(room)
+        do {
+            let timeline = try await sdkRoom.timeline()
+            guard let latest = await timeline.latestEventId() else { return nil }
+            try await sdkRoom.sendSingleReceipt(receiptType: isPrivate ? .readPrivate : .read, thread: .unthreaded, eventId: latest)
+            try await sdkRoom.markAsFullyReadUnchecked(eventId: latest)
+            return try EventID(latest)
+        } catch let error as HaloError {
+            throw error
+        } catch { throw ErrorMapper.map(error) }
+    }
+
+    public func setMarkedUnread(room: RoomID, _ value: Bool) async throws(HaloError) {
+        let sdkRoom = try await session.room(room)
+        do { try await sdkRoom.setUnreadFlag(newValue: value) } catch { throw ErrorMapper.map(error) }
+    }
 }
