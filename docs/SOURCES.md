@@ -25,6 +25,7 @@ Re-verify at every SDK bump (see [development/BUILD_AND_RELEASE.md](development/
 - F-LIC-4 `matrix-rust-components-swift` is Apache-2.0.
 - F-LIC-5 GRDB.swift is MIT.
 - F-LIC-6 evan1ee/matrix-bot is MIT.
+- F-LIC-8 Server components (not distributed): Synapse `LICENSE-AGPL-3.0` (element-hq/synapse), MAS `LICENSE` AGPL-3.0, Sygnal `LICENSE` Apache-2.0.
 - F-LIC-7 Build/test tools: swift-snapshot-testing (MIT), SwiftLint (MIT), gitleaks (MIT), cargo-deny and cargo-about (MIT / Apache-2.0 dual) — LICENSE files on each default branch.
 
 ### F-FFI — matrix-sdk-ffi (at the pinned rev)
@@ -55,6 +56,7 @@ Re-verify at every SDK bump (see [development/BUILD_AND_RELEASE.md](development/
 - F-SPEC-2 Marking rooms unread (`m.marked_unread`, MSC2867) was added in **v1.12**.
 - F-SPEC-3 Image packs (`m.room.image_pack` state, `m.image_pack.rooms` account data, MSC2545) were added in **v1.19**. Shortcode grammar `^[A-Za-z0-9_-]{1,100}$`; stickers ≥ 512×512 recommended; **packs are not encrypted** and clients SHOULD warn about this in E2EE rooms; when sending a sticker, `body` = image body or shortcode and `info` = image info.
 - F-SPEC-4 `m.fully_read` is room account data (read markers module); `m.mentions` (intentional mentions) were added in v1.7.
+- F-SPEC-5 Simplified Sliding Sync endpoint (MSC4186, unstable): `POST /_matrix/client/unstable/org.matrix.simplified_msc3575/sync` (ruma-client-api `sync/sync_events/msc4186.rs` at the pinned rev).
 - Spec text: https://spec.matrix.org/v1.19/client-server-api/ (source: https://github.com/matrix-org/matrix-spec).
 
 ### F-BOT — evan1ee/matrix-bot
