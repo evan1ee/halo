@@ -22,6 +22,13 @@ struct HaloDatabaseTests {
         #expect(applied == ["v1-meta", "v2-read-intent"])
     }
 
+    @Test("opening with file protection succeeds (the simulator and macOS don't report protection classes, so the class itself is checked on a device)")
+    func protects() throws {
+        let file = path()
+        _ = try HaloDatabase(path: file)
+        #expect(FileManager.default.fileExists(atPath: file))
+    }
+
     @Test("an unusable path is a storage error, not a crash")
     func badPath() {
         #expect(throws: HaloError.storage(.migrationFailed)) { try HaloDatabase(path: "/nonexistent-dir/x.sqlite") }

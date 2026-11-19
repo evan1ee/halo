@@ -17,6 +17,19 @@ public struct HaloDatabase: Sendable {
         } catch {
             throw .storage(.migrationFailed)
         }
+        try Self.protect(path: path)
+    }
+
+    /// Sets `completeUntilFirstUserAuthentication` on the database and its WAL/shared-memory files, and on the
+    /// directory so files SQLite creates later inherit it (PERSISTENCE §3: the NSE must read it while locked).
+    static func protect(path: String) throws(HaloError) {
+        let manager = FileManager.default
+        let directory = (path as NSString).deletingLastPathComponent
+        do {
+            for item in [directory, path, path + "-wal", path + "-shm"] where manager.fileExists(atPath: item) {
+                try manager.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: item)
+            }
+        } catch { throw .storage(.corrupted) }
     }
 
     /// The SQLite library GRDB runs on, e.g. `3.51.0`. Used by diagnostics and the V-SQL-1 check.
