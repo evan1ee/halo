@@ -85,6 +85,15 @@ public final class TimelineViewModel {
     public private(set) var sendError: String?
     /// The own message being edited, or `nil` when the composer writes a new message.
     public private(set) var editing: EventID?
+    /// The message an emoji is being picked for, or `nil` when the picker is closed.
+    public private(set) var reactionTarget: TimelineRow?
+    /// The emoji offered by the picker (a fixed set; the quick row of the menu is `quickReactions`).
+    public static let quickReactions = ["👍", "❤️", "😂"]
+    public static let pickerEmoji = [
+        "👍", "👎", "❤️", "😂", "😮", "😢", "😡", "🎉", "🙏", "👏", "🔥", "💯", "✅", "❌", "👀", "🤔",
+        "😀", "😅", "😉", "😍", "😘", "😎", "🥳", "😴", "🤯", "😬", "🙄", "🤗", "😇", "🤝", "💪", "🙌",
+        "👋", "✌️", "👌", "🤞", "🫡", "🫶", "💔", "💙", "💚", "⭐️", "✨", "🚀", "☕️", "🍕", "🎂", "🌈",
+    ]
     /// The message the next send replies to, or `nil`.
     public private(set) var replyingTo: TimelineRow?
 
@@ -154,6 +163,21 @@ public final class TimelineViewModel {
     public func toggleReaction(on row: TimelineRow, key: String) async {
         guard let id = row.eventID else { return }
         await perform { try await coordinator.toggleReaction(on: id, key: key) }
+    }
+
+    /// Opens the emoji picker for a confirmed message.
+    public func beginReactionPicker(_ row: TimelineRow) {
+        guard row.eventID != nil else { return }
+        reactionTarget = row
+    }
+
+    public func cancelReactionPicker() { reactionTarget = nil }
+
+    /// Reacts with `key` to the picker's message and closes the picker.
+    public func pickReaction(_ key: String) async {
+        guard let target = reactionTarget else { return }
+        reactionTarget = nil
+        await toggleReaction(on: target, key: key)
     }
 
     /// Deletes the user's own confirmed message.

@@ -14,6 +14,12 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   pass; SwiftLint skipped (not configured). Nothing iOS-specific has been built anywhere.
 
 ## 2. Completed work
+**2026-11-19 (latest+12) — M2: emoji picker for reactions**
+- Long-press menu gains "More reactions…": a sheet with a fixed grid of 48 emoji (`TimelineViewModel.pickerEmoji`; the quick row stays 👍 ❤️ 😂). `beginReactionPicker/pickReaction`, unconfirmed rows can't open it.
+  Checked: prepush passes (FeatureTimeline 18 tests); verified in the simulator against infra/dev: menu → sheet → 🎉 → chip "🎉 1" on the image message. It's a curated list, not a searchable system picker
+  and has no skin tones or recents; custom/sticker reactions aren't offered.
+- Not done: offline/kill-relaunch send (AC-M1), media sending, mentions, quote tap-to-jump, video/audio/file display, QR/emoji verification, G-NSE.
+
 **2026-11-19 (latest+11) — Q-XCODEGEN resolved; first physical-device run**
 - Founder decision: adopt XcodeGen. `ios/project.yml` is now in the repo (ADR-0017; Q-XCODEGEN resolved; DEVELOPMENT_SETUP updated). The generated project is committed. The development
   team is not in the spec: pass `DEVELOPMENT_TEAM=<id>` (Xcode had written one into the project; regeneration drops it).
@@ -188,7 +194,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 ## 6. Next steps
 1. Push this branch / open a PR; check CI.
 2. (Done) contracts pass on infra/dev. Keep running them after every adapter change.
-3. M2 next (docs/features/MESSAGING.md): emoji picker, formatted-body rendering, offline send test (AC-M1). M1 remaining: first real persisted data (read-intent/notification stores arrive with M3), video/audio/file display, QR/emoji verification, NSE spike and G-NSE.
+3. M2 next (docs/features/MESSAGING.md): offline send test (AC-M1). M1 remaining: first real persisted data (read-intent/notification stores arrive with M3), video/audio/file display, QR/emoji verification, NSE spike and G-NSE.
 4. Without a Mac: V-APPLE-1 from Apple docs; M1 prep — Halo's Sygnal pushkin in `infra/sygnal/` with tests and `pushkin.yml` (ADR-0015).
 
 ## 7. Next Session Prompt

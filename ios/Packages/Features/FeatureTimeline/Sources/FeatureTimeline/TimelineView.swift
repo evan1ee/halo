@@ -49,6 +49,9 @@ public struct TimelineView: View {
             }
         }
         .safeAreaInset(edge: .bottom) { Composer(model: model) }
+        .sheet(isPresented: Binding(get: { model.reactionTarget != nil }, set: { if !$0 { model.cancelReactionPicker() } })) {
+            ReactionPicker(model: model).presentationDetents([.medium])
+        }
         .task { await model.start() }
         .onDisappear { Task { await model.stop() } }
     }
@@ -96,9 +99,10 @@ private struct RowView: View {
 
     /// Long-press menu for confirmed messages: quick reactions, and edit/delete for own messages.
     @ViewBuilder private var actions: some View {
-        ForEach(["👍", "❤️", "😂"], id: \.self) { key in
+        ForEach(TimelineViewModel.quickReactions, id: \.self) { key in
             Button(key) { Task { await model.toggleReaction(on: row, key: key) } }
         }
+        Button("More reactions…", systemImage: "face.smiling") { model.beginReactionPicker(row) }
         Button("Reply", systemImage: "arrowshape.turn.up.left") { model.beginReply(row) }
         if row.isOwn {
             if row.style == .ownMessage && row.image == nil { Button("Edit", systemImage: "pencil") { model.beginEdit(row) } }
@@ -180,3 +184,22 @@ private struct ThumbnailView: View {
     }
 }
 #endif
+
+/// A grid of emoji; tapping one reacts to the message the picker was opened for.
+private struct ReactionPicker: View {
+    let model: TimelineViewModel
+
+    var body: some View {
+        ScrollView {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 8), spacing: 12) {
+                ForEach(TimelineViewModel.pickerEmoji, id: \.self) { key in
+                    Button(key) { Task { await model.pickReaction(key) } }
+                        .font(.title2)
+                        .buttonStyle(.plain)
+                }
+            }
+            .padding()
+        }
+        .accessibilityIdentifier("reactionPicker")
+    }
+}

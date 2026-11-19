@@ -195,6 +195,31 @@ struct TimelineViewModelTests {
         #expect(styled.map { String($0.characters) } == "b (edited)")
     }
 
+    @Test("the emoji picker reacts to its target, closes, and is unavailable for unconfirmed rows")
+    func picker() async throws {
+        let port = FakeTimelinePort()
+        let room = try RoomID("!r:x.org")
+        port.addRoom(room)
+        let model = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room))
+        await model.start()
+        func rows() -> [TimelineRow] { if case .live(let rows, _, _, _) = model.content { rows } else { [] } }
+        for _ in 0..<500_000 { if case .live = model.content { break }; await Task.yield() }
+        model.draft = "pick"
+        await model.send()
+        for _ in 0..<500_000 where rows().first?.eventID == nil { await Task.yield() }
+
+        model.beginReactionPicker(TimelineRow(id: "x", style: .message, sender: nil, text: "pending"))
+        #expect(model.reactionTarget == nil)
+        model.beginReactionPicker(try #require(rows().first))
+        #expect(model.reactionTarget != nil)
+        await model.pickReaction("🎉")
+        #expect(model.reactionTarget == nil)
+        for _ in 0..<500_000 where rows().first?.reactions.isEmpty != false { await Task.yield() }
+        #expect(rows().first?.reactions == [.init(key: "🎉", count: 1, reactedByMe: true)])
+        #expect(Set(TimelineViewModel.pickerEmoji).count == TimelineViewModel.pickerEmoji.count)
+        #expect(TimelineViewModel.quickReactions.allSatisfy(TimelineViewModel.pickerEmoji.contains))
+    }
+
     @Test("typing text uses known names, falls back to the user ID, and collapses for many people")
     func typingText() throws {
         let alice = try UserID("@alice:x.org")
