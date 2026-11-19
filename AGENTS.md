@@ -36,7 +36,7 @@ GRDB (exact version); Apple frameworks only otherwise. Infrastructure: Synapse (
 2. **One read-state function.** Attention, display counts and the app badge come only from `ReadStatePolicy` / `BadgeCalculator` in `HaloDomain`. No counters, no increments, no badge logic anywhere else (app or NSE).
 3. **The boundary is sacred.** Only `HaloMatrixAdapter` imports `MatrixRustSDK`. No upstream type in any port, domain model, view model or public signature. **Never bypass the Rust/Swift architectural boundary.**
 4. **Honest UI.** Unconfirmed things look unconfirmed (sending, pending bot actions, approximate counts).
-5. **Interoperability.** Use spec events; Halo-specific data is optional and namespaced (`app.halo.*`, final prefix per Q-BUNDLE).
+5. **Interoperability.** Use spec events; Halo-specific data is optional and namespaced under the project namespace root (`app.halo.*` is the stand-in; D63).
 6. **Privacy.** No content, tokens or raw Matrix IDs in logs; no third-party analytics/crash SDKs.
 7. **Clean room.** No Element X code/assets/strings, nothing from the old fork, no AGPL/GPL code in prompts ([CONTRIBUTING.md](CONTRIBUTING.md)).
 8. **Small surface.** No new dependency, abstraction layer or framework without a documented justification.

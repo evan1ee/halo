@@ -92,7 +92,7 @@ CREATE TABLE bot_action (
 | `app.halo.bot_allowlist` | `{ version: 1, bots: [userId] }` (synced allowlist) | BOT_MESSAGES |
 
 Rules: every Halo account-data type has a `version` field; unknown fields are preserved on write; readers ignore unknown versions gracefully.
-The `app.halo.*` namespace follows the spec's Java-package-style naming for custom types **[DECISION D54; final prefix depends on Q-BUNDLE/domain]**.
+The `app.halo.*` namespace follows the spec's Java-package-style naming for custom types **[DECISION D54, D63; `app.halo` stands in for the namespace root]**.
 
 ## 5. Repository interfaces (ports, sketch)
 `ReadIntentStore { upsertIfNewer(_:) ; markSent(room:) ; delete(room:, ifEventId:) ; all() ; observe() }`

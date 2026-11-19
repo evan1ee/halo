@@ -36,15 +36,16 @@
 | V-ST-3 | Legacy pack event names `im.ponies.user_emotes`, `im.ponies.room_emotes`, `im.ponies.emote_rooms` | MSC2545 history + FluffyChat/Cinny source (licence-safe: read docs/specs, not copy) | M4 | — |
 | V-SEARCH-1 | Upstream `SearchService` fits Halo's search needs (E2EE rooms, ranking, index size) | Spike in M8 | M8 | M8 |
 | V-APPLE-1 | Apple platform facts used in the design: Observation on iOS 17+, ImageIO animated GIF/APNG/WebP decoding, `com.apple.developer.usernotifications.filtering` entitlement key, file protection classes, NSE time limit, BGTaskScheduler behaviour | Check each against current Apple developer documentation for iOS 26 and record links in SOURCES.md | M0 | M0 (record), M4 (ImageIO) |
+| V-AUTH-1 | When MAS is introduced in M5, how existing `infra/dev` users and password-login sessions carry over (MAS migration tooling vs a fresh dev server) | Read the MAS docs for the version pinned at M5; try on a copy of the dev database | M5 | M5 |
 | V-LEGAL | Export compliance and trademark checks | Lawyer / Apple guidance | before external TestFlight | external TestFlight |
 
 ## Open decisions
 
 | ID | Question | Options | Recommendation | Decide by |
 |---|---|---|---|---|
-| Q-BUNDLE | Bundle ID prefix, App Group, account-data namespace (`app.halo.*` assumes the domain `halo.app`) | Owned domain (reverse-DNS) | Use a domain the founder controls; rename `app.halo.*` accordingly before M0 code | **Before M0** |
+| Q-BUNDLE | Bundle ID prefix, App Group, account-data namespace | — | **Decided D63**: one project-owned namespace root for app and extensions. Only the value (the founder's domain) remains to be recorded in DEVELOPMENT_SETUP §3 | Value: before the Xcode project is created (M0) |
 | Q-PUSH-BADGE | How to stop Synapse's count-only pushes from setting the icon badge (ADR-0015) | Halo Sygnal pushkin (background push) / filtering relay (drop) / accept the server badge | Pushkin; relay if V-PUSH-5 fails | **Before M1** |
-| Q-DEV-AUTH | How M0's password login works when `infra/dev` includes MAS (with MAS, Synapse delegates login to it) | Run M0 without MAS (Synapse's built-in password login) and add MAS in M5 behind a compose profile / run MAS from M0 with its password compatibility login enabled | Without MAS until M5 (fewer moving parts in M0); verify the chosen setup against the MAS docs when writing `infra/dev` | **Before M0** |
+| Q-DEV-AUTH | How M0's password login works when `infra/dev` includes MAS | — | **Decided D64**: native Synapse password login in M0; MAS from M5 | — |
 | Q-NSE-GATE | Should the NSE budget be its own gate at the end of M1 instead of a G-FFI criterion (ADR-0016)? | Keep in G-FFI / separate G-NSE | Separate G-NSE | Before M1 |
 | Q-SDK-BUILD | When to switch from the prebuilt SDK to building from source | M0 / before external TestFlight / never | Before the first external TestFlight | M5 |
 | Q-MAS-ACCOUNT | Device/session management for OIDC accounts: native list or MAS account page | Native via SDK / web (`account_url`) | Web page in the MVP | M5 |

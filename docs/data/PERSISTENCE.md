@@ -33,7 +33,7 @@ that opens both]**.
 ## 4. Multi-process access (app + NSE)
 - One `DatabasePool` per process, WAL mode, `busy_timeout` 5 s; writes in short `IMMEDIATE` transactions.
 - Monotonic upserts (e.g. `read_intent` only moves forward: `ON CONFLICT … DO UPDATE … WHERE excluded.event_ts > read_intent.event_ts`).
-- After an NSE write, a Darwin notification `app.halo.db.changed` tells the app to re-read.
+- After an NSE write, a Darwin notification `N.db.changed` (D63) tells the app to re-read.
 - **[ASSUMPTION V-SQL-2]** GRDB's guidance for sharing a database between an app and extensions (suspension handling: close/suspend the pool on background to avoid `0xdead10cc` terminations) is followed; verify in M1 with the NSE spike.
 
 ## 5. Cache strategy

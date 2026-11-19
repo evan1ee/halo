@@ -6,7 +6,7 @@ to be re-planned after M0. Each milestone ends with its exit criteria **verified
 ## Implementation entry criteria (before M0 starts)
 
 - [ ] Phase 0 documentation approved by the founder.
-- [ ] Apple Developer Program membership active; bundle ID prefix and App Group ID chosen.
+- [ ] Apple Developer Program membership active; namespace root `N` recorded (D63, DEVELOPMENT_SETUP §3).
 - [ ] Domain for the homeserver available; DNS control.
 - [ ] Mac with Xcode supporting iOS 26 SDK; Rust toolchain installable (only needed from gate G-FFI onwards).
 - [ ] Open questions marked "blocks M0" in [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) resolved.
@@ -34,12 +34,12 @@ gantt
 
 | # | Milestone | Scope | Exit criteria | Gates |
 |---|---|---|---|---|
-| M0 | Foundation | Repo layout, Xcode project + local packages, `infra/dev` Synapse/Sygnal (+ MAS per Q-DEV-AUTH), prebuilt SDK pinned, adapter skeleton behind ports, licence gate, CI (docs + Linux Swift domain tests), logging | Password login against the dev Synapse shows the room count via ports; CI green | V-SDK-1, V-SQL-1, V-CI-1, V-APPLE-1, Q-DEV-AUTH |
+| M0 | Foundation | Repo layout, Xcode project + local packages, `infra/dev` Synapse (native password login, D64)/Sygnal, prebuilt SDK pinned, adapter skeleton behind ports, licence gate, CI (docs + Linux Swift domain tests), logging | Password login against the dev Synapse shows the room count via ports; CI green | V-SDK-1, V-SQL-1, V-CI-1, V-APPLE-1 |
 | M1 | Read-only client | Session restore, `SyncService`, room list, timeline (text, notices, images, UTD), verification + recovery, NSE spike | All rooms readable; encrypted push shown | V-NSE-1, V-NSE-2 |
 | M2 | Messaging | Composer, replies, edits, deletes, reactions, typing, receipts display, send queue, media display, image send | Daily use alongside Element X; AC-M* | — |
 | M3 | Read-state engine | `ReadState` policy, receipt outbox, visibility tracking, badge, clearing, marked-unread, modes, auditor, Synapse scenario suite | AC-U1–U7 automated green | **G-UNREAD, G-FFI** |
 | M4 | Stickers v1 | Image-pack discovery, panel, favourites/recents, search, send/render, personal pack creation | AC-S* | V-ST-1 |
-| M5 | MVP hardening | OIDC/MAS login, settings, acknowledgements, generic bot rendering, performance, 7-day soak | **MVP: daily-driver switch**, AC-U8 | — |
+| M5 | MVP hardening | OIDC/MAS login (MAS added to `infra/dev`, V-AUTH-1), settings, acknowledgements, generic bot rendering, performance, 7-day soak | **MVP: daily-driver switch**, AC-U8 | — |
 | M6 | Bot cards | Template parsers v1, task→event index, reaction protocol | AC-B* | — |
 | M7 | Bot Activity tab | Task aggregation, filters, jump to source | AC-A* | — |
 | M8 | Search + Saved | Evaluate `SearchService` → decide; Saved room | Known message found in an E2EE room | V-SEARCH-1 |

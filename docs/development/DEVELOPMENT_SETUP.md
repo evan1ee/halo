@@ -25,7 +25,7 @@ halo/
 ├── tools/
 │   └── scenario-driver/      Swift (Linux) CLI driving Synapse for scenario tests
 ├── infra/
-│   ├── dev/                  docker-compose: Synapse + Postgres + Sygnal, MAS when Q-DEV-AUTH says so (+ .env.example)
+│   ├── dev/                  docker-compose: Synapse (native password login) + Postgres + Sygnal; MAS added in M5 (D64) (+ .env.example)
 │   └── test/                 docker-compose for CI scenarios (+ fault-injection proxy)
 ├── scripts/                  validate-docs.sh, check-boundaries.sh, rust-license-inventory.py, notices generator
 ├── core/                     (only if gate G-FFI fails) Rust workspace for halo-ffi
@@ -47,9 +47,26 @@ dependencies: [../architecture/MODULE_BOUNDARIES.md](../architecture/MODULE_BOUN
 
 ## 3. Xcode project configuration
 - Targets: `Halo` (iOS app), `HaloNotificationService` (NSE). Deployment target iOS 26.0.
-- Capabilities (both targets): App Groups `group.<bundle-prefix>.halo`, Keychain Sharing `<team>.<bundle-prefix>.halo.shared`; app: Push Notifications, Background Modes (remote notifications, background fetch), Communication Notifications; NSE: the filtering entitlement once granted (V-PUSH-3).
+- Capabilities (both targets): App Groups `group.N`, Keychain Sharing `<TeamID>.N.shared` (identifiers below); app: Push Notifications, Background Modes (remote notifications, background fetch), Communication Notifications; NSE: the filtering entitlement once granted (V-PUSH-3).
 - Build configurations: `Debug` (dev Synapse, verbose logs, auditor on), `Beta` (TestFlight: auditor on, logs info), `Release` (auditor off unless enabled in Diagnostics).
-- Settings in `ios/Config/*.xcconfig`: bundle IDs, App Group, default homeserver, Sygnal app id, log level. No secrets.
+- Settings in `ios/Config/*.xcconfig`: bundle IDs, App Group, default homeserver, Sygnal app id, log level. No secrets. `N` is defined once
+  (`HALO_NAMESPACE` in `Base.xcconfig`) and every other identifier is derived from it, so the app and its extensions can't diverge.
+
+### Identifiers (D63)
+`N` = the project-owned namespace root, reverse-DNS of a domain the founder controls. **Value: _not yet recorded_** — fill in here
+before the Xcode project is created; other documents write `app.halo` as a stand-in for `N`.
+
+| Identifier | Value |
+|---|---|
+| App bundle ID | `N` |
+| NSE bundle ID | `N.nse` (future extensions: `N.<extension>`) |
+| App Group | `group.N` |
+| Keychain access group | `<TeamID>.N.shared` |
+| BG task identifier | `N.refresh` |
+| Log subsystem | `N` |
+| Darwin notification (DB changed) | `N.db.changed` |
+| Sygnal / pusher `app_id` | `N` (production APNs), `N.dev` (sandbox) |
+| Halo account-data types | `N.sticker_prefs`, `N.sticker_rooms`, `N.bot_allowlist` |
 - Swift settings: `SWIFT_VERSION = 6`, strict concurrency `complete`, warnings as errors in CI.
 
 ## 4. Environments
