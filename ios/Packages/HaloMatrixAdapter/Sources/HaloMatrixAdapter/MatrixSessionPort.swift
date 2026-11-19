@@ -143,6 +143,15 @@ public actor MatrixSessionPort: SessionPort {
         } catch { throw ErrorMapper.map(error) }
     }
 
+    /// The SDK room for `id`; `.notFound` if the client doesn't know it.
+    func room(_ id: RoomID) async throws(HaloError) -> Room {
+        guard let client else { throw .unauthorized(soft: false) }
+        do {
+            guard let room = try client.getRoom(roomId: id.rawValue) else { throw HaloError.notFound }
+            return room
+        } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
+    }
+
     // MARK: Internals
 
     private func register(_ continuation: AsyncStream<SessionEvent>.Continuation, id: UUID) { events[id] = continuation }

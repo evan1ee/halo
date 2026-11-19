@@ -119,6 +119,32 @@ def check_manifests() -> None:
             violations.append(f"{manifest.relative_to(ROOT)}: declares {name}, which {module} may not depend on")
 
 
+PUBLIC_DECL_RE = re.compile(r"^\s*(?:@\w+(?:\([^)]*\))?\s+)*(?:public|open)\b[^\n{=]*", re.M)
+SDK_TYPE_RE = re.compile(r"^(?:public|open)\s+(?:indirect\s+)?(?:final\s+)?(?:class|struct|enum|protocol|typealias)\s+([A-Z]\w*)", re.M)
+ADAPTER = PACKAGES / "HaloMatrixAdapter"
+SDK_SOURCES = ADAPTER / ".build" / "checkouts" / "matrix-rust-components-swift" / "Sources" / "MatrixRustSDK"
+adapter_api_skipped = False
+
+
+def check_adapter_public_api() -> None:
+    """No upstream type may appear in a public signature of HaloMatrixAdapter (AGENTS.md §4.3, §17).
+
+    The upstream type names are read from the resolved SDK checkout, so the rule stays exact when the SDK
+    is bumped. Without a checkout (e.g. Linux CI) it can't run, and says so."""
+    global adapter_api_skipped
+    if not SDK_SOURCES.exists():
+        adapter_api_skipped = True
+        return
+    names = {n for f in SDK_SOURCES.glob("*.swift") for n in SDK_TYPE_RE.findall(f.read_text())}
+    # Halo domain types that share a name with an upstream type are fine only when module-qualified.
+    for path in sorted((ADAPTER / "Sources").rglob("*.swift")):
+        code = strip_comments_and_strings(path.read_text())
+        for decl in PUBLIC_DECL_RE.findall(code):
+            tokens = set(re.findall(r"(?<![\w.])([A-Z]\w*)", decl))
+            for name in sorted(tokens & names):
+                violations.append(f"{path.relative_to(ROOT)}: public signature mentions upstream type {name}: `{decl.strip()}`")
+
+
 def main() -> int:
     if not PACKAGES.exists():
         print("check-boundaries: no ios/Packages yet — nothing to check")
@@ -128,11 +154,14 @@ def main() -> int:
             continue
         check_file(path)
     check_manifests()
+    check_adapter_public_api()
     if violations:
         print(f"check-boundaries: {len(violations)} violation(s)")
         for v in violations:
             print(f"  - {v}")
         return 1
+    if adapter_api_skipped:
+        print("check-boundaries: SKIPPED adapter public-API rule (no SDK checkout; run after `swift package resolve` in the adapter)")
     print("check-boundaries: all checks passed")
     return 0
 

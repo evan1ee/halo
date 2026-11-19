@@ -25,7 +25,9 @@ struct RoomListViewModelTests {
                 break
             }
         }
-        #expect(model.content == .loaded(count: 2, names: ["General", "Unnamed room"]))
+        #expect(model.content == .loaded(count: 2, rows: [
+            .init(id: try RoomID("!a:x.org"), name: "General"), .init(id: try RoomID("!b:x.org"), name: "Unnamed room"),
+        ]))
     }
 
     @Test("a failed list shows a message, an idle list shows nothing")

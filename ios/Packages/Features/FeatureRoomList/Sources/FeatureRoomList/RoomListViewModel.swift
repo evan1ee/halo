@@ -3,16 +3,21 @@ import HaloDomain
 import HaloFoundation
 import Observation
 
-/// The room list for the signed-in user. M0 shows the count and the room names, which is the
-/// milestone's exit signal (docs/ROADMAP.md M0); rows, filters and unread badges arrive in M1.
+/// The room list for the signed-in user. It shows the count and the room names (M0's exit signal); a row selects a room for the timeline. Filters and unread
+/// badges come with the read-state work (M3).
 ///
 /// It follows the session: the list is subscribed while a session is ready and stopped otherwise.
 @MainActor @Observable
 public final class RoomListViewModel {
+    public struct Row: Equatable, Identifiable, Sendable {
+        public let id: RoomID
+        public let name: String
+    }
+
     public enum Content: Equatable {
         case idle
         case loading
-        case loaded(count: Int, names: [String])
+        case loaded(count: Int, rows: [Row])
         case failed(String)
     }
 
@@ -53,8 +58,8 @@ public final class RoomListViewModel {
         case .idle: content = .idle
         case .loading: content = .loading
         case .loaded(let count):
-            let names = await rooms.rooms.map { $0.name ?? "Unnamed room" }
-            content = .loaded(count: count, names: names)
+            let rows = await rooms.rooms.map { Row(id: $0.id, name: $0.name ?? "Unnamed room") }
+            content = .loaded(count: count, rows: rows)
         case .failed: content = .failed("The room list couldn't be loaded. Pull to try again.")
         }
     }

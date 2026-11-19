@@ -8,7 +8,7 @@
 | ID | Assumption | Exact validation | When | Blocks |
 |---|---|---|---|---|
 | V-SDK-1 | ~~Each prebuilt release maps to an identifiable SDK commit and feature set~~ **Resolved** — the release commit names it: `26.11.17` ← SDK `b93751e`, features `sentry`, profile `small-release-stripped` (`ios/SDKVERSION.md`); facts and inventory re-checked there [VERIFIED SOURCES pinned refs, F-LIC-2] | — | — | — |
-| V-SQL-1 | The SDK's bundled SQLite (inside the dynamic framework) and GRDB's system SQLite coexist without symbol interposition issues | M0 smoke test: open the SDK client and a GRDB DB in one process, run both, check `sqlite3_libversion()` from each side | M0 | M0 |
+| V-SQL-1 | The SDK's bundled SQLite and GRDB's SQLite coexist in one process | **Half verified (2026-11-19):** the SDK's `libmatrix_sdk_ffi.a` defines its `sqlite3_*` symbols as local (`nm`: `t _sqlite3_open`, none global), so they cannot interpose GRDB's. **Still open:** the runtime check (SDK client + GRDB DB in one process); it was written but GRDB would not download here (GitHub clone stalled), so it moves to the moment `HaloPersistence` adds GRDB | M0 → M1 (HaloPersistence) | M0 |
 | V-SQL-2 | GRDB `DatabasePool` shared by app + NSE works without `0xdead10cc` terminations when following GRDB's suspension guidance | NSE spike: 100 pushes while the app is backgrounded and writing | M1 | M3 |
 | V-CI-1 | ~~GRDB builds and tests on Linux with system SQLite~~ **Resolved** — yes, with `libsqlite3-dev` in the `swift` image [VERIFIED F-CI-1] | — | — | — |
 | V-CI-2 | ~~Linux CI Swift minor equals Xcode's~~ **Resolved (2026-11-19)** — they differ: Xcode 27.2 ships Swift 6.4.2, CI uses 6.2.4. Packages are `swift-tools-version: 6.2` and pass on both; CI stays on 6.2 as the floor [VERIFIED local run] | — | — | — |
@@ -36,7 +36,7 @@
 | V-ST-2 | The adapter can obtain a valid access token / trigger a refresh for option B | Inspect `Client.session()` and the session delegate | M4 | M4 (if B) |
 | V-ST-3 | Legacy pack event names `im.ponies.user_emotes`, `im.ponies.room_emotes`, `im.ponies.emote_rooms` | MSC2545 history + FluffyChat/Cinny source (licence-safe: read docs/specs, not copy) | M4 | — |
 | V-SEARCH-1 | Upstream `SearchService` fits Halo's search needs (E2EE rooms, ranking, index size) | Spike in M8 | M8 | M8 |
-| V-APPLE-1 | Apple platform facts used in the design: Observation on iOS 17+, ImageIO animated GIF/APNG/WebP decoding, `com.apple.developer.usernotifications.filtering` entitlement key, file protection classes, NSE time limit, BGTaskScheduler behaviour | Check each against current Apple developer documentation for iOS 26 and record links in SOURCES.md | M0 | M0 (record), M4 (ImageIO) |
+| V-APPLE-1 | ~~Apple platform facts used in the design~~ **Resolved for Observation, the filtering entitlement, file protection, NSE entry point and BGTaskScheduler [VERIFIED F-APPLE-1]**; NSE time/memory limits are measured at G-NSE and ImageIO animation formats in M4 | — | — | M4 (ImageIO) |
 | V-AUTH-1 | When MAS is introduced in M5, how existing `infra/dev` users and password-login sessions carry over (MAS migration tooling vs a fresh dev server) | Read the MAS docs for the version pinned at M5; try on a copy of the dev database | M5 | M5 |
 | V-LEGAL | Export compliance and trademark checks | Lawyer / Apple guidance | before external TestFlight | external TestFlight |
 

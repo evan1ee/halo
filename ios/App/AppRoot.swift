@@ -1,7 +1,9 @@
 import FeatureAuth
 import FeatureRoomList
+import FeatureTimeline
 import Foundation
 import HaloApplication
+import HaloDomain
 import HaloFoundation
 import HaloMatrixAdapter
 import HaloPlatform
@@ -12,6 +14,7 @@ import HaloPlatform
 final class AppRoot {
     let auth: AuthViewModel
     let roomList: RoomListViewModel
+    private let timelinePort: MatrixTimelinePort
 
     init() {
         let namespace = Bundle.main.bundleIdentifier ?? "one.mbm.halo"
@@ -25,9 +28,15 @@ final class AppRoot {
         let sessionCoordinator = SessionCoordinator(port: session, keychain: keychain)
         let roomCoordinator = RoomListCoordinator(port: MatrixRoomListPort(session: session))
 
+        timelinePort = MatrixTimelinePort(session: session)
         auth = AuthViewModel(coordinator: sessionCoordinator)
         roomList = RoomListViewModel(session: sessionCoordinator, rooms: roomCoordinator)
         log.info("app launched")
+    }
+
+    /// A view model for the timeline of `room`; each screen gets its own coordinator and session.
+    func makeTimeline(room: RoomID) -> TimelineViewModel {
+        TimelineViewModel(coordinator: TimelineCoordinator(port: timelinePort, room: room))
     }
 
     private static var minimumLogLevel: LogLevel {

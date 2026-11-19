@@ -18,6 +18,7 @@
 		B382DF9623A19AC4ED3D2FB5 /* HaloNotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 76ED106E261A2A8948DB12F6 /* HaloNotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		DF5EF2DF43E9B0888704F724 /* FeatureRoomList in Frameworks */ = {isa = PBXBuildFile; productRef = 0C836EFC11F76DCA8283F9D9 /* FeatureRoomList */; };
 		F7C8C003E20ADCE9617D81BC /* HaloApplication in Frameworks */ = {isa = PBXBuildFile; productRef = 043F0A8364EBBFB616A15D66 /* HaloApplication */; };
+		FE8C81196B7DFA19AE6F5DC4 /* FeatureTimeline in Frameworks */ = {isa = PBXBuildFile; productRef = CA58B4AA249ADB3B7D52F822 /* FeatureTimeline */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -60,6 +61,7 @@
 		A1E51DFB05F32237EA1C4BBE /* HaloFoundation */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HaloFoundation; path = Packages/HaloFoundation; sourceTree = SOURCE_ROOT; };
 		BBD186A499061D19EA7F87A0 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		C02129F24C211154F50ADD8A /* Beta.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Beta.xcconfig; sourceTree = "<group>"; };
+		CB99A77D2FED748851BA2449 /* FeatureTimeline */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FeatureTimeline; path = Packages/Features/FeatureTimeline; sourceTree = SOURCE_ROOT; };
 		DA3E1B8904AC903EF6240A91 /* Halo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Halo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E3D88711EB462A1A12171D80 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		F6C1EA7CA914253483FB61AF /* HaloPlatform */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HaloPlatform; path = Packages/HaloPlatform; sourceTree = SOURCE_ROOT; };
@@ -77,6 +79,7 @@
 				ADE867EEA4BBA88CD8ECE5E5 /* HaloPlatform in Frameworks */,
 				A5A986CA81A802F03C89A37E /* FeatureAuth in Frameworks */,
 				DF5EF2DF43E9B0888704F724 /* FeatureRoomList in Frameworks */,
+				FE8C81196B7DFA19AE6F5DC4 /* FeatureTimeline in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -109,6 +112,7 @@
 			children = (
 				7A3D76BB951E620E5C384DDA /* FeatureAuth */,
 				1A18178C457536A080B74F82 /* FeatureRoomList */,
+				CB99A77D2FED748851BA2449 /* FeatureTimeline */,
 				7062871F2640DF75FF141840 /* HaloApplication */,
 				9EC8385BD07B8D6D9DF96F10 /* HaloDomain */,
 				A1E51DFB05F32237EA1C4BBE /* HaloFoundation */,
@@ -189,6 +193,7 @@
 				4A0237C8C5FB6AAC71024475 /* HaloPlatform */,
 				83AACECE849C1196328AE949 /* FeatureAuth */,
 				0C836EFC11F76DCA8283F9D9 /* FeatureRoomList */,
+				CA58B4AA249ADB3B7D52F822 /* FeatureTimeline */,
 			);
 			productName = Halo;
 			productReference = DA3E1B8904AC903EF6240A91 /* Halo.app */;
@@ -201,7 +206,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 2720;
+				LastUpgradeCheck = 1430;
 			};
 			buildConfigurationList = FD72D6F5D3F07F5F009310F0 /* Build configuration list for PBXProject "Halo" */;
 			developmentRegion = en;
@@ -215,6 +220,7 @@
 			packageReferences = (
 				EF892FDF84537B2D18508DAC /* XCLocalSwiftPackageReference "Packages/Features/FeatureAuth" */,
 				4C58795DF6B4439CD9F9A18C /* XCLocalSwiftPackageReference "Packages/Features/FeatureRoomList" */,
+				7A9092141DC8F4B757DA43F0 /* XCLocalSwiftPackageReference "Packages/Features/FeatureTimeline" */,
 				6209975F329C42611C4F748B /* XCLocalSwiftPackageReference "Packages/HaloApplication" */,
 				081EBA8E086CCC6E744FA331 /* XCLocalSwiftPackageReference "Packages/HaloDomain" */,
 				9693EAA0CFC281A361789722 /* XCLocalSwiftPackageReference "Packages/HaloFoundation" */,
@@ -299,7 +305,6 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -319,7 +324,6 @@
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
 			name = Debug;
@@ -332,6 +336,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_TEAM = RN9SLQ2637;
 				INFOPLIST_KEY_CFBundleDisplayName = Halo;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
@@ -367,6 +372,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_TEAM = RN9SLQ2637;
 				INFOPLIST_KEY_CFBundleDisplayName = Halo;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
@@ -432,7 +438,6 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -445,7 +450,6 @@
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 			};
@@ -459,6 +463,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_TEAM = RN9SLQ2637;
 				INFOPLIST_KEY_CFBundleDisplayName = Halo;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
@@ -508,7 +513,6 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -521,7 +525,6 @@
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 			};
@@ -595,6 +598,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/HaloApplication;
 		};
+		7A9092141DC8F4B757DA43F0 /* XCLocalSwiftPackageReference "Packages/Features/FeatureTimeline" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/Features/FeatureTimeline;
+		};
 		9693EAA0CFC281A361789722 /* XCLocalSwiftPackageReference "Packages/HaloFoundation" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/HaloFoundation;
@@ -633,6 +640,10 @@
 		B84FBDA7CBAD6737BE7C8ACE /* HaloFoundation */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = HaloFoundation;
+		};
+		CA58B4AA249ADB3B7D52F822 /* FeatureTimeline */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FeatureTimeline;
 		};
 		EB52A262E7FF6BAE43AD1A07 /* HaloDomain */ = {
 			isa = XCSwiftPackageProductDependency;

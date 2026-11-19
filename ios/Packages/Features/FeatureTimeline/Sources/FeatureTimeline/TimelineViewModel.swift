@@ -1,0 +1,151 @@
+import Foundation
+import HaloApplication
+import HaloDomain
+import HaloFoundation
+import Observation
+
+/// One displayed row. Text is prepared here so the view only lays it out.
+public struct TimelineRow: Equatable, Identifiable, Sendable {
+    public enum Style: Equatable, Sendable { case message, ownMessage, notice, emote, placeholder, state, divider, marker }
+    public let id: String
+    public let style: Style
+    public let sender: String?
+    public let text: String
+}
+
+/// Presents one room's timeline from `TimelineCoordinator` (docs/features/TIMELINE.md). M1: read-only.
+@MainActor @Observable
+public final class TimelineViewModel {
+    public enum Content: Equatable {
+        case opening
+        case live(rows: [TimelineRow], isPaginating: Bool, canLoadEarlier: Bool, paginationError: String?)
+        case failed(String)
+    }
+
+    public private(set) var content: Content = .opening
+
+    private let coordinator: TimelineCoordinator
+    private var observation: Task<Void, Never>?
+    private let dateFormatter: DateFormatter
+
+    public init(coordinator: TimelineCoordinator, locale: Locale = .current, timeZone: TimeZone = .current) {
+        self.coordinator = coordinator
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        dateFormatter = formatter
+    }
+
+    isolated deinit { observation?.cancel() }
+
+    /// Opens the timeline and follows it. Call when the screen appears.
+    public func start() async {
+        guard observation == nil else { return }
+        let statuses = await coordinator.statuses()
+        observation = Task { [weak self] in
+            for await status in statuses { self?.apply(status) }
+        }
+        await coordinator.open()
+    }
+
+    /// Closes the timeline. Call when the screen disappears.
+    public func stop() async {
+        observation?.cancel()
+        observation = nil
+        await coordinator.close()
+    }
+
+    public func loadEarlier() async { await coordinator.paginateBackwards() }
+
+    func apply(_ status: TimelineCoordinator.Status) {
+        switch status {
+        case .idle, .opening:
+            content = .opening
+        case .live(let snapshot):
+            content = .live(
+                rows: Self.collapsingStateRuns(snapshot.items.map(row), items: snapshot.items),
+                isPaginating: snapshot.isPaginating,
+                canLoadEarlier: !snapshot.reachedStart,
+                paginationError: snapshot.paginationError.map { _ in "Couldn't load earlier messages." })
+        case .failed(let error):
+            content = .failed(error == .notFound ? "This room isn't available." : "The timeline couldn't be loaded.")
+        }
+    }
+
+    /// A run of unnamed room-setting changes (creation, power levels, join rules …) becomes one row
+    /// (TIMELINE FR-2: state events grouped). Membership changes stay visible.
+    static func collapsingStateRuns(_ rows: [TimelineRow], items: [TimelineItem]) -> [TimelineRow] {
+        var result: [TimelineRow] = []
+        for (row, item) in zip(rows, items) {
+            let isSettings: Bool = { if case .event(let e) = item.content, e.kind == .otherState { true } else { false } }()
+            if isSettings, let last = result.last, last.style == .state, last.text == Self.settingsText { continue }
+            result.append(row)
+        }
+        return result
+    }
+
+    static let settingsText = "The room was updated"
+
+    func row(_ item: TimelineItem) -> TimelineRow {
+        let id = item.id.rawValue
+        switch item.content {
+        case .virtual(.dateDivider(let date)):
+            return TimelineRow(id: id, style: .divider, sender: nil, text: dateFormatter.string(from: date))
+        case .virtual(.readMarker):
+            return TimelineRow(id: id, style: .marker, sender: nil, text: "New messages")
+        case .virtual(.timelineStart):
+            return TimelineRow(id: id, style: .state, sender: nil, text: "This is the start of the conversation.")
+        case .event(let event):
+            let name = event.senderName ?? event.sender.map { $0.rawValue } ?? "Unknown"
+            switch event.kind {
+            case .text(let body, let edited):
+                return TimelineRow(id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: edited ? "\(body) (edited)" : body)
+            case .notice(let body, _):
+                return TimelineRow(id: id, style: .notice, sender: name, text: body)
+            case .emote(let body, _):
+                return TimelineRow(id: id, style: .emote, sender: nil, text: "\(name) \(body)")
+            case .media(let kind, let body):
+                return TimelineRow(id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: "[\(Self.label(kind))] \(body)")
+            case .sticker(let body):
+                return TimelineRow(id: id, style: .message, sender: name, text: "[Sticker] \(body)")
+            case .redacted:
+                return TimelineRow(id: id, style: .placeholder, sender: name, text: "Message deleted")
+            case .undecryptable:
+                return TimelineRow(id: id, style: .placeholder, sender: name, text: "Unable to decrypt this message")
+            case .membership(_, let displayName, let change):
+                let who = displayName ?? name
+                return TimelineRow(id: id, style: .state, sender: nil, text: "\(who) \(Self.phrase(change))")
+            case .otherState:
+                return TimelineRow(id: id, style: .state, sender: nil, text: Self.settingsText)
+            case .unsupported:
+                return TimelineRow(id: id, style: .placeholder, sender: name, text: "Unsupported event")
+            }
+        }
+    }
+
+    private static func label(_ kind: MediaKind) -> String {
+        switch kind {
+        case .image: "Image"
+        case .video: "Video"
+        case .audio: "Audio"
+        case .file: "File"
+        }
+    }
+
+    private static func phrase(_ change: MembershipChange) -> String {
+        switch change {
+        case .joined: "joined"
+        case .left: "left"
+        case .invited: "was invited"
+        case .kicked: "was removed"
+        case .banned: "was banned"
+        case .unbanned: "was unbanned"
+        case .invitationRejected: "declined the invitation"
+        case .invitationRevoked: "had the invitation withdrawn"
+        case .knocked: "asked to join"
+        case .other: "changed their membership"
+        }
+    }
+}

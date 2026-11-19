@@ -70,3 +70,67 @@ public enum RoomListPortContract {
         throw ContractViolation("the list never reached \(expectedRoomCount) rooms (had \(rooms.count) after \(received) diffs)")
     }
 }
+
+/// Behaviour every `TimelinePort` implementation must show for a room whose events are `expectedBodies`
+/// (oldest first, text-like events only). Run against the fake and against the adapter on the dev homeserver.
+public enum TimelinePortContract {
+    public static func verify(_ port: any TimelinePort, room: RoomID, expectedBodies: [String], maxDiffs: Int = 1_000) async throws {
+        let session: any TimelineSession
+        do { session = try await port.open(room: room) } catch {
+            throw ContractViolation("open(room:) failed with \(error.code)")
+        }
+
+        // A freshly synced room may hold only its newest event: back-paginate, as a real client does, until the start.
+        let pagination = Task { () -> HaloError? in
+            for _ in 0..<10 {
+                do { if try await session.paginateBackwards(count: 20) { return nil } } catch { return (error as? HaloError) ?? .internal(code: "CONTRACT_PAGINATE") }
+            }
+            return nil
+        }
+        defer { pagination.cancel() }
+
+        var items: [TimelineItem] = []
+        var received = 0
+        for await diff in session.items() {
+            if received == 0 {
+                switch diff {
+                case .reset, .append: break
+                default: throw ContractViolation("the first diff must be .reset or .append, got \(diff)")
+                }
+            }
+            received += 1
+            do { try ListReducer.apply(diff, to: &items) } catch {
+                throw ContractViolation("diff #\(received) doesn't apply: \(error.code)")
+            }
+            guard Set(items.map(\.id)).count == items.count else { throw ContractViolation("duplicate item id after diff #\(received)") }
+            if bodies(of: items) == expectedBodies { await session.close(); return }
+            if received >= maxDiffs { break }
+        }
+        await session.close()
+        pagination.cancel()
+        if let failure = await pagination.value { throw ContractViolation("paginateBackwards failed with \(failure.code)") }
+        throw ContractViolation("the timeline never showed \(expectedBodies) (had \(bodies(of: items)) after \(received) diffs)")
+    }
+
+    /// The text of the text-like events, in order.
+    public static func bodies(of items: [TimelineItem]) -> [String] {
+        items.compactMap { item in
+            guard case .event(let event) = item.content else { return nil }
+            switch event.kind {
+            case .text(let body, _), .notice(let body, _), .emote(let body, _): return body
+            default: return nil
+            }
+        }
+    }
+
+    /// Opening a room the client doesn't know must fail with `.notFound`.
+    public static func verifyUnknownRoom(_ port: any TimelinePort, room: RoomID) async throws {
+        do {
+            let session = try await port.open(room: room)
+            await session.close()
+            throw ContractViolation("opening an unknown room must throw .notFound")
+        } catch let error as HaloError {
+            guard error == .notFound else { throw ContractViolation("unknown room must throw .notFound, got \(error.code)") }
+        }
+    }
+}

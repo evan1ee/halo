@@ -28,57 +28,14 @@ public enum RoomListFilter: Sendable, Equatable {
     case all, unread, people, rooms, favourites, invites
 }
 
-/// One change to the ordered room list. Mirrors the upstream list diff one to one
-/// (`RoomListEntriesUpdate`: Append, Clear, PushFront, PushBack, PopFront, PopBack, Insert, Set,
-/// Remove, Truncate, Reset), so the adapter maps without reinterpreting. Diffs are incremental and
-/// must never be dropped (CONCURRENCY §3).
-public enum RoomListDiff: Sendable, Equatable {
-    case append([RoomSummary])
-    case clear
-    case pushFront(RoomSummary)
-    case pushBack(RoomSummary)
-    case popFront
-    case popBack
-    case insert(index: Int, RoomSummary)
-    case set(index: Int, RoomSummary)
-    case remove(index: Int)
-    case truncate(length: Int)
-    case reset([RoomSummary])
-}
+/// One change to the ordered room list (see `ListDiff`).
+public typealias RoomListDiff = ListDiff<RoomSummary>
 
 /// Applies room-list diffs to an array. Pure.
 public enum RoomListReducer {
-    /// Applies `diff` to `rooms`. A diff that doesn't fit the current list (index out of range,
-    /// pop from an empty list) leaves `rooms` unchanged and throws
-    /// `.internal(code: "ROOM_LIST_DIFF_OUT_OF_RANGE")`: the list and the SDK disagree, and the
-    /// caller must resubscribe to get a `.reset`.
+    /// Applies `diff` to `rooms`; throws `.internal(code: "ROOM_LIST_DIFF_OUT_OF_RANGE")` for a diff that
+    /// doesn't fit, leaving `rooms` unchanged. The caller must resubscribe to get a `.reset`.
     public static func apply(_ diff: RoomListDiff, to rooms: inout [RoomSummary]) throws(HaloError) {
-        switch diff {
-        case .append(let values): rooms.append(contentsOf: values)
-        case .clear: rooms.removeAll()
-        case .pushFront(let value): rooms.insert(value, at: 0)
-        case .pushBack(let value): rooms.append(value)
-        case .popFront:
-            guard !rooms.isEmpty else { throw outOfRange }
-            rooms.removeFirst()
-        case .popBack:
-            guard !rooms.isEmpty else { throw outOfRange }
-            rooms.removeLast()
-        case .insert(let index, let value):
-            guard (0...rooms.count).contains(index) else { throw outOfRange }
-            rooms.insert(value, at: index)
-        case .set(let index, let value):
-            guard rooms.indices.contains(index) else { throw outOfRange }
-            rooms[index] = value
-        case .remove(let index):
-            guard rooms.indices.contains(index) else { throw outOfRange }
-            rooms.remove(at: index)
-        case .truncate(let length):
-            guard length >= 0 else { throw outOfRange }
-            if length < rooms.count { rooms.removeLast(rooms.count - length) }
-        case .reset(let values): rooms = values
-        }
+        do { try ListReducer.apply(diff, to: &rooms) } catch { throw .internal(code: "ROOM_LIST_DIFF_OUT_OF_RANGE") }
     }
-
-    private static var outOfRange: HaloError { .internal(code: "ROOM_LIST_DIFF_OUT_OF_RANGE") }
 }

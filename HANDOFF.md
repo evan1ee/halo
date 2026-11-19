@@ -14,7 +14,21 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   pass; SwiftLint skipped (not configured). Nothing iOS-specific has been built anywhere.
 
 ## 2. Completed work
-**2026-11-19 (later) — M0b done on the simulator: login → room count**
+**2026-11-19 (latest) — M1 started: read-only timeline**
+- Domain: generic `ListDiff`/`ListReducer` (room list now a typealias over it), `TimelineItem`/`TimelineEvent`/`TimelineEventKind`, `TimelinePort` +
+  `TimelineSession`. TestSupport: `FakeTimelinePort`, `TimelinePortContract` (paginates like a real client). Application: `TimelineCoordinator`.
+  Adapter: `MatrixTimelinePort`, `TimelineMapper` (SDK-qualified names), `MatrixSessionPort.room(_:)`. Feature: `FeatureTimeline`; room tap pushes it
+  from `ios/App/HaloApp.swift`; `RoomListViewModel` rows now carry `RoomID`.
+- Contracts: all 10 adapter tests pass against infra/dev (env: `TEST_RUNNER_HALO_DEV_SERVER/USER/PASSWORD/ROOMS=3/TIMELINE_ROOM`), incl. the timeline
+  contract with 60 s deadlines. Found by running it: a synced room holds only its newest event; pagination returns false once more before true; the SDK
+  adds a `timelineStart` item (coordinator treats it as the start signal). Verified by eye in the simulator: messages, notice, emote, deleted
+  placeholder, date divider, membership row, state rows collapsed, auto-load to the start.
+- Boundary rule: no upstream type in `HaloMatrixAdapter` public signatures (reads the resolved SDK checkout; prints SKIPPED without one). V-APPLE-1 resolved
+  (SOURCES F-APPLE-1). V-SQL-1 half verified: SDK's sqlite3 symbols are local; runtime check needs GRDB, whose download stalled → do it with HaloPersistence.
+- Tests now: Domain 5, Foundation 13, TestSupport 5, Application 27, Platform 4, FeatureAuth 3, FeatureRoomList 2, FeatureTimeline 6, adapter 10 (7 run
+  without a server; 3 contract tests skipped unless env is set).
+
+**2026-11-19 (earlier) — M0b done on the simulator: login → room count**
 - `FeatureAuth` (AuthViewModel + SignInView) and `FeatureRoomList` (RoomListViewModel + RoomListView) packages; `ios/App/AppRoot.swift` wires
   `KeychainStore` + `OSLogSink` + `MatrixSessionPort` + `MatrixRoomListPort` into the coordinators. Tests: FeatureAuth 3, FeatureRoomList 2.
 - **Exit criterion run by hand in the iPhone 17 simulator against `infra/dev`:** server `http://127.0.0.1:8008` → discovery → password login →
@@ -65,7 +79,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 - **D47** read state: `readPosTs` (true read position) is separate from `notifiedThroughTs` (notification coverage).
 
 ## 4. Modified files (this push)
-- New: `ios/Packages/Features/{FeatureAuth,FeatureRoomList}`, `ios/App/AppRoot.swift`, `ios/Packages/HaloPlatform`; `ios/Halo.xcodeproj`, `ios/App/`, `ios/NotificationService/`, `ios/Config/`; `ios/Packages/HaloMatrixAdapter/` (Package.swift, ErrorMapper, Bootstrap, MatrixSessionPort, MatrixRoomListPort, unit + gated contract tests).
+- New: `ios/Packages/Features/{FeatureAuth,FeatureRoomList,FeatureTimeline}`, timeline files in HaloDomain/TestSupport/Application/HaloMatrixAdapter, `ios/App/AppRoot.swift`, `ios/Packages/HaloPlatform`; `ios/Halo.xcodeproj`, `ios/App/`, `ios/NotificationService/`, `ios/Config/`; `ios/Packages/HaloMatrixAdapter/` (Package.swift, ErrorMapper, Bootstrap, MatrixSessionPort, MatrixRoomListPort, unit + gated contract tests).
 - Docs: `docs/OPEN_QUESTIONS.md` (V-CI-2), `docs/development/DEVELOPMENT_SETUP.md` §2, `docs/ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
@@ -83,7 +97,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 ## 6. Next steps
 1. Push this branch / open a PR; check CI.
 2. (Done) contracts pass on infra/dev. Keep running them after every adapter change.
-3. Finish M0: adapter public-API rule in `check-boundaries` (no SDK types in public signatures), V-SQL-1, V-APPLE-1; answer Q-XCODEGEN; optionally a UI test of the exit flow. Then M1 (docs/ROADMAP.md).
+3. M1 remaining (docs/ROADMAP.md): `SyncPort` lifecycle owner (sync is started on first room-list use and never stopped before logout), HaloPersistence (GRDB; run the V-SQL-1 runtime check there), media display, verification + recovery, NSE spike and G-NSE. Answer Q-XCODEGEN before adding the next package to the app.
 4. Without a Mac: V-APPLE-1 from Apple docs; M1 prep — Halo's Sygnal pushkin in `infra/sygnal/` with tests and `pushkin.yml` (ADR-0015).
 
 ## 7. Next Session Prompt
