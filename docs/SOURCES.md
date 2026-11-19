@@ -15,6 +15,8 @@ Re-verify at every SDK bump (see [development/BUILD_AND_RELEASE.md](development/
 | Synapse | Latest tag v1.165.0 | Tags of https://github.com/element-hq/synapse |
 | Sygnal | Latest tag v0.15.1 | Tags of https://github.com/matrix-org/sygnal |
 | GRDB.swift | v7.12.0, MIT | https://github.com/groue/GRDB.swift (LICENSE) |
+| Synapse push code | tag `v1.165.0`, `synapse/push/httppusher.py`, `synapse/push/push_tools.py`, `synapse/config/push.py` | Sparse checkout of https://github.com/element-hq/synapse |
+| Sygnal APNs pushkin | tag `v0.15.1`, `sygnal/apnspushkin.py`, `sygnal/sygnal.py` | Git checkout of https://github.com/matrix-org/sygnal |
 
 ## Verified facts
 
@@ -61,6 +63,19 @@ Re-verify at every SDK bump (see [development/BUILD_AND_RELEASE.md](development/
 - F-SPEC-4 `m.fully_read` is room account data (read markers module); `m.mentions` (intentional mentions) were added in v1.7.
 - F-SPEC-5 Simplified Sliding Sync endpoint (MSC4186, unstable): `POST /_matrix/client/unstable/org.matrix.simplified_msc3575/sync` (ruma-client-api `sync/sync_events/msc4186.rs` at the pinned rev).
 - Spec text: https://spec.matrix.org/v1.19/client-server-api/ (source: https://github.com/matrix-org/matrix-spec).
+
+### F-PUSH — Synapse and Sygnal push behaviour (at the pinned tags)
+- F-PUSH-1 Synapse's HTTP pusher sends a **count-only notification** whenever the user's badge changes after a receipt
+  (`on_new_receipts` → `_update_badge` → `_send_badge`): `{"notification": {"id": "", "type": null, "sender": "", "counts": {"unread": N}, "devices": [...]}}`.
+  It has no event id or room id and is sent **regardless of the pusher's `format`**; MSC4076's `disable_badge_count` (experimental
+  flag) removes `counts` only from *event* pushes, not from these. `N` comes from `get_badge_count`: invites + rooms with a non-zero
+  notification count (`push.group_unread_count_by_room`, default `true`), or the sum of counts when that option is `false`.
+- F-PUSH-2 Sygnal's APNs pushkin uses the `event_id_only` payload only when the notification has an event id and no type:
+  `default_payload` merged with top-level `room_id`, `event_id`, `unread_count` (no `aps.badge`). Otherwise it builds the full
+  payload: for a count-only notification (`type` null → `default_payload` **not** applied, no alert) the result is
+  `{"aps": {"badge": N}}`, which iOS applies to the app icon without running the NSE or waking the app.
+- F-PUSH-3 Sygnal loads a pushkin class by fully qualified name when an app's `type` contains a dot (`sygnal.py` `_make_pushkin`),
+  and the APNs pushkin has a per-app `push_type` setting (`alert`, `background`, `voip`, …) applied to every push of that app.
 
 ### F-BOT — evan1ee/matrix-bot
 - F-BOT-1 Matrix output is `body` + an HTML subset (`b i u code pre p ul ol li blockquote a br`, plus `del` in todo views). `Content.actions` (buttons) aren't sent on Matrix.

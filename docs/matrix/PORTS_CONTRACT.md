@@ -17,7 +17,7 @@ needs, made of Halo value types, and independent of the SDK version underneath.
 | `SessionPort` | Auth & session | `loginDetails(server)`, `loginPassword`, `oauthURL`, `completeOAuth(callback)`, `restore(session)`, `logout()`, `sessionUpdates: AsyncStream<SessionEvent>` | Adapter |
 | `SyncPort` | Sync lifecycle | `start()`, `stop()`, `status: AsyncStream<SyncStatus>` (snapshot) | Adapter |
 | `RoomListPort` | Room list | `rooms(filter:) -> AsyncStream<RoomListDiff>`, `loadMore()`, `setFilter(_)` | Adapter |
-| `RoomReadStatePort` | Inputs for read state | `inputs(room:) -> AsyncStream<RoomReadInputsPart>` (snapshot), `allInputs() async -> [RoomReadInputsPart]`, `ownReceipt(room)` | Adapter |
+| `RoomReadStatePort` | Inputs for read state | `updates() -> AsyncStream<RoomReadInputsPart>` (lossless; one full per-room snapshot per change, coalesced by the consumer per room id), `allInputs() async -> [RoomReadInputsPart]` (initial load and reconcile), `ownReceipt(room)` | Adapter |
 | `ReadMarkerPort` | Outbound read state | `sendReceipt(room, event, private:)`, `setFullyRead(room, event)`, `markRoomRead(room, private:) -> EventRef`, `setMarkedUnread(room, Bool)`, `markAllRead()` | Adapter |
 | `TimelinePort` | Timeline of one room | `open(room) -> TimelineSession`; `TimelineSession.items: AsyncStream<TimelineDiff>`, `paginateBackwards(n)`, `send(_ draft)`, `reply`, `edit`, `redact`, `toggleReaction`, `sendImage`, `sendRawMessage(type, contentJSON)` | Adapter |
 | `MediaPort` | Media | `thumbnail(source, size)`, `content(source)`, `file(source) -> URL`, `upload(data, mime)` | Adapter |
@@ -33,7 +33,12 @@ needs, made of Halo value types, and independent of the SDK version underneath.
 Exact signatures are written in code in M0–M1 and must match the intent of this table; any deviation updates this document.
 
 ## 3. Mapping responsibilities (adapter)
-- Upstream `RoomInfo` → `RoomReadInputsPart` (server + SDK counts, marked unread, encryption, membership, mode) and `RoomSummary`.
+- Upstream `RoomInfo` → `RoomReadInputsPart` and `RoomSummary`. `RoomReadInputsPart` is the adapter's share of `RoomReadInputs`
+  ([UNREAD_STATE.md](UNREAD_STATE.md) §4): every field except `localIntent` and `unconfirmedNotified`, which `ReadStateCoordinator`
+  adds from HaloPersistence. It carries the per-room `sequence`.
+- **One source per room.** All read-state fields of a room come from that room's `RoomInfo` (via `subscribe_to_room_info_updates`
+  for every room in the room list, or the room-list entries if those carry the same `RoomInfo` — chosen in M1 by V-RS-1). The
+  adapter never mixes the two sources for one room, and the `sequence` increases with every `RoomInfo` it maps.
 - `LatestEventValue` → `LatestEventRef` (timestamp, is_own) (F-FFI-15).
 - `TimelineDiff` → `TimelineDiff` (Halo) with `TimelineItem` values; unique stable ids from upstream unique ids.
 - `ClientError` → `HaloError`.

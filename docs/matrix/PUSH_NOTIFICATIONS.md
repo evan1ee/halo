@@ -33,7 +33,7 @@ sequenceDiagram
    - `EventFilteredOut` → suppress (with entitlement) or a generic placeholder
    - `EventRedacted`, `EventNotFound` → suppress / placeholder
 3. De-duplicate: insert `notification_record`; if the PK already exists → suppress (AC-U7).
-4. Already read? If the room's `readPosTs ≥ event ts` → suppress.
+4. Already read? If the room's `notifiedThroughTs ≥ event ts` ([UNREAD_STATE.md](UNREAD_STATE.md) §5) → suppress.
 5. Should notify? Use `item.is_noisy`, `item.has_mention` (on-device push-rule evaluation by the SDK) **[VERIFIED F-FFI-10 field names]** together with the room's mode.
 6. Content: communication notification (`INSendMessageIntent`) with the sender's name and avatar, body (or "Sticker", "Image" …); `threadIdentifier = room_id`; `request identifier = event_id`.
 7. Badge = `BadgeCalculator` over the policy inputs for all rooms that can be loaded within budget **[ASSUMPTION V-NSE-2: reading RoomInfo for all rooms in the NSE fits the time/memory budget; fallback = cached last badge ± this event's room]**.
@@ -46,9 +46,15 @@ Without it, "suppress" becomes a low-relevance generic notification that the app
 The push payload's `counts.unread` is the server's count and is **ignored** for the badge (cause C5).
 
 ## 5. Clearing delivered notifications
-When `readPosTs` for a room moves forward (any source):
-`getDeliveredNotifications` → remove those with `threadIdentifier == room_id` and `event_ts ≤ readPosTs` (looked up via
+When `notifiedThroughTs` for a room moves forward (any source):
+`getDeliveredNotifications` → remove those with `threadIdentifier == room_id` and `event_ts ≤ notifiedThroughTs` (looked up via
 `notification_record`) → delete those records → `setBadgeCount(badge)`.
+
+**Notifications without a record.** If the NSE was killed or never ran, iOS shows the payload's own alert: it has no
+`notification_record`, no `threadIdentifier`, and its request identifier is the APNs id, not the event id. The payload still
+carries top-level `room_id` and `event_id` (Sygnal's `event_id_only` payload **[VERIFIED F-PUSH-2]**). Clearing therefore also
+removes every delivered notification whose `userInfo["room_id"]` is the room and whose `event_id` has no record, **once the room
+has no attention** (Halo can't know that event's timestamp, so it waits until nothing in the room is unread).
 Triggers: every reconcile in the app, background push wake-ups, BG refresh (D11).
 
 ## 6. Failure modes

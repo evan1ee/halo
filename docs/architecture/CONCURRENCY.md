@@ -20,7 +20,10 @@
   1. copy or map the payload into Swift value types right away (no upstream object kept outside the adapter);
   2. `yield` it into an `AsyncStream.Continuation` (thread-safe), with `bufferingPolicy` set per stream (see below);
   3. never block, never call back into the FFI synchronously.
-- Buffering: timeline and room-list diffs use `.unbounded` (diffs must not be dropped, since they're incremental); snapshot streams (room info, sync state) use `.bufferingNewest(1)` (the latest value wins).
+- Buffering: timeline and room-list diffs use `.unbounded` (diffs must not be dropped, since they're incremental). `.bufferingNewest(1)`
+  is allowed **only** for a stream that carries one logical value (sync state, one room's info). A stream that carries snapshots for
+  many keys (e.g. read-state inputs for all rooms) is lossless (`.unbounded`), and the consumer coalesces per key (keeps the newest
+  `sequence` per room id); dropping across keys would lose another room's update and cause a missed unread (R-P0-2).
 
 ## 4. Cancellation and lifetimes
 - Upstream subscriptions return a `TaskHandle` **[VERIFIED F-FFI-4]**. The adapter wraps each in a Swift

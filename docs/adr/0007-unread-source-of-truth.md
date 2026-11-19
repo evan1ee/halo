@@ -24,7 +24,7 @@ Avoids duplicating SDK business logic (counting) while fixing its known failure 
 In encrypted rooms where the SDK hasn't seen new events, the count is approximate (shown as a dot). Ordering by timestamps has a federation clock-skew limitation.
 
 ## Consequences
-No stored counts; the badge is always recomputed (D9); auditor compares all signals; scenario suite S01–S21 is the gate.
+No stored counts; the badge is always recomputed (D9); auditor compares all signals; scenario suite S01–S22 is the gate.
 
 ## Verified facts and assumptions
-F-FFI-6/7/12/15, F-SDK-1, F-SPEC-1/2 [VERIFIED]. The "server zero ⇒ read" rule is a design decision **validated by scenarios S02, S04, S05**, and it applies only where the server can count (E2x, V-RS-6, S21) — not a spec guarantee.
+F-FFI-6/7/12/15, F-SDK-1, F-SPEC-1/2 [VERIFIED]. The "server zero ⇒ every notifying event read" rule is a design decision **validated by scenarios S02, S04, S05, S07b**, and it applies only where the server can count (E2x, V-RS-6, S21) — not a spec guarantee.

@@ -19,6 +19,8 @@ Plus: badge counting, display formatting (99+), reason codes for the auditor.
 | P6 | A notified event newer than every read position ⇒ `attention` (in all-messages mode; or if it's a mention in mentions mode) |
 | P7 | `badge == |{r : attention(r)}|` and is identical for app and NSE code paths after serialising/deserialising inputs through the DB |
 | P8 | The intent store never moves a room's intent backwards under concurrent upserts |
+| P9 | `serverZero` never advances `readPosTs`: changing only the server counts never changes `readPosTs` (it may change `notifiedThroughTs`) |
+| P10 | `hasUnread` under E2 follows UNREAD_STATE §5: `false` in all-messages mode; `sdk.unreadMessages > 0` in mentions/keywords or mute mode |
 
 ## 3. Integration scenarios (Synapse in Docker; scenario driver)
 
@@ -31,8 +33,9 @@ Actors: **A** = the Halo user on device A1 (under test); **A2** = the same user'
 | S03 | B sends 1; A1 was offline; A1 receives the push first (NSE path) then syncs | Attention from the push (E4) → still attention after sync → cleared after viewing |
 | S04 | 300 messages over 20 rooms while A1 is offline (limited timelines), A2 reads 10 rooms | A1 after reconnect: exactly the 10 other rooms have attention |
 | S05 | A2's receipt targets an event inside A1's gap | A1: no attention for that room |
-| S06 | Encrypted group room, B mentions A; keys arrive late on A1 | Attention with `.dot` (E3c) → becomes `.mentions(1)` once decrypted |
+| S06 | Encrypted group room **in all-messages mode** (E3c can't apply in mentions/keywords mode, where the server counts nothing — see S21, S22), B mentions A; keys arrive late on A1 | Attention with `.dot` (E3c) → becomes `.mentions(1)` once decrypted |
 | S07 | Encrypted room in mentions-only mode, B sends 3 messages without mention | No attention; `hasUnread` true |
+| S07b | **Unencrypted** room in mentions-only mode, B sends 3 messages without mention; A1 then views them | Before: no attention, `hasUnread` true although server counts are 0 (E2 doesn't clear quiet unread here); after viewing: a receipt is sent for the 3rd message (server zero must not have advanced `readPosTs`) |
 | S08 | The only unread message is redacted | No attention |
 | S09 | A2 marks the room unread | A1: attention (`MARKED_UNREAD`) → A1 opens the room → flag cleared on the server |
 | S10 | A2 mutes a room that has unread messages | A1: attention gone |
@@ -47,6 +50,7 @@ Actors: **A** = the Halo user on device A1 (under test); **A2** = the same user'
 | S19 | 50 rooms change state while the app reconciles (concurrency) | Final state equals a fresh evaluation |
 | S20 | App killed between "intent written" and "receipt sent" | After relaunch the outbox sends the receipt; A2 sees the room as read |
 | S21 | Encrypted room in mentions-only mode; B mentions A (server counts stay 0) | A1: attention `.mentions(1)` (E2x); after A1 views it → cleared; after A2 views it instead → cleared once the SDK applies A2's receipt (auditor reports `SERVER_BLIND` meanwhile) |
+| S22 | Encrypted room in mentions-only mode; A1 offline; B sends 30 messages, one of them mentioning A, so A1's next sync has a limited timeline that leaves the mention in a gap. Variant (a): the push for the mention reaches A1; variant (b): A1 has no pusher | (a) attention `.mentions(1)` from E4 before and after sync; (b) **documented limitation**: no attention until the SDK sees the event (opening the room or back-pagination); the auditor records `SERVER_BLIND` — the test asserts this exact behaviour so a change is noticed |
 
 ## 4. Regression procedure
 1. Reproduce with the auditor export or a recorded trace.

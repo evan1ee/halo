@@ -6,7 +6,7 @@
 |---|---|
 | Trigger | The timeline reports the newest event that has been ≥ 50 % visible for ≥ 0.5 s while `scenePhase == .active` and the room is the top-most screen (D6) |
 | Candidate | Only events that may carry receipts: not local echoes (no event id yet), not state events hidden from the user **[ASSUMPTION V-RS-4: receipts on hidden events are accepted by Synapse but may confuse counting; target the latest *visible* event]** |
-| Monotonic | Ignore a candidate whose `originServerTs` ≤ the current `readPosTs` |
+| Monotonic | Ignore a candidate whose `originServerTs` ≤ the current `readPosTs` (the true read position — local intent or own receipt; server zero never advances it, [UNREAD_STATE.md](UNREAD_STATE.md) §5) |
 | Intent | Upsert `read_intent` in the same call → the policy updates immediately |
 | Send | `Room.send_single_receipt(.read or .readPrivate, .unthreaded, eventId)` **[VERIFIED F-FFI-6]**, then `Room.mark_as_fully_read_unchecked(eventId)` **[VERIFIED F-FFI-6]** |
 | Receipt type | `.read` unless the privacy setting is "private receipts" → `.readPrivate` (D7) |

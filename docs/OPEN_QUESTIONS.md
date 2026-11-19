@@ -18,7 +18,7 @@
 | V-PUSH-2 | Count-change pushes (read elsewhere) arrive as background pushes with our pusher config | Read on another device; observe app wake-ups (Console) | M3 | — (best effort) |
 | V-PUSH-3 | Apple grants `com.apple.developer.usernotifications.filtering` | Submit the request in M1 | M1 → M3 | — (fallback exists) |
 | V-PUSH-4 | The notification Reply action launches the app in the background long enough to send | Device test | M3 | — |
-| V-RS-1 | `subscribe_to_room_info_updates` fires when own receipts / counts change | Adapter test against the dev Synapse with a second client reading | M1 | M3 |
+| V-RS-1 | `subscribe_to_room_info_updates` fires when own receipts / counts change, and whether room-list entries carry the same `RoomInfo` (decides the single per-room source, PORTS_CONTRACT §3) | Adapter test against the dev Synapse with a second client reading; compare both sources for 50 rooms | M1 | M3 |
 | V-RS-3 | The adapter can supply a timeline order index for events in open timelines (clock-skew mitigation) | Inspect timeline item APIs at M2 | M2 | — |
 | V-RS-6 | Synapse counts every encrypted event as notifying in all-messages mode, and gives 0 in mentions/keywords or mute mode for encrypted rooms (basis of `serverCanCount`) | Scenarios S06, S07, S21 inspecting `/sync` counts on the pinned Synapse | M3 | M3 |
 | V-RS-4 | Receipts on the latest *visible* event (skipping hidden state events) clear server counts | Scenario with hidden state events after the last message | M3 | M3 |
