@@ -1,6 +1,6 @@
 # Phase 0 — Documentation Completeness Report
 
-Date: 2026-11-19 · Branch: `claude/blissful-galileo-3400g9` · Status: **complete, awaiting approval for Phase 1**.
+Date: 2026-11-19 · Branch: `claude/blissful-galileo-3400g9` · Status: **complete and reviewed (§9), awaiting approval for Phase 1**.
 
 ## 1. Files created
 
@@ -8,7 +8,7 @@ Date: 2026-11-19 · Branch: `claude/blissful-galileo-3400g9` · Status: **comple
 |---|---|
 | Root | `AGENTS.md` (engineering contract), `CLAUDE.md`, `README.md`, `CONTRIBUTING.md`, `LICENSE` (proprietary), `.gitignore`, `.github/workflows/docs.yml` |
 | Product | `docs/README.md`, `PRODUCT_VISION.md`, `REQUIREMENTS.md`, `ROADMAP.md`, `GLOSSARY.md` |
-| Decisions and tracking | `DECISION_LOG.md` (D1–D48, superseded entries kept), `adr/` (README, TEMPLATE, ADR-0001…0014), `OPEN_QUESTIONS.md`, `RISK_REGISTER.md`, `SOURCES.md`, this report |
+| Decisions and tracking | `DECISION_LOG.md` (D1–D62, superseded entries kept), `adr/` (README, TEMPLATE, ADR-0001…0014 accepted, ADR-0015/0016 proposed), `OPEN_QUESTIONS.md`, `RISK_REGISTER.md`, `SOURCES.md`, this report |
 | Architecture (9) | `OVERVIEW`, `SYSTEM_DESIGN`, `MODULE_BOUNDARIES`, `DATA_FLOW`, `CONCURRENCY`, `ERROR_HANDLING`, `BACKGROUND_EXECUTION`, `LOGGING_AND_DIAGNOSTICS`, `ARCHITECTURE_DECISIONS` |
 | Matrix (8) | `SDK_INTEGRATION`, `RUST_FFI`, `PORTS_CONTRACT`, `SYNC_ENGINE`, `UNREAD_STATE`, `READ_RECEIPTS`, `PUSH_NOTIFICATIONS`, `MEDIA` |
 | Feature specs (13 + template) | `AUTHENTICATION`, `ENCRYPTION_AND_DEVICES`, `ROOM_LIST`, `TIMELINE`, `MESSAGING`, `MEDIA_ATTACHMENTS`, `NOTIFICATIONS`, `ROOM_MANAGEMENT`, `USER_PROFILES`, `SETTINGS`, `STICKERS`, `BOT_MESSAGES`, `BOT_ACTIVITY` |
@@ -33,7 +33,7 @@ decisions are preserved in `DECISION_LOG.md`. No application code, UI or placeho
 | 5 | Important decisions have ADRs | ✅ | 14 ADRs incl. all required topics (monorepo, SDK integration, UniFFI vs C, SwiftUI state, persistence, unread source of truth, module boundaries, testing) + push, stickers, bots, licensing, iOS target |
 | 6 | AGENTS.md actionable | ✅ | Mandatory procedure, ownership table, conventions, real commands with availability, forbidden patterns; the 10 required instructions are explicit (§0, §4, §11–13) |
 | 7 | No contradictory requirements | ✅ | Superseded decisions are marked (D3, D8, D12, D27, D40 → D44, D46, D47, D48); stale references checked by the validator |
-| 8 | Unresolved technical risks identified | ✅ | RISK_REGISTER (28 risks) + OPEN_QUESTIONS (29 validation items, 8 open decisions) |
+| 8 | Unresolved technical risks identified | ✅ | RISK_REGISTER (30 risks) + OPEN_QUESTIONS (30 validation items of which 2 resolved, 11 open decisions) |
 | 9 | Prioritised roadmap | ✅ | ROADMAP M0–M10 with gates G-FFI and G-UNREAD |
 | 10 | Entry criteria for implementation | ✅ | ROADMAP "Implementation entry criteria" + §6 below |
 
@@ -54,6 +54,9 @@ D/ADR/F/V/Q/AC/S, ADR sections, statement labels and code fences).
 | ID | Question | Needed by |
 |---|---|---|
 | **Q-BUNDLE** | Bundle ID prefix / App Group / account-data namespace (needs a domain you control) | **before M0** |
+| **Q-DEV-AUTH** | Password login in M0 when `infra/dev` includes MAS (run M0 without MAS, or enable MAS password compatibility) | **before M0** |
+| **Q-PUSH-BADGE** | Accept ADR-0015: stop Synapse's count-only pushes from setting the icon badge (pushkin or relay) | **before M1** |
+| Q-NSE-GATE | Accept ADR-0016: NSE budget as its own gate G-NSE at the end of M1 | before M1 |
 | Q-SDK-BUILD | When to build the SDK from source instead of the prebuilt package | M5 |
 | Q-E2EE-STRATEGY | Room-key sharing strategy with unverified devices | M2 |
 | Q-MAS-ACCOUNT | Native session list vs MAS account page | M5 |
@@ -69,8 +72,8 @@ D/ADR/F/V/Q/AC/S, ADR sections, statement labels and code fences).
 | V-ST-1/2 | Loading `m.room.image_pack` through the FFI, or the authenticated-GET fallback | M4 |
 | V-SDK-1 | Prebuilt package version ↔ SDK commit/features (licence inventory accuracy) | M0 |
 | V-SQL-1/2, V-CI-1 | Two SQLite copies; GRDB multi-process; GRDB on Linux | M0–M1 |
-| V-PUSH-1/3 | Sygnal payload mapping; filtering entitlement approval (request early) | M1 |
-| V-APPLE-1 | Apple platform facts used in the design | M0 |
+| V-PUSH-1/3/5 | Sygnal payload mapping; filtering entitlement approval (request early); count-only pushes as background pushes (ADR-0015) | M1 |
+| V-APPLE-1, V-CI-1 | Apple platform facts used in the design; GRDB on Linux | M0 |
 Full list: [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md).
 
 ## 6. Known risks (top)
@@ -87,5 +90,25 @@ T-NSE, T-RECEIPTS, T-FFI, T-STATE, T-XPROC, L1/L3 (licence drift / upstream reli
 ## 8. Entry criteria for Phase 1
 - [ ] Founder approves this documentation set (or requests changes).
 - [ ] Q-BUNDLE decided (bundle prefix, App Group, account-data namespace).
+- [ ] Q-DEV-AUTH decided (how M0's password login works with or without MAS).
+- [ ] ADR-0015 and ADR-0016 accepted or rejected (needed before M1; listed here so they're decided with the approval).
 - [ ] Apple Developer membership and a Mac with the iOS 26 SDK available.
 - [ ] Homeserver domain available for `infra/dev` / personal deployment.
+
+## 9. Review (2026-11-19)
+A full read of the documentation before Phase 1 found the issues below; each is fixed on this branch in its own commit.
+
+| Area | Finding | Resolution |
+|---|---|---|
+| Read state | Server zero advanced the read position, so receipts for quiet messages could be skipped; `hasUnread` under E2 was undefined | `readPosTs` vs `notifiedThroughTs` split; `hasUnread` per mode; P9, P10, S07b ([matrix/UNREAD_STATE.md](matrix/UNREAD_STATE.md) §5) |
+| Read state | C1 promised a server floor in encrypted rooms that no rule applied (and a floor would cause phantom unread, C4) | E3b marks counts approximate; encrypted-gap mention documented as a limitation; T-ENCGAP, S22 |
+| Read state | Default "mentions" mode for groups puts most encrypted groups on E2x; S06 couldn't fire in that mode | Trade-off stated (UNREAD_STATE §9, NOTIFICATIONS FR-8); S06 pinned to all-messages mode |
+| Concurrency | `.bufferingNewest(1)` on a multi-room stream would drop other rooms' updates | Lossless stream, coalesced per room id; `RoomReadInputsPart` and one source per room defined |
+| Push | Synapse's count-only pushes become `aps.badge`-only pushes with stock Sygnal **[VERIFIED F-PUSH-1/2]** — the server's count would overwrite Halo's badge | ADR-0015 (proposed), V-PUSH-5, Q-PUSH-BADGE; V-PUSH-2 resolved as false |
+| Push | Notifications shown without the NSE had no clearing path | Clearing by payload `room_id` once the room has no attention |
+| Gates | NSE budget was a G-FFI criterion although Halo bindings wouldn't reduce it | ADR-0016 (proposed): separate gate G-NSE at the end of M1 |
+| Consistency | Sticker prefs location, rollback vs SDK downgrade, Bot Activity FR-1 vs AC-A1, AC-TL-3, HaloFoundation layering, ADR-0014 vs D18, M0 gate list, MAS in M0 | Fixed; Q-DEV-AUTH added |
+| Accuracy | Wrong `[VERIFIED]` citations; nine API names used as verified without a source | All checked at the pinned SDK rev: F-FFI-21/22; V-TL-1 resolved; dormant Sentry code noted in PRIVACY |
+| Design | Badge and status tokens failed the 4.5:1 contrast rule; `attention` ≈ `warning` | New `on*` tokens and adjusted colours |
+| Hygiene | 21 `[DECISION]` labels without IDs; risk IDs colliding with milestones/properties; stale `AGENTS.md §9` refs | D49–D62; risk prefixes `COMPAT-`/`PERF-`/`PROJ-`; refs fixed; validator now checks decision IDs and AGENTS § references |
+
