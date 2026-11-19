@@ -39,9 +39,12 @@ Documents mark important statements with one of these labels:
 | Data | [DATA_MODELS](data/DATA_MODELS.md) · [PERSISTENCE](data/PERSISTENCE.md) · [MIGRATIONS](data/MIGRATIONS.md) |
 | Security | [SECURITY](security/SECURITY.md) · [PRIVACY](security/PRIVACY.md) · [LICENSE_COMPLIANCE](security/LICENSE_COMPLIANCE.md) · [DEPENDENCY_INVENTORY](security/DEPENDENCY_INVENTORY.md) |
 | Testing | [TEST_STRATEGY](testing/TEST_STRATEGY.md) · [UNREAD_REGRESSION_TESTS](testing/UNREAD_REGRESSION_TESTS.md) · [INTEGRATION_TESTS](testing/INTEGRATION_TESTS.md) |
-| Development | [DEVELOPMENT_SETUP](development/DEVELOPMENT_SETUP.md) · [CODE_CONVENTIONS](development/CODE_CONVENTIONS.md) · [BUILD_AND_RELEASE](development/BUILD_AND_RELEASE.md) · [CI_CD](development/CI_CD.md) · [NEXT_SESSION](development/NEXT_SESSION.md) (handoff prompt) |
+| Development | [DEVELOPMENT_SETUP](development/DEVELOPMENT_SETUP.md) · [CODE_CONVENTIONS](development/CODE_CONVENTIONS.md) · [BUILD_AND_RELEASE](development/BUILD_AND_RELEASE.md) · [CI_CD](development/CI_CD.md) |
 
 ## Maintenance rules
+
+- [../HANDOFF.md](../HANDOFF.md) (repository root) is updated in the last commit of every push (AGENTS.md §18). It summarises the
+  state and links here; it never holds the only copy of a fact.
 
 - Each fact appears in exactly one place; other documents link to it rather than restating it.
 - A change in behaviour updates the owning document **in the same commit**.

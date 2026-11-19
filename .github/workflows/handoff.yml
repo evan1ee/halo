@@ -1,0 +1,19 @@
+name: handoff
+# Session Handoff Rule (AGENTS.md §18, D67): the tip commit of every pull-request push updates
+# HANDOFF.md, and HANDOFF.md has every required section.
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
+      - name: Tip commit updates HANDOFF.md
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 scripts/check_handoff.py commit "$HEAD_SHA"

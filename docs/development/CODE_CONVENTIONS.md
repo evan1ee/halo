@@ -39,7 +39,8 @@
 ## 5. Git
 - Branches: `main` (always green); work branches `feat/…`, `fix/…`, `docs/…`, `chore/…`.
 - Commits: Conventional Commits with a scope = module (`feat(read-state): …`, `fix(adapter): …`, `docs(adr): …`). Body explains *why*. Reference decision/requirement IDs.
-- One logical change per commit; docs updated in the same commit as behaviour changes.
+- One logical change per commit; docs updated in the same commit as behaviour changes. The last commit of a push also carries the
+  updated `HANDOFF.md` (AGENTS.md §18).
 - No secrets, no generated binaries (XCFrameworks are fetched by SwiftPM, never committed).
 
 ## 6. Documentation

@@ -16,7 +16,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
 
 REQUIRED = [
-    "AGENTS.md", "README.md", "CONTRIBUTING.md", "LICENSE", ".gitignore", "CLAUDE.md",
+    "AGENTS.md", "README.md", "CONTRIBUTING.md", "LICENSE", ".gitignore", "CLAUDE.md", "HANDOFF.md",
     "docs/README.md", "docs/PRODUCT_VISION.md", "docs/REQUIREMENTS.md", "docs/ROADMAP.md",
     "docs/DECISION_LOG.md", "docs/SOURCES.md", "docs/GLOSSARY.md", "docs/OPEN_QUESTIONS.md",
     "docs/RISK_REGISTER.md", "docs/PHASE0_REPORT.md",
@@ -73,7 +73,7 @@ def fail(msg: str) -> None:
 
 def md_files() -> list[pathlib.Path]:
     files = [p for p in DOCS.rglob("*.md")]
-    files += [ROOT / n for n in ("AGENTS.md", "README.md", "CONTRIBUTING.md", "CLAUDE.md")]
+    files += [ROOT / n for n in ("AGENTS.md", "README.md", "CONTRIBUTING.md", "CLAUDE.md", "HANDOFF.md")]
     return [f for f in files if f.exists()]
 
 
@@ -226,6 +226,17 @@ def check_agents_sections() -> None:
                     fail(f"{f.relative_to(ROOT)}: reference to missing AGENTS.md §{num}")
 
 
+def check_handoff() -> None:
+    """HANDOFF.md structure (AGENTS.md §18), shared with the pre-push hook and handoff.yml."""
+    import importlib.util
+    sys.dont_write_bytecode = True  # never leave a __pycache__ in the repository
+    spec = importlib.util.spec_from_file_location("check_handoff", ROOT / "scripts" / "check_handoff.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    for problem in module.structure():
+        fail(problem)
+
+
 def main() -> int:
     check_required()
     check_feature_specs()
@@ -236,6 +247,7 @@ def main() -> int:
     check_labels_and_stale()
     check_decision_labels()
     check_agents_sections()
+    check_handoff()
     if failures:
         print(f"validate-docs: {len(failures)} problem(s)")
         for msg in failures:

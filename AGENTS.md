@@ -5,7 +5,9 @@ a request, stop and ask the founder. If it conflicts with another document, this
 `docs/` wins for *behaviour*; report the conflict.
 
 ## 0. Mandatory procedure for every task
-1. **Read this file completely** before changing anything.
+1. **Read this file completely, then [HANDOFF.md](HANDOFF.md)** before changing anything. The handoff tells you where the previous
+   session stopped; trust it instead of re-deriving the project state, and read further documents only as the task needs them.
+   Run `scripts/install-hooks.sh` once per clone so the pre-push hook enforces §18.
 2. **Read the relevant documents** before implementing: always [docs/architecture/MODULE_BOUNDARIES.md](docs/architecture/MODULE_BOUNDARIES.md);
    plus the feature spec in `docs/features/`, and for anything touching unread/receipts/notifications
    [docs/matrix/UNREAD_STATE.md](docs/matrix/UNREAD_STATE.md), [docs/matrix/READ_RECEIPTS.md](docs/matrix/READ_RECEIPTS.md), [docs/matrix/PUSH_NOTIFICATIONS.md](docs/matrix/PUSH_NOTIFICATIONS.md).
@@ -13,6 +15,7 @@ a request, stop and ask the founder. If it conflicts with another document, this
 4. **Don't decide open questions silently.** If the task hits an item in [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md), either perform the documented validation and record the result, or stop and ask.
 5. **Run the relevant checks (§13) and report actual results** — the commands you ran and their real output. **Never claim tests passed without running them.** If you couldn't run something (e.g. iOS builds on Linux), say so explicitly.
 6. **Update documentation in the same change** when behaviour, an interface or a decision changes.
+7. **Before every `git push`, follow the Session Handoff Rule (§18).** No push without an updated `HANDOFF.md` in its last commit.
 
 ## 1. Project overview
 Halo is an independent, **proprietary** iOS Matrix client (SwiftUI, iOS 26+) built on the official `matrix-rust-sdk`
@@ -104,6 +107,7 @@ Before adding or upgrading **any** dependency: (1) justify it in the PR/commit; 
 | Rust licence gate | `scripts/rust-license-inventory.py --sdk <checkout at ios/SDKVERSION.md sdk_commit> --check docs/security/inventory/rust-deps-matrix-sdk-ffi.csv` | **M0 (in place)** |
 | Dev homeserver | `docker compose -f infra/dev/docker-compose.yml up -d && infra/dev/smoke.sh` | **M0 (in place)** |
 | All local checks | `scripts/prepush.sh` (lists what it skipped) | **M0 (in place)** |
+| Session handoff (§18) | `python3 scripts/check_handoff.py structure` · `… commit HEAD`; hook: `scripts/install-hooks.sh` | **in place** |
 Commands that don't exist yet must not be reported as run.
 
 ## 14. Security requirements
@@ -116,7 +120,7 @@ verify in the pinned SDK source or mark as [ASSUMPTION] with a V-item. One fact,
 
 ## 16. Git and commit conventions
 Conventional Commits with a module scope (`feat(read-state): …`); body explains why and cites Dnn/R-ids; one logical change per commit; docs in the same commit;
-never commit secrets or binaries; never rewrite shared history.
+never commit secrets or binaries; never rewrite shared history. The last commit of every push includes the updated `HANDOFF.md` (§18).
 
 ## 17. Forbidden implementation patterns
 - Importing `MatrixRustSDK` outside `HaloMatrixAdapter`; upstream types in public/port signatures.
@@ -128,3 +132,27 @@ never commit secrets or binaries; never rewrite shared history.
 - Placeholder implementations that pretend to work (e.g. returning fake data from a real adapter).
 - `print`, `try!`, force unwraps in production code; disabling TLS checks; analytics SDKs.
 - Copying code from Element X or any copyleft source.
+
+## 18. Session Handoff Rule (mandatory, D67)
+Every `git push` is a clean handoff point. Goal: the next session — another agent or a human — continues immediately, without
+repeating research or analysis, and spends as few tokens as possible on context.
+
+**Before every push:**
+1. **Create or update [HANDOFF.md](HANDOFF.md)** (repository root) with all seven sections: 1 current status (milestone, branch, pull
+   request, CI state), 2 completed work (newest first; keep about the last three sessions, older history lives in `git log`), 3 key
+   decisions (IDs plus one line each, linking [docs/DECISION_LOG.md](docs/DECISION_LOG.md)), 4 modified files in this push (grouped by
+   area), 5 outstanding issues (failing or unrun checks, open questions that block, known bugs), 6 next steps (ordered, concrete).
+2. **Write section 7, the Next Session Prompt:** a concise, ready-to-paste fenced code block tagged `text` (≤ 60 lines) that lets a new session
+   start working at once. Point to HANDOFF sections and specific documents instead of repeating them; state the exact next task, what
+   needs which machine, and the checks to run.
+3. **Bring specifications, documentation and roadmap statuses up to date** for everything the push changes (ROADMAP status, OPEN_QUESTIONS,
+   SOURCES, DECISION_LOG, the owning spec). The handoff summarises and links; it never becomes a second copy of a fact (§15).
+4. **Commit the handoff with the related changes:** the last commit of the push includes the updated `HANDOFF.md`.
+
+**Rules for the handoff itself:** facts only — report checks as actually run (§0 step 5) and say what wasn't run; ≤ 250 lines; no secrets,
+tokens or private data beyond what the docs already contain.
+
+**Enforcement:** `scripts/check_handoff.py` checks the structure (also run by `scripts/validate-docs.sh`); the pre-push hook
+(`scripts/hooks/pre-push`, installed by `scripts/install-hooks.sh`) rejects a push whose tip commit doesn't update `HANDOFF.md`; the
+`handoff.yml` workflow applies the same check to every pull-request push.
+
