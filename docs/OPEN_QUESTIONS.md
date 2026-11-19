@@ -15,8 +15,9 @@
 | V-NSE-2 | Reading RoomInfo for all rooms in the NSE for the badge fits the budget | Measure with 300 rooms; else use cached badge ± current room | M1 | M3 |
 | V-NSE-3 | `use_lightweight_tokio_runtime = true` lowers NSE memory | A/B measurement in the spike | M1 | — |
 | V-PUSH-1 | Sygnal maps the pusher `default_payload` into the APNs payload as expected (`mutable-content`, generic alert) | Read Sygnal docs; send a test push; inspect the device payload | M1 | M1 |
-| V-PUSH-2 | Count-change pushes (read elsewhere) arrive as background pushes with our pusher config | Read on another device; observe app wake-ups (Console) | M3 | — (best effort) |
+| V-PUSH-2 | ~~Count-change pushes arrive as background pushes with our pusher config~~ **Resolved — false with stock Sygnal**: they arrive as `aps.badge`-only pushes [VERIFIED F-PUSH-1, F-PUSH-2]; replaced by V-PUSH-5 and ADR-0015 | — | — | — |
 | V-PUSH-3 | Apple grants `com.apple.developer.usernotifications.filtering` | Submit the request in M1 | M1 → M3 | — (fallback exists) |
+| V-PUSH-5 | A Sygnal pushkin subclass (ADR-0015 option 1) can send count-only notifications as background pushes (`content-available`, no `badge`, push type `background`, priority 5) while event pushes stay alert pushes, and iOS wakes the app for them | Implement in `infra/dev`; read on another device; check the device payload and app wake-ups (Console); confirm the icon badge is unchanged | M1 | M1 (else ADR-0015 option 2) |
 | V-PUSH-4 | The notification Reply action launches the app in the background long enough to send | Device test | M3 | — |
 | V-RS-1 | `subscribe_to_room_info_updates` fires when own receipts / counts change, and whether room-list entries carry the same `RoomInfo` (decides the single per-room source, PORTS_CONTRACT §3) | Adapter test against the dev Synapse with a second client reading; compare both sources for 50 rooms | M1 | M3 |
 | V-RS-3 | The adapter can supply a timeline order index for events in open timelines (clock-skew mitigation) | Inspect timeline item APIs at M2 | M2 | — |
@@ -42,6 +43,7 @@
 | ID | Question | Options | Recommendation | Decide by |
 |---|---|---|---|---|
 | Q-BUNDLE | Bundle ID prefix, App Group, account-data namespace (`app.halo.*` assumes the domain `halo.app`) | Owned domain (reverse-DNS) | Use a domain the founder controls; rename `app.halo.*` accordingly before M0 code | **Before M0** |
+| Q-PUSH-BADGE | How to stop Synapse's count-only pushes from setting the icon badge (ADR-0015) | Halo Sygnal pushkin (background push) / filtering relay (drop) / accept the server badge | Pushkin; relay if V-PUSH-5 fails | **Before M1** |
 | Q-SDK-BUILD | When to switch from the prebuilt SDK to building from source | M0 / before external TestFlight / never | Before the first external TestFlight | M5 |
 | Q-MAS-ACCOUNT | Device/session management for OIDC accounts: native list or MAS account page | Native via SDK / web (`account_url`) | Web page in the MVP | M5 |
 | Q-E2EE-STRATEGY | Room key recipient strategy (share keys with unverified devices?) | SDK default / identity-based / error-on-unverified | SDK default in the MVP; revisit with verification UX | M2 |

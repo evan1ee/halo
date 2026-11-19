@@ -55,7 +55,7 @@ Bot messages: copied **verbatim** from the bot repo's tests (MIT, attribution fi
 Targets in [../REQUIREMENTS.md](../REQUIREMENTS.md) NFR-1..3; measured with signposts ([../architecture/LOGGING_AND_DIAGNOSTICS.md](../architecture/LOGGING_AND_DIAGNOSTICS.md) §5) on a reference device; regressions > 20 % block release.
 
 ## 8. Device checklist (per TestFlight release)
-Encrypted DM push on the lock screen · read on another client → banner gone · airplane mode 1 h → recover · force-quit during sync · low-power mode · 300-room account cold start · sticker send/receive with Element Web · bot card tick with the real bot.
+Encrypted DM push on the lock screen · read on another client → banner gone and the icon badge matches Halo's count while Halo stays in the background (ADR-0015) · airplane mode 1 h → recover · force-quit during sync · low-power mode · 300-room account cold start · sticker send/receive with Element Web · bot card tick with the real bot.
 
 ## 9. Reporting rule
 Test results are reported **as executed**, with commands and output (AGENTS.md §9). "Should pass" isn't a result.

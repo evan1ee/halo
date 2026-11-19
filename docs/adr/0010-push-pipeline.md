@@ -1,6 +1,6 @@
 # ADR-0010: Push via Sygnal `event_id_only` + NSE
 
-- **Status:** Accepted · **Date:** 2026-11-19 · **Decision IDs:** D10, D11 · **Validation:** V-NSE-1/2/3, V-PUSH-1/2/3
+- **Status:** Accepted (count-only pushes: see ADR-0015, proposed) · **Date:** 2026-11-19 · **Decision IDs:** D10, D11 · **Validation:** V-NSE-1/2/3, V-PUSH-1/2/3
 
 ## Context
 E2EE content must be decrypted on device; the badge must not come from the server's message count.

@@ -5,7 +5,7 @@ iOS gives no persistent background connection. Halo relies on four mechanisms:
 | Mechanism | Used for | Constraints |
 |---|---|---|
 | **NSE** (`UNNotificationServiceExtension`) | Decrypt and present every push; update notification records and the badge | Time and memory limited **[ASSUMPTION V-NSE-1: ~30 s, low memory limit; measure]** |
-| **Background push** (`content-available`) | Synapse sends count-only pushes when unread counts change (e.g. read elsewhere) → the app wakes briefly → reconcile + clear | Throttled by iOS; best effort (D11) **[ASSUMPTION V-PUSH-2: Synapse/Sygnal deliver these as background pushes with the chosen pusher config]** |
+| **Background push** (`content-available`) | Synapse sends a count-only push whenever the badge changes after a receipt (e.g. read elsewhere) **[VERIFIED F-PUSH-1]**. Stock Sygnal turns it into an `aps.badge`-only push that sets the server's count on the icon and wakes nothing **[VERIFIED F-PUSH-2]**; ADR-0015 (proposed) converts it into a background push → the app wakes briefly → reconcile + clear | Throttled by iOS; best effort (D11) **[ASSUMPTION V-PUSH-5]** |
 | **BGAppRefreshTask** | Periodic short sync (`SyncService` start → wait until idle or 20 s → stop), reconcile, outbox flush | Scheduled at iOS's discretion |
 | **beginBackgroundTask** on backgrounding | Flush the receipt outbox and send queue, stop sync cleanly | ~30 s **[ASSUMPTION]** |
 

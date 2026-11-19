@@ -13,6 +13,7 @@ L(ikelihood) / I(mpact): Low · Med · High. Reviewed at every milestone exit.
 | T-SQLITE | Two SQLite libraries in one process misbehave | Low | High | Never share files; M0 smoke test | V-SQL-1 |
 | T-CHURN | Upstream API churn makes bumps expensive | High | Med | Adapter-only changes; monthly bumps at most | Bump > 1 day |
 | T-PERF | SwiftUI timeline performance with media and animated stickers | Med | Med | Diff batching, off-main decoding, animation caps, perf tests | Dropped frames |
+| T-BADGEPUSH | Synapse's count-only pushes set the server's count on the icon (stock Sygnal), undoing Halo's badge after every read | High (verified behaviour) | High | ADR-0015 pushkin or relay; foreground re-set; device checklist | Icon differs from Halo's count while backgrounded |
 | T-ENCGAP | Mentions in encrypted mentions-only rooms (the default for groups) missed when they fall into a timeline gap and no push arrives | Med | Med | E4 via push; reconcile on room open; auditor `SERVER_BLIND`; S22 pins the behaviour | Auditor `SERVER_BLIND` counts |
 | T-SKEW | Timestamp ordering wrong under federation clock skew | Low | Med | Timeline order index when available (V-RS-3); tests S18 | Auditor |
 | T-BOTFMT | Bot message format changes break parsers | Med | Low | Strict versioned parsers + fallback; fixture sync | Unparsed-bot-message counter |
