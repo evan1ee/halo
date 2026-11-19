@@ -20,6 +20,12 @@ standing between M0 and its exit criterion.
 | **M0a — Linux** | `infra/dev` (Synapse + Postgres, native password login, D64); Linux-buildable packages (`HaloFoundation`, `HaloDomain`, `HaloApplication`, `HaloTestSupport`) with the M0 ports `SessionPort` and `RoomListPort`, the session/room-count use case, fakes and contract tests; CI (`docs`, `swift-linux`, `boundaries`, `secrets`, `licenses`); V-CI-1; V-SDK-1 | This container / Linux CI |
 | **M0b — Mac** | Xcode project (app + NSE targets, identifiers per DEVELOPMENT_SETUP §3); `HaloMatrixAdapter` implementing `SessionPort` + `RoomListPort` over the pinned `MatrixRustSDK`; `HaloPlatform` log sink; V-SQL-1; V-APPLE-1; V-CI-2; the exit criterion (password login against `infra/dev` shows the room count via ports) | Mac with Xcode for the iOS 26 SDK |
 
+**Status (2026-11-19): M0a done.** `infra/dev` passes `smoke.sh`; the four Linux packages pass their tests on Swift 6.2.4;
+`check-boundaries`, the licence gate (at SDK `b93751e`) and gitleaks pass locally; V-CI-1 and V-SDK-1 are resolved. The CI workflows
+run once a pull request is open. **Remaining for M0 (all M0b, needs the Mac):** Xcode project, `HaloMatrixAdapter` for `SessionPort` +
+`RoomListPort` passing `SessionPortContract` / `RoomListPortContract` against `infra/dev`, `HaloPlatform` Keychain and log sink,
+V-SQL-1, V-APPLE-1, V-CI-2, and the exit criterion.
+
 ## Milestones
 
 ```mermaid
