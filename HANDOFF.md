@@ -19,7 +19,8 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   `AttributedString`: b/strong, i/em, s/del/strike, code, a (http, https, mailto, matrix only), br, p/div/pre/blockquote/headings as line breaks, ul/ol/li as bullets, `mx-reply` dropped,
   other tags dropped but their text kept, entities decoded; nothing is executed or fetched. Rows carry `styled`; edits keep the "(edited)" suffix.
   Checked: prepush passes (FeatureTimeline 17 tests incl. 5 new HTML and VM ones); adapter 16 tests pass vs infra/dev (the mapper change compiles and runs, but no contract sends or reads a
-  formatted message yet). NOT looked at in the simulator. Our own Markdown sends already carry a formatted body from the SDK, so `**bold**` should now show bold — unverified on screen.
+  formatted message yet). Verified in the simulator (iPhone 17, infra/dev): `Hello **bold** and _italic_ with `code`` shows bold and italic; the quoted original shows above replies made by the adapter contract.
+  Known: `code` spans render without a monospaced font (SwiftUI `Text` ignores the code intent) — needs an explicit font attribute. Typing line and the Reply menu/composer bar not tapped through by hand.
 - Not done: pills/mentions, tables, images in HTML, underline/colour, a full emoji picker, offline/kill-relaunch send (AC-M1), media sending, quote tap-to-jump.
 
 **2026-11-19 (latest+9) — M2: typing indicators**
