@@ -4,9 +4,12 @@
 - **[DECISION]** Swift: Apple `os.Logger` through a thin `HaloLog` facade in `HaloFoundation`, with subsystem
   `app.halo` (final ID per Q-BUNDLE) and categories `session`, `sync`, `readstate`, `outbox`, `push`, `nse`,
   `stickers`, `bot`, `db`, `ui`.
-- SDK logs: configure upstream tracing at `info` (`warn` in release) and route it to a rotating file in the
-  App Group container (`logs/sdk-*.log`, max 5 × 5 MB). Exact upstream API for log setup: **[OPEN V-SDK-3]** (to
-  verify at M0; matrix-sdk-ffi has a tracing setup module, name to be confirmed).
+- SDK logs: the adapter calls `init_platform(config: TracingConfiguration, use_lightweight_tokio_runtime:)`
+  **once per process** **[VERIFIED F-FFI-13]**. `TracingConfiguration` has `log_level`, `trace_log_packs`,
+  `extra_targets`, `write_to_stdout_or_system`, `write_to_files: TracingFileConfiguration?`, `sentry_config`.
+  Halo: `log_level` `info` (debug builds) / `warn` (release), files in the App Group container
+  (`logs/sdk/`), `sentry_config = nil` (never enabled). The NSE passes `use_lightweight_tokio_runtime = true`
+  **[ASSUMPTION V-NSE-3: reduces NSE memory; measure]**.
 - **Privacy**: interpolated values default to `.private`. Matrix IDs are logged as short hashes
   (`HaloLog.id(roomId)` → `!a1b2c3`); message bodies, keys, tokens and media URLs are **never** logged. See
   [../security/SECURITY.md](../security/SECURITY.md) §6.

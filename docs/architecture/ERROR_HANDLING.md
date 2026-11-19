@@ -47,5 +47,5 @@ Each case gets a stable `code` string for logs and diagnostics (e.g. `NET_TIMEOU
 |---|---|
 | `SyncService` error state | Restart with backoff; after 3 failures show the banner; keep retrying |
 | `halo.sqlite` corruption / failed migration | Move the file aside (`halo.sqlite.corrupt-<ts>`) and create a new DB; derived data is rebuilt; log + auditor event |
-| SDK store corruption | Offer "Clear cache" (`Client.clear_caches` **[VERIFIED F-FFI-4 list: `clear_caches`]**), then a full re-sync |
+| SDK store corruption | Offer "Clear cache" (`Client.clear_caches` **[VERIFIED F-FFI-14]**), then a full re-sync |
 | Push registration failure | Retry on the next foreground; the settings screen shows push status |

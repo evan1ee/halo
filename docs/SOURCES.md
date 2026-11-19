@@ -38,6 +38,10 @@ Re-verify at every SDK bump (see [development/BUILD_AND_RELEASE.md](development/
 - F-FFI-9 There's no dedicated sticker send API. `Room::send_raw(event_type, content)` sends arbitrary message events; `Room::send_state_event_raw` sends arbitrary state; `Room::state_events(type)` reads state, but **only types included in the sliding sync `required_state` are stored locally** (doc comment), so custom types are empty otherwise.
 - F-FFI-10 Notifications: `NotificationClient::{get_notification, get_notifications}`; `NotificationStatus = Event | EventNotFound | EventFilteredOut | EventRedacted`; `NotificationItem` includes `is_noisy`, `has_mention`, `thread_id`, `sender_info`, `room_info`, `raw_event`. `NotificationProcessSetup = MultipleProcesses | SingleProcess`. `CrossProcessLockConfig = MultiProcess { holder_name } | SingleProcess`.
 - F-FFI-11 `SearchService` exists (`set_query`, `paginate`, `subscribe_to_results`), backed by `matrix-sdk-search` (Tantivy 0.27, encrypted index).
+- F-FFI-13 Platform setup: `init_platform(config: TracingConfiguration, use_lightweight_tokio_runtime: bool)` (once per process; errors if the logger is already initialised); `TracingConfiguration { log_level, trace_log_packs, extra_targets, write_to_stdout_or_system, write_to_files, sentry_config }`; also `reload_tracing_file_writer`, `enable_sentry_logging` (`platform/mod.rs`).
+- F-FFI-14 `Client::clear_caches`, `Client::get_store_sizes`, `Client::optimize_stores` exist.
+- F-FFI-15 `Room.latest_event()` returns `LatestEventValue = None | Remote{timestamp, sender, is_own, profile, content} | RemoteInvite{…} | Local{…}` (no event id); `Timeline.latest_event_id()` exists. `UserReceipt{event_id, receipt: Receipt{timestamp?}}` where the timestamp is the receipt's.
+- F-FFI-16 Pushers: `PusherIdentifiers{pushkey, app_id}`, `PusherKind = Http{data: HttpPusherData{url, format: PushFormat?, default_payload: String?}} | Email`, `PushFormat = EventIdOnly`.
 - F-FFI-12 The doc comment of `Client::mark_all_rooms_as_read` refers to wrong iOS badges caused by the backend: https://github.com/element-hq/element-x-ios/issues/3151.
 
 ### F-SDK — SDK internals
