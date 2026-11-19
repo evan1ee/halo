@@ -13,7 +13,15 @@ public struct SystemBadge: BadgePort {
 
     public func update(attentionRooms: Set<RoomID>) async {
         attention.store(attentionRooms)
-        try? await UNUserNotificationCenter.current().setBadgeCount(attentionRooms.count)
+        var failure: String?
+        do { try await UNUserNotificationCenter.current().setBadgeCount(attentionRooms.count) } catch { failure = "\(error)" }
+        #if DEBUG
+        // Debug aid: what the app computed and what iOS said, readable with `devicectl … copy from Documents/badge-debug.txt`.
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        let text = "at=\(Date()) rooms=\(attentionRooms.count) badgeSetting=\(settings.badgeSetting.rawValue) auth=\(settings.authorizationStatus.rawValue) setBadgeError=\(failure ?? "none")\n"
+        let file = URL.documentsDirectory.appendingPathComponent("badge-debug.txt")
+        if let handle = try? FileHandle(forWritingTo: file) { _ = try? handle.seekToEnd(); try? handle.write(contentsOf: Data(text.utf8)); try? handle.close() } else { try? text.write(to: file, atomically: true, encoding: .utf8) }
+        #endif
     }
 }
 

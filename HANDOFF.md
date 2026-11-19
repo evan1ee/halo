@@ -21,7 +21,13 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
 - `RoomSummary.read` (adapter: `RoomInfo` counts + effective `NotificationSettings` mode; unknown mode → all messages); `RoomListCoordinator.readStates()`; `BadgeCoordinator` (first evaluation always writes so an
   extension-added room can be cleared); `BadgePort` (+`FakeBadgePort`), `SystemBadge` (sets `setBadgeCount` and stores the attention set in the App Group), `AttentionCache`. NSE: after a fetched notifying event
   it adds the room to the cached set and sets `badge` to the set size (a fallback per V-NSE-2; no payload count is used, ADR-0015 holds). The app requests `.badge` authorisation too.
-- Checked: prepush passes (Domain 17, Application 47, Platform 5, adapter 20 incl. against infra/dev). NOT verified on the device yet. **Note: notification permission was first requested without `.badge`, so on the
+- **Finding (on the phone, Badges enabled, authorisation granted, `setBadgeCount` succeeded): the badge stays empty because the policy computes 0 rooms.** Cause: Synapse 1.165's *native sliding sync returns constant 0* for
+  `notification_count`/`highlight_count` (source: `handlers/sliding_sync/__init__.py:1522`, "dummy values"; live request confirmed), although classic `/v3/sync` gave 24 and `event_push_summary` holds 24 for the same room.
+  The SDK's local counts were 0 too (room list sync carries only the newest event). So UNREAD_STATE rules E2 ("server zero ⇒ read") and E3a ("unencrypted: server counts") rest on a false premise for this stack: logged as
+  V-RS-7 (falsified). **Open decision for the founder (not decided here):** (a) rely on pushes (E4, the extension's attention set) plus SDK counts once the SDK has the events (open the room / larger timeline limit),
+  accepting that unread read on another device clears late; (b) add a classic `/v3/sync` counts side-channel outside the SDK; (c) change the sliding-sync request (more timeline events per room) so the SDK can count.
+  Side effect to know: the app's first evaluation overwrites the extension's cached attention set with the (wrong) empty set, so launching the app clears a badge the extension had set.
+- Checked: prepush passes (Domain 17, Application 47, Platform 5, adapter 20 incl. against infra/dev). Debug builds write `Documents/badge-debug.txt` (computed rooms, authorisation, `setBadgeCount` result). **Note: notification permission was first requested without `.badge`, so on the
   founder's phone Badges must be enabled in Settings → Notifications → Halo (or the app reinstalled).** Limits: only the loaded room-list page counts toward the badge (first 50 rooms); invites count as attention;
   `AC-U*`/G-UNREAD scenarios (S01–S22) and the auditor are not built; clearing delivered notifications when read elsewhere is not built.
 
