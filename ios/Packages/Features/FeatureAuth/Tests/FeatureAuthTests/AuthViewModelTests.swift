@@ -40,6 +40,15 @@ struct AuthViewModelTests {
         #expect(model.screen == .busy)
     }
 
+    @Test("a new attempt clears the previous error while busy")
+    func busyClearsError() {
+        let model = AuthViewModel(coordinator: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()))
+        model.apply(.signedOut(failure: .invalidInput("SERVER_NAME")))
+        #expect(model.errorMessage != nil)
+        model.apply(.discovering)
+        #expect(model.screen == .busy && model.errorMessage == nil)
+    }
+
     @Test("the full flow against the fake ends signed in")
     func fullFlow() async throws {
         let port = FakeSessionPort()
@@ -55,5 +64,47 @@ struct AuthViewModelTests {
         await model.submitCredentials()
         for _ in 0..<200 where model.screen != .signedIn { await Task.yield() }
         #expect(model.screen == .signedIn)
+    }
+}
+
+@MainActor
+@Suite("RecoveryViewModel")
+struct RecoveryViewModelTests {
+    private func model(_ port: FakeEncryptionPort) async throws -> RecoveryViewModel {
+        let sessionPort = FakeSessionPort()
+        let url = try #require(URL(string: "https://example.org"))
+        sessionPort.addServer("example.org", ServerDetails(homeserverURL: url, supportsPassword: true, supportsOIDC: false, supportsNativeSlidingSync: true))
+        sessionPort.addAccount(.init(localpart: "alice", password: "pw"))
+        let session = SessionCoordinator(port: sessionPort, keychain: InMemoryKeychain())
+        let model = RecoveryViewModel(coordinator: EncryptionCoordinator(port: port, session: session))
+        await model.start()
+        await session.start()
+        await session.discover(server: "example.org")
+        await session.loginPassword(username: "alice", password: "pw")
+        return model
+    }
+
+    @Test("the banner appears for an unverified device and the key field is cleared on submit")
+    func flow() async throws {
+        let model = try await model(FakeEncryptionPort(recoveryKey: "right"))
+        for _ in 0..<500_000 where !model.needsRecovery { await Task.yield() }
+        #expect(model.needsRecovery)
+
+        model.key = "wrong"
+        await model.submit()
+        #expect(model.key.isEmpty)
+        for _ in 0..<500_000 where model.errorMessage == nil { await Task.yield() }
+        #expect(model.errorMessage?.contains("doesn't match") == true)
+
+        model.key = "right"
+        await model.submit()
+        for _ in 0..<500_000 where !model.isVerified { await Task.yield() }
+        #expect(model.isVerified && !model.needsRecovery && model.errorMessage == nil)
+    }
+
+    @Test("error messages never echo the key or server text")
+    func messages() {
+        #expect(!RecoveryViewModel.message(for: .invalidInput("RECOVERY_KEY")).contains("RECOVERY_KEY"))
+        #expect(RecoveryViewModel.message(for: .network(retryable: true)).contains("connection"))
     }
 }

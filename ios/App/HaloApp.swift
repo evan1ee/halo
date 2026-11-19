@@ -26,7 +26,8 @@ private struct RootView: View {
             switch root.auth.screen {
             case .signedIn:
                 NavigationStack(path: $path) {
-                    VStack {
+                    VStack(spacing: 0) {
+                        RecoveryBanner(model: root.recovery)
                         RoomListView(model: root.roomList) { path.append($0) }
                         Button("Sign out") { Task { await root.auth.signOut() } }.padding()
                     }
@@ -42,6 +43,7 @@ private struct RootView: View {
         }
         .task {
             await root.sync.begin()
+            await root.recovery.start()  // before the banner exists: a hidden banner view runs no task
             await root.auth.start()
         }
         // Sync runs only in the foreground (SYNC_ENGINE §2 rule 1).

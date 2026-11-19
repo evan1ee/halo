@@ -24,7 +24,7 @@ needs, made of Halo value types, and independent of the SDK version underneath.
 | `RoomPort` | Room management | `details(room)`, `members(room)`, `leave`, `invite`, `createDM(user)`, `createRoom(opts)`, `setNotificationMode`, `state(room, type)`, `sendState(room, type, key, json)` | Adapter |
 | `ProfilePort` | Profiles | `ownProfile`, `setDisplayName`, `setAvatar`, `profile(user)`, `ignore(user)` | Adapter |
 | `AccountDataPort` | Account data | `get(type) -> JSON?`, `set(type, JSON)`, `observe(type)` | Adapter |
-| `EncryptionPort` | E2EE & devices | `verificationState`, `startVerification`, `recover(recoveryKey)`, `backupState`, `devices` | Adapter |
+| `EncryptionPort` | E2EE & devices | `statuses() -> AsyncStream<EncryptionStatus>` (verification + recovery state, snapshot), `recover(recoveryKey:)`, `enableRecovery() -> key` — **in code since M1**; `startVerification`, `backupState`, `devices` follow | Adapter |
 | `NotificationFetchPort` | NSE | `notification(room, event) -> FetchedNotification` | Adapter |
 | `PusherPort` | Pushers | `register(token, gateway)`, `unregister()` | Adapter |
 | `ReadIntentStore`, `NotificationRecordStore`, `AuditStore`, `StickerPackCache`, `BotTaskStore` | Halo persistence | CRUD with monotonic guards (sticker favourites/recents are account data via `AccountDataPort`, not a store) | HaloPersistence |
@@ -32,7 +32,7 @@ needs, made of Halo value types, and independent of the SDK version underneath.
 
 Exact signatures are written in code in M0–M1 and must match the intent of this table; any deviation updates this document.
 Ports live in `ios/Packages/HaloDomain/Sources/HaloDomain/Ports/` and use typed throws (`throws(HaloError)`), so the compiler enforces
-rule 3. Fakes and the contract suites (`SessionPortContract`, `RoomListPortContract`, `TimelinePortContract`, `SyncPortContract`, `MediaPortContract`) are in `HaloTestSupport`.
+rule 3. Fakes and the contract suites (`SessionPortContract`, `RoomListPortContract`, `TimelinePortContract`, `SyncPortContract`, `MediaPortContract`, `EncryptionPortContract`) are in `HaloTestSupport`.
 
 **Verified against the dev Synapse (M1 slice):** a freshly synced room holds only its newest event, so a timeline consumer must back-paginate; `paginateBackwards` returns `false` until one call past the last page, and the SDK puts a `timelineStart` virtual item on top when the start is loaded (the coordinator treats that item as authoritative). Room list and timeline diffs share one `ListDiff`/`ListReducer`.
 

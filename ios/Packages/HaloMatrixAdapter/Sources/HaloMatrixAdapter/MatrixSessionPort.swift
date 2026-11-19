@@ -181,6 +181,12 @@ public actor MatrixSessionPort: SessionPort {
         } catch { throw ErrorMapper.map(error) }
     }
 
+    /// The SDK's encryption object for the signed-in client.
+    func encryption() throws(HaloError) -> Encryption {
+        guard let client else { throw .unauthorized(soft: false) }
+        return client.encryption()
+    }
+
     // MARK: Internals
 
     private func register(_ continuation: AsyncStream<SessionEvent>.Continuation, id: UUID) { events[id] = continuation }
@@ -210,6 +216,8 @@ public actor MatrixSessionPort: SessionPort {
             .sessionPaths(dataPath: data.path, cachePath: cache.path)
             .sqliteStore(config: SqliteStoreBuilder(dataPath: data.path, cachePath: cache.path).passphrase(passphrase: passphrase))
             .slidingSyncVersionBuilder(versionBuilder: .native)
+            .autoEnableCrossSigning(autoEnableCrossSigning: true)
+            .autoEnableBackups(autoEnableBackups: true)
             .crossProcessLockConfig(crossProcessLockConfig: .multiProcess(holderName: holderName))
             .setSessionDelegate(sessionDelegate: delegate)
             .build()

@@ -68,6 +68,7 @@ public final class AuthViewModel {
             errorMessage = failure.map(AuthMessages.text)
         case .discovering, .authenticating, .signingOut:
             screen = .busy
+            errorMessage = nil  // a new attempt starts without the previous attempt's error
         case .choosingMethod(let details, let failure):
             screen = .credentials(host: details.homeserverURL.host() ?? "")
             errorMessage = failure.map(AuthMessages.text)

@@ -120,4 +120,29 @@ struct AdapterContractTests {
         try await within(seconds: 60) { try await MediaPortContract.verify(MatrixMediaPort(session: session), existing: existing, missing: missing) }
         try await session.logout()
     }
+
+    @Test("EncryptionPortContract: recovery set up on one device unlocks a second one (needs a throwaway account in HALO_DEV_E2EE_USER/PASSWORD)", .enabled(if: env["HALO_DEV_E2EE_USER"] != nil && env["HALO_DEV_E2EE_PASSWORD"] != nil))
+    func encryption() async throws {
+        // A throwaway account (create it with infra/dev/create-user.sh): recovery can be enabled on it only once.
+        let user = try #require(env["HALO_DEV_E2EE_USER"])
+        let password = try #require(env["HALO_DEV_E2EE_PASSWORD"])
+        let server = env["HALO_DEV_SERVER"] ?? ""
+
+        let first = port()
+        let details = try await first.loginDetails(server: server)
+        _ = try await first.loginPassword(PasswordCredentials(username: user, password: password, deviceDisplayName: "e2ee-1"), on: details)
+        try await MatrixSyncPort(session: first).start()
+        let key = try await within(seconds: 90) { try await MatrixEncryptionPort(session: first).enableRecovery() }
+
+        // Optional: leave the key where a manual UI check can read it (throwaway account only).
+        if let out = env["HALO_DEV_E2EE_KEY_OUT"] { try key.write(toFile: out, atomically: true, encoding: .utf8) }
+
+        let second = port()
+        _ = try await second.loginPassword(PasswordCredentials(username: user, password: password, deviceDisplayName: "e2ee-2"), on: details)
+        try await MatrixSyncPort(session: second).start()
+        let unverified = MatrixEncryptionPort(session: second)
+        try await within(seconds: 90) { try await EncryptionPortContract.verifyRecovery(unverified, recoveryKey: key) }
+        try await first.logout()
+        try await second.logout()
+    }
 }

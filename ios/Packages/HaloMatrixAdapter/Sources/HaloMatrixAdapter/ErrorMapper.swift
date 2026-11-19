@@ -11,6 +11,7 @@ enum ErrorMapper {
         case is CancellationError: return .cancelled
         case let error as ClientError: return map(error)
         case let error as ClientBuildError: return map(error)
+        case let error as RecoveryError: return map(error)
         case let error as URLError: return map(error)
         default: return .internal(code: "SDK_UNMAPPED")
         }
@@ -39,6 +40,16 @@ enum ErrorMapper {
         case .missingToken: .unauthorized(soft: false)
         case .limitExceeded: .network(retryable: true)
         default: .internal(code: "MATRIX_API")
+        }
+    }
+
+    /// A key that doesn't unlock secret storage is the user's input problem; the rest is mapped by cause.
+    static func map(_ error: RecoveryError) -> HaloError {
+        switch error {
+        case .SecretStorage: .invalidInput("RECOVERY_KEY")
+        case .Client(let source): map(source)
+        case .BackupExistsOnServer: .internal(code: "RECOVERY_BACKUP_EXISTS")
+        case .Import: .crypto(.verificationFailed)
         }
     }
 

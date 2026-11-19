@@ -14,6 +14,16 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   pass; SwiftLint skipped (not configured). Nothing iOS-specific has been built anywhere.
 
 ## 2. Completed work
+**2026-11-19 (latest+4) — M1: recovery-key verification**
+- `VerificationState`/`RecoveryState`/`EncryptionStatus` (+`needsRecovery`), `EncryptionPort` (+`FakeEncryptionPort`, `EncryptionPortContract`), `EncryptionCoordinator`
+  (follows session; recovery attempts; key trimmed, never kept), `MatrixEncryptionPort`, `ErrorMapper` for `RecoveryError` (wrong key → `invalidInput("RECOVERY_KEY")`),
+  `ClientBuilder` now sets `autoEnableCrossSigning`/`autoEnableBackups` (ENCRYPTION FR-1). FeatureAuth: `RecoveryViewModel`, `RecoveryBanner`, `RecoveryView`.
+- Adapter contract (15 tests pass; the encryption one needs a throwaway account `HALO_DEV_E2EE_USER/PASSWORD`, created with `infra/dev/create-user.sh`; it enables
+  recovery on device 1 and recovers on device 2; `HALO_DEV_E2EE_KEY_OUT` writes the key for a manual UI check). Verified by hand in the simulator: banner for an unverified
+  device, wrong key → message, right key → sheet closes and banner disappears.
+- Bugs found by the UI check: a hidden banner (empty `Group`) never ran its `.task` (model now started from `HaloApp`); `AuthViewModel` kept the previous error while busy
+  (fixed + test). V-E2EE-1 resolved. Application tests: 40.
+
 **2026-11-19 (latest+3) — M1: inline images**
 - `MediaRef` (opaque token = SDK `MediaSource` JSON), `MediaAttachment` (replaces `.media(kind, body)`), `MediaPort` (+ `FakeMediaPort`, `MediaPortContract`),
   `MediaLoader` (in-memory cache with byte-limit LRU, one download per key, failures not cached; 4 tests), `MatrixMediaPort` (client `getMediaThumbnail`/`getMediaContent`),
@@ -119,7 +129,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 ## 6. Next steps
 1. Push this branch / open a PR; check CI.
 2. (Done) contracts pass on infra/dev. Keep running them after every adapter change.
-3. M1 remaining (docs/ROADMAP.md): first real persisted data (read-intent/notification stores arrive with M3), video/audio/file display, verification + recovery, NSE spike and G-NSE. Answer Q-XCODEGEN before adding the next package to the app.
+3. M1 remaining (docs/ROADMAP.md): first real persisted data (read-intent/notification stores arrive with M3), video/audio/file display, QR/emoji verification, UTD reasons, NSE spike and G-NSE. Answer Q-XCODEGEN before adding the next package to the app.
 4. Without a Mac: V-APPLE-1 from Apple docs; M1 prep — Halo's Sygnal pushkin in `infra/sygnal/` with tests and `pushkin.yml` (ADR-0015).
 
 ## 7. Next Session Prompt

@@ -15,6 +15,7 @@ final class AppRoot {
     let auth: AuthViewModel
     let roomList: RoomListViewModel
     let sync: SyncCoordinator
+    let recovery: RecoveryViewModel
     private let timelinePort: MatrixTimelinePort
     private let media: MediaLoader
 
@@ -32,6 +33,7 @@ final class AppRoot {
 
         timelinePort = MatrixTimelinePort(session: session)
         media = MediaLoader(port: MatrixMediaPort(session: session))
+        recovery = RecoveryViewModel(coordinator: EncryptionCoordinator(port: MatrixEncryptionPort(session: session), session: sessionCoordinator))
         sync = SyncCoordinator(port: MatrixSyncPort(session: session), session: sessionCoordinator)
         auth = AuthViewModel(coordinator: sessionCoordinator)
         roomList = RoomListViewModel(session: sessionCoordinator, rooms: roomCoordinator)

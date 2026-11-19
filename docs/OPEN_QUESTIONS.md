@@ -28,7 +28,7 @@
 | V-SYNC-2 | The SDK send queue persists unsent events across app restarts | Kill during send offline; relaunch; observe | M2 | M2 |
 | V-TL-1 | ~~An event-focused timeline is available via `timeline_with_configuration`~~ **Resolved** — `TimelineFocus.Event` exists [VERIFIED F-FFI-22] | — | — | — |
 | V-RL-1 | Room tags beyond favourite are reachable | `set_is_favourite` exists **[VERIFIED F-FFI-18]**; other tags unknown → not needed in the MVP | M2 | — |
-| V-E2EE-1 | Encryption API names for recovery and backup | Inspect `encryption.rs` at M1 | M1 | M1 |
+| V-E2EE-1 | ~~Method names of the SDK `Encryption` object~~ **Resolved (2026-11-19)**: `recover(recoveryKey:)`, `enableRecovery(waitForBackupsToUpload:key:progressListener:)`, `verificationState()`/`recoveryState()` and their listeners exist in the pinned SDK and work against the dev Synapse (recovery on one device unlocks a second; a wrong key throws `RecoveryError.SecretStorage`) [VERIFIED, adapter contract] | — | — | — |
 | V-MEDIA-1 | Media retention policy can be configured as planned | Inspect `set_media_retention_policy` parameters | M2 | — |
 | V-FFI-1 | Cancellation semantics of UniFFI async calls | UniFFI manual + a test | before any Halo-owned FFI | G-FFI fail path |
 | V-FFI-2 | Panics map to an error for the caller | UniFFI manual | same | same |

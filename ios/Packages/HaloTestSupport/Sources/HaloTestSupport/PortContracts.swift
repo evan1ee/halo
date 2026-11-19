@@ -174,3 +174,27 @@ public enum MediaPortContract {
         }
     }
 }
+
+/// Behaviour every `EncryptionPort` implementation must show. `unverified` is a port for an account that has a
+/// recovery key (`recoveryKey`) but whose device hasn't used it yet.
+public enum EncryptionPortContract {
+    public static func verifyRecovery(_ unverified: any EncryptionPort, recoveryKey: String) async throws {
+        // A wrong key is rejected as an input problem and leaves the device unverified.
+        do {
+            try await unverified.recover(recoveryKey: recoveryKey + "x")
+            throw ContractViolation("a wrong recovery key must not verify the device")
+        } catch let error as HaloError {
+            guard error == .invalidInput("RECOVERY_KEY") else {
+                throw ContractViolation("a wrong recovery key must throw invalidInput(RECOVERY_KEY), got \(error.code)")
+            }
+        }
+        do { try await unverified.recover(recoveryKey: recoveryKey) } catch {
+            throw ContractViolation("the right recovery key failed with \(error.code)")
+        }
+        for await status in unverified.statuses() {
+            if status.verification == .verified { return }
+            throw ContractViolation("after recovery the device must be verified, got \(status)")
+        }
+        throw ContractViolation("the status stream ended")
+    }
+}
