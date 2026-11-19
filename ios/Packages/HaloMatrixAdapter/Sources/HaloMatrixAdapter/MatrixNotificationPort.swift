@@ -42,13 +42,19 @@ enum NotificationMapper {
             case .roomEncrypted:
                 return .encrypted(roomName: item.roomInfo.displayName)
             case .roomMessage(let type, _):
-                return .display(shape(sender: sender, room: item.roomInfo.displayName, isDirect: item.roomInfo.isDirect, text: text(of: type)))
+                return .display(stamped(shape(sender: sender, room: item.roomInfo.displayName, isDirect: item.roomInfo.isDirect, text: text(of: type)), event: event, item: item))
             case .sticker:
-                return .display(shape(sender: sender, room: item.roomInfo.displayName, isDirect: item.roomInfo.isDirect, text: "Sticker"))
+                return .display(stamped(shape(sender: sender, room: item.roomInfo.displayName, isDirect: item.roomInfo.isDirect, text: "Sticker"), event: event, item: item))
             default:
                 return .suppressed
             }
         }
+    }
+
+    private static func stamped(_ display: NotificationDisplay, event: MatrixRustSDK.TimelineEvent, item: NotificationItem) -> NotificationDisplay {
+        NotificationDisplay(
+            title: display.title, body: display.body, timestamp: Date(timeIntervalSince1970: Double(event.timestamp()) / 1000),
+            isMention: item.hasMention ?? false)
     }
 
     /// A direct chat shows the sender as the title; a group shows the room as the title and "Sender: text" as the body.

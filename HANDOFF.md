@@ -24,10 +24,13 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
 - **Finding (on the phone, Badges enabled, authorisation granted, `setBadgeCount` succeeded): the badge stays empty because the policy computes 0 rooms.** Cause: Synapse 1.165's *native sliding sync returns constant 0* for
   `notification_count`/`highlight_count` (source: `handlers/sliding_sync/__init__.py:1522`, "dummy values"; live request confirmed), although classic `/v3/sync` gave 24 and `event_push_summary` holds 24 for the same room.
   The SDK's local counts were 0 too (room list sync carries only the newest event). So UNREAD_STATE rules E2 ("server zero ⇒ read") and E3a ("unencrypted: server counts") rest on a false premise for this stack: logged as
-  V-RS-7 (falsified). **Open decision for the founder (not decided here):** (a) rely on pushes (E4, the extension's attention set) plus SDK counts once the SDK has the events (open the room / larger timeline limit),
-  accepting that unread read on another device clears late; (b) add a classic `/v3/sync` counts side-channel outside the SDK; (c) change the sliding-sync request (more timeline events per room) so the SDK can count.
-  Side effect to know: the app's first evaluation overwrites the extension's cached attention set with the (wrong) empty set, so launching the app clears a badge the extension had set.
-- Checked: prepush passes (Domain 17, Application 47, Platform 5, adapter 20 incl. against infra/dev). Debug builds write `Documents/badge-debug.txt` (computed rooms, authorisation, `setBadgeCount` result). **Note: notification permission was first requested without `.badge`, so on the
+  V-RS-7 (falsified). **Founder decision (2026-11-19): pushes + SDK counts.** Implemented: `NotificationRecord`/`NotificationRecordPort` (+`FakeNotificationRecords`, `NotificationRecordStore` in the App Group `UserDefaults`
+  with a Darwin notification, de-duplicated by event ID, 7-day/200-record limit; replaced by a GRDB table with the M3 unread persistence). The extension writes a record per fetched notifying event (time and
+  mention flag from the fetched event) and sets `badge` to |app's last attention set ∪ rooms with records|. `BadgeCoordinator` now evaluates the room list's read inputs *with* the records (rule E4) plus rooms that
+  only have records, and writes the union; the app's first evaluation no longer wipes the extension's rooms. Opening a room (`TimelineCoordinator(records:)`) clears that room's records, and `SystemBadge` removes
+  delivered notifications whose `threadIdentifier` room no longer needs attention. SDK counts are still used where the SDK has them (they are 0 until it has the events). Not built: clearing when read on another
+  device (no receipts are sent or read yet), paging all rooms, the larger-timeline-limit experiment.
+- Checked: prepush passes (Domain 17, Application 50, Platform 7, adapter tests). NOT yet verified on the device after this change. Debug builds write `Documents/badge-debug.txt` (computed rooms, authorisation, `setBadgeCount` result). **Note: notification permission was first requested without `.badge`, so on the
   founder's phone Badges must be enabled in Settings → Notifications → Halo (or the app reinstalled).** Limits: only the loaded room-list page counts toward the badge (first 50 rooms); invites count as attention;
   `AC-U*`/G-UNREAD scenarios (S01–S22) and the auditor are not built; clearing delivered notifications when read elsewhere is not built.
 

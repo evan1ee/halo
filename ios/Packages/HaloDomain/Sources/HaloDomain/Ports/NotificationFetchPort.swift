@@ -6,10 +6,15 @@ import HaloFoundation
 public struct NotificationDisplay: Sendable, Equatable {
     public let title: String
     public let body: String
+    /// When the event was sent, and whether it mentions the user; both feed the notification record.
+    public let timestamp: Date?
+    public let isMention: Bool
 
-    public init(title: String, body: String) {
+    public init(title: String, body: String, timestamp: Date? = nil, isMention: Bool = false) {
         self.title = title
         self.body = body
+        self.timestamp = timestamp
+        self.isMention = isMention
     }
 }
 

@@ -23,8 +23,8 @@ public actor RoomListCoordinator {
 
     private let port: any RoomListPort
     private var broadcaster = SnapshotBroadcaster<Status>()
-    private var readBroadcaster = SnapshotBroadcaster<[RoomReadState]>()
-    private var readStatesCache: [RoomReadState] = []
+    private var readBroadcaster = SnapshotBroadcaster<[RoomReadInputs]>()
+    private var readInputsCache: [RoomReadInputs] = []
     private var subscription: Task<Void, Never>?
     private var generation = 0
     private var consecutiveFailures = 0
@@ -43,9 +43,9 @@ public actor RoomListCoordinator {
         broadcaster.subscribe(current: status)
     }
 
-    /// The read state of every loaded room (`ReadStatePolicy`), now and after each change; latest value wins. Only the
-    /// rooms the list has loaded so far are included (the first page until the list pages further).
-    public func readStates() -> AsyncStream<[RoomReadState]> { readBroadcaster.subscribe(current: readStatesCache) }
+    /// The read inputs of every loaded room, now and after each change; latest value wins. Only the rooms the list has
+    /// loaded so far are included (the first page until the list pages further). `BadgeCoordinator` evaluates them.
+    public func readInputs() -> AsyncStream<[RoomReadInputs]> { readBroadcaster.subscribe(current: readInputsCache) }
 
     public func start(filter: RoomListFilter = .all) {
         consecutiveFailures = 0
@@ -79,13 +79,11 @@ public actor RoomListCoordinator {
         }
     }
 
-    private func publishReadStates() {
-        let states = rooms.map {
-            ReadStatePolicy.evaluate(RoomReadInputs(roomID: $0.id, membership: $0.membership, isEncrypted: $0.isEncrypted, counts: $0.read))
-        }
-        guard states != readStatesCache else { return }
-        readStatesCache = states
-        readBroadcaster.publish(states)
+    private func publishReadInputs() {
+        let inputs = rooms.map { RoomReadInputs(roomID: $0.id, membership: $0.membership, isEncrypted: $0.isEncrypted, counts: $0.read) }
+        guard inputs != readInputsCache else { return }
+        readInputsCache = inputs
+        readBroadcaster.publish(inputs)
     }
 
     /// Applies one diff; returns `false` when this subscription must stop.
@@ -98,7 +96,7 @@ public actor RoomListCoordinator {
             // applies; only a later diff proves the stream is healthy again.
             if diffsInSubscription > 1 { consecutiveFailures = 0 }
             status = .loaded(roomCount: rooms.count)
-            publishReadStates()
+            publishReadInputs()
             return true
         } catch {
             consecutiveFailures += 1

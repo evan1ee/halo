@@ -39,7 +39,8 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
         var metrics = NSEMetrics()
         let content = (request.content.mutableCopy() as? UNMutableNotificationContent) ?? UNMutableNotificationContent()
         content.badge = nil  // the badge is never taken from a push (ADR-0015); it is set below from local state
-        let attention = AttentionCache(suiteName: "group.\(HaloShared.namespace())")
+        let suite = "group.\(HaloShared.namespace())"
+        let records = NotificationRecordStore(suiteName: suite)
         do {
             guard let data = try await HaloShared.keychain().read(.session) else { return deliver(request.content, outcome: "no-session", metrics: metrics) }
             let stored = try JSONDecoder().decode(StoredSession.self, from: data)
@@ -54,13 +55,15 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
                 content.title = display.title
                 content.body = display.body
                 content.threadIdentifier = room.rawValue
-                content.badge = NSNumber(value: attention.adding(room))
+                records.add(NotificationRecord(roomID: room, eventID: event, timestamp: display.timestamp ?? Date(), isMention: display.isMention))
+                content.badge = NSNumber(value: badge(suite: suite, records: records))
                 deliver(content, outcome: "display", metrics: metrics)
             case .encrypted(let roomName):
                 content.title = roomName ?? "Halo"
                 content.body = "Encrypted message"
                 content.threadIdentifier = room.rawValue
-                content.badge = NSNumber(value: attention.adding(room))
+                records.add(NotificationRecord(roomID: room, eventID: event, timestamp: Date(), isMention: false))
+                content.badge = NSNumber(value: badge(suite: suite, records: records))
                 deliver(content, outcome: "encrypted", metrics: metrics)
             case .suppressed:
                 // Suppression needs Apple's filtering entitlement (V-PUSH-3); until then show the generic alert.
@@ -69,6 +72,12 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
         } catch {
             deliver(request.content, outcome: "error", metrics: metrics)
         }
+    }
+
+    /// The rooms the app last found to need attention plus every room with a notification record (the same union the app
+    /// computes, UNREAD_STATE §2/C5). A fallback for when the extension can't recompute every room (V-NSE-2).
+    private func badge(suite: String, records: NotificationRecordStore) -> Int {
+        AttentionCache(suiteName: suite).rooms().union(records.all().map(\.roomID.rawValue)).count
     }
 
     private func deliver(_ content: UNNotificationContent, outcome: String, metrics: NSEMetrics) {

@@ -49,13 +49,16 @@ public actor TimelineCoordinator {
     private var typingSubscription: Task<Void, Never>?
     private var typingSentAt: ContinuousClock.Instant?
     private let now: @Sendable () -> ContinuousClock.Instant
+    private let records: (any NotificationRecordPort)?
 
     /// A typing notice is repeated at most this often while the user keeps typing (MESSAGING FR-4).
     public static let typingInterval: Duration = .seconds(4)
 
-    public init(port: any TimelinePort, room: RoomID, now: @escaping @Sendable () -> ContinuousClock.Instant = { .now }) {
+    /// - Parameter records: when given, opening the room counts as reading it here and clears its notification records.
+    public init(port: any TimelinePort, room: RoomID, records: (any NotificationRecordPort)? = nil, now: @escaping @Sendable () -> ContinuousClock.Instant = { .now }) {
         self.port = port
         self.room = room
+        self.records = records
         self.now = now
     }
 
@@ -79,6 +82,7 @@ public actor TimelineCoordinator {
         consecutiveFailures = 0
         subscribe()
         subscribeTyping()
+        records?.clear(room: room)
     }
 
     public func close() async {

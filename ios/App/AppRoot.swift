@@ -19,6 +19,7 @@ final class AppRoot {
     /// `nil` when no push gateway is configured (Beta/Release until one is deployed).
     let push: PushCoordinator?
     let badge: BadgeCoordinator
+    private let records: NotificationRecordStore
     private let timelinePort: MatrixTimelinePort
     private let media: MediaLoader
 
@@ -33,7 +34,9 @@ final class AppRoot {
         let session = MatrixSessionPort(baseDirectory: HaloShared.storeDirectory())
         let sessionCoordinator = SessionCoordinator(port: session, keychain: keychain)
         let roomCoordinator = RoomListCoordinator(port: MatrixRoomListPort(session: session))
-        badge = BadgeCoordinator(rooms: roomCoordinator, port: SystemBadge(suiteName: "group.\(HaloShared.namespace())"))
+        let suite = "group.\(HaloShared.namespace())"
+        records = NotificationRecordStore(suiteName: suite)
+        badge = BadgeCoordinator(rooms: roomCoordinator, records: records, port: SystemBadge(suiteName: suite))
 
         timelinePort = MatrixTimelinePort(session: session)
         media = MediaLoader(port: MatrixMediaPort(session: session))
@@ -59,7 +62,7 @@ final class AppRoot {
 
     /// A view model for the timeline of `room`; each screen gets its own coordinator and session.
     func makeTimeline(room: RoomID) -> TimelineViewModel {
-        TimelineViewModel(coordinator: TimelineCoordinator(port: timelinePort, room: room), media: media)
+        TimelineViewModel(coordinator: TimelineCoordinator(port: timelinePort, room: room, records: records), media: media)
     }
 
     #if DEBUG

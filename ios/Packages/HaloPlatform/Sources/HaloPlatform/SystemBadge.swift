@@ -13,6 +13,11 @@ public struct SystemBadge: BadgePort {
 
     public func update(attentionRooms: Set<RoomID>) async {
         attention.store(attentionRooms)
+        // Notifications of rooms that no longer need attention are removed from Notification Center (read here, PUSH §5).
+        let center = UNUserNotificationCenter.current()
+        let keep = Set(attentionRooms.map(\.rawValue))
+        let stale = await center.deliveredNotifications().map(\.request).filter { !$0.content.threadIdentifier.isEmpty && !keep.contains($0.content.threadIdentifier) }
+        if !stale.isEmpty { center.removeDeliveredNotifications(withIdentifiers: stale.map(\.identifier)) }
         var failure: String?
         do { try await UNUserNotificationCenter.current().setBadgeCount(attentionRooms.count) } catch { failure = "\(error)" }
         #if DEBUG
