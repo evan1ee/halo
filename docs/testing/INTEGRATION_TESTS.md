@@ -4,7 +4,7 @@
 | Environment | Contents | Use |
 |---|---|---|
 | `infra/test` (Docker Compose) | Synapse (pinned version, native sliding sync, registration with a shared secret, rate limits off), Postgres, MAS (optional profile), a TCP proxy for fault injection | CI scenario tests, local FFI runs |
-| `infra/dev` | Same + Sygnal (sandbox APNs) | Manual development |
+| `infra/dev` | Synapse + Postgres with native password login (D64, [../../infra/dev/README.md](../../infra/dev/README.md)); Sygnal + pushkin from M1; MAS from M5 | Manual development |
 
 Users are created per test run with random suffixes; every test starts from a fresh database (or a fresh namespace of users and rooms).
 

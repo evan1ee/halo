@@ -19,7 +19,7 @@ Which database and where does it live, now that domain logic is Swift (D44)?
 Option 1 ([../data/PERSISTENCE.md](../data/PERSISTENCE.md)).
 
 ## Rationale
-GRDB: WAL `DatabasePool`, explicit migrations, observation, documented use in app extensions, MIT **[VERIFIED F-LIC-5]**, builds on Linux for tests (V-CI-1). SwiftData/Core Data: weaker control over multi-process writes and migrations. SQLCipher: another SQLite build and its notices for little gain over file protection + field encryption.
+GRDB: WAL `DatabasePool`, explicit migrations, observation, documented use in app extensions, MIT **[VERIFIED F-LIC-5]**, builds on Linux for tests (F-CI-1). SwiftData/Core Data: weaker control over multi-process writes and migrations. SQLCipher: another SQLite build and its notices for little gain over file protection + field encryption.
 
 ## Trade-offs
 Two SQLite copies in-process (the SDK's bundled one inside its dynamic framework, and the system one) — must never open the same file (V-SQL-1); field encryption makes encrypted columns unqueryable (only titles/content are encrypted).
@@ -28,4 +28,4 @@ Two SQLite copies in-process (the SDK's bundled one inside its dynamic framework
 Every table is keyed by account; monotonic upserts for cross-process safety; NSE suspension handling per GRDB guidance (V-SQL-2).
 
 ## Verified facts and assumptions
-[VERIFIED] SDK default feature `bundled-sqlite` (F-FFI-1); prebuilt product is a dynamic library (SOURCES pinned refs). [ASSUMPTION] V-SQL-1, V-SQL-2, V-CI-1.
+[VERIFIED] SDK default feature `bundled-sqlite` (F-FFI-1); prebuilt product is a dynamic library (SOURCES pinned refs). [ASSUMPTION] V-SQL-1, V-SQL-2. [VERIFIED F-CI-1] GRDB on Linux.

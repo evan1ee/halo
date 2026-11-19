@@ -26,4 +26,4 @@ SDK client-side counts are simulated in Linux runs (a reference counter) — mit
 `tools/scenario-driver`, `infra/test`, fixture format for traces, Linux-buildable core packages.
 
 ## Verified facts and assumptions
-Sliding sync endpoint path [VERIFIED F-SPEC-5]. [ASSUMPTION V-CI-1] GRDB on Linux.
+Sliding sync endpoint path [VERIFIED F-SPEC-5]. [VERIFIED F-CI-1] GRDB on Linux.

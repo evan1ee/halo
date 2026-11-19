@@ -79,7 +79,7 @@ types, so it is treated as fixed.
 | personal | Founder's production Synapse | Sygnal → APNs production | Beta/Release |
 
 ## 5. Local workflow
-1. `docker compose -f infra/dev/docker-compose.yml up -d`
+1. `docker compose -f infra/dev/docker-compose.yml up -d`, then `infra/dev/smoke.sh` and `infra/dev/create-user.sh <name>` ([../../infra/dev/README.md](../../infra/dev/README.md))
 2. Open `ios/Halo.xcodeproj`, scheme `Halo-Debug`, run on the simulator (push needs a device).
 3. Fast loop for logic: `swift test --package-path ios/Packages/HaloDomain` (also runs on Linux).
 4. Before pushing: `scripts/validate-docs.sh`, `scripts/check-boundaries.sh`, SwiftLint, unit tests.

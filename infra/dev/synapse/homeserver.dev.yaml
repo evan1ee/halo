@@ -1,0 +1,53 @@
+# Halo overrides for the generated homeserver.yaml (infra/dev only). Contains no secrets: the
+# registration shared secret, macaroon/form secrets and the signing key are generated into the
+# synapse-data volume by `synapse-init`.
+
+database:
+  name: psycopg2
+  args:
+    user: synapse
+    database: synapse
+    host: postgres
+    cp_min: 2
+    cp_max: 10
+
+# Listen on IPv4 inside the container (the generated config binds "::", which fails where IPv6 is
+# unavailable). Exposure to the host is controlled by the port mapping in docker-compose.yml.
+listeners:
+  - port: 8008
+    type: http
+    tls: false
+    bind_addresses: ["0.0.0.0"]
+    x_forwarded: true
+    resources:
+      - names: [client]
+        compress: false
+
+# Native Matrix username/password login (D64); OIDC/MAS is added in M5.
+password_config:
+  enabled: true
+
+# Accounts are created with the registration shared secret (`infra/dev/create-user.sh`), never by
+# open registration.
+enable_registration: false
+
+# Push rules count encrypted events in all-messages rooms; group badge counts by room (Synapse
+# default, F-PUSH-1). Kept explicit because the read-state design depends on it.
+push:
+  group_unread_count_by_room: true
+
+# Local development: relax rate limits so scripted clients and the scenario driver aren't throttled.
+rc_message: {per_second: 1000, burst_count: 1000}
+rc_login:
+  address: {per_second: 1000, burst_count: 1000}
+  account: {per_second: 1000, burst_count: 1000}
+  failed_attempts: {per_second: 1000, burst_count: 1000}
+rc_registration: {per_second: 1000, burst_count: 1000}
+rc_joins:
+  local: {per_second: 1000, burst_count: 1000}
+  remote: {per_second: 1000, burst_count: 1000}
+
+# Nothing leaves the machine.
+report_stats: false
+trusted_key_servers: []
+suppress_key_server_warning: true

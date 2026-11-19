@@ -10,7 +10,7 @@
 | V-SDK-1 | Each prebuilt `matrix-rust-components-swift` release maps to an identifiable upstream SDK commit and feature set (incl. `sentry`) | Inspect the release notes/workflow of the components repo; or compare the bundled Swift bindings with `uniffi-bindgen` output at candidate commits | M0 | M0 (licence inventory accuracy) |
 | V-SQL-1 | The SDK's bundled SQLite (inside the dynamic framework) and GRDB's system SQLite coexist without symbol interposition issues | M0 smoke test: open the SDK client and a GRDB DB in one process, run both, check `sqlite3_libversion()` from each side | M0 | M0 |
 | V-SQL-2 | GRDB `DatabasePool` shared by app + NSE works without `0xdead10cc` terminations when following GRDB's suspension guidance | NSE spike: 100 pushes while the app is backgrounded and writing | M1 | M3 |
-| V-CI-1 | GRDB builds and tests on Linux with system SQLite | `swift test` in the `swift` Docker image | M0 | M0 |
+| V-CI-1 | ~~GRDB builds and tests on Linux with system SQLite~~ **Resolved** — yes, with `libsqlite3-dev` in the `swift` image [VERIFIED F-CI-1] | — | — | — |
 | V-CI-2 | The Linux CI Swift toolchain (`swift:6.2` image, currently 6.2.4) is the same Swift minor version as the Xcode used for iOS 26 builds | On the Mac: `xcrun swift --version`; align the CI image tag and record both in DEVELOPMENT_SETUP §2 | M0 (Mac part) | M0 |
 | V-NSE-1 | NSE memory/time budget suffices for the SDK client + one decryption | Instruments on the oldest supported device; record peak memory and duration over 50 pushes | M1 | M1 (G-NSE) |
 | V-NSE-2 | Reading RoomInfo for all rooms in the NSE for the badge fits the budget | Measure with 300 rooms; else use cached badge ± current room | M1 | M1 (G-NSE) |

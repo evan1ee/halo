@@ -86,6 +86,20 @@ Re-verify at every SDK bump (see [development/BUILD_AND_RELEASE.md](development/
 - F-PUSH-3 Sygnal loads a pushkin class by fully qualified name when an app's `type` contains a dot (`sygnal.py` `_make_pushkin`),
   and the APNs pushkin has a per-app `push_type` setting (`alert`, `background`, `voip`, …) applied to every push of that app.
 
+### F-SYN — Synapse as deployed in `infra/dev` (measured 2026-11-19)
+- F-SYN-1 Synapse `v1.165.0` enables native Simplified Sliding Sync by default (`experimental.msc3575_enabled` defaults to `true`) and
+  advertises `org.matrix.simplified_msc3575: true` in `/_matrix/client/versions`; the endpoint requires `required_state` in every list
+  (`M_MISSING_PARAM` otherwise). `infra/dev/smoke.sh` checks both.
+- F-SYN-2 The same Synapse advertises spec versions up to **v1.17** (not v1.19). Image packs are ordinary state and account data, so
+  this doesn't stop Halo from storing them; clients that gate image-pack support on the advertised version won't enable it (COMPAT-2).
+- F-SYN-3 The generated `homeserver.yaml` binds the listener to `::`; where IPv6 is unavailable Synapse fails to start
+  (`Errno 97`), so `infra/dev` overrides the listener to `0.0.0.0` inside the container.
+
+### F-CI — toolchain checks (measured 2026-11-19)
+- F-CI-1 GRDB `7.12.0` builds and its API works on Linux with `swift:6.2-noble` (Swift 6.2.4) plus `libsqlite3-dev` (system SQLite
+  3.45.1): two `DatabasePool`s on one WAL file, 500 concurrent monotonic upserts (`ON CONFLICT … WHERE excluded.event_ts > …`) end at
+  the maximum. In-process only — the app ⇄ NSE case is V-SQL-2.
+
 ### F-BOT — evan1ee/matrix-bot
 - F-BOT-1 Matrix output is `body` + an HTML subset (`b i u code pre p ul ol li blockquote a br`, plus `del` in todo views). `Content.actions` (buttons) aren't sent on Matrix.
 - F-BOT-2 Reactions 👍 done, 👎 delete, 😝 +1 day, 🎉 celebrate; only on messages registered in `reaction_targets`, which are parsed from `Added Task <b>#N</b>` and `Reminder #N set!` confirmations.

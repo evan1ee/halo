@@ -153,7 +153,7 @@ def check_ids() -> None:
             fail(f"ADR-{a} referenced but no file docs/adr/{a}-*.md")
 
     defined_f = set(re.findall(r"^- (F-[A-Z]+-\d+)\b", sources, flags=re.M))
-    for fid in sorted(collect(r"\bF-(?:LIC|FFI|SDK|SPEC|BOT|PUSH)-\d+\b", files)):
+    for fid in sorted(collect(r"\bF-(?:LIC|FFI|SDK|SPEC|BOT|PUSH|SYN|CI)-\d+\b", files)):
         if fid not in defined_f:
             fail(f"fact {fid} referenced but not defined in SOURCES.md")
 
