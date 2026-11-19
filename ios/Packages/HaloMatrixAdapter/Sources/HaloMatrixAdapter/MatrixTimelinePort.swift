@@ -12,23 +12,28 @@ public final class MatrixTimelinePort: TimelinePort {
 
     public func open(room id: RoomID) async throws(HaloError) -> any TimelineSession {
         let room = try await session.room(id)
-        do { return MatrixTimelineSession(timeline: try await room.timeline()) } catch { throw ErrorMapper.map(error) }
+        let own = try await session.ownUserID()
+        do { return MatrixTimelineSession(timeline: try await room.timeline(), ownUserID: own) } catch { throw ErrorMapper.map(error) }
     }
 }
 
 final class MatrixTimelineSession: TimelineSession {
     private let timeline: Timeline
+    private let ownUserID: String
 
-    init(timeline: Timeline) { self.timeline = timeline }
+    init(timeline: Timeline, ownUserID: String) {
+        self.timeline = timeline
+        self.ownUserID = ownUserID
+    }
 
     func items() -> AsyncStream<HaloDomain.TimelineDiff> {
         let (output, continuation) = AsyncStream<HaloDomain.TimelineDiff>.makeStream(bufferingPolicy: .unbounded)
-        let task = Task { [timeline] in
+        let task = Task { [timeline, ownUserID] in
             let (raw, rawContinuation) = AsyncStream<[MatrixRustSDK.TimelineDiff]>.makeStream(bufferingPolicy: .unbounded)
             let handle = await timeline.addListener(listener: Listener(rawContinuation))
             defer { handle.cancel() }
             for await batch in raw {
-                for update in batch { continuation.yield(TimelineMapper.map(update)) }
+                for update in batch { continuation.yield(TimelineMapper.map(update, ownUserID: ownUserID)) }
             }
             continuation.finish()
         }
@@ -47,6 +52,23 @@ final class MatrixTimelineSession: TimelineSession {
             // a queued send) isn't needed yet; failed sends are retried by the send queue.
             _ = try await timeline.send(msg: messageEventContentFromMarkdown(md: text))
         } catch { throw ErrorMapper.map(error) }
+    }
+
+    func toggleReaction(on event: EventID, key: String) async throws(HaloError) {
+        do { _ = try await timeline.toggleReaction(itemId: .eventId(eventId: event.rawValue), key: key) } catch { throw ErrorMapper.map(error) }
+    }
+
+    func edit(event: EventID, newText: String) async throws(HaloError) {
+        guard !newText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw .invalidInput("EMPTY_MESSAGE") }
+        do {
+            try await timeline.edit(
+                eventOrTransactionId: .eventId(eventId: event.rawValue),
+                newContent: .roomMessage(content: messageEventContentFromMarkdown(md: newText)))
+        } catch { throw ErrorMapper.map(error) }
+    }
+
+    func delete(event: EventID) async throws(HaloError) {
+        do { try await timeline.redactEvent(eventOrTransactionId: .eventId(eventId: event.rawValue), reason: nil) } catch { throw ErrorMapper.map(error) }
     }
 
     func close() async {}

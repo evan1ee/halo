@@ -156,6 +156,59 @@ public enum TimelinePortContract {
         throw ContractViolation("the sent message never reached .sent")
     }
 
+    /// React, un-react, edit and delete on the user's own just-sent message (MESSAGING FR-2, TIMELINE FR-7).
+    public static func verifyInteractions(_ port: any TimelinePort, room: RoomID, text: String, maxDiffs: Int = 2_000) async throws {
+        let session = try await port.open(room: room)
+        let pagination = Task { for _ in 0..<5 { if (try? await session.paginateBackwards(count: 20)) == true { break } } }
+        defer { pagination.cancel() }
+        let stream = session.items()
+        try await session.send(text: text)
+
+        var items: [TimelineItem] = []
+        var received = 0
+        var iterator = stream.makeAsyncIterator()
+
+        /// Waits until the event whose current text is `body` satisfies `predicate`.
+        func wait(_ what: String, body: String, _ predicate: (TimelineEvent) -> Bool) async throws -> TimelineEvent {
+            while let diff = await iterator.next() {
+                received += 1
+                do { try ListReducer.apply(diff, to: &items) } catch { throw ContractViolation("diff #\(received) doesn't apply: \(error.code)") }
+                for item in items {
+                    guard case .event(let event) = item.content, event.isOwn, event.eventID != nil else { continue }
+                    let matches: Bool
+                    switch event.kind {
+                    case .text(let current, _): matches = current == body
+                    case .redacted: matches = body == "<redacted>"
+                    default: matches = false
+                    }
+                    if matches && predicate(event) { return event }
+                }
+                if received >= maxDiffs { break }
+            }
+            throw ContractViolation("never saw: \(what)")
+        }
+
+        let sent = try await wait("the sent message", body: text) { $0.sendState == .sent }
+        guard let id = sent.eventID else { throw ContractViolation("a sent event must have an event ID") }
+
+        try await session.toggleReaction(on: id, key: "👍")
+        let reacted = try await wait("the reaction", body: text) { $0.reactions.contains { $0.key == "👍" && $0.count == 1 && $0.reactedByMe } }
+        _ = reacted
+        try await session.toggleReaction(on: id, key: "👍")
+        _ = try await wait("the reaction removed", body: text) { $0.reactions.isEmpty }
+
+        let edited = text + " (edited)"
+        do { try await session.edit(event: id, newText: " ") ; throw ContractViolation("a blank edit must be rejected") } catch let error as HaloError {
+            guard error == .invalidInput("EMPTY_MESSAGE") else { throw ContractViolation("a blank edit must throw invalidInput(EMPTY_MESSAGE), got \(error.code)") }
+        }
+        try await session.edit(event: id, newText: edited)
+        _ = try await wait("the edit", body: edited) { event in if case .text(_, let isEdited) = event.kind { isEdited } else { false } }
+
+        try await session.delete(event: id)
+        _ = try await wait("the deletion", body: "<redacted>") { _ in true }
+        await session.close()
+    }
+
     /// Opening a room the client doesn't know must fail with `.notFound`.
     public static func verifyUnknownRoom(_ port: any TimelinePort, room: RoomID) async throws {
         do {

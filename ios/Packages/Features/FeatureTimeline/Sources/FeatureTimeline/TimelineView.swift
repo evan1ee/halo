@@ -60,6 +60,13 @@ private struct Composer: View {
     var body: some View {
         VStack(spacing: 4) {
             if let error = model.sendError { Text(error).font(.caption).foregroundStyle(.red) }
+            if model.editing != nil {
+                HStack {
+                    Label("Editing message", systemImage: "pencil").font(.caption)
+                    Spacer()
+                    Button("Cancel") { model.cancelEdit() }.font(.caption)
+                }
+            }
             HStack(alignment: .bottom) {
                 TextField("Message", text: $model.draft, axis: .vertical)
                     .lineLimit(1...5)
@@ -79,6 +86,17 @@ private struct RowView: View {
     let row: TimelineRow
     let model: TimelineViewModel
 
+    /// Long-press menu for confirmed messages: quick reactions, and edit/delete for own messages.
+    @ViewBuilder private var actions: some View {
+        ForEach(["👍", "❤️", "😂"], id: \.self) { key in
+            Button(key) { Task { await model.toggleReaction(on: row, key: key) } }
+        }
+        if row.isOwn {
+            if row.style == .ownMessage && row.image == nil { Button("Edit", systemImage: "pencil") { model.beginEdit(row) } }
+            Button("Delete", systemImage: "trash", role: .destructive) { Task { await model.delete(row) } }
+        }
+    }
+
     var body: some View {
         switch row.style {
         case .message, .ownMessage:
@@ -90,8 +108,21 @@ private struct RowView: View {
                     .background(row.style == .ownMessage ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.15), in: .rect(cornerRadius: 12))
                     .opacity(row.status == nil ? 1 : 0.6)
                 if let status = row.status { Text(status).font(.caption2).foregroundStyle(.secondary) }
+                if !row.reactions.isEmpty {
+                    HStack {
+                        ForEach(row.reactions) { chip in
+                            Button { Task { await model.toggleReaction(on: row, key: chip.key) } } label: {
+                                Text("\(chip.key) \(chip.count)").font(.caption)
+                                    .padding(.horizontal, 8).padding(.vertical, 3)
+                                    .background(chip.reactedByMe ? Color.accentColor.opacity(0.3) : Color.secondary.opacity(0.15), in: .capsule)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
             }
             .frame(maxWidth: .infinity, alignment: row.style == .ownMessage ? .trailing : .leading)
+            .contextMenu { if row.eventID != nil { actions } }
         case .notice:
             Text(row.text).font(.callout).foregroundStyle(.secondary)
         case .emote:

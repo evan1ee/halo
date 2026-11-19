@@ -181,6 +181,12 @@ public actor MatrixSessionPort: SessionPort {
         } catch { throw ErrorMapper.map(error) }
     }
 
+    /// The signed-in user's Matrix ID, used to tell own reactions from others'.
+    func ownUserID() throws(HaloError) -> String {
+        guard let client else { throw .unauthorized(soft: false) }
+        do { return try client.userId() } catch { throw ErrorMapper.map(error) }
+    }
+
     /// The SDK's encryption object for the signed-in client.
     func encryption() throws(HaloError) -> Encryption {
         guard let client else { throw .unauthorized(soft: false) }

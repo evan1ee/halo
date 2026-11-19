@@ -118,4 +118,45 @@ struct TimelineViewModelTests {
         await model.send()
         #expect(model.draft == "kept" && model.sendError != nil)
     }
+
+    @Test("reactions, edit and delete drive the timeline through the coordinator; edit mode round-trips the text")
+    func interactions() async throws {
+        let port = FakeTimelinePort()
+        let room = try RoomID("!r:x.org")
+        port.addRoom(room)
+        let model = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room))
+        await model.start()
+        func rows() -> [TimelineRow] { if case .live(let rows, _, _, _) = model.content { rows } else { [] } }
+        for _ in 0..<500_000 { if case .live = model.content { break }; await Task.yield() }
+
+        model.draft = "my message"
+        await model.send()
+        for _ in 0..<500_000 where rows().first?.eventID == nil { await Task.yield() }
+        let sent = try #require(rows().first)
+        #expect(sent.isOwn && sent.eventID != nil)
+
+        await model.toggleReaction(on: sent, key: "👍")
+        for _ in 0..<500_000 where rows().first?.reactions.isEmpty != false { await Task.yield() }
+        #expect(rows().first?.reactions == [.init(key: "👍", count: 1, reactedByMe: true)])
+
+        model.beginEdit(rows()[0])
+        #expect(model.editing != nil && model.draft == "my message")
+        model.draft = "changed"
+        await model.send()
+        #expect(model.editing == nil && model.draft.isEmpty)
+        for _ in 0..<500_000 where rows().first?.text != "changed (edited)" { await Task.yield() }
+        #expect(rows().first?.text == "changed (edited)")
+
+        await model.delete(rows()[0])
+        for _ in 0..<500_000 where rows().first?.text != "Message deleted" { await Task.yield() }
+        #expect(rows().first?.text == "Message deleted")
+    }
+
+    @Test("someone else's message can't be edited or deleted from the UI")
+    func foreign() throws {
+        let model = try model()
+        let row = model.row(event(.text("theirs", isEdited: false)))
+        model.beginEdit(row)
+        #expect(model.editing == nil)
+    }
 }

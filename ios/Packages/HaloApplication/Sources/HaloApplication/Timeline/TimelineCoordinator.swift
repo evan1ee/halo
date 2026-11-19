@@ -103,6 +103,24 @@ public actor TimelineCoordinator {
         try await session.send(text: text)
     }
 
+    /// Reacts to (or un-reacts from) a confirmed event of the open timeline.
+    public func toggleReaction(on event: EventID, key: String) async throws(HaloError) {
+        guard let session, case .live = status else { throw .cancelled }
+        try await session.toggleReaction(on: event, key: key)
+    }
+
+    /// Edits the user's own message.
+    public func edit(event: EventID, newText: String) async throws(HaloError) {
+        guard let session, case .live = status else { throw .cancelled }
+        try await session.edit(event: event, newText: newText)
+    }
+
+    /// Deletes the user's own message.
+    public func delete(event: EventID) async throws(HaloError) {
+        guard let session, case .live = status else { throw .cancelled }
+        try await session.delete(event: event)
+    }
+
     // MARK: Private
 
     private func subscribe() {

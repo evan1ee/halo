@@ -14,6 +14,13 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   pass; SwiftLint skipped (not configured). Nothing iOS-specific has been built anywhere.
 
 ## 2. Completed work
+**2026-11-19 (latest+7) — M2: reactions, edit, delete**
+- `ReactionSummary` on `TimelineEvent`; `TimelineSession.toggleReaction(on:key:)`, `edit(event:newText:)`, `delete(event:)` (confirmed events only, by `EventID`); `FakeTimelinePort` implements them
+  with distinct event IDs; `TimelinePortContract.verifyInteractions` (send → react → un-react → blank edit rejected → edit → delete); `TimelineCoordinator` methods; adapter via `timeline.toggleReaction/edit/redactEvent`,
+  `TimelineMapper` now takes the own user ID (reactedByMe) and `MatrixSessionPort.ownUserID()`. `FeatureTimeline`: reaction chips, long-press menu (👍 ❤️ 😂, Edit/Delete for own), edit mode in the composer.
+  Adapter 16 tests pass vs infra/dev (contract includes interactions); Application 42; verified in the simulator (menu, 👍 chip). Edit and delete from the UI were not tapped through by hand; covered by VM tests + the adapter contract.
+- Not done: replies, a full emoji picker, formatted-body rendering, typing indicators.
+
 **2026-11-19 (latest+6) — M2 started: sending text**
 - `SendState` (sent/sending/failed(recoverable)) on `TimelineEvent`; `TimelineSession.send(text:)` (blank → `invalidInput("EMPTY_MESSAGE")`); `FakeTimelinePort` echo+confirm,
   `TimelinePortContract.verifySend`; `TimelineCoordinator.send`; adapter `MatrixTimelineSession.send` (`timeline.send` + `messageEventContentFromMarkdown`), `enableAllSendQueues(true)`
@@ -143,7 +150,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 ## 6. Next steps
 1. Push this branch / open a PR; check CI.
 2. (Done) contracts pass on infra/dev. Keep running them after every adapter change.
-3. M2 next (docs/features/MESSAGING.md): reply/edit/delete/reactions, typing, formatted-body rendering, offline send test (AC-M1). M1 remaining: first real persisted data (read-intent/notification stores arrive with M3), video/audio/file display, QR/emoji verification, NSE spike and G-NSE. Answer Q-XCODEGEN before adding the next package to the app.
+3. M2 next (docs/features/MESSAGING.md): replies, emoji picker, typing, formatted-body rendering, offline send test (AC-M1). M1 remaining: first real persisted data (read-intent/notification stores arrive with M3), video/audio/file display, QR/emoji verification, NSE spike and G-NSE. Answer Q-XCODEGEN before adding the next package to the app.
 4. Without a Mac: V-APPLE-1 from Apple docs; M1 prep — Halo's Sygnal pushkin in `infra/sygnal/` with tests and `pushkin.yml` (ADR-0015).
 
 ## 7. Next Session Prompt

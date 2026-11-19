@@ -5,25 +5,26 @@ import MatrixRustSDK
 
 /// Maps upstream timeline items to Halo's. Names that exist on both sides are written module-qualified.
 enum TimelineMapper {
-    static func map(_ update: MatrixRustSDK.TimelineDiff) -> HaloDomain.TimelineDiff {
+    static func map(_ update: MatrixRustSDK.TimelineDiff, ownUserID: String) -> HaloDomain.TimelineDiff {
+        func convert(_ item: MatrixRustSDK.TimelineItem) -> HaloDomain.TimelineItem { map(item, ownUserID: ownUserID) }
         switch update {
-        case .append(let values): .append(values.map(map))
-        case .clear: .clear
-        case .pushFront(let value): .pushFront(map(value))
-        case .pushBack(let value): .pushBack(map(value))
-        case .popFront: .popFront
-        case .popBack: .popBack
-        case .insert(let index, let value): .insert(index: Int(index), map(value))
-        case .set(let index, let value): .set(index: Int(index), map(value))
-        case .remove(let index): .remove(index: Int(index))
-        case .truncate(let length): .truncate(length: Int(length))
-        case .reset(let values): .reset(values.map(map))
+        case .append(let values): return .append(values.map(convert))
+        case .clear: return .clear
+        case .pushFront(let value): return .pushFront(convert(value))
+        case .pushBack(let value): return .pushBack(convert(value))
+        case .popFront: return .popFront
+        case .popBack: return .popBack
+        case .insert(let index, let value): return .insert(index: Int(index), convert(value))
+        case .set(let index, let value): return .set(index: Int(index), convert(value))
+        case .remove(let index): return .remove(index: Int(index))
+        case .truncate(let length): return .truncate(length: Int(length))
+        case .reset(let values): return .reset(values.map(convert))
         }
     }
 
-    static func map(_ item: MatrixRustSDK.TimelineItem) -> HaloDomain.TimelineItem {
+    static func map(_ item: MatrixRustSDK.TimelineItem, ownUserID: String) -> HaloDomain.TimelineItem {
         let id = TimelineItemID(item.uniqueId().id)
-        if let event = item.asEvent() { return HaloDomain.TimelineItem(id: id, content: .event(map(event))) }
+        if let event = item.asEvent() { return HaloDomain.TimelineItem(id: id, content: .event(map(event, ownUserID: ownUserID))) }
         if let virtual = item.asVirtual() { return HaloDomain.TimelineItem(id: id, content: .virtual(map(virtual))) }
         return HaloDomain.TimelineItem(id: id, content: .event(
             HaloDomain.TimelineEvent(eventID: nil, sender: nil, senderName: nil, timestamp: Date(timeIntervalSince1970: 0), isOwn: false, kind: .unsupported)))
@@ -37,7 +38,7 @@ enum TimelineMapper {
         }
     }
 
-    static func map(_ event: EventTimelineItem) -> HaloDomain.TimelineEvent {
+    static func map(_ event: EventTimelineItem, ownUserID: String) -> HaloDomain.TimelineEvent {
         var eventID: EventID?
         if case .eventId(let raw) = event.eventOrTransactionId { eventID = try? EventID(raw) }
         var senderName: String?
@@ -45,7 +46,10 @@ enum TimelineMapper {
         return HaloDomain.TimelineEvent(
             eventID: eventID, sender: try? UserID(event.sender), senderName: senderName,
             timestamp: date(event.timestamp), isOwn: event.isOwn, kind: kind(of: event.content),
-            sendState: sendState(of: event.localSendState))
+            sendState: sendState(of: event.localSendState),
+            reactions: event.reactions.map { reaction in
+                ReactionSummary(key: reaction.key, count: reaction.senders.count, reactedByMe: reaction.senders.contains { $0.senderId == ownUserID })
+            })
     }
 
     static func kind(of content: TimelineItemContent) -> TimelineEventKind {

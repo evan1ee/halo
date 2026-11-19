@@ -20,5 +20,16 @@ public protocol TimelineSession: Sendable {
     /// `.sent` when the server confirms. Throws `.invalidInput("EMPTY_MESSAGE")` for blank text.
     func send(text: String) async throws(HaloError)
 
+    /// Adds the signed-in user's reaction `key` to a confirmed event, or removes it if already there. Events that
+    /// are still sending have no event ID yet and can't be reacted to.
+    func toggleReaction(on event: EventID, key: String) async throws(HaloError)
+
+    /// Replaces the text of the user's own message. Blank text throws `.invalidInput("EMPTY_MESSAGE")`; someone
+    /// else's message throws `.forbidden`.
+    func edit(event: EventID, newText: String) async throws(HaloError)
+
+    /// Deletes (redacts) the user's own message.
+    func delete(event: EventID) async throws(HaloError)
+
     func close() async
 }

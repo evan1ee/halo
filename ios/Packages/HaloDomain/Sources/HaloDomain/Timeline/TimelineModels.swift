@@ -36,11 +36,13 @@ public struct TimelineEvent: Sendable, Equatable {
     public let kind: TimelineEventKind
     /// Local echo state of an event this device is sending; remote events are always `.sent`.
     public let sendState: SendState
+    public let reactions: [ReactionSummary]
 
     public init(
         eventID: EventID?, sender: UserID?, senderName: String?, timestamp: Date, isOwn: Bool, kind: TimelineEventKind,
-        sendState: SendState = .sent
+        sendState: SendState = .sent, reactions: [ReactionSummary] = []
     ) {
+        self.reactions = reactions
         self.sendState = sendState
         self.eventID = eventID
         self.sender = sender
@@ -52,6 +54,20 @@ public struct TimelineEvent: Sendable, Equatable {
 }
 
 /// What an event is, as far as M1 renders it (TIMELINE FR-2). Anything else is `.unsupported`.
+/// One reaction key on an event (docs/features/TIMELINE.md FR-7): the emoji, how many people used it, and whether
+/// the signed-in user is one of them.
+public struct ReactionSummary: Sendable, Equatable {
+    public let key: String
+    public let count: Int
+    public let reactedByMe: Bool
+
+    public init(key: String, count: Int, reactedByMe: Bool) {
+        self.key = key
+        self.count = count
+        self.reactedByMe = reactedByMe
+    }
+}
+
 /// Where an own message is on its way to the server (docs/features/MESSAGING.md §6). Unconfirmed things look
 /// unconfirmed (AGENTS.md §4.4).
 public enum SendState: Sendable, Equatable {

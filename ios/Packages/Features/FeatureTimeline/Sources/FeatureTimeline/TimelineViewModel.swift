@@ -15,6 +15,17 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     public let image: Image?
     /// "Sending…" or "Not sent" for an own message that the server hasn't confirmed; `nil` once it is sent.
     public let status: String?
+    /// Set for confirmed events only: reactions, edits and deletes need it.
+    public let eventID: EventID?
+    public let isOwn: Bool
+    public let reactions: [Chip]
+
+    public struct Chip: Equatable, Sendable, Identifiable {
+        public var id: String { key }
+        public let key: String
+        public let count: Int
+        public let reactedByMe: Bool
+    }
 
     public struct Image: Equatable, Sendable {
         public let ref: MediaRef
@@ -22,7 +33,13 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
         public let aspectRatio: Double?
     }
 
-    init(id: String, style: Style, sender: String?, text: String, image: Image? = nil, status: String? = nil) {
+    init(
+        id: String, style: Style, sender: String?, text: String, image: Image? = nil, status: String? = nil,
+        eventID: EventID? = nil, isOwn: Bool = false, reactions: [Chip] = []
+    ) {
+        self.eventID = eventID
+        self.isOwn = isOwn
+        self.reactions = reactions
         self.status = status
         self.id = id
         self.style = style
@@ -46,6 +63,8 @@ public final class TimelineViewModel {
     public var draft = ""
     public private(set) var isSending = false
     public private(set) var sendError: String?
+    /// The own message being edited, or `nil` when the composer writes a new message.
+    public private(set) var editing: EventID?
 
     public var canSend: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending }
 
@@ -94,10 +113,45 @@ public final class TimelineViewModel {
         sendError = nil
         defer { isSending = false }
         do {
-            try await coordinator.send(text)
+            if let editing {
+                try await coordinator.edit(event: editing, newText: text)
+                self.editing = nil
+            } else {
+                try await coordinator.send(text)
+            }
             draft = ""
         } catch {
             sendError = error == .network(retryable: true) ? "Can't reach the server. Your message was kept." : "The message couldn't be sent."
+        }
+    }
+
+    /// Reacts to a confirmed message, or removes the user's reaction.
+    public func toggleReaction(on row: TimelineRow, key: String) async {
+        guard let id = row.eventID else { return }
+        await perform { try await coordinator.toggleReaction(on: id, key: key) }
+    }
+
+    /// Deletes the user's own confirmed message.
+    public func delete(_ row: TimelineRow) async {
+        guard let id = row.eventID, row.isOwn else { return }
+        await perform { try await coordinator.delete(event: id) }
+    }
+
+    /// Loads an own, confirmed text message into the composer for editing.
+    public func beginEdit(_ row: TimelineRow) {
+        guard let id = row.eventID, row.isOwn, row.style == .ownMessage, row.image == nil else { return }
+        editing = id
+        draft = row.text.replacingOccurrences(of: " (edited)", with: "")
+    }
+
+    public func cancelEdit() {
+        editing = nil
+        draft = ""
+    }
+
+    private func perform(_ action: () async throws -> Void) async {
+        do { try await action() } catch {
+            sendError = (error as? HaloError) == .forbidden ? "You can only change your own messages." : "That didn't work. Try again."
         }
     }
 
@@ -151,7 +205,8 @@ public final class TimelineViewModel {
             case .text(let body, let edited):
                 return TimelineRow(
                     id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: edited ? "\(body) (edited)" : body,
-                    status: Self.status(of: event.sendState))
+                    status: Self.status(of: event.sendState), eventID: event.eventID, isOwn: event.isOwn,
+                    reactions: Self.chips(event.reactions))
             case .notice(let body, _):
                 return TimelineRow(id: id, style: .notice, sender: name, text: body)
             case .emote(let body, _):
@@ -163,7 +218,9 @@ public final class TimelineViewModel {
                     guard let width = attachment.width, let height = attachment.height, height > 0 else { return nil }
                     return Double(width) / Double(height)
                 }()
-                    return TimelineRow(id: id, style: style, sender: name, text: attachment.body, image: .init(ref: source, aspectRatio: ratio))
+                    return TimelineRow(
+                        id: id, style: style, sender: name, text: attachment.body, image: .init(ref: source, aspectRatio: ratio),
+                        eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions))
                 }
                 return TimelineRow(id: id, style: style, sender: name, text: "[\(Self.label(attachment.kind))] \(attachment.body)")
             case .sticker(let body, _):
@@ -181,6 +238,10 @@ public final class TimelineViewModel {
                 return TimelineRow(id: id, style: .placeholder, sender: name, text: "Unsupported event")
             }
         }
+    }
+
+    static func chips(_ reactions: [ReactionSummary]) -> [TimelineRow.Chip] {
+        reactions.map { TimelineRow.Chip(key: $0.key, count: $0.count, reactedByMe: $0.reactedByMe) }
     }
 
     static func status(of state: SendState) -> String? {

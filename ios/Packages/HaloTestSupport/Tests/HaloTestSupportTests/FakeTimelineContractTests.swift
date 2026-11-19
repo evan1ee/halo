@@ -51,4 +51,12 @@ struct FakeTimelineContractTests {
         try await TimelinePortContract.verifySend(port, room: room, text: "hello there")
         #expect(port.sentTexts(in: room) == ["hello there"])
     }
+
+    @Test("react, un-react, edit and delete on an own message")
+    func interactions() async throws {
+        let port = FakeTimelinePort()
+        let room = try RoomID("!r:x.org")
+        port.addRoom(room, items: [Self.text("1", "one")])
+        try await TimelinePortContract.verifyInteractions(port, room: room, text: "interact with me")
+    }
 }

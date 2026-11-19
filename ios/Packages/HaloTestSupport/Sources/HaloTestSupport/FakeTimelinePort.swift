@@ -102,9 +102,56 @@ public final class FakeTimelinePort: TimelinePort {
             let confirmed = TimelineItem(
                 id: item.id,
                 content: .event(TimelineEvent(
-                    eventID: nil, sender: nil, senderName: nil, timestamp: Date(), isOwn: true,
+                    eventID: try? EventID("$fake-\(UUID().uuidString.prefix(8))"), sender: nil, senderName: nil, timestamp: Date(), isOwn: true,
                     kind: .text(trimmed, isEdited: false), sendState: .sent)))
             try? port.emit(.set(index: count, confirmed), in: room)
+        }
+
+        func toggleReaction(on event: EventID, key: String) async throws(HaloError) {
+            try modify(event) { e in
+                var reactions = e.reactions
+                if let index = reactions.firstIndex(where: { $0.key == key }) {
+                    let current = reactions[index]
+                    if current.reactedByMe {
+                        if current.count <= 1 { reactions.remove(at: index) } else { reactions[index] = ReactionSummary(key: key, count: current.count - 1, reactedByMe: false) }
+                    } else {
+                        reactions[index] = ReactionSummary(key: key, count: current.count + 1, reactedByMe: true)
+                    }
+                } else {
+                    reactions.append(ReactionSummary(key: key, count: 1, reactedByMe: true))
+                }
+                return TimelineEvent(eventID: e.eventID, sender: e.sender, senderName: e.senderName, timestamp: e.timestamp, isOwn: e.isOwn, kind: e.kind, sendState: e.sendState, reactions: reactions)
+            }
+        }
+
+        func edit(event: EventID, newText: String) async throws(HaloError) {
+            let trimmed = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { throw .invalidInput("EMPTY_MESSAGE") }
+            try modify(event) { e in
+                guard e.isOwn else { return nil }
+                return TimelineEvent(eventID: e.eventID, sender: e.sender, senderName: e.senderName, timestamp: e.timestamp, isOwn: true, kind: .text(trimmed, isEdited: true), sendState: e.sendState, reactions: e.reactions)
+            }
+        }
+
+        func delete(event: EventID) async throws(HaloError) {
+            try modify(event) { e in
+                guard e.isOwn else { return nil }
+                return TimelineEvent(eventID: e.eventID, sender: e.sender, senderName: e.senderName, timestamp: e.timestamp, isOwn: true, kind: .redacted, sendState: e.sendState)
+            }
+        }
+
+        /// Replaces the event with `event` in the room's items and tells subscribers. `nil` from `change` means forbidden.
+        private func modify(_ id: EventID, _ change: (TimelineEvent) -> TimelineEvent?) throws(HaloError) {
+            let found: (Int, TimelineItem)? = port.rooms.withLock { rooms in
+                guard let items = rooms[room]?.items else { return nil }
+                for (index, item) in items.enumerated() {
+                    if case .event(let event) = item.content, event.eventID == id { return (index, item) }
+                }
+                return nil
+            }
+            guard let (index, item) = found, case .event(let event) = item.content else { throw .notFound }
+            guard let changed = change(event) else { throw .forbidden }
+            try port.emit(.set(index: index, TimelineItem(id: item.id, content: .event(changed))), in: room)
         }
 
         func close() async { port.rooms.withLock { $0[room]?.openSessions -= 1 } }

@@ -116,4 +116,19 @@ struct TimelineCoordinatorTests {
         #expect(items(done) == ["one", "hello"])
         await #expect(throws: HaloError.invalidInput("EMPTY_MESSAGE")) { try await coordinator.send("  ") }
     }
+
+    @Test("reaction, edit and delete go through the open timeline and refuse when it is closed")
+    func interactions() async throws {
+        let port = FakeTimelinePort()
+        let room = try RoomID("!r:x.org")
+        port.addRoom(room)
+        let coordinator = TimelineCoordinator(port: port, room: room)
+        let someEvent = try EventID("$e")
+        await #expect(throws: HaloError.cancelled) { try await coordinator.toggleReaction(on: someEvent, key: "👍") }
+        await #expect(throws: HaloError.cancelled) { try await coordinator.edit(event: someEvent, newText: "x") }
+        await #expect(throws: HaloError.cancelled) { try await coordinator.delete(event: someEvent) }
+        await coordinator.open()
+        _ = await wait(coordinator) { if case .live = $0 { true } else { false } }
+        await #expect(throws: HaloError.notFound) { try await coordinator.delete(event: someEvent) }  // unknown event
+    }
 }
