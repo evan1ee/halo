@@ -14,7 +14,8 @@ Plus: badge counting, display formatting (99+), reason codes for the auditor.
 | P2 | `evaluate` is total: no crash, and `display == .none ⇔ !attention ∧ !hasUnread` |
 | P3 | **Order independence**: applying the same multiset of snapshot updates (by sequence) in any order yields the same final state |
 | P4 | **Idempotence**: re-applying any input leaves the state unchanged |
-| P5 | Server zero (both counts 0), no unconfirmed notified events, not marked, not invited ⇒ `!attention` |
+| P5 | Server zero (both counts 0) **with `serverCanCount`**, no unconfirmed notified events, not marked, not invited ⇒ `!attention` |
+| P5b | Encrypted room in mentions mode with `sdk.unreadMentions > 0` and no covering intent ⇒ `attention` even when server counts are 0 (E2x) |
 | P6 | A notified event newer than every read position ⇒ `attention` (in all-messages mode; or if it's a mention in mentions mode) |
 | P7 | `badge == |{r : attention(r)}|` and is identical for app and NSE code paths after serialising/deserialising inputs through the DB |
 | P8 | The intent store never moves a room's intent backwards under concurrent upserts |
@@ -45,6 +46,7 @@ Actors: **A** = the Halo user on device A1 (under test); **A2** = the same user'
 | S18 | B's server clock skewed by −10 min | Ordering limitation documented; no phantom unread after A1 views the latest event |
 | S19 | 50 rooms change state while the app reconciles (concurrency) | Final state equals a fresh evaluation |
 | S20 | App killed between "intent written" and "receipt sent" | After relaunch the outbox sends the receipt; A2 sees the room as read |
+| S21 | Encrypted room in mentions-only mode; B mentions A (server counts stay 0) | A1: attention `.mentions(1)` (E2x); after A1 views it → cleared; after A2 views it instead → cleared once the SDK applies A2's receipt (auditor reports `SERVER_BLIND` meanwhile) |
 
 ## 4. Regression procedure
 1. Reproduce with the auditor export or a recorded trace.

@@ -20,6 +20,7 @@
 | V-PUSH-4 | The notification Reply action launches the app in the background long enough to send | Device test | M3 | — |
 | V-RS-1 | `subscribe_to_room_info_updates` fires when own receipts / counts change | Adapter test against the dev Synapse with a second client reading | M1 | M3 |
 | V-RS-3 | The adapter can supply a timeline order index for events in open timelines (clock-skew mitigation) | Inspect timeline item APIs at M2 | M2 | — |
+| V-RS-6 | Synapse counts every encrypted event as notifying in all-messages mode, and gives 0 in mentions/keywords or mute mode for encrypted rooms (basis of `serverCanCount`) | Scenarios S06, S07, S21 inspecting `/sync` counts on the pinned Synapse | M3 | M3 |
 | V-RS-4 | Receipts on the latest *visible* event (skipping hidden state events) clear server counts | Scenario with hidden state events after the last message | M3 | M3 |
 | V-RS-5 | Which sliding-sync extensions `RoomListService` enables for which rooms (receipts coverage) | Log the SSS request bodies from the SDK on the dev Synapse | M1 | M3 |
 | V-SYNC-2 | The SDK send queue persists unsent events across app restarts | Kill during send offline; relaunch; observe | M2 | M2 |

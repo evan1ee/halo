@@ -22,7 +22,7 @@ Full design: [matrix/UNREAD_STATE.md](matrix/UNREAD_STATE.md). Must be prevented
 - **AC-U2** Reading on another device clears attention within 5 s while Halo is in the foreground (one sync round trip), and on the next foreground or background refresh otherwise; covered delivered notifications are removed.
 - **AC-U3** `badge == count(rooms needing attention)`, the same in the app and NSE paths for the same inputs.
 - **AC-U4** After app kill during sync, 24 h offline, reconnect, gaps, out-of-order receipts or a redacted unread event, the state converges with no user action.
-- **AC-U5** Server counts = 0, not marked unread and no unconfirmed newer event ⇒ no attention (no "phantom unread").
+- **AC-U5** Server counts = 0 where the server can count the room (unencrypted, or encrypted in all-messages mode), not marked unread and no unconfirmed newer event ⇒ no attention (no "phantom unread").
 - **AC-U6** A new notifying event the device has seen (sync or push) ⇒ attention until a receipt at or beyond it exists (no "missed unread").
 - **AC-U7** Every notification is delivered at most once per event id.
 - **AC-U8** (manual soak) 7 days of daily use with zero *unexplained* auditor findings.

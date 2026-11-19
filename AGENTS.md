@@ -86,7 +86,7 @@ Before adding or upgrading **any** dependency: (1) justify it in the PR/commit; 
 ## 12. Testing requirements
 - Every behaviour change ships with tests at the lowest sensible layer ([docs/testing/TEST_STRATEGY.md](docs/testing/TEST_STRATEGY.md)).
 - **Every bug fix adds a regression test** that fails before the fix. Read-state bugs add a trace fixture ([docs/testing/UNREAD_REGRESSION_TESTS.md](docs/testing/UNREAD_REGRESSION_TESTS.md) §4).
-- Changes to `ReadStatePolicy`, receipts, NSE or the outbox must keep P1–P8 and S01–S20 green.
+- Changes to `ReadStatePolicy`, receipts, NSE or the outbox must keep P1–P8 and S01–S21 green.
 - Port changes start with a failing contract test and update the fake.
 - No sleeps in tests; inject clocks and schedulers.
 

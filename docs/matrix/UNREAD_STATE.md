@@ -82,9 +82,11 @@ function. `BadgeCalculator.badge(_ states: [RoomReadState]) -> Int` = `states.fi
 
 ## 5. Evaluation rules
 
+Evaluation order: E0 → compute `readPosTs` → `unconfirmedNotified` → E1/E1b → E2/E2x → E3 → E4 → E5 → attention by mode.
+
 Let **`readPosTs`** (the read position, as an event timestamp) be the maximum of:
 - `localIntent.eventTs` (Halo knows the timestamp of the event the user saw);
-- `latestEvent.ts` **if** E2 (server zero) holds for this snapshot;
+- `latestEvent.ts` **if** E2 (server zero, with `serverCanCount`) holds for this snapshot;
 - the event timestamp of `ownReceipt.eventId` **if** the adapter can resolve it cheaply (open timeline) — optional.
 
 **[DECISION]** Read state never needs to order receipts against each other: E1 uses the local intent, E2 uses server counts.
@@ -95,7 +97,8 @@ This avoids depending on receipt timestamps, which record *when* something was r
 | **E0 Invite** | `membership == invited` | attention = true, display = .dot | `INVITE` |
 | **E1 Local intent covers latest** | `localIntent` exists and `latestEvent.ts ≤ localIntent.eventTs` | notify = highlight = 0, hasUnread = false | `INTENT_COVERS` |
 | **E1b Own latest** | `latestEvent.senderIsSelf` and no newer `unconfirmedNotified` | same as E1 (sending implies reading; an intent is created at the own event) | `OWN_LATEST` |
-| **E2 Server zero** | `server.notification == 0 && server.highlight == 0` | notify = highlight = 0 regardless of SDK counts; if SDK counts > 0 → audit (explained) | `SERVER_ZERO` (+`SDK_STALE`) |
+| **E2 Server zero** | `server.notification == 0 && server.highlight == 0` **and the server could have counted** (`serverCanCount` = `!isEncrypted ∨ mode == allMessages`) | notify = highlight = 0 regardless of SDK counts; if SDK counts > 0 → audit (explained) | `SERVER_ZERO` (+`SDK_STALE`) |
+| **E2x Server blind** | server counts are 0 but `!serverCanCount` (encrypted room in mentions/keywords or mute mode: the server can't see mentions in encrypted content and room rules suppress counting) | E2 does **not** apply; continue with E3b/E3c using SDK counts; confidence approximate if `sdk.unreadMentions > 0` and no intent covers the latest event | `SERVER_BLIND` |
 | **E3a Unencrypted** | `!isEncrypted` and not E1/E2 | notify = server.notification, highlight = server.highlight, confidence exact | `SERVER_COUNTS` |
 | **E3b Encrypted, SDK saw it** | `isEncrypted`, `sdk.unreadMessages > 0` | notify = sdk.unreadNotifications, highlight = sdk.unreadMentions, confidence exact | `SDK_COUNTS` |
 | **E3c Encrypted, SDK blind** | `isEncrypted`, `sdk.unreadMessages == 0`, server notification > 0 | notify = 1 (at least), highlight = unknown → 0, display .dot, confidence approximate | `ENC_SDK_BLIND` |
@@ -119,7 +122,7 @@ flowchart TD
   I -- yes --> ATT[attention]
   I -- no --> E1{local intent or own event<br/>covers latest?}
   E1 -- yes --> Z[notify=0, highlight=0]
-  E1 -- no --> E2{server counts both 0?}
+  E1 -- no --> E2{server counts both 0<br/>and server can count?}
   E2 -- yes --> Z
   E2 -- no --> ENC{encrypted?}
   ENC -- no --> SC[server counts, exact]
@@ -134,9 +137,12 @@ flowchart TD
   E5 --> MODE[attention by notification mode]
 ```
 
-**Why E2 is safe** **[DECISION, verified by scenario tests]**: server counts are computed relative to the user's latest
-receipt across all devices. If they are zero in a snapshot that already contains `latestEvent`, every
-notifying event up to it has been read on some device. A new event after that snapshot comes with new counts in the
+**Why E2 is safe — and when it isn't** **[DECISION, validated by scenario tests]**: server counts are computed relative to
+the user's latest receipt across all devices. If they are zero in a snapshot that already contains `latestEvent`, and the server
+*could* have counted the room's events, every notifying event up to it has been read on some device. The server can count
+everything in unencrypted rooms, and in encrypted rooms in all-messages mode (the default encrypted-room push rules notify for
+every encrypted event). It **can't** in encrypted rooms whose mode is mentions/keywords or mute: room-level rules suppress
+counting and mentions are hidden in the ciphertext — hence E2x **[ASSUMPTION V-RS-6: verify Synapse's counts for encrypted rooms per mode on the pinned version]**. A new event after that snapshot comes with new counts in the
 next snapshot. Exception: an event known only from a push (not yet synced) — handled by E4.
 
 ## 6. Lifecycle of a room's read state
@@ -191,5 +197,5 @@ AC-U1 … AC-U8 in [../REQUIREMENTS.md](../REQUIREMENTS.md). Gate **G-UNREAD** (
 ## 11. Test requirements (summary)
 - Unit: one test per rule row, per mode, per reason code.
 - Property: P1–P8 ([../testing/UNREAD_REGRESSION_TESTS.md](../testing/UNREAD_REGRESSION_TESTS.md) §2).
-- Integration: scenarios S01–S20 against Synapse.
+- Integration: scenarios S01–S21 against Synapse.
 - Regression: every bug → a recorded input trace as a fixture.

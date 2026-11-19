@@ -9,7 +9,7 @@ Decision: D36 (Linux CI for everything that can run on Linux; Apple builds on th
 | `docs.yml` | PR, push to main | ubuntu | `scripts/validate-docs.sh` | **Phase 0** (script exists) |
 | `swift-linux.yml` | PR | ubuntu + Docker `swift` image | build + test `HaloFoundation`, `HaloDomain`, `HaloApplication`, `HaloPersistence`, `HaloTestSupport` | M0 |
 | `boundaries.yml` | PR | ubuntu | `scripts/check-boundaries.sh` (forbidden imports, upstream types in public API) | M0 |
-| `scenarios.yml` | PR touching read state / nightly | ubuntu + Docker Compose (`infra/test`) | start Synapse → `tools/scenario-driver` S01–S20 + feature scenarios | M3 |
+| `scenarios.yml` | PR touching read state / nightly | ubuntu + Docker Compose (`infra/test`) | start Synapse → `tools/scenario-driver` S01–S21 + feature scenarios | M3 |
 | `secrets.yml` | PR | ubuntu | gitleaks | M0 |
 | `licenses.yml` | PR touching `Package.resolved`, `ios/SDKVERSION.md` or `core/` | ubuntu (+ Rust) | inventory for the pinned SDK commit, allowlist check, diff report | M0 |
 

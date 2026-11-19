@@ -19,6 +19,7 @@ One place for account, notifications, privacy, appearance, storage, diagnostics 
 | Privacy | Read receipts: public / private (D7); typing notices on/off; media previews; URL previews |
 | Appearance | System / light / dark, text size follows Dynamic Type, timeline density |
 | Stickers | Manage packs, favourites (links to the sticker manager) |
+| Bots | Allowlisted bot user IDs for template cards (synced as `app.halo.bot_allowlist`, see BOT_MESSAGES §3) |
 | Storage | SDK store sizes, clear cache |
 | Diagnostics | Auditor summary (debug/TestFlight), "Reconcile now", "Export diagnostics", log level |
 | About | Version, SDK version, **Acknowledgements** (generated, D39), licence notice |
