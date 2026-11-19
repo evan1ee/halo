@@ -14,6 +14,11 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   pass; SwiftLint skipped (not configured). Nothing iOS-specific has been built anywhere.
 
 ## 2. Completed work
+**2026-11-19 (latest+5) — M1: UTD reasons**
+- `UTDReason` (unknown / sentBeforeJoining / keysNotShared / senderVerificationProblem / backupDisabled); `.undecryptable(UTDReason)`; `TimelineMapper.reason(of:)`
+  from the SDK's `UtdCause` (unit-tested, adapter 16 tests); distinct explanatory rows in `FeatureTimeline`. Not tested: a real UTD turning into text when keys arrive
+  (AC-E2EE-3) — needs sending into an encrypted room (M2).
+
 **2026-11-19 (latest+4) — M1: recovery-key verification**
 - `VerificationState`/`RecoveryState`/`EncryptionStatus` (+`needsRecovery`), `EncryptionPort` (+`FakeEncryptionPort`, `EncryptionPortContract`), `EncryptionCoordinator`
   (follows session; recovery attempts; key trimmed, never kept), `MatrixEncryptionPort`, `ErrorMapper` for `RecoveryError` (wrong key → `invalidInput("RECOVERY_KEY")`),
@@ -129,7 +134,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 ## 6. Next steps
 1. Push this branch / open a PR; check CI.
 2. (Done) contracts pass on infra/dev. Keep running them after every adapter change.
-3. M1 remaining (docs/ROADMAP.md): first real persisted data (read-intent/notification stores arrive with M3), video/audio/file display, QR/emoji verification, UTD reasons, NSE spike and G-NSE. Answer Q-XCODEGEN before adding the next package to the app.
+3. M1 remaining (docs/ROADMAP.md): first real persisted data (read-intent/notification stores arrive with M3), video/audio/file display, QR/emoji verification, NSE spike and G-NSE. Answer Q-XCODEGEN before adding the next package to the app.
 4. Without a Mac: V-APPLE-1 from Apple docs; M1 prep — Halo's Sygnal pushkin in `infra/sygnal/` with tests and `pushkin.yml` (ADR-0015).
 
 ## 7. Next Session Prompt

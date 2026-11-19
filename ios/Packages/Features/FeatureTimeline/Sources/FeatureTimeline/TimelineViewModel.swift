@@ -144,8 +144,8 @@ public final class TimelineViewModel {
                 return TimelineRow(id: id, style: .message, sender: name, text: "[Sticker] \(body)")
             case .redacted:
                 return TimelineRow(id: id, style: .placeholder, sender: name, text: "Message deleted")
-            case .undecryptable:
-                return TimelineRow(id: id, style: .placeholder, sender: name, text: "Unable to decrypt this message")
+            case .undecryptable(let reason):
+                return TimelineRow(id: id, style: .placeholder, sender: name, text: Self.text(for: reason))
             case .membership(_, let displayName, let change):
                 let who = displayName ?? name
                 return TimelineRow(id: id, style: .state, sender: nil, text: "\(who) \(Self.phrase(change))")
@@ -154,6 +154,17 @@ public final class TimelineViewModel {
             case .unsupported:
                 return TimelineRow(id: id, style: .placeholder, sender: name, text: "Unsupported event")
             }
+        }
+    }
+
+    /// The reason is shown honestly; where the user can do something about it, the text says what.
+    static func text(for reason: UTDReason) -> String {
+        switch reason {
+        case .unknown: "Unable to decrypt this message. It will appear if the keys arrive."
+        case .sentBeforeJoining: "This message was sent before you joined, so you can't read it."
+        case .keysNotShared: "Unable to decrypt: the sender's device hasn't shared its keys with this device yet."
+        case .senderVerificationProblem: "Unable to decrypt: the sender's identity has changed or isn't verified."
+        case .backupDisabled: "Unable to decrypt this older message. Verify this device with your recovery key to load your key backup."
         }
     }
 

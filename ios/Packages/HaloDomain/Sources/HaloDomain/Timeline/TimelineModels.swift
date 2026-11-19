@@ -55,10 +55,24 @@ public enum TimelineEventKind: Sendable, Equatable {
     case sticker(body: String, source: MediaRef?)
     case redacted
     /// Can't be decrypted (yet). The reason is shown honestly, never hidden (R-P0-3).
-    case undecryptable
+    case undecryptable(UTDReason)
     case membership(user: UserID?, displayName: String?, change: MembershipChange)
     case otherState
     case unsupported
+}
+
+/// Why an event can't be read (docs/features/ENCRYPTION_AND_DEVICES.md FR-5). The SDK retries by itself when keys
+/// arrive, and the row then turns into the decrypted message (AC-E2EE-3).
+public enum UTDReason: Sendable, Equatable {
+    case unknown
+    /// Sent before this user joined the room: the keys were never shared with them.
+    case sentBeforeJoining
+    /// The sender's device didn't share keys with this device, or it is unknown/unsigned.
+    case keysNotShared
+    /// The sender's identity changed or is unverified in a way that blocks decryption.
+    case senderVerificationProblem
+    /// An old message whose keys would be in a key backup, which is not enabled.
+    case backupDisabled
 }
 
 public enum MediaKind: Sendable, Equatable { case image, video, audio, file }

@@ -41,6 +41,21 @@ struct ErrorMapperTests {
     }
 }
 
+@Suite("TimelineMapper UTD reasons")
+struct UTDReasonTests {
+    @Test("the SDK's cause maps to Halo's reason; non-megolm or unknown causes are .unknown")
+    func reasons() {
+        func reason(_ cause: UtdCause) -> UTDReason { TimelineMapper.reason(of: .megolmV1AesSha2(sessionId: "s", cause: cause)) }
+        #expect(reason(.sentBeforeWeJoined) == .sentBeforeJoining)
+        #expect(reason(.unsignedDevice) == .keysNotShared)
+        #expect(reason(.unknownDevice) == .keysNotShared)
+        #expect(reason(.verificationViolation) == .senderVerificationProblem)
+        #expect(reason(.historicalMessageAndBackupIsDisabled) == .backupDisabled)
+        #expect(reason(.unknown) == .unknown)
+        #expect(TimelineMapper.reason(of: .unknown) == .unknown)
+    }
+}
+
 @Suite("MatrixRoomListPort mapping")
 struct RoomListMappingTests {
     @Test("filters map to SDK kinds; unread is explicitly unsupported until M1")

@@ -75,8 +75,19 @@ enum TimelineMapper {
             }
         case .sticker(let body, _, let source): .sticker(body: body, source: ref(source))
         case .redacted: .redacted
-        case .unableToDecrypt: .undecryptable
+        case .unableToDecrypt(let message): .undecryptable(reason(of: message))
         case .poll, .other, .liveLocation: .unsupported
+        }
+    }
+
+    static func reason(of message: EncryptedMessage) -> UTDReason {
+        guard case .megolmV1AesSha2(_, let cause) = message else { return .unknown }
+        return switch cause {
+        case .sentBeforeWeJoined: .sentBeforeJoining
+        case .unsignedDevice, .unknownDevice: .keysNotShared
+        case .verificationViolation: .senderVerificationProblem
+        case .historicalMessageAndBackupIsDisabled: .backupDisabled
+        default: .unknown
         }
     }
 
