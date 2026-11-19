@@ -19,6 +19,14 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     public let eventID: EventID?
     public let isOwn: Bool
     public let reactions: [Chip]
+    /// The quoted message, shown above the text of a reply.
+    public let reply: Reply?
+
+    public struct Reply: Equatable, Sendable {
+        public let sender: String?
+        /// `nil` when the original isn't available; the view then says so.
+        public let snippet: String?
+    }
 
     public struct Chip: Equatable, Sendable, Identifiable {
         public var id: String { key }
@@ -35,8 +43,9 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
 
     init(
         id: String, style: Style, sender: String?, text: String, image: Image? = nil, status: String? = nil,
-        eventID: EventID? = nil, isOwn: Bool = false, reactions: [Chip] = []
+        eventID: EventID? = nil, isOwn: Bool = false, reactions: [Chip] = [], reply: Reply? = nil
     ) {
+        self.reply = reply
         self.eventID = eventID
         self.isOwn = isOwn
         self.reactions = reactions
@@ -65,6 +74,8 @@ public final class TimelineViewModel {
     public private(set) var sendError: String?
     /// The own message being edited, or `nil` when the composer writes a new message.
     public private(set) var editing: EventID?
+    /// The message the next send replies to, or `nil`.
+    public private(set) var replyingTo: TimelineRow?
 
     public var canSend: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending }
 
@@ -116,6 +127,9 @@ public final class TimelineViewModel {
             if let editing {
                 try await coordinator.edit(event: editing, newText: text)
                 self.editing = nil
+            } else if let id = replyingTo?.eventID {
+                try await coordinator.reply(to: id, text: text)
+                replyingTo = nil
             } else {
                 try await coordinator.send(text)
             }
@@ -141,8 +155,18 @@ public final class TimelineViewModel {
     public func beginEdit(_ row: TimelineRow) {
         guard let id = row.eventID, row.isOwn, row.style == .ownMessage, row.image == nil else { return }
         editing = id
+        replyingTo = nil
         draft = row.text.replacingOccurrences(of: " (edited)", with: "")
     }
+
+    /// Makes the next send a reply to a confirmed message.
+    public func beginReply(_ row: TimelineRow) {
+        guard row.eventID != nil else { return }
+        editing = nil
+        replyingTo = row
+    }
+
+    public func cancelReply() { replyingTo = nil }
 
     public func cancelEdit() {
         editing = nil
@@ -206,7 +230,7 @@ public final class TimelineViewModel {
                 return TimelineRow(
                     id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: edited ? "\(body) (edited)" : body,
                     status: Self.status(of: event.sendState), eventID: event.eventID, isOwn: event.isOwn,
-                    reactions: Self.chips(event.reactions))
+                    reactions: Self.chips(event.reactions), reply: Self.reply(event.replyTo))
             case .notice(let body, _):
                 return TimelineRow(id: id, style: .notice, sender: name, text: body)
             case .emote(let body, _):
@@ -238,6 +262,10 @@ public final class TimelineViewModel {
                 return TimelineRow(id: id, style: .placeholder, sender: name, text: "Unsupported event")
             }
         }
+    }
+
+    static func reply(_ preview: ReplyPreview?) -> TimelineRow.Reply? {
+        preview.map { TimelineRow.Reply(sender: $0.senderName, snippet: $0.snippet) }
     }
 
     static func chips(_ reactions: [ReactionSummary]) -> [TimelineRow.Chip] {

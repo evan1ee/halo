@@ -37,11 +37,14 @@ public struct TimelineEvent: Sendable, Equatable {
     /// Local echo state of an event this device is sending; remote events are always `.sent`.
     public let sendState: SendState
     public let reactions: [ReactionSummary]
+    /// The message this one replies to, if any (docs/features/MESSAGING.md FR-2).
+    public let replyTo: ReplyPreview?
 
     public init(
         eventID: EventID?, sender: UserID?, senderName: String?, timestamp: Date, isOwn: Bool, kind: TimelineEventKind,
-        sendState: SendState = .sent, reactions: [ReactionSummary] = []
+        sendState: SendState = .sent, reactions: [ReactionSummary] = [], replyTo: ReplyPreview? = nil
     ) {
+        self.replyTo = replyTo
         self.reactions = reactions
         self.sendState = sendState
         self.eventID = eventID
@@ -50,6 +53,20 @@ public struct TimelineEvent: Sendable, Equatable {
         self.timestamp = timestamp
         self.isOwn = isOwn
         self.kind = kind
+    }
+}
+
+/// The quoted message of a reply. `snippet` is `nil` while the original isn't loaded (or can't be shown), so the UI
+/// says so instead of inventing text.
+public struct ReplyPreview: Sendable, Equatable {
+    public let eventID: EventID
+    public let senderName: String?
+    public let snippet: String?
+
+    public init(eventID: EventID, senderName: String?, snippet: String?) {
+        self.eventID = eventID
+        self.senderName = senderName
+        self.snippet = snippet
     }
 }
 

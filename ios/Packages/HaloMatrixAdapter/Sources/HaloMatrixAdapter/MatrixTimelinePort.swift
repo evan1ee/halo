@@ -54,6 +54,11 @@ final class MatrixTimelineSession: TimelineSession {
         } catch { throw ErrorMapper.map(error) }
     }
 
+    func reply(to event: EventID, text: String) async throws(HaloError) {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw .invalidInput("EMPTY_MESSAGE") }
+        do { _ = try await timeline.sendReply(msg: messageEventContentFromMarkdown(md: text), eventId: event.rawValue) } catch { throw ErrorMapper.map(error) }
+    }
+
     func toggleReaction(on event: EventID, key: String) async throws(HaloError) {
         do { _ = try await timeline.toggleReaction(itemId: .eventId(eventId: event.rawValue), key: key) } catch { throw ErrorMapper.map(error) }
     }

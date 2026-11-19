@@ -49,7 +49,24 @@ enum TimelineMapper {
             sendState: sendState(of: event.localSendState),
             reactions: event.reactions.map { reaction in
                 ReactionSummary(key: reaction.key, count: reaction.senders.count, reactedByMe: reaction.senders.contains { $0.senderId == ownUserID })
-            })
+            },
+            replyTo: replyPreview(of: event.content))
+    }
+
+    /// The quoted message of a reply. Text-like originals give a snippet; anything else (not loaded, encrypted, media)
+    /// leaves it `nil` rather than guessing.
+    static func replyPreview(of content: TimelineItemContent) -> ReplyPreview? {
+        guard case .msgLike(let msgLike) = content, let details = msgLike.inReplyTo, let id = try? EventID(details.eventId()) else { return nil }
+        guard case .ready(let original, _, let profile, _, _) = details.event() else { return ReplyPreview(eventID: id, senderName: nil, snippet: nil) }
+        var name: String?
+        if case .ready(let displayName, _, _, _, _) = profile { name = displayName }
+        var snippet: String?
+        switch kind(of: original) {
+        case .text(let body, _), .notice(let body, _), .emote(let body, _): snippet = body
+        case .media(let attachment): snippet = attachment.body
+        default: break
+        }
+        return ReplyPreview(eventID: id, senderName: name, snippet: snippet)
     }
 
     static func kind(of content: TimelineItemContent) -> TimelineEventKind {

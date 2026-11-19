@@ -67,6 +67,13 @@ private struct Composer: View {
                     Button("Cancel") { model.cancelEdit() }.font(.caption)
                 }
             }
+            if let target = model.replyingTo {
+                HStack {
+                    Label("Replying to \(target.sender ?? "message")", systemImage: "arrowshape.turn.up.left").font(.caption).lineLimit(1)
+                    Spacer()
+                    Button("Cancel") { model.cancelReply() }.font(.caption)
+                }
+            }
             HStack(alignment: .bottom) {
                 TextField("Message", text: $model.draft, axis: .vertical)
                     .lineLimit(1...5)
@@ -91,6 +98,7 @@ private struct RowView: View {
         ForEach(["👍", "❤️", "😂"], id: \.self) { key in
             Button(key) { Task { await model.toggleReaction(on: row, key: key) } }
         }
+        Button("Reply", systemImage: "arrowshape.turn.up.left") { model.beginReply(row) }
         if row.isOwn {
             if row.style == .ownMessage && row.image == nil { Button("Edit", systemImage: "pencil") { model.beginEdit(row) } }
             Button("Delete", systemImage: "trash", role: .destructive) { Task { await model.delete(row) } }
@@ -102,6 +110,15 @@ private struct RowView: View {
         case .message, .ownMessage:
             VStack(alignment: row.style == .ownMessage ? .trailing : .leading, spacing: 2) {
                 if let sender = row.sender, row.style == .message { Text(sender).font(.caption).foregroundStyle(.secondary) }
+                if let reply = row.reply {
+                    VStack(alignment: .leading, spacing: 0) {
+                        if let name = reply.sender { Text(name).font(.caption2.bold()) }
+                        Text(reply.snippet ?? "Original message unavailable").font(.caption).lineLimit(2)
+                    }
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 6)
+                    .overlay(alignment: .leading) { Rectangle().fill(.secondary).frame(width: 2) }
+                }
                 if let image = row.image { ThumbnailView(image: image, model: model) }
                 Text(row.text)
                     .padding(8)

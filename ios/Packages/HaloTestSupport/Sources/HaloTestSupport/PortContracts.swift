@@ -197,6 +197,10 @@ public enum TimelinePortContract {
         try await session.toggleReaction(on: id, key: "👍")
         _ = try await wait("the reaction removed", body: text) { $0.reactions.isEmpty }
 
+        let replyText = text + " (reply)"
+        try await session.reply(to: id, text: replyText)
+        _ = try await wait("the reply quoting the original", body: replyText) { $0.sendState == .sent && $0.replyTo?.eventID == id }
+
         let edited = text + " (edited)"
         do { try await session.edit(event: id, newText: " ") ; throw ContractViolation("a blank edit must be rejected") } catch let error as HaloError {
             guard error == .invalidInput("EMPTY_MESSAGE") else { throw ContractViolation("a blank edit must throw invalidInput(EMPTY_MESSAGE), got \(error.code)") }

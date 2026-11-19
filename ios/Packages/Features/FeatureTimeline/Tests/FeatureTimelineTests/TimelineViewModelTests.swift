@@ -152,6 +152,36 @@ struct TimelineViewModelTests {
         #expect(rows().first?.text == "Message deleted")
     }
 
+    @Test("a reply quotes the original, and cancelling or editing drops the reply target")
+    func replies() async throws {
+        let port = FakeTimelinePort()
+        let room = try RoomID("!r:x.org")
+        port.addRoom(room)
+        let model = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room))
+        await model.start()
+        func rows() -> [TimelineRow] { if case .live(let rows, _, _, _) = model.content { rows } else { [] } }
+        for _ in 0..<500_000 { if case .live = model.content { break }; await Task.yield() }
+
+        model.draft = "original"
+        await model.send()
+        for _ in 0..<500_000 where rows().first?.eventID == nil { await Task.yield() }
+        let original = try #require(rows().first)
+
+        model.beginReply(original)
+        model.cancelReply()
+        #expect(model.replyingTo == nil)
+        model.beginReply(original)
+        model.draft = "answer"
+        await model.send()
+        #expect(model.replyingTo == nil && model.draft.isEmpty)
+        for _ in 0..<500_000 where rows().count < 2 || rows()[1].eventID == nil { await Task.yield() }
+        #expect(rows()[1].text == "answer" && rows()[1].reply?.snippet == "original")
+
+        // An unconfirmed row can't be replied to.
+        model.beginReply(TimelineRow(id: "x", style: .ownMessage, sender: nil, text: "pending"))
+        #expect(model.replyingTo == nil)
+    }
+
     @Test("someone else's message can't be edited or deleted from the UI")
     func foreign() throws {
         let model = try model()

@@ -85,7 +85,20 @@ public final class FakeTimelinePort: TimelinePort {
             return reachedStart
         }
 
-        func send(text: String) async throws(HaloError) {
+        func send(text: String) async throws(HaloError) { try await send(text: text, replyTo: nil) }
+
+        func reply(to event: EventID, text: String) async throws(HaloError) {
+            let original: TimelineEvent? = port.rooms.withLock { rooms in
+                for item in rooms[room]?.items ?? [] { if case .event(let e) = item.content, e.eventID == event { return e } }
+                return nil
+            }
+            guard let original else { throw .notFound }
+            var snippet: String?
+            if case .text(let body, _) = original.kind { snippet = body }
+            try await send(text: text, replyTo: ReplyPreview(eventID: event, senderName: original.senderName, snippet: snippet))
+        }
+
+        private func send(text: String, replyTo: ReplyPreview?) async throws(HaloError) {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { throw .invalidInput("EMPTY_MESSAGE") }
             let count = port.rooms.withLock { rooms -> Int in
@@ -96,14 +109,14 @@ public final class FakeTimelinePort: TimelinePort {
                 id: TimelineItemID("local-\(UUID().uuidString)"),
                 content: .event(TimelineEvent(
                     eventID: nil, sender: nil, senderName: nil, timestamp: Date(), isOwn: true,
-                    kind: .text(trimmed, isEdited: false), sendState: .sending)))
+                    kind: .text(trimmed, isEdited: false), sendState: .sending, replyTo: replyTo)))
             try? port.emit(.pushBack(item), in: room)
             // The server confirms: the echo turns into the sent event in place.
             let confirmed = TimelineItem(
                 id: item.id,
                 content: .event(TimelineEvent(
                     eventID: try? EventID("$fake-\(UUID().uuidString.prefix(8))"), sender: nil, senderName: nil, timestamp: Date(), isOwn: true,
-                    kind: .text(trimmed, isEdited: false), sendState: .sent)))
+                    kind: .text(trimmed, isEdited: false), sendState: .sent, replyTo: replyTo)))
             try? port.emit(.set(index: count, confirmed), in: room)
         }
 

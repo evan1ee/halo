@@ -103,6 +103,12 @@ public actor TimelineCoordinator {
         try await session.send(text: text)
     }
 
+    /// Replies to a confirmed event of the open timeline.
+    public func reply(to event: EventID, text: String) async throws(HaloError) {
+        guard let session, case .live = status else { throw .cancelled }
+        try await session.reply(to: event, text: text)
+    }
+
     /// Reacts to (or un-reacts from) a confirmed event of the open timeline.
     public func toggleReaction(on event: EventID, key: String) async throws(HaloError) {
         guard let session, case .live = status else { throw .cancelled }
