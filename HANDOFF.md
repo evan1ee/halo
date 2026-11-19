@@ -16,12 +16,13 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   constants and a one-line `.gitleaksignore` for the old commit's fingerprint (history scans see it).
 
 ## 2. Completed work
-**2026-11-19 (latest+16) — M3 start: outbound read receipts (no UI wiring yet)**
-- `ReadMarkerPort` (domain; `sendReceipt(room:event:isPrivate:)`, `setFullyRead`) + `FakeReadMarkerPort`; `ReadReceiptCoordinator` (HaloApplication): ignores candidates not newer than the room's intent,
-  keeps the newest intent per room, ≤ 1 receipt per room per 2 s (injected clock/sleep), retryable errors back off 1 s → 5 min, `flush()` for foreground/reconnect, private-receipt setting (D7), marker after receipt.
-  `MatrixReadMarkerPort` (adapter: `Room.sendSingleReceipt(.read/.readPrivate, .unthreaded)` + `markAsFullyReadUnchecked`; names checked in the pinned SDK source).
-- Checked: HaloApplication tests pass with `-warnings-as-errors` (56 tests, 6 new); adapter builds for the iOS simulator. NOT done: nothing calls the coordinator yet (no D6 visibility tracking in
-  FeatureTimeline, not composed in `AppRoot`), no adapter contract test against infra/dev, `read_intent` is in memory only (no GRDB persistence), `ownReceipt` isn't read back, confirmation rules (a)–(c) of READ_RECEIPTS §1 not built.
+**2026-11-20 (latest+17) — Outbound read receipts wired end to end**
+- `TimelineViewModel(receipts:room:)`: rows report `rowVisibility(_:isVisible:)` (List `onAppear`/`onDisappear`), `setActive` follows `scenePhase`; the newest visible *confirmed* event that stays visible for 0.5 s while active is
+  passed to `ReadReceiptCoordinator.reportSeen`. `AppRoot` owns one coordinator over `MatrixReadMarkerPort`; `HaloApp` flushes it when the scene leaves `.active`.
+- Checked: FeatureTimeline 19 tests (new `readReceipts`); app builds for the simulator; adapter contract `ReadMarkerPort` passes against infra/dev (public + private receipt, fully-read marker, unknown room → `.notFound`; run with a throwaway user).
+  In that run the Timeline/Media contracts timed out only because the throwaway room lacks their fixture content.
+- Limits: "visible" is List row appearance, not the D6 ≥ 50 % area rule (approximation); the top-most-screen condition is `scenePhase` + the screen's lifetime only; not looked at on screen, so no check that the receipt shows on a second client; `read_intent`
+  persistence, `ownReceipt` read-back and confirmation rules (a)–(c) are still not built.
 
 **2026-11-19 (latest+15) — Badge: read-state policy, BadgeCalculator, badge on the icon**
 - `HaloDomain/ReadState`: `RoomReadInputs`/`RoomReadCounts`/`ServerCounts`/`SDKCounts`, `ReadStatePolicy.evaluate` (rules E0, E1/E1b, E2/E2x, E3a/b/c, E4, E5, modes, `hasUnread`, display, confidence, reason codes) and
@@ -167,7 +168,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 - Docker Hub rate-limited pulls in the last session (Sygnal image not pulled; Swift 6.3 tag unchecked).
 
 ## 6. Next steps
-0. Wire `ReadReceiptCoordinator`: D6 visibility reporting in FeatureTimeline (≥ 50 % for ≥ 0.5 s, scene active), compose in `AppRoot` with `MatrixReadMarkerPort`, add a contract test on infra/dev, persist `read_intent`, read `ownReceipt`.
+0. Receipts: persist `read_intent` (GRDB), read `ownReceipt` (V-RS-1) and feed `localIntent`/`latestEvent` into `ReadStatePolicy`, confirmation rules, true ≥ 50 % visibility, mark as read/unread in the room list.
 1. Push this branch / open a PR; check CI.
 2. (Done) contracts pass on infra/dev. Keep running them after every adapter change.
 3. Verify the badge on the phone (enable Badges for Halo in iOS Settings first), then G-NSE hardening: true peak memory, an encrypted room (decrypt/UTD in the NSE), timeout and termination injection (AC-NSE-3/4), 100 pushes, Release build.

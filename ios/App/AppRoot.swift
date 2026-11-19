@@ -21,6 +21,7 @@ final class AppRoot {
     let badge: BadgeCoordinator
     private let records: NotificationRecordStore
     private let timelinePort: MatrixTimelinePort
+    let receipts: ReadReceiptCoordinator
     private let media: MediaLoader
 
     init() {
@@ -39,6 +40,7 @@ final class AppRoot {
         badge = BadgeCoordinator(rooms: roomCoordinator, records: records, port: SystemBadge(suiteName: suite))
 
         timelinePort = MatrixTimelinePort(session: session)
+        receipts = ReadReceiptCoordinator(port: MatrixReadMarkerPort(session: session))
         media = MediaLoader(port: MatrixMediaPort(session: session))
         recovery = RecoveryViewModel(coordinator: EncryptionCoordinator(port: MatrixEncryptionPort(session: session), session: sessionCoordinator))
         sync = SyncCoordinator(port: MatrixSyncPort(session: session), session: sessionCoordinator)
@@ -62,7 +64,7 @@ final class AppRoot {
 
     /// A view model for the timeline of `room`; each screen gets its own coordinator and session.
     func makeTimeline(room: RoomID) -> TimelineViewModel {
-        TimelineViewModel(coordinator: TimelineCoordinator(port: timelinePort, room: room, records: records), media: media)
+        TimelineViewModel(coordinator: TimelineCoordinator(port: timelinePort, room: room, records: records), media: media, receipts: receipts, room: room)
     }
 
     #if DEBUG

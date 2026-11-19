@@ -61,7 +61,10 @@ private struct RootView: View {
             }
         }
         // Sync runs only in the foreground (SYNC_ENGINE §2 rule 1).
-        .task(id: scenePhase) { await root.sync.setForeground(scenePhase == .active) }
+        .task(id: scenePhase) {
+            await root.sync.setForeground(scenePhase == .active)
+            if scenePhase != .active { await root.receipts.flush() }
+        }
     }
 }
 

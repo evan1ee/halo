@@ -239,4 +239,38 @@ struct TimelineViewModelTests {
         model.beginEdit(row)
         #expect(model.editing == nil)
     }
+
+    @Test("the newest visible confirmed event is reported as read once the app is active; nothing while inactive")
+    func readReceipts() async throws {
+        let room = try RoomID("!r:x.org")
+        let port = FakeReadMarkerPort()
+        let receipts = ReadReceiptCoordinator(port: port)
+        let model = TimelineViewModel(
+            coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: room), receipts: receipts, room: room,
+            dwell: .zero, sleep: { _ in }, locale: Locale(identifier: "en_US"), timeZone: .gmt)
+        func item(_ n: Int) throws -> TimelineItem {
+            TimelineItem(id: TimelineItemID("i\(n)"), content: .event(TimelineEvent(
+                eventID: try EventID("$e\(n)"), sender: nil, senderName: "Bob", timestamp: Date(timeIntervalSince1970: Double(n)),
+                isOwn: false, kind: .text("m\(n)", isEdited: false))))
+        }
+        let items = [try item(1), try item(2), try item(3)]
+        model.apply(.live(.init(items: items, isPaginating: false, reachedStart: true, paginationError: nil)))
+        let rows = items.map(model.row)
+
+        model.setActive(false)
+        model.rowVisibility(rows[0], isVisible: true)
+        model.rowVisibility(rows[1], isVisible: true)
+        for _ in 0..<2000 { await Task.yield() }
+        #expect(port.receipts.isEmpty)
+
+        model.setActive(true)
+        for _ in 0..<200_000 where port.receipts.isEmpty { await Task.yield() }
+        #expect(port.receipts.map(\.event.rawValue) == ["$e2"])
+
+        // A row that scrolls out is not reported; a not-yet-confirmed row (no event id) never is.
+        model.rowVisibility(rows[1], isVisible: false)
+        model.rowVisibility(TimelineRow(id: "echo", style: .ownMessage, sender: nil, text: "x"), isVisible: true)
+        for _ in 0..<2000 { await Task.yield() }
+        #expect(port.receipts.count == 1)
+    }
 }

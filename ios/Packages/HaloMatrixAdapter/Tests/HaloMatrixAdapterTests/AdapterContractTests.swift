@@ -123,6 +123,38 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
+    @Test("ReadMarkerPort: receipts (public and private) and the fully-read marker are accepted for a confirmed event", .enabled(if: env["HALO_DEV_TIMELINE_ROOM"] != nil))
+    func readMarkers() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(
+                username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
+            on: details)
+        try await MatrixSyncPort(session: session).start()
+        let rooms = Int(env["HALO_DEV_ROOMS"] ?? "0") ?? 0
+        try await within(seconds: 60) { try await RoomListPortContract.verify(MatrixRoomListPort(session: session), expectedRoomCount: rooms) }
+        let room = try RoomID(env["HALO_DEV_TIMELINE_ROOM"] ?? "")
+        let timeline = try await MatrixTimelinePort(session: session).open(room: room)
+        let eventID: EventID? = try await within(seconds: 60) {
+            var items: [HaloDomain.TimelineItem] = []
+            for await diff in timeline.items() {
+                try ListReducer.apply(diff, to: &items)
+                for item in items { if case .event(let event) = item.content, let id = event.eventID { return id } }
+            }
+            return nil
+        }
+        let event = try #require(eventID)
+        let markers = MatrixReadMarkerPort(session: session)
+        try await markers.sendReceipt(room: room, event: event, isPrivate: false)
+        try await markers.sendReceipt(room: room, event: event, isPrivate: true)
+        try await markers.setFullyRead(room: room, event: event)
+        await #expect(throws: HaloError.notFound) {
+            try await markers.sendReceipt(room: try RoomID("!unknown:halo.localhost"), event: event, isPrivate: false)
+        }
+        try await session.logout()
+    }
+
     @Test("EncryptionPortContract: recovery set up on one device unlocks a second one (needs a throwaway account in HALO_DEV_E2EE_USER/PASSWORD)", .enabled(if: env["HALO_DEV_E2EE_USER"] != nil && env["HALO_DEV_E2EE_PASSWORD"] != nil))
     func encryption() async throws {
         // A throwaway account (create it with infra/dev/create-user.sh): recovery can be enabled on it only once.
