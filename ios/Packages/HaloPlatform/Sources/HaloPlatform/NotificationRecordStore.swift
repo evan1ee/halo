@@ -8,7 +8,7 @@ import HaloFoundation
 /// record only costs one badge update, which the next sync or push repairs.
 public struct NotificationRecordStore: NotificationRecordPort {
     private let suiteName: String
-    private static let key = "notificationRecords.v1"
+    private static let storageName = "notificationRecords.v1"
     private static let maximumCount = 200
     private static let maximumAge: TimeInterval = 7 * 24 * 3600
     private let darwinName: String
@@ -19,7 +19,7 @@ public struct NotificationRecordStore: NotificationRecordPort {
     }
 
     public func all() -> [NotificationRecord] {
-        guard let data = UserDefaults(suiteName: suiteName)?.data(forKey: Self.key),
+        guard let data = UserDefaults(suiteName: suiteName)?.data(forKey: Self.storageName),
               let records = try? JSONDecoder().decode([NotificationRecord].self, from: data) else { return [] }
         let cutoff = Date().addingTimeInterval(-Self.maximumAge)
         return records.filter { $0.timestamp >= cutoff }
@@ -60,7 +60,7 @@ public struct NotificationRecordStore: NotificationRecordPort {
 
     private func write(_ records: [NotificationRecord]) {
         guard let data = try? JSONEncoder().encode(records) else { return }
-        UserDefaults(suiteName: suiteName)?.set(data, forKey: Self.key)
+        UserDefaults(suiteName: suiteName)?.set(data, forKey: Self.storageName)
         CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFNotificationName(darwinName as CFString), nil, nil, true)
     }
 }

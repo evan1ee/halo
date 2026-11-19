@@ -12,6 +12,8 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   reviewed in a session). `licenses` runs only when SDK/inventory files change.
 - **Local checks at this push:** `scripts/prepush.sh` — handoff, docs, boundaries, 4 Swift packages (Swift 6.2.4 Linux), gitleaks
   pass; SwiftLint skipped (not configured). Apple-only packages, the adapter (iOS simulator) and the signed app for a physical device have all been built and run.
+  gitleaks 8.30.1 is now installed locally (`brew install gitleaks`) and `scripts/prepush.sh` runs it; CI's first run on PR #3 flagged a UserDefaults key name as `generic-api-key`, fixed by renaming the
+  constants and a one-line `.gitleaksignore` for the old commit's fingerprint (history scans see it).
 
 ## 2. Completed work
 **2026-11-19 (latest+15) — Badge: read-state policy, BadgeCalculator, badge on the icon**

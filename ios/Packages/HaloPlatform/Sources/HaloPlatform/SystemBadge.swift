@@ -33,23 +33,23 @@ public struct SystemBadge: BadgePort {
 /// The set of rooms that needed attention at the app's last evaluation, shared through the App Group.
 public struct AttentionCache: Sendable {
     private let suiteName: String
-    private static let key = "attentionRooms.v1"
+    private static let storageName = "attentionRooms.v1"
 
     public init(suiteName: String) { self.suiteName = suiteName }
 
     public func rooms() -> Set<String> {
-        Set(UserDefaults(suiteName: suiteName)?.stringArray(forKey: Self.key) ?? [])
+        Set(UserDefaults(suiteName: suiteName)?.stringArray(forKey: Self.storageName) ?? [])
     }
 
     public func store(_ rooms: Set<RoomID>) {
-        UserDefaults(suiteName: suiteName)?.set(rooms.map(\.rawValue).sorted(), forKey: Self.key)
+        UserDefaults(suiteName: suiteName)?.set(rooms.map(\.rawValue).sorted(), forKey: Self.storageName)
     }
 
     /// Adds a room the extension just fetched a notifying event for and returns the new badge (the size of the set).
     public func adding(_ room: RoomID) -> Int {
         var current = rooms()
         current.insert(room.rawValue)
-        UserDefaults(suiteName: suiteName)?.set(current.sorted(), forKey: Self.key)
+        UserDefaults(suiteName: suiteName)?.set(current.sorted(), forKey: Self.storageName)
         return current.count
     }
 }
