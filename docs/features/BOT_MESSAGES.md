@@ -22,6 +22,8 @@ Render messages from known bots as native, structured UI and let users act on th
 | `TodoListV1` | `📋 <b>{title}…:</b><br/>` followed by rows `• [<b>#{id}</b>] {text} …<br/>`; completed rows `<del>…</del> ✅` | Checklist with ids, priority marker, owner |
 | `TaskAddedV1` | `Added Task <b>#{id}</b> for …: <i>"{title}"</i>` | Single task card with a checkbox |
 | `ReminderSetV1` | `Reminder #{id} set!</b> … for: <i>"{title}"</i>` | Reminder card (time, title) |
+| `TaskDoneV1` | `✅ Marked task as done: <i>"{title}"</i>` (F-BOT-4) | Compact "completed" card; also a confirmation signal |
+| `TaskDeletedV1` | `🗑️ Deleted task: <i>"{title}"</i>` (F-BOT-4) | Compact "deleted" card |
 
 - Parsers are pure functions over the HTML string; they fail closed (strict match, every row must parse or the whole message falls back).
 
