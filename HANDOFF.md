@@ -14,7 +14,12 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   pass; SwiftLint skipped (not configured). Nothing iOS-specific has been built anywhere.
 
 ## 2. Completed work
-**2026-11-19 (later) — M0b: adapter + Xcode project**
+**2026-11-19 (later) — M0b: adapter, Xcode project, HaloPlatform Keychain, HaloLog**
+- `HaloLog` facade in HaloFoundation (static event text + `HaloError` code + salted hashed IDs only; injected `LogSink`; `OSLogSink` on
+  Apple, no global instance). `HaloPlatform` package with `KeychainStore` (generic password, `afterFirstUnlockThisDeviceOnly`, non-sync,
+  versioned names, account items keyed by SHA-256 prefix). Tests: Foundation 13, Platform 4 pass on macOS. Platform tests run on the
+  macOS login keychain with no access group: the shared access group and data-protection keychain are untested until a signed device/sim run.
+- `scripts/prepush.sh` now also runs HaloPlatform and the adapter (xcodebuild, simulator) on macOS.
 - `ios/Halo.xcodeproj` (targets Halo app + HaloNotificationService, configs Debug/Beta/Release from `ios/Config/*.xcconfig`, bundle IDs
   `one.mbm.halo` / `.nse`); builds for the iPhone 17 simulator with `CODE_SIGNING_ALLOWED=NO` and embeds the NSE. App shows a bare
   `Text("Halo")`; the NSE delivers notifications unchanged (pipeline = M1). Generated once with XcodeGen from a throwaway spec (ADR-0008:
@@ -71,7 +76,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 ## 6. Next steps
 1. Push this branch / open a PR; check CI.
 2. (Done) contracts pass on infra/dev. Keep running them after every adapter change.
-3. M0b continued — HaloPlatform Keychain + log sink → sign-in + room-count screen (Feature package) wired in `ios/App` → adapter public-API rule in `check-boundaries` → V-SQL-1, V-APPLE-1 → exit criterion.
+3. M0b continued — sign-in + room-count screen (Feature package) wired in `ios/App` (wire `KeychainStore` + `OSLogSink` + `MatrixSessionPort` in `ios/App`) → adapter public-API rule in `check-boundaries` → V-SQL-1, V-APPLE-1 → exit criterion.
 4. Without a Mac: V-APPLE-1 from Apple docs; M1 prep — Halo's Sygnal pushkin in `infra/sygnal/` with tests and `pushkin.yml` (ADR-0015).
 
 ## 7. Next Session Prompt
