@@ -40,6 +40,15 @@ final class MatrixTimelineSession: TimelineSession {
         do { return try await timeline.paginateBackwards(numEvents: count) } catch { throw ErrorMapper.map(error) }
     }
 
+    func send(text: String) async throws(HaloError) {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw .invalidInput("EMPTY_MESSAGE") }
+        do {
+            // Markdown is converted to the message content (formatted body) by the SDK. The returned handle (to abort
+            // a queued send) isn't needed yet; failed sends are retried by the send queue.
+            _ = try await timeline.send(msg: messageEventContentFromMarkdown(md: text))
+        } catch { throw ErrorMapper.map(error) }
+    }
+
     func close() async {}
 }
 

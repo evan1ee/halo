@@ -81,4 +81,41 @@ struct TimelineViewModelTests {
         let rows = TimelineViewModel.collapsingStateRuns(items.map(model.row), items: items)
         #expect(rows.map(\.text) == ["The room was updated", "hi", "The room was updated"])
     }
+
+    @Test("unconfirmed own messages say so; sent ones carry no status")
+    func sendStatus() throws {
+        let model = try model()
+        func own(_ state: SendState) -> TimelineItem {
+            TimelineItem(id: TimelineItemID("o"), content: .event(TimelineEvent(
+                eventID: nil, sender: nil, senderName: "Me", timestamp: Date(timeIntervalSince1970: 0), isOwn: true,
+                kind: .text("hi", isEdited: false), sendState: state)))
+        }
+        #expect(model.row(own(.sent)).status == nil)
+        #expect(model.row(own(.sending)).status == "Sending…")
+        #expect(model.row(own(.failed(recoverable: true))).status?.contains("retry") == true)
+        #expect(model.row(own(.failed(recoverable: false))).status == "Not sent")
+    }
+
+    @Test("a successful send clears the draft; a failed send keeps it and explains")
+    func composer() async throws {
+        let port = FakeTimelinePort()
+        let room = try RoomID("!r:x.org")
+        port.addRoom(room, items: [event(.text("one", isEdited: false))])
+        let model = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room))
+        await model.start()
+        for _ in 0..<500_000 { if case .live = model.content { break }; await Task.yield() }
+
+        model.draft = "  "
+        #expect(!model.canSend)
+        model.draft = "hello"
+        #expect(model.canSend)
+        await model.send()
+        #expect(model.draft.isEmpty && model.sendError == nil)
+        #expect(port.sentTexts(in: room) == ["hello"])
+
+        await model.stop()  // closed timeline: the send is refused, the text must survive
+        model.draft = "kept"
+        await model.send()
+        #expect(model.draft == "kept" && model.sendError != nil)
+    }
 }

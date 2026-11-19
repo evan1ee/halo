@@ -44,7 +44,8 @@ enum TimelineMapper {
         if case .ready(let displayName, _, _, _, _) = event.senderProfile { senderName = displayName }
         return HaloDomain.TimelineEvent(
             eventID: eventID, sender: try? UserID(event.sender), senderName: senderName,
-            timestamp: date(event.timestamp), isOwn: event.isOwn, kind: kind(of: event.content))
+            timestamp: date(event.timestamp), isOwn: event.isOwn, kind: kind(of: event.content),
+            sendState: sendState(of: event.localSendState))
     }
 
     static func kind(of content: TimelineItemContent) -> TimelineEventKind {
@@ -77,6 +78,15 @@ enum TimelineMapper {
         case .redacted: .redacted
         case .unableToDecrypt(let message): .undecryptable(reason(of: message))
         case .poll, .other, .liveLocation: .unsupported
+        }
+    }
+
+    /// `nil` means the event came from the server.
+    static func sendState(of state: EventSendState?) -> SendState {
+        switch state {
+        case nil, .sent: .sent
+        case .notSentYet: .sending
+        case .sendingFailed(_, let isRecoverable): .failed(recoverable: isRecoverable)
         }
     }
 

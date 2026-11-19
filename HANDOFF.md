@@ -14,6 +14,15 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   pass; SwiftLint skipped (not configured). Nothing iOS-specific has been built anywhere.
 
 ## 2. Completed work
+**2026-11-19 (latest+6) — M2 started: sending text**
+- `SendState` (sent/sending/failed(recoverable)) on `TimelineEvent`; `TimelineSession.send(text:)` (blank → `invalidInput("EMPTY_MESSAGE")`); `FakeTimelinePort` echo+confirm,
+  `TimelinePortContract.verifySend`; `TimelineCoordinator.send`; adapter `MatrixTimelineSession.send` (`timeline.send` + `messageEventContentFromMarkdown`), `enableAllSendQueues(true)`
+  after login/restore, `TimelineMapper.sendState`; `FeatureTimeline` composer (draft kept on failure), "Sending…/Not sent" under unconfirmed own messages, scroll to the newest row.
+  Adapter 16 tests pass vs infra/dev (the timeline contract now sends a message into the contract room each run; the contract allows later events). Verified by hand in the simulator.
+- Not done: reply/edit/delete/reactions/typing/media send; message *rendering* of formatted bodies (`**bold**` shows literally); offline/kill-and-relaunch send (AC-M1) untested.
+- `xcodebuild` on the app project re-resolves the whole package graph, including GRDB through the adapter's test-only HaloPersistence dependency; it ignores the user-level mirror and can
+  stall or fail on GitHub clones (retrying works; a successful resolve is then cached).
+
 **2026-11-19 (latest+5) — M1: UTD reasons**
 - `UTDReason` (unknown / sentBeforeJoining / keysNotShared / senderVerificationProblem / backupDisabled); `.undecryptable(UTDReason)`; `TimelineMapper.reason(of:)`
   from the SDK's `UtdCause` (unit-tested, adapter 16 tests); distinct explanatory rows in `FeatureTimeline`. Not tested: a real UTD turning into text when keys arrive
@@ -134,7 +143,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 ## 6. Next steps
 1. Push this branch / open a PR; check CI.
 2. (Done) contracts pass on infra/dev. Keep running them after every adapter change.
-3. M1 remaining (docs/ROADMAP.md): first real persisted data (read-intent/notification stores arrive with M3), video/audio/file display, QR/emoji verification, NSE spike and G-NSE. Answer Q-XCODEGEN before adding the next package to the app.
+3. M2 next (docs/features/MESSAGING.md): reply/edit/delete/reactions, typing, formatted-body rendering, offline send test (AC-M1). M1 remaining: first real persisted data (read-intent/notification stores arrive with M3), video/audio/file display, QR/emoji verification, NSE spike and G-NSE. Answer Q-XCODEGEN before adding the next package to the app.
 4. Without a Mac: V-APPLE-1 from Apple docs; M1 prep — Halo's Sygnal pushkin in `infra/sygnal/` with tests and `pushkin.yml` (ADR-0015).
 
 ## 7. Next Session Prompt

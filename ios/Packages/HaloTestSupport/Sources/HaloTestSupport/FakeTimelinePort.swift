@@ -11,6 +11,7 @@ public final class FakeTimelinePort: TimelinePort {
         var older: [[TimelineItem]] = []
         var continuations: [UUID: AsyncStream<TimelineDiff>.Continuation] = [:]
         var openSessions = 0
+        var sent: [String] = []
         var paginateCalls = 0
     }
 
@@ -32,6 +33,7 @@ public final class FakeTimelinePort: TimelinePort {
         for continuation in continuations { continuation.yield(diff) }
     }
 
+    public func sentTexts(in id: RoomID) -> [String] { rooms.withLock { $0[id]?.sent ?? [] } }
     public func openSessions(in id: RoomID) -> Int { rooms.withLock { $0[id]?.openSessions ?? 0 } }
     public func paginateCalls(in id: RoomID) -> Int { rooms.withLock { $0[id]?.paginateCalls ?? 0 } }
 
@@ -81,6 +83,28 @@ public final class FakeTimelinePort: TimelinePort {
                 for continuation in continuations { continuation.yield(.insert(index: offset, item)) }
             }
             return reachedStart
+        }
+
+        func send(text: String) async throws(HaloError) {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { throw .invalidInput("EMPTY_MESSAGE") }
+            let count = port.rooms.withLock { rooms -> Int in
+                rooms[room]?.sent.append(trimmed)
+                return rooms[room]?.items.count ?? 0
+            }
+            let item = TimelineItem(
+                id: TimelineItemID("local-\(UUID().uuidString)"),
+                content: .event(TimelineEvent(
+                    eventID: nil, sender: nil, senderName: nil, timestamp: Date(), isOwn: true,
+                    kind: .text(trimmed, isEdited: false), sendState: .sending)))
+            try? port.emit(.pushBack(item), in: room)
+            // The server confirms: the echo turns into the sent event in place.
+            let confirmed = TimelineItem(
+                id: item.id,
+                content: .event(TimelineEvent(
+                    eventID: nil, sender: nil, senderName: nil, timestamp: Date(), isOwn: true,
+                    kind: .text(trimmed, isEdited: false), sendState: .sent)))
+            try? port.emit(.set(index: count, confirmed), in: room)
         }
 
         func close() async { port.rooms.withLock { $0[room]?.openSessions -= 1 } }

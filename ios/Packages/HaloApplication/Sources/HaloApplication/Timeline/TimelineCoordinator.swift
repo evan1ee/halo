@@ -97,6 +97,12 @@ public actor TimelineCoordinator {
         publish()
     }
 
+    /// Sends a message into the open timeline; the local echo arrives as a diff. Throws `.cancelled` when the timeline isn't open.
+    public func send(_ text: String) async throws(HaloError) {
+        guard let session, case .live = status else { throw .cancelled }
+        try await session.send(text: text)
+    }
+
     // MARK: Private
 
     private func subscribe() {

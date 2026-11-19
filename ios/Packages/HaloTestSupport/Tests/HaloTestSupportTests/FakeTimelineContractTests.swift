@@ -42,4 +42,13 @@ struct FakeTimelineContractTests {
         #expect(TimelinePortContract.bodies(of: items) == ["one", "two", "three"])
         #expect(seen == 1)
     }
+
+    @Test("sending shows a local echo that is confirmed; blank text is rejected")
+    func sending() async throws {
+        let port = FakeTimelinePort()
+        let room = try RoomID("!r:x.org")
+        port.addRoom(room, items: [Self.text("1", "one")])
+        try await TimelinePortContract.verifySend(port, room: room, text: "hello there")
+        #expect(port.sentTexts(in: room) == ["hello there"])
+    }
 }

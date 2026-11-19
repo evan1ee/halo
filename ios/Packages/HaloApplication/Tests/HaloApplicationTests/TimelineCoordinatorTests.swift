@@ -98,4 +98,22 @@ struct TimelineCoordinatorTests {
         await coordinator.paginateBackwards()
         #expect(port.paginateCalls(in: room) == 0)
     }
+
+    @Test("sending adds a local echo that is confirmed in place; sending into a closed timeline is cancelled")
+    func sends() async throws {
+        let port = FakeTimelinePort()
+        let room = try RoomID("!r:x.org")
+        port.addRoom(room, items: [item("1", "one")])
+        let coordinator = TimelineCoordinator(port: port, room: room)
+        await #expect(throws: HaloError.cancelled) { try await coordinator.send("too early") }
+        await coordinator.open()
+        _ = await wait(coordinator) { if case .live = $0 { true } else { false } }
+        try await coordinator.send("hello")
+        let done = await wait(coordinator) { status in
+            guard case .live(let s) = status, s.items.count == 2, case .event(let e) = s.items[1].content else { return false }
+            return e.sendState == .sent
+        }
+        #expect(items(done) == ["one", "hello"])
+        await #expect(throws: HaloError.invalidInput("EMPTY_MESSAGE")) { try await coordinator.send("  ") }
+    }
 }

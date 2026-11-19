@@ -34,8 +34,14 @@ public struct TimelineEvent: Sendable, Equatable {
     public let timestamp: Date
     public let isOwn: Bool
     public let kind: TimelineEventKind
+    /// Local echo state of an event this device is sending; remote events are always `.sent`.
+    public let sendState: SendState
 
-    public init(eventID: EventID?, sender: UserID?, senderName: String?, timestamp: Date, isOwn: Bool, kind: TimelineEventKind) {
+    public init(
+        eventID: EventID?, sender: UserID?, senderName: String?, timestamp: Date, isOwn: Bool, kind: TimelineEventKind,
+        sendState: SendState = .sent
+    ) {
+        self.sendState = sendState
         self.eventID = eventID
         self.sender = sender
         self.senderName = senderName
@@ -46,6 +52,16 @@ public struct TimelineEvent: Sendable, Equatable {
 }
 
 /// What an event is, as far as M1 renders it (TIMELINE FR-2). Anything else is `.unsupported`.
+/// Where an own message is on its way to the server (docs/features/MESSAGING.md §6). Unconfirmed things look
+/// unconfirmed (AGENTS.md §4.4).
+public enum SendState: Sendable, Equatable {
+    case sent
+    /// Queued or in flight; it survives an app kill (the SDK send queue).
+    case sending
+    /// Sending failed. `recoverable` failures (offline, rate limit) retry by themselves; others wait for the user.
+    case failed(recoverable: Bool)
+}
+
 public enum TimelineEventKind: Sendable, Equatable {
     case text(String, isEdited: Bool)
     case notice(String, isEdited: Bool)

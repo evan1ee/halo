@@ -13,6 +13,8 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     public let text: String
     /// An image to show above the text (the filename or caption), loaded through the view model.
     public let image: Image?
+    /// "Sending…" or "Not sent" for an own message that the server hasn't confirmed; `nil` once it is sent.
+    public let status: String?
 
     public struct Image: Equatable, Sendable {
         public let ref: MediaRef
@@ -20,7 +22,8 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
         public let aspectRatio: Double?
     }
 
-    init(id: String, style: Style, sender: String?, text: String, image: Image? = nil) {
+    init(id: String, style: Style, sender: String?, text: String, image: Image? = nil, status: String? = nil) {
+        self.status = status
         self.id = id
         self.style = style
         self.sender = sender
@@ -39,6 +42,12 @@ public final class TimelineViewModel {
     }
 
     public private(set) var content: Content = .opening
+    /// The message being typed. Cleared only once the send was accepted, so a failure never loses the text.
+    public var draft = ""
+    public private(set) var isSending = false
+    public private(set) var sendError: String?
+
+    public var canSend: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending }
 
     private let coordinator: TimelineCoordinator
     private let media: MediaLoader?
@@ -76,6 +85,21 @@ public final class TimelineViewModel {
     }
 
     public func loadEarlier() async { await coordinator.paginateBackwards() }
+
+    /// Sends the draft (MESSAGING FR-2). The message shows up in the timeline as a local echo.
+    public func send() async {
+        guard canSend else { return }
+        let text = draft
+        isSending = true
+        sendError = nil
+        defer { isSending = false }
+        do {
+            try await coordinator.send(text)
+            draft = ""
+        } catch {
+            sendError = error == .network(retryable: true) ? "Can't reach the server. Your message was kept." : "The message couldn't be sent."
+        }
+    }
 
     /// Thumbnail bytes for an image row, or `nil` if it can't be loaded (the row then shows a placeholder).
     public func thumbnail(for image: TimelineRow.Image) async -> Data? {
@@ -125,7 +149,9 @@ public final class TimelineViewModel {
             let name = event.senderName ?? event.sender.map { $0.rawValue } ?? "Unknown"
             switch event.kind {
             case .text(let body, let edited):
-                return TimelineRow(id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: edited ? "\(body) (edited)" : body)
+                return TimelineRow(
+                    id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: edited ? "\(body) (edited)" : body,
+                    status: Self.status(of: event.sendState))
             case .notice(let body, _):
                 return TimelineRow(id: id, style: .notice, sender: name, text: body)
             case .emote(let body, _):
@@ -154,6 +180,14 @@ public final class TimelineViewModel {
             case .unsupported:
                 return TimelineRow(id: id, style: .placeholder, sender: name, text: "Unsupported event")
             }
+        }
+    }
+
+    static func status(of state: SendState) -> String? {
+        switch state {
+        case .sent: nil
+        case .sending: "Sending…"
+        case .failed(let recoverable): recoverable ? "Not sent yet — will retry" : "Not sent"
         }
     }
 

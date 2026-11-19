@@ -18,6 +18,7 @@ public struct TimelineView: View {
             case .failed(let message):
                 Text(message).foregroundStyle(.secondary)
             case .live(let rows, let isPaginating, let canLoadEarlier, let paginationError):
+                ScrollViewReader { proxy in
                 List {
                     if canLoadEarlier {
                         HStack {
@@ -39,10 +40,38 @@ public struct TimelineView: View {
                 .listStyle(.plain)
                 .defaultScrollAnchor(.bottom)
                 .accessibilityIdentifier("timeline")
+                // A newer last row (own echo or incoming message) scrolls into view. Earlier history prepended at the
+                // top doesn't change the last row, so reading old messages isn't disturbed.
+                .onChange(of: rows.last?.id) { _, last in
+                    if let last { withAnimation { proxy.scrollTo(last, anchor: .bottom) } }
+                }
+                }
             }
         }
+        .safeAreaInset(edge: .bottom) { Composer(model: model) }
         .task { await model.start() }
         .onDisappear { Task { await model.stop() } }
+    }
+}
+
+private struct Composer: View {
+    @Bindable var model: TimelineViewModel
+
+    var body: some View {
+        VStack(spacing: 4) {
+            if let error = model.sendError { Text(error).font(.caption).foregroundStyle(.red) }
+            HStack(alignment: .bottom) {
+                TextField("Message", text: $model.draft, axis: .vertical)
+                    .lineLimit(1...5)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("composer")
+                Button { Task { await model.send() } } label: { Image(systemName: "arrow.up.circle.fill").font(.title) }
+                    .disabled(!model.canSend)
+                    .accessibilityLabel("Send")
+            }
+        }
+        .padding(8)
+        .background(.bar)
     }
 }
 
@@ -59,6 +88,8 @@ private struct RowView: View {
                 Text(row.text)
                     .padding(8)
                     .background(row.style == .ownMessage ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.15), in: .rect(cornerRadius: 12))
+                    .opacity(row.status == nil ? 1 : 0.6)
+                if let status = row.status { Text(status).font(.caption2).foregroundStyle(.secondary) }
             }
             .frame(maxWidth: .infinity, alignment: row.style == .ownMessage ? .trailing : .leading)
         case .notice:

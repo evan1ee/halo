@@ -124,6 +124,38 @@ public enum TimelinePortContract {
         }
     }
 
+    /// Sending shows a local echo of the text as the user's own message and ends `.sent`; blank text is rejected.
+    public static func verifySend(_ port: any TimelinePort, room: RoomID, text: String, maxDiffs: Int = 1_000) async throws {
+        let session = try await port.open(room: room)
+        let pagination = Task { for _ in 0..<5 { if (try? await session.paginateBackwards(count: 20)) == true { break } } }
+        defer { pagination.cancel() }
+        do {
+            try await session.send(text: "   ")
+            throw ContractViolation("blank text must not be sent")
+        } catch let error as HaloError {
+            guard error == .invalidInput("EMPTY_MESSAGE") else { throw ContractViolation("blank text must throw invalidInput(EMPTY_MESSAGE), got \(error.code)") }
+        }
+        let stream = session.items()
+        do { try await session.send(text: text) } catch { throw ContractViolation("send failed with \(error.code)") }
+
+        var items: [TimelineItem] = []
+        var received = 0
+        for await diff in stream {
+            received += 1
+            do { try ListReducer.apply(diff, to: &items) } catch { throw ContractViolation("diff #\(received) doesn't apply: \(error.code)") }
+            let mine = items.compactMap { item -> TimelineEvent? in
+                guard case .event(let event) = item.content, event.isOwn else { return nil }
+                if case .text(let body, _) = event.kind, body == text { return event }
+                return nil
+            }
+            if let last = mine.last, last.sendState == .sent { await session.close(); return }
+            if case .failed = mine.last?.sendState { throw ContractViolation("the message failed to send") }
+            if received >= maxDiffs { break }
+        }
+        await session.close()
+        throw ContractViolation("the sent message never reached .sent")
+    }
+
     /// Opening a room the client doesn't know must fail with `.notFound`.
     public static func verifyUnknownRoom(_ port: any TimelinePort, room: RoomID) async throws {
         do {

@@ -75,7 +75,7 @@ public actor MatrixSessionPort: SessionPort {
                 throw ErrorMapper.mapLogin(error)
             }
             let stored = try Self.stored(from: client.session(), storeID: newStoreID, passphrase: passphrase)
-            adopt(client, storeID: newStoreID, session: try client.session())
+            await adopt(client, storeID: newStoreID, session: try client.session())
             return stored
         } catch let error as HaloError {
             throw error
@@ -99,7 +99,7 @@ public actor MatrixSessionPort: SessionPort {
                 deviceId: payload.deviceID, homeserverUrl: payload.homeserverURL, oauthData: payload.oauthData,
                 slidingSyncVersion: .native)
             try await client.restoreSession(session: sdkSession)
-            adopt(client, storeID: payload.storeID, session: sdkSession)
+            await adopt(client, storeID: payload.storeID, session: sdkSession)
         } catch { throw ErrorMapper.map(error) }
     }
 
@@ -192,7 +192,9 @@ public actor MatrixSessionPort: SessionPort {
     private func register(_ continuation: AsyncStream<SessionEvent>.Continuation, id: UUID) { events[id] = continuation }
     private func unregister(_ id: UUID) { events[id] = nil }
 
-    private func adopt(_ client: Client, storeID: String, session: Session) {
+    private func adopt(_ client: Client, storeID: String, session: Session) async {
+        // Unsent messages survive an app kill and go out when the network returns (MESSAGING FR-3).
+        await client.enableAllSendQueues(enable: true)
         self.client = client
         self.storeID = storeID
     }
