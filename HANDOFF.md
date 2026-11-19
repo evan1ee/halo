@@ -25,7 +25,8 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
 - Verified afterwards on the device (iPhone 16, Debug build, `contract`): the pusher row appears in Synapse after sign-in (HTTP, `event_id_only`, our default payload). A message from a second account made
   Synapse call Sygnal and Sygnal send to APNs sandbox: APNs accepted it (no rejection logged). Two fixes were needed in `infra/dev`: Synapse must be *restarted* after the `ip_range_whitelist` change, and Sygnal needs
   `convert_device_token_to_hex: false` because Halo registers the hex token (the default expects base64; otherwise APNs answered 400 BadDeviceToken and Synapse deleted the pusher). Whether the notification
-  actually appeared on the phone is for the founder to confirm (the NSE is still pass-through, so it shows the generic "Halo — New message" alert).
+  actually appeared on the phone: **confirmed by the founder (2026-11-19): the generic "New message" alert shows on the lock screen** (physical iPhone 16, APNs sandbox, Debug build). No badge number appears
+  on the icon — expected: pushes never set `aps.badge` (ADR-0015) and the badge comes only from the app/NSE via `BadgeCalculator`, which doesn't exist yet. First end-to-end proof of Synapse → Sygnal → APNs → device.
 
 **2026-11-19 (latest+12) — M2: emoji picker for reactions**
 - Long-press menu gains "More reactions…": a sheet with a fixed grid of 48 emoji (`TimelineViewModel.pickerEmoji`; the quick row stays 👍 ❤️ 😂). `beginReactionPicker/pickReaction`, unconfirmed rows can't open it.
