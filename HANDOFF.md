@@ -14,7 +14,11 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   pass; SwiftLint skipped (not configured). Nothing iOS-specific has been built anywhere.
 
 ## 2. Completed work
-**2026-11-19 (later) — M0b: adapter implemented, contract run pending**
+**2026-11-19 (later) — M0b: adapter + Xcode project**
+- `ios/Halo.xcodeproj` (targets Halo app + HaloNotificationService, configs Debug/Beta/Release from `ios/Config/*.xcconfig`, bundle IDs
+  `one.mbm.halo` / `.nse`); builds for the iPhone 17 simulator with `CODE_SIGNING_ALLOWED=NO` and embeds the NSE. App shows a bare
+  `Text("Halo")`; the NSE delivers notifications unchanged (pipeline = M1). Generated once with XcodeGen from a throwaway spec (ADR-0008:
+  no generator in the workflow). Not built for a device; signing, team ID, capabilities beyond entitlements files untested.
 - `HaloMatrixAdapter`: `ErrorMapper`, `MatrixBootstrap`, `MatrixSessionPort` (actor; discovery, password login, restore, logout, token-refresh
   events; payload JSON holds SDK session + per-login store dir + random store passphrase, Keychain-only), `MatrixRoomListPort`
   (dynamic adapters, ordered mapping, `.unread` filter → `.unsupported` until M1). SDK API names verified in the pinned package source.
@@ -49,7 +53,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 - **D47** read state: `readPosTs` (true read position) is separate from `notifiedThroughTs` (notification coverage).
 
 ## 4. Modified files (this push)
-- New: `ios/Packages/HaloMatrixAdapter/` (Package.swift, ErrorMapper, Bootstrap, MatrixSessionPort, MatrixRoomListPort, unit + gated contract tests).
+- New: `ios/Halo.xcodeproj`, `ios/App/`, `ios/NotificationService/`, `ios/Config/`; `ios/Packages/HaloMatrixAdapter/` (Package.swift, ErrorMapper, Bootstrap, MatrixSessionPort, MatrixRoomListPort, unit + gated contract tests).
 - Docs: `docs/OPEN_QUESTIONS.md` (V-CI-2), `docs/development/DEVELOPMENT_SETUP.md` §2, `docs/ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
@@ -67,8 +71,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 ## 6. Next steps
 1. Push this branch / open a PR; check CI.
 2. (Done) contracts pass on infra/dev. Keep running them after every adapter change.
-3. M0b continued — Xcode project (`one.mbm.halo`, `HALO_NAMESPACE` in `ios/Config/Base.xcconfig`) →
-   HaloPlatform Keychain + log sink → adapter public-API rule in `check-boundaries` → V-SQL-1, V-APPLE-1 → exit criterion.
+3. M0b continued — HaloPlatform Keychain + log sink → sign-in + room-count screen (Feature package) wired in `ios/App` → adapter public-API rule in `check-boundaries` → V-SQL-1, V-APPLE-1 → exit criterion.
 4. Without a Mac: V-APPLE-1 from Apple docs; M1 prep — Halo's Sygnal pushkin in `infra/sygnal/` with tests and `pushkin.yml` (ADR-0015).
 
 ## 7. Next Session Prompt

@@ -1,0 +1,4 @@
+#include "Base.xcconfig"
+HALO_DEFAULT_HOMESERVER =
+HALO_LOG_LEVEL = warning
+HALO_PUSH_APP_ID = $(HALO_NAMESPACE)

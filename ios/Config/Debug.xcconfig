@@ -1,0 +1,6 @@
+#include "Base.xcconfig"
+// Local dev homeserver (infra/dev); verbose logs.
+HALO_DEFAULT_HOMESERVER = http:/$()/127.0.0.1:8008
+HALO_LOG_LEVEL = debug
+HALO_PUSH_APP_ID = $(HALO_NAMESPACE).dev
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG
