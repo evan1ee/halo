@@ -6,10 +6,19 @@ to be re-planned after M0. Each milestone ends with its exit criteria **verified
 ## Implementation entry criteria (before M0 starts)
 
 - [x] Phase 0 documentation approved by the founder (2026-11-19).
-- [ ] Apple Developer Program membership active; namespace root `one.mbm.halo` recorded (D63, DEVELOPMENT_SETUP §3).
-- [ ] Domain for the homeserver available; DNS control.
-- [ ] Mac with Xcode supporting iOS 26 SDK; Rust toolchain installable (only needed on the G-FFI or G-NSE fail paths, or for Q-SDK-BUILD).
+- [x] Apple Developer Program membership active; namespace root `one.mbm.halo` recorded (D63, DEVELOPMENT_SETUP §3).
+- [x] Domain for the homeserver available; DNS control.
+- [ ] Mac with Xcode supporting iOS 26 SDK — **not available yet** (2026-11-19); M0 proceeds with its Linux part, see below; Rust toolchain installable (only needed on the G-FFI or G-NSE fail paths, or for Q-SDK-BUILD).
 - [ ] Open questions marked "blocks M0" in [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) resolved (the remaining ones are M0 validation items, done during M0).
+
+## M0 without a Mac (2026-11-19)
+M0 started before the Mac is available. Work that runs on Linux is done first; the rest waits for the Mac and is the only thing
+standing between M0 and its exit criterion.
+
+| Part | Items | Needs |
+|---|---|---|
+| **M0a — Linux** | `infra/dev` (Synapse + Postgres, native password login, D64); Linux-buildable packages (`HaloFoundation`, `HaloDomain`, `HaloApplication`, `HaloTestSupport`) with the M0 ports `SessionPort` and `RoomListPort`, the session/room-count use case, fakes and contract tests; CI (`docs`, `swift-linux`, `boundaries`, `secrets`, `licenses`); V-CI-1; V-SDK-1 | This container / Linux CI |
+| **M0b — Mac** | Xcode project (app + NSE targets, identifiers per DEVELOPMENT_SETUP §3); `HaloMatrixAdapter` implementing `SessionPort` + `RoomListPort` over the pinned `MatrixRustSDK`; `HaloPlatform` log sink; V-SQL-1; V-APPLE-1; V-CI-2; the exit criterion (password login against `infra/dev` shows the room count via ports) | Mac with Xcode for the iOS 26 SDK |
 
 ## Milestones
 

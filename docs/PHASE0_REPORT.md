@@ -88,8 +88,9 @@ T-NSE, T-RECEIPTS, T-FFI, T-STATE, T-XPROC, L1/L3 (licence drift / upstream reli
 - [x] Q-BUNDLE decided (D63): namespace root `one.mbm.halo`, identifiers in DEVELOPMENT_SETUP §3.
 - [x] Q-DEV-AUTH decided (D64: native password login in M0, MAS in M5).
 - [x] ADR-0015 accepted with conditions (D65) and ADR-0016 accepted (D66).
-- [ ] Apple Developer membership and a Mac with the iOS 26 SDK available.
-- [ ] Homeserver domain available for `infra/dev` / personal deployment.
+- [x] Apple Developer membership available.
+- [ ] Mac with the iOS 26 SDK — not yet; M0 started with its Linux part (ROADMAP "M0 without a Mac").
+- [x] Homeserver domain available for the personal deployment (`infra/dev` runs on localhost).
 
 ## 9. Review (2026-11-19)
 A full read of the documentation before Phase 1 found the issues below; each is fixed on this branch in its own commit.

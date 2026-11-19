@@ -41,7 +41,7 @@ dependencies: [../architecture/MODULE_BOUNDARIES.md](../architecture/MODULE_BOUN
 |---|---|---|
 | macOS + Xcode | Xcode with the iOS 26 SDK (D25) | Swift 6 language mode |
 | Docker Desktop / Colima | current | `infra/dev`, `infra/test` |
-| Swift toolchain on Linux (CI) | same Swift minor as Xcode | Docker image `swift:<version>` |
+| Swift toolchain on Linux (CI) | same Swift minor as Xcode — currently `swift:6.2-noble` (Swift 6.2.4), to be confirmed against Xcode (V-CI-2) | Docker image |
 | Rust (rustup) | ≥ 1.96 (SDK `rust-version`, F-FFI-17 context) | Only for building the SDK from source or `core/` |
 | SwiftLint | pinned in `.swiftlint.yml` comment | Lint |
 | gitleaks | current | Pre-commit + CI |
