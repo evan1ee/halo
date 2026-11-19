@@ -51,7 +51,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 - Docs: `docs/OPEN_QUESTIONS.md` (V-CI-2), `docs/development/DEVELOPMENT_SETUP.md` §2, `docs/ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
-- Contract suites unrun against a real homeserver (no Docker here). `prepush.sh` doesn't build/test the adapter (needs xcodebuild).
+- Contract suites unrun against a real homeserver (no Docker here). Tried Synapse 1.165.0 natively via pip (`PIP_CERT=/etc/ssl/cert.pem`; plain pip fails TLS verification on this Mac): its Rust extension is rejected by the macOS 27 loader ("mis-aligned LINKEDIT"), so only a container (Docker/Colima/OrbStack) will work. `prepush.sh` doesn't build/test the adapter (needs xcodebuild).
 - `RefreshDelegate.saveSessionInKeychain` uses `try?` when encoding a refreshed session (no logger yet); add `HaloLog` + a test when HaloPlatform lands.
 - Sync service is started on first room-list use and stopped only at logout (no lifecycle owner yet).
 - PR #1 CI results haven't been checked yet — first task of the next session.
