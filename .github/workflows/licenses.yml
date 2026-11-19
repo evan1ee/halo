@@ -1,0 +1,33 @@
+name: licenses
+# Rust licence gate for the shipped SDK (LICENSE_COMPLIANCE §4, AGENTS.md §11): the committed
+# inventory must match the SDK commit in ios/SDKVERSION.md, and every licence must be allowed.
+on:
+  pull_request:
+    paths:
+      - "ios/SDKVERSION.md"
+      - "ios/**/Package.resolved"
+      - "docs/security/inventory/**"
+      - "scripts/rust-license-inventory.py"
+      - "core/**"
+      - ".github/workflows/licenses.yml"
+  push:
+    branches: [main]
+    paths: ["ios/SDKVERSION.md", "docs/security/inventory/**", "scripts/rust-license-inventory.py"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  rust-inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out the pinned SDK commit
+        run: |
+          repo="$(sed -n 's/^sdk_repository: //p' ios/SDKVERSION.md)"
+          commit="$(sed -n 's/^sdk_commit: //p' ios/SDKVERSION.md)"
+          [[ "$repo" == https://github.com/* && "$commit" =~ ^[0-9a-f]{40}$ ]] || { echo "bad SDKVERSION.md"; exit 1; }
+          git init -q sdk
+          git -C sdk fetch -q --depth 1 "$repo" "$commit"
+          git -C sdk checkout -q FETCH_HEAD
+      - name: Inventory and licence gate
+        run: scripts/rust-license-inventory.py --sdk sdk --check docs/security/inventory/rust-deps-matrix-sdk-ffi.csv
