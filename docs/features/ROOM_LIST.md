@@ -13,11 +13,11 @@ Show every conversation, sorted by activity, with indicators you can trust.
 
 ## 3. Functional requirements
 - FR-1 Entries from `RoomList.entries_with_dynamic_adapters` with paging (`add_one_page`) **[VERIFIED F-FFI-5]**.
-- FR-2 Filters via `RoomListDynamicEntriesController.set_filter` (filter kinds per `RoomListEntriesDynamicFilterKind` **[VERIFIED type exists; cases at M1]**).
+- FR-2 Filters via `RoomListDynamicEntriesController.set_filter` (filter kinds per `RoomListEntriesDynamicFilterKind` **[VERIFIED F-FFI-18; cases at M1]**).
 - FR-3 Row: avatar, name, latest-event preview (`LatestEventValue`), timestamp, indicator from `RoomReadState` (`.count`, `.mentions`, `.dot`, none), muted icon, `hasUnread` bold.
 - FR-4 The indicator comes **only** from `ReadStateCoordinator` (never from `RoomInfo` directly).
 - FR-5 Invites section at the top; accept/decline.
-- FR-6 Swipe actions: mark read (`ReadMarkerPort.sendReceipt` on the latest event + clear the flag), mark unread (`setMarkedUnread(true)`), mute (mode), favourite (room tag **[ASSUMPTION V-RL-1: tag API in FFI]**).
+- FR-6 Swipe actions: mark read (`ReadMarkerPort.markRoomRead(room)` + clear the flag — see READ_RECEIPTS §1), mark unread (`setMarkedUnread(true)`), mute (mode), favourite (`Room.set_is_favourite` **[VERIFIED F-FFI-18]**).
 - FR-7 Sync indicator in the header (`sync_indicator`).
 - FR-8 Pull-to-refresh is **not** provided (sync is continuous); a manual "Reconcile" exists under Diagnostics.
 

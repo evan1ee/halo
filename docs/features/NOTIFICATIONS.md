@@ -20,7 +20,7 @@ Tell the user about what matters — once, with useful content — and remove it
 - FR-5 Notification actions: Reply (text input, sent by the app in the background **[ASSUMPTION V-PUSH-4: the app is launched in the background for the action]**), Mark as read.
 - FR-6 Clearing on read anywhere (§5 there).
 - FR-7 Badge = rooms needing attention (D5), set via `setBadgeCount` by app and NSE only from `BadgeCalculator`.
-- FR-8 Per-room mode in Room details; the global defaults (DMs: all, groups: mentions) in Settings, stored as push rules on the server via the SDK notification settings API (`get_notification_settings`) **[VERIFIED method exists]**.
+- FR-8 Per-room mode in Room details; the global defaults (DMs: all, groups: mentions) in Settings, stored as push rules on the server via the SDK notification settings API (`get_notification_settings`) **[VERIFIED F-FFI-18]**.
 - FR-9 Settings show push health: permission, token registered, last push received time.
 
 ## 4. Non-functional requirements

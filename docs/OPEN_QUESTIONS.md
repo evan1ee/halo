@@ -24,7 +24,7 @@
 | V-RS-5 | Which sliding-sync extensions `RoomListService` enables for which rooms (receipts coverage) | Log the SSS request bodies from the SDK on the dev Synapse | M1 | M3 |
 | V-SYNC-2 | The SDK send queue persists unsent events across app restarts | Kill during send offline; relaunch; observe | M2 | M2 |
 | V-TL-1 | An event-focused timeline (jump to an old event) is available via `timeline_with_configuration` | Inspect `TimelineConfiguration`/focus types at M2 | M2 | — |
-| V-RL-1 | Room tags beyond favourite are reachable | `set_is_favourite` exists **[VERIFIED]**; other tags unknown → not needed in the MVP | M2 | — |
+| V-RL-1 | Room tags beyond favourite are reachable | `set_is_favourite` exists **[VERIFIED F-FFI-18]**; other tags unknown → not needed in the MVP | M2 | — |
 | V-E2EE-1 | Encryption API names for recovery and backup | Inspect `encryption.rs` at M1 | M1 | M1 |
 | V-MEDIA-1 | Media retention policy can be configured as planned | Inspect `set_media_retention_policy` parameters | M2 | — |
 | V-FFI-1 | Cancellation semantics of UniFFI async calls | UniFFI manual + a test | before any Halo-owned FFI | G-FFI fail path |
@@ -33,6 +33,7 @@
 | V-ST-2 | The adapter can obtain a valid access token / trigger a refresh for option B | Inspect `Client.session()` and the session delegate | M4 | M4 (if B) |
 | V-ST-3 | Legacy pack event names `im.ponies.user_emotes`, `im.ponies.room_emotes`, `im.ponies.emote_rooms` | MSC2545 history + FluffyChat/Cinny source (licence-safe: read docs/specs, not copy) | M4 | — |
 | V-SEARCH-1 | Upstream `SearchService` fits Halo's search needs (E2EE rooms, ranking, index size) | Spike in M8 | M8 | M8 |
+| V-APPLE-1 | Apple platform facts used in the design: Observation on iOS 17+, ImageIO animated GIF/APNG/WebP decoding, `com.apple.developer.usernotifications.filtering` entitlement key, file protection classes, NSE time limit, BGTaskScheduler behaviour | Check each against current Apple developer documentation for iOS 26 and record links in SOURCES.md | M0 | M0 (record), M4 (ImageIO) |
 | V-LEGAL | Export compliance and trademark checks | Lawyer / Apple guidance | before external TestFlight | external TestFlight |
 
 ## Open decisions

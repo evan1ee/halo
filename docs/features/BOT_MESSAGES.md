@@ -40,6 +40,9 @@ Render messages from known bots as native, structured UI and let users act on th
 ## 5. Non-functional requirements
 Parsing ≤ 1 ms per message; parsers have no I/O; zero crashes on fuzzed input.
 
+## 5b. User flows
+Open a room → a bot list renders as a checklist → tap a row → row shows "Waiting for bot…" → the bot's ✅ arrives → row completed. Long-press any message → "View source". A message that fails to parse simply renders as formatted text.
+
 ## 6. State transitions (checkbox)
 ```mermaid
 stateDiagram-v2

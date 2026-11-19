@@ -27,4 +27,4 @@ Less enforced structure than TCA → conventions in CODE_CONVENTIONS and reviews
 View models are `@MainActor @Observable final class`; coordinators are actors in HaloApplication; DI by constructor + a root `AppContainer` passed through the Environment.
 
 ## Verified facts and assumptions
-Observation is available since iOS 17 [VERIFIED: Apple documentation for the Observation framework] — well within iOS 26.
+Observation (`@Observable`) is available on iOS 17+ **[ASSUMPTION V-APPLE-1: Apple platform facts re-checked against Apple documentation at M0]** — well within iOS 26.

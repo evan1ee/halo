@@ -15,7 +15,7 @@ iOS 26 · iOS 18 · iOS 17.
 iOS 26.0.
 
 ## Rationale
-Fewer compatibility branches for one developer; current SwiftUI scroll/observation APIs; the founder's devices run it. The SDK package supports older targets (`.iOS(.v16)` in its manifest **[VERIFIED: matrix-rust-components-swift Package.swift]**), so this doesn't constrain the SDK.
+Fewer compatibility branches for one developer; current SwiftUI scroll/observation APIs; the founder's devices run it. The SDK package supports older targets (`.iOS(.v16)` in its manifest **[VERIFIED F-FFI-19]**), so this doesn't constrain the SDK.
 
 ## Trade-offs
 Smaller audience at public launch; revisit before M10 if needed.

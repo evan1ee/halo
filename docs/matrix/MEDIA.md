@@ -4,7 +4,7 @@
 - Sources come from timeline items as upstream `MediaSource` (encrypted or plain) — mapped to an opaque `MediaRef` in the domain.
 - Thumbnails: `Client.get_media_thumbnail(source, width, height)`; full content: `get_media_content(source)`; large files: `get_media_file(...)` → temporary file **[VERIFIED F-FFI-4 method names; exact parameters at M1]**.
 - The SDK's media store caches downloaded media **[ASSUMPTION V-MEDIA-1: cache policy configurable via `set_media_retention_policy` (method exists, F-FFI-4)]**.
-- Decoding: ImageIO (`CGImageSource`) off the main thread, downsampled to the display size; animated WebP/GIF/APNG via `CGAnimateImageAtURLWithBlock` / frame extraction **[VERIFIED: ImageIO supports animated GIF, APNG and WebP on iOS 14+ — Apple docs; re-check for iOS 26]**.
+- Decoding: ImageIO (`CGImageSource`) off the main thread, downsampled to the display size; animated WebP/GIF/APNG via `CGAnimateImageAtURLWithBlock` / frame extraction **[ASSUMPTION V-APPLE-1: ImageIO decodes animated GIF, APNG and WebP on iOS 26]**.
 - Memory: an in-memory LRU of decoded thumbnails (cap 64 MB), evicted on memory warnings.
 
 ## 2. Upload

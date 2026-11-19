@@ -13,10 +13,10 @@ See and manage a room's details, members and notification behaviour; start new c
 
 ## 3. Functional requirements
 - FR-1 Details from `RoomInfo` (name, topic, avatar, encryption, member counts) **[VERIFIED F-FFI-7 fields exist]**.
-- FR-2 Members list (paged, iterator `RoomMembersIterator` **[VERIFIED type]**), with power-level badges.
+- FR-2 Members list (paged, iterator `RoomMembersIterator` **[VERIFIED F-FFI-18]**), with power-level badges.
 - FR-3 Notification mode: all / mentions & keywords / mute (FR-8 of NOTIFICATIONS).
 - FR-4 Leave room (confirm; warn if the user is the last admin).
-- FR-5 Create DM (`create_room` with `is_direct`, or `get_dm_room` if it exists **[VERIFIED method names]**), create private encrypted room, invite users (`search_users`).
+- FR-5 Create DM (`create_room` with `is_direct`, or `get_dm_room` if it exists **[VERIFIED F-FFI-18]**), create private encrypted room, invite users (`search_users`).
 - FR-6 Invites: accept (`join_room_by_id`), decline (leave), preview (`get_room_preview_from_room_id`).
 - FR-7 Edit name/topic/avatar if allowed by power levels (`get_power_levels`).
 - FR-8 Mark as unread / read (READ_RECEIPTS explicit actions).

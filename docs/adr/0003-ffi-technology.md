@@ -14,7 +14,7 @@ Which FFI technology should a Halo-owned Rust layer use?
 3. swift-bridge.
 
 ## Decision
-UniFFI, same major version as the pinned SDK (0.32.x **[VERIFIED: workspace pins 0.32.1; crates.io latest 0.32.2]**).
+UniFFI, same major version as the pinned SDK (0.32.x **[VERIFIED F-FFI-20]**).
 
 ## Rationale
 Generates Swift for async functions, objects with reference counting, records, enums, errors and callback interfaces; upstream already uses it **[VERIFIED F-FFI-2]**, so tooling (`uniffi-bindgen generate --library`) and patterns (`TaskHandle`) carry over. A C ABI would require manual memory management, error marshalling and async bridging — high risk, no benefit here.

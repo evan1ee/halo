@@ -18,7 +18,7 @@ needs, made of Halo value types, and independent of the SDK version underneath.
 | `SyncPort` | Sync lifecycle | `start()`, `stop()`, `status: AsyncStream<SyncStatus>` (snapshot) | Adapter |
 | `RoomListPort` | Room list | `rooms(filter:) -> AsyncStream<RoomListDiff>`, `loadMore()`, `setFilter(_)` | Adapter |
 | `RoomReadStatePort` | Inputs for read state | `inputs(room:) -> AsyncStream<RoomReadInputsPart>` (snapshot), `allInputs() async -> [RoomReadInputsPart]`, `ownReceipt(room)` | Adapter |
-| `ReadMarkerPort` | Outbound read state | `sendReceipt(room, event, private:)`, `setFullyRead(room, event)`, `setMarkedUnread(room, Bool)`, `markAllRead()` | Adapter |
+| `ReadMarkerPort` | Outbound read state | `sendReceipt(room, event, private:)`, `setFullyRead(room, event)`, `markRoomRead(room, private:) -> EventRef`, `setMarkedUnread(room, Bool)`, `markAllRead()` | Adapter |
 | `TimelinePort` | Timeline of one room | `open(room) -> TimelineSession`; `TimelineSession.items: AsyncStream<TimelineDiff>`, `paginateBackwards(n)`, `send(_ draft)`, `reply`, `edit`, `redact`, `toggleReaction`, `sendImage`, `sendRawMessage(type, contentJSON)` | Adapter |
 | `MediaPort` | Media | `thumbnail(source, size)`, `content(source)`, `file(source) -> URL`, `upload(data, mime)` | Adapter |
 | `RoomPort` | Room management | `details(room)`, `members(room)`, `leave`, `invite`, `createDM(user)`, `createRoom(opts)`, `setNotificationMode`, `state(room, type)`, `sendState(room, type, key, json)` | Adapter |

@@ -40,6 +40,9 @@ Tab → list → tap → timeline at the event (event-focused timeline, V-TL-1) 
 ## 8. Data models
 See [../data/DATA_MODELS.md](../data/DATA_MODELS.md) `bot_task`, `bot_action`.
 
+## 8b. API boundaries
+FeatureBotActivity → `BotActivityUseCase` (HaloApplication) → `BotTaskStore` (port, HaloPersistence) for reads; ticks go through `BotActionCoordinator` → `TimelinePort` (same as BOT_MESSAGES §8). The indexer receives bot events from `TimelinePort` sessions and sync-time room updates via the adapter; it never calls the network itself.
+
 ## 9. Error scenarios
 The source room left → items marked "room left" and hidden by default · the bot changed format → index stops updating (diagnostics count unparsed bot messages).
 

@@ -13,7 +13,7 @@
 ## 2. End-to-end encryption considerations
 - All crypto runs in matrix-rust-sdk (vodozemac). Halo never handles key material directly.
 - New rooms created by Halo are encrypted by default (DMs and private rooms) **[DECISION]**.
-- Unverified devices: show an "unverified" state; sending into rooms with unverified devices follows the SDK's default room-key recipient strategy (configurable via `ClientBuilder.room_key_recipient_strategy` **[VERIFIED method exists]**; the default choice is **[OPEN Q-E2EE-STRATEGY]**).
+- Unverified devices: show an "unverified" state; sending into rooms with unverified devices follows the SDK's default room-key recipient strategy (configurable via `ClientBuilder.room_key_recipient_strategy` **[VERIFIED F-FFI-18]**; the default choice is **[OPEN Q-E2EE-STRATEGY]**).
 - Identity changes of contacts are shown in the timeline (ENCRYPTION_AND_DEVICES FR-7).
 - **Unencrypted surfaces** users must know about: image packs/stickers (F-SPEC-3), room names/topics/avatars (state), push metadata (room/event ids to Sygnal and Apple).
 

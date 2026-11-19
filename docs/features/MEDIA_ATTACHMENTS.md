@@ -17,7 +17,7 @@ Display every incoming media type and send photos (D16).
 - FR-4 Files: name, size, Quick Look preview, share.
 - FR-5 Photo picker (`PHPicker`) → up to 10 images → `send_image` each with progress and cancel (`abort_send`) **[VERIFIED F-FFI-8]**.
 - FR-6 Strip location EXIF; HEIC → JPEG (see [../matrix/MEDIA.md](../matrix/MEDIA.md) §2).
-- FR-7 Media display respects the SDK media preview policy (`get_media_preview_display_policy`) **[VERIFIED method exists]**.
+- FR-7 Media display respects the SDK media preview policy (`get_media_preview_display_policy`) **[VERIFIED F-FFI-18]**.
 
 ## 4. Non-functional requirements
 Thumbnail decode ≤ 16 ms on a background thread; memory cap per [../matrix/MEDIA.md](../matrix/MEDIA.md).

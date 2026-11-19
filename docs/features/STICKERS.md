@@ -88,7 +88,7 @@ Duplicate shortcodes across packs (disambiguate with the pack name, spec) · a p
 
 ## 12. Acceptance criteria
 - AC-S1 Send a sticker in ≤ 2 taps from the composer (panel open → tap).
-- AC-S2 A sticker sent from Halo renders as a sticker in Element Web and FluffyChat (AC-M3).
+- AC-S2 A sticker sent from Halo renders as a sticker in Element Web and FluffyChat.
 - AC-S3 A pack created in Halo is usable in a client that supports v1.19 image packs **[ASSUMPTION: at least one such client exists at M4; otherwise verify the events with a raw client]**.
 - AC-S4 Favourites and recents appear on a second Halo device after sync.
 - AC-S5 Shortcodes created in Halo always match the spec grammar.

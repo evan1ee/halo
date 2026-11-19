@@ -66,4 +66,4 @@ flowchart LR
 ```
 
 ## Technical risks per milestone
-See [RISK_REGISTER.md](RISK_REGISTER.md). Highest: T-NSE (M1), T-RECEIPTS (M3), T-STATE (M4), T-CAPACITY (all).
+See [RISK_REGISTER.md](RISK_REGISTER.md). Highest: T-NSE (M1), T-RECEIPTS (M3), T-STATE (M4), and the capacity risk (register section "Maintenance", M1) across all milestones.
