@@ -14,6 +14,16 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   pass; SwiftLint skipped (not configured). Nothing iOS-specific has been built anywhere.
 
 ## 2. Completed work
+**2026-11-19 (latest+13) — Push groundwork: Sygnal in infra/dev, pusher registration**
+- `infra/dev`: optional Sygnal v0.15.1 (`--profile push`, config rendered by `infra/dev/sygnal-config.sh` from `sygnal/sygnal.yaml.template`, needs `HALO_APNS_TEAM_ID` and one `secrets/AuthKey_<KEYID>.p8`, both
+  gitignored/never committed; app id `one.mbm.halo.dev`, topic `one.mbm.halo`, APNs *sandbox*). Synapse whitelists private ranges for outbound pushes (`ip_range_whitelist`). Sygnal starts and loads the key; no push has been sent.
+- `PushPort` (+`FakePushPort`), `PushCoordinator` (registers when there is a token and a ready session; refreshes on token change; retries on the next trigger), `MatrixPushPort` (`set_pusher`, HTTP,
+  `event_id_only`, hex token as pushkey, generic default payload with `mutable-content` and no badge). App: `PushDelegate` receives the token, permission is requested after sign-in, `aps-environment` entitlement
+  from `HALO_APS_ENVIRONMENT`, `HaloPushAppID`/`HaloPushGatewayURL` Info keys (empty gateway in Beta/Release = push off). Debug gateway URL `http://sygnal:5000/_matrix/push/v1/notify` is what Synapse (in Docker) calls.
+  Checked: prepush passes (Application 45 tests, adapter compiles incl. a payload test); the signed Debug build has the `aps-environment` entitlement and the Info keys. NOT verified: the permission prompt, a pusher row
+  in Synapse (none yet: the phone hasn't signed in with this build), Synapse → Sygnal → APNs → phone delivery, `delete_pusher` on logout (not implemented), the NSE (still pass-through), G-NSE.
+- Next: sign in on the phone, accept the prompts, check `select * from pushers` in Postgres, send a message from another account and watch the Sygnal log.
+
 **2026-11-19 (latest+12) — M2: emoji picker for reactions**
 - Long-press menu gains "More reactions…": a sheet with a fixed grid of 48 emoji (`TimelineViewModel.pickerEmoji`; the quick row stays 👍 ❤️ 😂). `beginReactionPicker/pickReaction`, unconfirmed rows can't open it.
   Checked: prepush passes (FeatureTimeline 18 tests); verified in the simulator against infra/dev: menu → sheet → 🎉 → chip "🎉 1" on the image message. It's a curated list, not a searchable system picker

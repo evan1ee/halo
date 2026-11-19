@@ -1,13 +1,17 @@
 import FeatureAuth
 import FeatureRoomList
 import FeatureTimeline
+import HaloApplication
 import HaloFoundation
 import SwiftUI
+import UIKit
+import UserNotifications
 
 /// Composition root of the app (AGENTS.md §5: wiring only). Screens live in the Feature packages.
 @main
 struct HaloApp: App {
     @State private var root = AppRoot()
+    @UIApplicationDelegateAdaptor(PushDelegate.self) private var delegate
 
     var body: some Scene {
         WindowGroup {
@@ -42,9 +46,18 @@ private struct RootView: View {
             }
         }
         .task {
+            PushDelegate.coordinator = root.push
+            await root.push?.begin()
             await root.sync.begin()
             await root.recovery.start()  // before the banner exists: a hidden banner view runs no task
             await root.auth.start()
+        }
+        // Ask for notification permission once signed in; the token then arrives in `PushDelegate`.
+        .task(id: root.auth.screen) {
+            guard root.push != nil, case .signedIn = root.auth.screen else { return }
+            if (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])) == true {
+                UIApplication.shared.registerForRemoteNotifications()
+            }
         }
         // Sync runs only in the foreground (SYNC_ENGINE §2 rule 1).
         .task(id: scenePhase) { await root.sync.setForeground(scenePhase == .active) }
@@ -55,4 +68,13 @@ private struct RootView: View {
 private struct TimelineScreen: View {
     @State var model: TimelineViewModel
     var body: some View { TimelineView(model: model).navigationBarTitleDisplayMode(.inline) }
+}
+
+/// Receives the APNs device token and hands it to the push coordinator (PUSH_NOTIFICATIONS §2).
+final class PushDelegate: NSObject, UIApplicationDelegate {
+    @MainActor static var coordinator: PushCoordinator?
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        Task { @MainActor in await Self.coordinator?.deviceTokenReceived(deviceToken) }
+    }
 }

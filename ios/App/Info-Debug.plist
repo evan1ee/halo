@@ -9,6 +9,10 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>HaloPushAppID</key>
+	<string>$(HALO_PUSH_APP_ID)</string>
+	<key>HaloPushGatewayURL</key>
+	<string>$(HALO_PUSH_GATEWAY_URL)</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Halo connects to your development homeserver on the local network.</string>
 </dict>

@@ -3,4 +3,7 @@
 HALO_DEFAULT_HOMESERVER = http:/$()/127.0.0.1:8008
 HALO_LOG_LEVEL = debug
 HALO_PUSH_APP_ID = $(HALO_NAMESPACE).dev
+// The notify endpoint as Synapse reaches it (the Sygnal container of infra/dev, `--profile push`).
+HALO_PUSH_GATEWAY_URL = http:/$()/sygnal:5000/_matrix/push/v1/notify
+HALO_APS_ENVIRONMENT = development
 SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG

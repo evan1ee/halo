@@ -48,6 +48,10 @@ targets:
       configs:
         Debug:
           INFOPLIST_FILE: App/Info-Debug.plist
+        Beta:
+          INFOPLIST_FILE: App/Info.plist
+        Release:
+          INFOPLIST_FILE: App/Info.plist
   HaloNotificationService:
     type: app-extension
     platform: iOS

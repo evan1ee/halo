@@ -16,6 +16,8 @@ final class AppRoot {
     let roomList: RoomListViewModel
     let sync: SyncCoordinator
     let recovery: RecoveryViewModel
+    /// `nil` when no push gateway is configured (Beta/Release until one is deployed).
+    let push: PushCoordinator?
     private let timelinePort: MatrixTimelinePort
     private let media: MediaLoader
 
@@ -35,9 +37,19 @@ final class AppRoot {
         media = MediaLoader(port: MatrixMediaPort(session: session))
         recovery = RecoveryViewModel(coordinator: EncryptionCoordinator(port: MatrixEncryptionPort(session: session), session: sessionCoordinator))
         sync = SyncCoordinator(port: MatrixSyncPort(session: session), session: sessionCoordinator)
+        push = Self.pushConfiguration().map {
+            PushCoordinator(port: MatrixPushPort(session: session), session: sessionCoordinator, appID: $0.appID, gatewayURL: $0.gateway)
+        }
         auth = AuthViewModel(coordinator: sessionCoordinator)
         roomList = RoomListViewModel(session: sessionCoordinator, rooms: roomCoordinator)
         log.info("app launched")
+    }
+
+    private static func pushConfiguration() -> (appID: String, gateway: URL)? {
+        guard let appID = Bundle.main.object(forInfoDictionaryKey: "HaloPushAppID") as? String, !appID.isEmpty,
+              let raw = Bundle.main.object(forInfoDictionaryKey: "HaloPushGatewayURL") as? String, !raw.isEmpty,
+              let gateway = URL(string: raw) else { return nil }
+        return (appID, gateway)
     }
 
     /// A view model for the timeline of `room`; each screen gets its own coordinator and session.

@@ -2,3 +2,6 @@
 HALO_DEFAULT_HOMESERVER =
 HALO_LOG_LEVEL = warning
 HALO_PUSH_APP_ID = $(HALO_NAMESPACE)
+// No push gateway is deployed yet: an empty URL keeps push registration off.
+HALO_PUSH_GATEWAY_URL =
+HALO_APS_ENVIRONMENT = production

@@ -187,6 +187,12 @@ public actor MatrixSessionPort: SessionPort {
         do { return try client.userId() } catch { throw ErrorMapper.map(error) }
     }
 
+    /// The signed-in SDK client, for ports that need it directly (pushers).
+    func signedInClient() throws(HaloError) -> Client {
+        guard let client else { throw .unauthorized(soft: false) }
+        return client
+    }
+
     /// The SDK's encryption object for the signed-in client.
     func encryption() throws(HaloError) -> Encryption {
         guard let client else { throw .unauthorized(soft: false) }

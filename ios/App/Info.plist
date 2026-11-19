@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Beta and Release (project.yml). Debug uses Info-Debug.plist, which adds local-network access for infra/dev. -->
+	<key>HaloPushAppID</key>
+	<string>$(HALO_PUSH_APP_ID)</string>
+	<key>HaloPushGatewayURL</key>
+	<string>$(HALO_PUSH_GATEWAY_URL)</string>
+</dict>
+</plist>
