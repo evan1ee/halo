@@ -8,7 +8,7 @@ to be re-planned after M0. Each milestone ends with its exit criteria **verified
 - [x] Phase 0 documentation approved by the founder (2026-11-19).
 - [x] Apple Developer Program membership active; namespace root `one.mbm.halo` recorded (D63, DEVELOPMENT_SETUP §3).
 - [x] Domain for the homeserver available; DNS control.
-- [ ] Mac with Xcode supporting iOS 26 SDK — **not available yet** (2026-11-19); M0 proceeds with its Linux part, see below; Rust toolchain installable (only needed on the G-FFI or G-NSE fail paths, or for Q-SDK-BUILD).
+- [x] Mac with Xcode supporting iOS 26 SDK — available from 2026-11-19 (Xcode 27.2, iOS 26+ simulators); M0 proceeds with its Linux part, see below; Rust toolchain installable (only needed on the G-FFI or G-NSE fail paths, or for Q-SDK-BUILD).
 - [ ] Open questions marked "blocks M0" in [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) resolved (the remaining ones are M0 validation items, done during M0).
 
 ## M0 without a Mac (2026-11-19)
@@ -24,7 +24,9 @@ standing between M0 and its exit criterion.
 `check-boundaries`, the licence gate (at SDK `b93751e`) and gitleaks pass locally; V-CI-1 and V-SDK-1 are resolved. The CI workflows
 run once a pull request is open. **Remaining for M0 (all M0b, needs the Mac):** Xcode project, `HaloMatrixAdapter` for `SessionPort` +
 `RoomListPort` passing `SessionPortContract` / `RoomListPortContract` against `infra/dev`, `HaloPlatform` Keychain and log sink,
-V-SQL-1, V-APPLE-1, V-CI-2, and the exit criterion.
+V-SQL-1, V-APPLE-1, and the exit criterion.
+
+**M0b started (2026-11-19):** V-CI-2 resolved; `ios/Packages/HaloMatrixAdapter` exists and builds against the pinned SDK 26.11.17 for the iOS Simulator. The prebuilt xcframework has no macOS slice, so the adapter builds and tests only through `xcodebuild` with an iOS destination (not `swift build`/`swift test`).
 
 ## Milestones
 

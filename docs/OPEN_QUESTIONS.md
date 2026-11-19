@@ -11,7 +11,7 @@
 | V-SQL-1 | The SDK's bundled SQLite (inside the dynamic framework) and GRDB's system SQLite coexist without symbol interposition issues | M0 smoke test: open the SDK client and a GRDB DB in one process, run both, check `sqlite3_libversion()` from each side | M0 | M0 |
 | V-SQL-2 | GRDB `DatabasePool` shared by app + NSE works without `0xdead10cc` terminations when following GRDB's suspension guidance | NSE spike: 100 pushes while the app is backgrounded and writing | M1 | M3 |
 | V-CI-1 | ~~GRDB builds and tests on Linux with system SQLite~~ **Resolved** — yes, with `libsqlite3-dev` in the `swift` image [VERIFIED F-CI-1] | — | — | — |
-| V-CI-2 | The Linux CI Swift toolchain (`swift:6.2` image, currently 6.2.4) is the same Swift minor version as the Xcode used for iOS 26 builds | On the Mac: `xcrun swift --version`; align the CI image tag and record both in DEVELOPMENT_SETUP §2 | M0 (Mac part) | M0 |
+| V-CI-2 | ~~Linux CI Swift minor equals Xcode's~~ **Resolved (2026-11-19)** — they differ: Xcode 27.2 ships Swift 6.4.2, CI uses 6.2.4. Packages are `swift-tools-version: 6.2` and pass on both; CI stays on 6.2 as the floor [VERIFIED local run] | — | — | — |
 | V-NSE-1 | NSE memory/time budget suffices for the SDK client + one decryption | Instruments on the oldest supported device; record peak memory and duration over 50 pushes | M1 | M1 (G-NSE) |
 | V-NSE-2 | Reading RoomInfo for all rooms in the NSE for the badge fits the budget | Measure with 300 rooms; else use cached badge ± current room | M1 | M1 (G-NSE) |
 | V-NSE-3 | `use_lightweight_tokio_runtime = true` lowers NSE memory | A/B measurement in the spike | M1 | — (G-NSE input) |
