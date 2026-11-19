@@ -1,3 +1,4 @@
+import Foundation
 import HaloDomain
 import HaloFoundation
 
@@ -149,5 +150,27 @@ public enum SyncPortContract {
         guard sawRunning else { throw ContractViolation("the status stream ended before .running") }
         await port.stop()
         await port.stop()
+    }
+}
+
+/// Behaviour every `MediaPort` implementation must show for a reference to an existing image.
+public enum MediaPortContract {
+    public static func verify(_ port: any MediaPort, existing: MediaRef, missing: MediaRef) async throws {
+        let thumbnail: Data
+        do { thumbnail = try await port.thumbnail(existing, width: 64, height: 64) } catch {
+            throw ContractViolation("thumbnail of existing media failed with \(error.code)")
+        }
+        guard !thumbnail.isEmpty else { throw ContractViolation("the thumbnail is empty") }
+        let content: Data
+        do { content = try await port.content(existing) } catch {
+            throw ContractViolation("content of existing media failed with \(error.code)")
+        }
+        guard !content.isEmpty else { throw ContractViolation("the content is empty") }
+        do {
+            _ = try await port.content(missing)
+            throw ContractViolation("missing media must throw")
+        } catch let error as HaloError {
+            guard error == .notFound else { throw ContractViolation("missing media must throw .notFound, got \(error.code)") }
+        }
     }
 }

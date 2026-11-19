@@ -1,5 +1,9 @@
 #if canImport(SwiftUI)
+import HaloDomain
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 public struct TimelineView: View {
     private let model: TimelineViewModel
@@ -30,7 +34,7 @@ public struct TimelineView: View {
                         // Re-runs whenever rows change, so loading continues until the start marker arrives.
                         .task(id: rows.count) { if paginationError == nil { await model.loadEarlier() } }
                     }
-                    ForEach(rows) { row in RowView(row: row).listRowSeparator(.hidden) }
+                    ForEach(rows) { row in RowView(row: row, model: model).listRowSeparator(.hidden) }
                 }
                 .listStyle(.plain)
                 .defaultScrollAnchor(.bottom)
@@ -44,12 +48,14 @@ public struct TimelineView: View {
 
 private struct RowView: View {
     let row: TimelineRow
+    let model: TimelineViewModel
 
     var body: some View {
         switch row.style {
         case .message, .ownMessage:
             VStack(alignment: row.style == .ownMessage ? .trailing : .leading, spacing: 2) {
                 if let sender = row.sender, row.style == .message { Text(sender).font(.caption).foregroundStyle(.secondary) }
+                if let image = row.image { ThumbnailView(image: image, model: model) }
                 Text(row.text)
                     .padding(8)
                     .background(row.style == .ownMessage ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.15), in: .rect(cornerRadius: 12))
@@ -66,6 +72,31 @@ private struct RowView: View {
         case .divider:
             Text(row.text).font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity)
         }
+    }
+}
+
+/// An image row's thumbnail; shows a neutral box while loading or if the download failed.
+private struct ThumbnailView: View {
+    let image: TimelineRow.Image
+    let model: TimelineViewModel
+    @State private var data: Data?
+
+    var body: some View {
+        Group {
+            #if canImport(UIKit)
+            if let data, let uiImage = UIImage(data: data) {
+                Image(uiImage: uiImage).resizable().scaledToFit()
+            } else {
+                Rectangle().fill(.secondary.opacity(0.2)).overlay(ProgressView())
+            }
+            #else
+            Rectangle().fill(.secondary.opacity(0.2))
+            #endif
+        }
+        .aspectRatio(image.aspectRatio ?? 4 / 3, contentMode: .fit)
+        .frame(maxWidth: 240)
+        .clipShape(.rect(cornerRadius: 12))
+        .task { data = await model.thumbnail(for: image) }
     }
 }
 #endif

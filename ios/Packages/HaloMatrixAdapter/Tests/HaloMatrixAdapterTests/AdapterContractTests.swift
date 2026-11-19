@@ -2,6 +2,7 @@ import Foundation
 import HaloDomain
 import HaloFoundation
 import HaloTestSupport
+import MatrixRustSDK
 import Testing
 @testable import HaloMatrixAdapter
 
@@ -83,6 +84,40 @@ struct AdapterContractTests {
             on: details)
         let sync = MatrixSyncPort(session: session)
         try await within(seconds: 60) { try await SyncPortContract.verify(sync) }
+        try await session.logout()
+    }
+
+    @Test("MediaPortContract (the timeline room holds one image, blue.png)", .enabled(if: env["HALO_DEV_TIMELINE_ROOM"] != nil))
+    func media() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(
+                username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
+            on: details)
+        try await MatrixSyncPort(session: session).start()
+        let rooms = Int(env["HALO_DEV_ROOMS"] ?? "0") ?? 0
+        try await within(seconds: 60) { try await RoomListPortContract.verify(MatrixRoomListPort(session: session), expectedRoomCount: rooms) }
+
+        // Find the image through the timeline, like the UI does.
+        let timeline = try await MatrixTimelinePort(session: session).open(room: try RoomID(env["HALO_DEV_TIMELINE_ROOM"] ?? ""))
+        let attachment: MediaAttachment? = try await within(seconds: 60) {
+            let pagination = Task { for _ in 0..<5 { if (try? await timeline.paginateBackwards(count: 20)) == true { break } } }
+            defer { pagination.cancel() }
+            var items: [HaloDomain.TimelineItem] = []
+            for await diff in timeline.items() {
+                try ListReducer.apply(diff, to: &items)
+                for item in items {
+                    if case .event(let event) = item.content, case .media(let media) = event.kind, media.kind == .image { return media }
+                }
+            }
+            return nil
+        }
+        let found = try #require(attachment)
+        #expect(found.body == "blue.png" && found.width == 64 && found.height == 48)
+        let existing = try #require(found.source)
+        let missing = MediaRef(token: try MediaSource.fromUrl(url: "mxc://halo.localhost/doesNotExist00000000000").toJson())
+        try await within(seconds: 60) { try await MediaPortContract.verify(MatrixMediaPort(session: session), existing: existing, missing: missing) }
         try await session.logout()
     }
 }

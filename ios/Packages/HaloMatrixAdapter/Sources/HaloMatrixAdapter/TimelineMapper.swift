@@ -64,13 +64,16 @@ enum TimelineMapper {
             case .text: .text(message.body, isEdited: message.isEdited)
             case .notice: .notice(message.body, isEdited: message.isEdited)
             case .emote: .emote(message.body, isEdited: message.isEdited)
-            case .image: .media(.image, body: message.body)
-            case .video: .media(.video, body: message.body)
-            case .audio: .media(.audio, body: message.body)
-            case .file: .media(.file, body: message.body)
+            case .image(let content):
+                .media(MediaAttachment(
+                    kind: .image, body: message.body, source: ref(content.source),
+                    width: content.info?.width.map(Int.init), height: content.info?.height.map(Int.init)))
+            case .video(let content): .media(MediaAttachment(kind: .video, body: message.body, source: ref(content.source)))
+            case .audio(let content): .media(MediaAttachment(kind: .audio, body: message.body, source: ref(content.source)))
+            case .file(let content): .media(MediaAttachment(kind: .file, body: message.body, source: ref(content.source)))
             default: .unsupported
             }
-        case .sticker(let body, _, _): .sticker(body: body)
+        case .sticker(let body, _, let source): .sticker(body: body, source: ref(source))
         case .redacted: .redacted
         case .unableToDecrypt: .undecryptable
         case .poll, .other, .liveLocation: .unsupported
@@ -91,6 +94,9 @@ enum TimelineMapper {
         default: .other
         }
     }
+
+    /// The opaque reference the media port later turns back into an upstream `MediaSource`.
+    static func ref(_ source: MediaSource) -> MediaRef { MediaRef(token: source.toJson()) }
 
     static func date(_ timestamp: UInt64) -> Date { Date(timeIntervalSince1970: Double(timestamp) / 1000) }
 }

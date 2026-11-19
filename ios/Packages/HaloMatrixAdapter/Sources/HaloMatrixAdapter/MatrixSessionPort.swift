@@ -169,6 +169,18 @@ public actor MatrixSessionPort: SessionPort {
         } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
     }
 
+    /// Downloads media for a reference made by `TimelineMapper.ref`.
+    func mediaData(_ ref: MediaRef, thumbnail: (width: Int, height: Int)?) async throws(HaloError) -> Data {
+        guard let client else { throw .unauthorized(soft: false) }
+        do {
+            let source = try MediaSource.fromJson(json: ref.token)
+            if let thumbnail {
+                return try await client.getMediaThumbnail(mediaSource: source, width: UInt64(thumbnail.width), height: UInt64(thumbnail.height))
+            }
+            return try await client.getMediaContent(mediaSource: source)
+        } catch { throw ErrorMapper.map(error) }
+    }
+
     // MARK: Internals
 
     private func register(_ continuation: AsyncStream<SessionEvent>.Continuation, id: UUID) { events[id] = continuation }

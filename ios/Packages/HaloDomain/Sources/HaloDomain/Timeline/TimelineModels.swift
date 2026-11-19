@@ -50,9 +50,9 @@ public enum TimelineEventKind: Sendable, Equatable {
     case text(String, isEdited: Bool)
     case notice(String, isEdited: Bool)
     case emote(String, isEdited: Bool)
-    /// Image, video, audio or file; `body` is the filename or caption. Media display arrives in M2.
-    case media(MediaKind, body: String)
-    case sticker(body: String)
+    /// Image, video, audio or file. Only images are displayed in M1; the others show their name.
+    case media(MediaAttachment)
+    case sticker(body: String, source: MediaRef?)
     case redacted
     /// Can't be decrypted (yet). The reason is shown honestly, never hidden (R-P0-3).
     case undecryptable
@@ -62,6 +62,31 @@ public enum TimelineEventKind: Sendable, Equatable {
 }
 
 public enum MediaKind: Sendable, Equatable { case image, video, audio, file }
+
+/// An opaque reference to media on the homeserver. Only the adapter that created it can interpret it, so
+/// the domain never sees URLs, keys or upstream types (PORTS_CONTRACT §1).
+public struct MediaRef: Sendable, Hashable, CustomStringConvertible {
+    public let token: String
+    public init(token: String) { self.token = token }
+    public var description: String { "MediaRef(<redacted>)" }
+}
+
+public struct MediaAttachment: Sendable, Equatable {
+    public let kind: MediaKind
+    /// The filename or caption.
+    public let body: String
+    public let source: MediaRef?
+    public let width: Int?
+    public let height: Int?
+
+    public init(kind: MediaKind, body: String, source: MediaRef?, width: Int? = nil, height: Int? = nil) {
+        self.kind = kind
+        self.body = body
+        self.source = source
+        self.width = width
+        self.height = height
+    }
+}
 
 public enum MembershipChange: Sendable, Equatable {
     case joined, left, invited, kicked, banned, unbanned, invitationRejected, invitationRevoked, knocked, other

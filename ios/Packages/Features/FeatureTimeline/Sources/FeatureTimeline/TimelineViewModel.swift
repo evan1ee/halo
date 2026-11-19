@@ -11,6 +11,22 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     public let style: Style
     public let sender: String?
     public let text: String
+    /// An image to show above the text (the filename or caption), loaded through the view model.
+    public let image: Image?
+
+    public struct Image: Equatable, Sendable {
+        public let ref: MediaRef
+        /// Width / height, when the sender gave dimensions; the view falls back to 4:3.
+        public let aspectRatio: Double?
+    }
+
+    init(id: String, style: Style, sender: String?, text: String, image: Image? = nil) {
+        self.id = id
+        self.style = style
+        self.sender = sender
+        self.text = text
+        self.image = image
+    }
 }
 
 /// Presents one room's timeline from `TimelineCoordinator` (docs/features/TIMELINE.md). M1: read-only.
@@ -25,11 +41,13 @@ public final class TimelineViewModel {
     public private(set) var content: Content = .opening
 
     private let coordinator: TimelineCoordinator
+    private let media: MediaLoader?
     private var observation: Task<Void, Never>?
     private let dateFormatter: DateFormatter
 
-    public init(coordinator: TimelineCoordinator, locale: Locale = .current, timeZone: TimeZone = .current) {
+    public init(coordinator: TimelineCoordinator, media: MediaLoader? = nil, locale: Locale = .current, timeZone: TimeZone = .current) {
         self.coordinator = coordinator
+        self.media = media
         let formatter = DateFormatter()
         formatter.locale = locale
         formatter.timeZone = timeZone
@@ -58,6 +76,12 @@ public final class TimelineViewModel {
     }
 
     public func loadEarlier() async { await coordinator.paginateBackwards() }
+
+    /// Thumbnail bytes for an image row, or `nil` if it can't be loaded (the row then shows a placeholder).
+    public func thumbnail(for image: TimelineRow.Image) async -> Data? {
+        guard let media else { return nil }
+        return try? await media.thumbnail(image.ref, width: 600, height: 600)
+    }
 
     func apply(_ status: TimelineCoordinator.Status) {
         switch status {
@@ -106,9 +130,17 @@ public final class TimelineViewModel {
                 return TimelineRow(id: id, style: .notice, sender: name, text: body)
             case .emote(let body, _):
                 return TimelineRow(id: id, style: .emote, sender: nil, text: "\(name) \(body)")
-            case .media(let kind, let body):
-                return TimelineRow(id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: "[\(Self.label(kind))] \(body)")
-            case .sticker(let body):
+            case .media(let attachment):
+                let style: TimelineRow.Style = event.isOwn ? .ownMessage : .message
+                if attachment.kind == .image, let source = attachment.source {
+                    let ratio: Double? = {
+                    guard let width = attachment.width, let height = attachment.height, height > 0 else { return nil }
+                    return Double(width) / Double(height)
+                }()
+                    return TimelineRow(id: id, style: style, sender: name, text: attachment.body, image: .init(ref: source, aspectRatio: ratio))
+                }
+                return TimelineRow(id: id, style: style, sender: name, text: "[\(Self.label(attachment.kind))] \(attachment.body)")
+            case .sticker(let body, _):
                 return TimelineRow(id: id, style: .message, sender: name, text: "[Sticker] \(body)")
             case .redacted:
                 return TimelineRow(id: id, style: .placeholder, sender: name, text: "Message deleted")

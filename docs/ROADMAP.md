@@ -26,7 +26,7 @@ run once a pull request is open. **Remaining for M0 (all M0b, needs the Mac):** 
 `RoomListPort` passing `SessionPortContract` / `RoomListPortContract` against `infra/dev`, `HaloPlatform` Keychain and log sink,
 V-SQL-1, V-APPLE-1, and the exit criterion.
 
-**M1 started (2026-11-19):** read-only timeline slice — `TimelinePort` (domain, fake, contract, adapter), `TimelineCoordinator`, `FeatureTimeline`, tap a room to read it (text, notice, emote, media placeholders, deleted, undecryptable, membership, date dividers) — verified on the simulator against `infra/dev`. Remaining for M1: media display, verification + recovery, `SyncPort` lifecycle owner, HaloPersistence, NSE spike and G-NSE.
+**M1 started (2026-11-19):** read-only timeline slice — `TimelinePort` (domain, fake, contract, adapter), `TimelineCoordinator`, `FeatureTimeline`, tap a room to read it (text, notice, emote, media placeholders, deleted, undecryptable, membership, date dividers) — verified on the simulator against `infra/dev`. Also done: `SyncPort`/`SyncCoordinator`, `HaloPersistence` (V-SQL-1 resolved), `MediaPort`/`MediaLoader` with inline image thumbnails. Remaining for M1: verification + recovery, NSE spike and G-NSE (both need a physical device or more design), video/audio/file display.
 
 **M0 exit criterion met on the simulator (2026-11-19):** the app signs in with a password against `infra/dev` and shows the room count and names; a relaunch restores the session without signing in (AC-AUTH-1/2 manually). Not yet: signed device build, shared Keychain access group, NSE pipeline (M1), V-SQL-1, V-APPLE-1. Earlier M0b notes:
 

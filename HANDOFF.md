@@ -14,6 +14,13 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   pass; SwiftLint skipped (not configured). Nothing iOS-specific has been built anywhere.
 
 ## 2. Completed work
+**2026-11-19 (latest+3) — M1: inline images**
+- `MediaRef` (opaque token = SDK `MediaSource` JSON), `MediaAttachment` (replaces `.media(kind, body)`), `MediaPort` (+ `FakeMediaPort`, `MediaPortContract`),
+  `MediaLoader` (in-memory cache with byte-limit LRU, one download per key, failures not cached; 4 tests), `MatrixMediaPort` (client `getMediaThumbnail`/`getMediaContent`),
+  `FeatureTimeline` image rows (`ThumbnailView`, 600 px thumbnails). Adapter: 14 tests pass vs infra/dev (media contract finds the image through the timeline
+  room: needs an `m.image` event named blue.png, 64×48, uploaded as the contract user). Verified by eye in the simulator.
+- Video/audio/file rows still show `[Kind] name`; stickers show `[Sticker] body` (no rendering until M4).
+
 **2026-11-19 (latest+2) — M1: HaloPersistence and V-SQL-1**
 - `HaloPersistence` package (GRDB 7.12.0 exact): `HaloDatabase` (WAL pool + append-only migrator, `v1-meta`), 2 tests on macOS. **V-SQL-1 resolved**: adapter test
   `SQLiteCoexistenceTests` runs a syncing SDK client and Halo's database in one simulator process (adapter now 13 tests, all pass against infra/dev).
@@ -112,7 +119,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 ## 6. Next steps
 1. Push this branch / open a PR; check CI.
 2. (Done) contracts pass on infra/dev. Keep running them after every adapter change.
-3. M1 remaining (docs/ROADMAP.md): first real persisted data (read-intent/notification stores arrive with M3), media display, verification + recovery, NSE spike and G-NSE. Answer Q-XCODEGEN before adding the next package to the app.
+3. M1 remaining (docs/ROADMAP.md): first real persisted data (read-intent/notification stores arrive with M3), video/audio/file display, verification + recovery, NSE spike and G-NSE. Answer Q-XCODEGEN before adding the next package to the app.
 4. Without a Mac: V-APPLE-1 from Apple docs; M1 prep — Halo's Sygnal pushkin in `infra/sygnal/` with tests and `pushkin.yml` (ADR-0015).
 
 ## 7. Next Session Prompt

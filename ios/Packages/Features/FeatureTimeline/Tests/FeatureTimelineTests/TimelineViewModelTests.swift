@@ -30,7 +30,10 @@ struct TimelineViewModelTests {
         #expect(model.row(event(.text("hi", isEdited: true), own: true)).text == "hi (edited)")
         #expect(model.row(event(.text("hi", isEdited: false), own: true)).style == .ownMessage)
         #expect(model.row(event(.emote("waves", isEdited: false))).text == "Alice waves")
-        #expect(model.row(event(.media(.image, body: "cat.png"))).text == "[Image] cat.png")
+        #expect(model.row(event(.media(MediaAttachment(kind: .file, body: "a.pdf", source: nil)))).text == "[File] a.pdf")
+        let image = model.row(event(.media(MediaAttachment(kind: .image, body: "cat.png", source: MediaRef(token: "t"), width: 200, height: 100))))
+        #expect(image.text == "cat.png" && image.image == .init(ref: MediaRef(token: "t"), aspectRatio: 2))
+        #expect(model.row(event(.media(MediaAttachment(kind: .image, body: "x.png", source: nil)))).text == "[Image] x.png")
         #expect(model.row(event(.notice("fyi", isEdited: false))).style == .notice)
     }
 

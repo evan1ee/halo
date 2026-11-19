@@ -16,6 +16,7 @@ final class AppRoot {
     let roomList: RoomListViewModel
     let sync: SyncCoordinator
     private let timelinePort: MatrixTimelinePort
+    private let media: MediaLoader
 
     init() {
         let namespace = Bundle.main.bundleIdentifier ?? "one.mbm.halo"
@@ -30,6 +31,7 @@ final class AppRoot {
         let roomCoordinator = RoomListCoordinator(port: MatrixRoomListPort(session: session))
 
         timelinePort = MatrixTimelinePort(session: session)
+        media = MediaLoader(port: MatrixMediaPort(session: session))
         sync = SyncCoordinator(port: MatrixSyncPort(session: session), session: sessionCoordinator)
         auth = AuthViewModel(coordinator: sessionCoordinator)
         roomList = RoomListViewModel(session: sessionCoordinator, rooms: roomCoordinator)
@@ -38,7 +40,7 @@ final class AppRoot {
 
     /// A view model for the timeline of `room`; each screen gets its own coordinator and session.
     func makeTimeline(room: RoomID) -> TimelineViewModel {
-        TimelineViewModel(coordinator: TimelineCoordinator(port: timelinePort, room: room))
+        TimelineViewModel(coordinator: TimelineCoordinator(port: timelinePort, room: room), media: media)
     }
 
     private static var minimumLogLevel: LogLevel {
