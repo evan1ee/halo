@@ -42,6 +42,7 @@ Re-verify at every SDK bump (see [development/BUILD_AND_RELEASE.md](development/
 - F-FFI-14 `Client::clear_caches`, `Client::get_store_sizes`, `Client::optimize_stores` exist.
 - F-FFI-15 `Room.latest_event()` returns `LatestEventValue = None | Remote{timestamp, sender, is_own, profile, content} | RemoteInvite{…} | Local{…}` (no event id); `Timeline.latest_event_id()` exists. `UserReceipt{event_id, receipt: Receipt{timestamp?}}` where the timestamp is the receipt's.
 - F-FFI-16 Pushers: `PusherIdentifiers{pushkey, app_id}`, `PusherKind = Http{data: HttpPusherData{url, format: PushFormat?, default_payload: String?}} | Email`, `PushFormat = EventIdOnly`.
+- F-FFI-17 `SyncServiceState = Idle | Running | Terminated | Error | Offline`; `SqliteStoreBuilder::new(data_path, cache_path)` with `.passphrase(Option<String>)`, `.key(Option<Vec<u8>>)`, `.system_is_memory_constrained()`; `SlidingSyncVersionBuilder = None | Native | DiscoverNative`; the Apple release profile `small-release-stripped` = release + `opt-level = "s"`, `lto = true`, `strip = "debuginfo"` (no panic override).
 - F-FFI-12 The doc comment of `Client::mark_all_rooms_as_read` refers to wrong iOS badges caused by the backend: https://github.com/element-hq/element-x-ios/issues/3151.
 
 ### F-SDK — SDK internals

@@ -1,0 +1,20 @@
+# Media Handling
+
+## 1. Download and display
+- Sources come from timeline items as upstream `MediaSource` (encrypted or plain) — mapped to an opaque `MediaRef` in the domain.
+- Thumbnails: `Client.get_media_thumbnail(source, width, height)`; full content: `get_media_content(source)`; large files: `get_media_file(...)` → temporary file **[VERIFIED F-FFI-4 method names; exact parameters at M1]**.
+- The SDK's media store caches downloaded media **[ASSUMPTION V-MEDIA-1: cache policy configurable via `set_media_retention_policy` (method exists, F-FFI-4)]**.
+- Decoding: ImageIO (`CGImageSource`) off the main thread, downsampled to the display size; animated WebP/GIF/APNG via `CGAnimateImageAtURLWithBlock` / frame extraction **[VERIFIED: ImageIO supports animated GIF, APNG and WebP on iOS 14+ — Apple docs; re-check for iOS 26]**.
+- Memory: an in-memory LRU of decoded thumbnails (cap 64 MB), evicted on memory warnings.
+
+## 2. Upload
+- Images: `Timeline.send_image(...)` with progress (`MediaUploadProgress`) **[VERIFIED F-FFI-8]**; strip location EXIF by default; convert HEIC → JPEG for compatibility **[DECISION]**; max dimension 4096 px, quality 0.85.
+- Sticker pack images: `Client.upload_media(mime, data)` → `mxc://` (F-FFI-4), then written into the pack state event.
+
+## 3. Privacy
+- E2EE rooms: media is encrypted by the SDK (attachment keys in the event).
+- **Image-pack media is not encrypted** **[VERIFIED F-SPEC-3]** → the warning in [../features/STICKERS.md](../features/STICKERS.md).
+- URL previews: off by default in E2EE rooms (`get_url_preview` exists) **[DECISION]**.
+
+## 4. Storage limits
+Settings → Storage shows the SDK store sizes (`get_store_sizes` F-FFI-14) with "Clear cache".
