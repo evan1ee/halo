@@ -16,6 +16,15 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   constants and a one-line `.gitleaksignore` for the old commit's fingerprint (history scans see it).
 
 ## 2. Completed work
+**2026-11-20 (latest+18) — Read intents persisted (GRDB) and restored**
+- `ReadIntentPort`/`ReadIntent` (domain), `FakeReadIntents`, `HaloPersistence.ReadIntentStore` + migration `v2-read-intent` (table per docs/data/DATA_MODELS.md; monotonic upsert, a sent intent never reverts to pending,
+  scoped by account, `removeSent(createdBefore:)`). `ReadReceiptCoordinator` (also: ReadMarkerPort, 2 s per-room debounce, backoff 1 s → 5 min, `flush()`) saves every intent and the sent state; `restore(from:)` loads them,
+  drops sent intents older than 7 days and sends unsent ones; `lastStorageError` records a storage failure (intents still work from memory; no logging yet). App: `HaloPersistence` added to `ios/project.yml` (project
+  regenerated), `AppRoot.followReadIntents()` opens `halo/halo.sqlite` in the store directory when a session is ready.
+- **Bug found and fixed:** two overlapping sends for one room (actor re-entrancy across the network await) could send the same receipt twice; `sending` guard added. Caught as a flaky burst test (5 of 15 runs); 20 runs clean after the fix.
+- Checked: HaloPersistence 5 tests, HaloApplication 58, app builds for the simulator, `scripts/prepush.sh` passes. NOT verified: the DB file on a device (App Group path; file protection `completeUntilFirstUserAuthentication` isn't
+  set on it yet), that a kill-and-relaunch actually resends, multi-process (NSE) access; `receipt_type` is always `read` (private receipts aren't stored); `attempts`/`last_error` columns unused.
+
 **2026-11-20 (latest+17) — Outbound read receipts wired end to end**
 - `TimelineViewModel(receipts:room:)`: rows report `rowVisibility(_:isVisible:)` (List `onAppear`/`onDisappear`), `setActive` follows `scenePhase`; the newest visible *confirmed* event that stays visible for 0.5 s while active is
   passed to `ReadReceiptCoordinator.reportSeen`. `AppRoot` owns one coordinator over `MatrixReadMarkerPort`; `HaloApp` flushes it when the scene leaves `.active`.
@@ -168,7 +177,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 - Docker Hub rate-limited pulls in the last session (Sygnal image not pulled; Swift 6.3 tag unchecked).
 
 ## 6. Next steps
-0. Receipts: persist `read_intent` (GRDB), read `ownReceipt` (V-RS-1) and feed `localIntent`/`latestEvent` into `ReadStatePolicy`, confirmation rules, true ≥ 50 % visibility, mark as read/unread in the room list.
+0. Receipts: set file protection on halo.sqlite, feed stored intents into `ReadStatePolicy` (`localIntent`), read `ownReceipt` (V-RS-1) and feed `localIntent`/`latestEvent` into `ReadStatePolicy`, confirmation rules, true ≥ 50 % visibility, mark as read/unread in the room list.
 1. Push this branch / open a PR; check CI.
 2. (Done) contracts pass on infra/dev. Keep running them after every adapter change.
 3. Verify the badge on the phone (enable Badges for Halo in iOS Settings first), then G-NSE hardening: true peak memory, an encrypted room (decrypt/UTD in the NSE), timeout and termination injection (AC-NSE-3/4), 100 pushes, Release build.

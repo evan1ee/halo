@@ -49,6 +49,7 @@ private struct RootView: View {
             PushDelegate.coordinator = root.push
             await root.push?.begin()
             await root.badge.begin()
+            Task { await root.followReadIntents() }
             await root.sync.begin()
             await root.recovery.start()  // before the banner exists: a hidden banner view runs no task
             await root.auth.start()

@@ -6,6 +6,7 @@ import HaloApplication
 import HaloDomain
 import HaloFoundation
 import HaloMatrixAdapter
+import HaloPersistence
 import HaloPlatform
 
 /// Builds the object graph once at launch: platform and adapter implementations behind the ports,
@@ -22,6 +23,7 @@ final class AppRoot {
     private let records: NotificationRecordStore
     private let timelinePort: MatrixTimelinePort
     let receipts: ReadReceiptCoordinator
+    private let sessionCoordinator: SessionCoordinator
     private let media: MediaLoader
 
     init() {
@@ -34,6 +36,7 @@ final class AppRoot {
         let keychain = HaloShared.keychain()
         let session = MatrixSessionPort(baseDirectory: HaloShared.storeDirectory())
         let sessionCoordinator = SessionCoordinator(port: session, keychain: keychain)
+        self.sessionCoordinator = sessionCoordinator
         let roomCoordinator = RoomListCoordinator(port: MatrixRoomListPort(session: session))
         let suite = "group.\(HaloShared.namespace())"
         records = NotificationRecordStore(suiteName: suite)
@@ -53,6 +56,21 @@ final class AppRoot {
         Self.exportNSEMetrics(namespace: namespace)
         #endif
         log.info("app launched")
+    }
+
+    /// Opens Halo's database for each signed-in account and restores the read intents it holds. Runs for the life of the app.
+    func followReadIntents() async {
+        for await state in await sessionCoordinator.states() {
+            guard case .ready(let user) = state else { continue }
+            do {
+                let directory = HaloShared.storeDirectory().appendingPathComponent("halo", isDirectory: true)
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                let database = try HaloDatabase(path: directory.appendingPathComponent("halo.sqlite").path)
+                await receipts.restore(from: ReadIntentStore(database: database, account: user))
+            } catch {
+                // Without a database, receipts still work from memory; there is nothing to restore.
+            }
+        }
     }
 
     private static func pushConfiguration() -> (appID: String, gateway: URL)? {

@@ -36,6 +36,18 @@ public struct HaloDatabase: Sendable {
                 table.column("value", .text).notNull()
             }
         }
+        migrator.registerMigration("v2-read-intent") { db in
+            try db.execute(sql: """
+                CREATE TABLE read_intent (
+                  account TEXT NOT NULL, room_id TEXT NOT NULL,
+                  event_id TEXT NOT NULL, event_ts INTEGER NOT NULL,
+                  created_at INTEGER NOT NULL, state TEXT NOT NULL CHECK (state IN ('pending','sent')),
+                  attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT,
+                  receipt_type TEXT NOT NULL CHECK (receipt_type IN ('read','read_private')),
+                  PRIMARY KEY (account, room_id)
+                )
+                """)
+        }
         return migrator
     }
 }
