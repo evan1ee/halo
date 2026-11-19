@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Validate the Halo documentation tree.
 
-Checks: required files, feature-spec and ADR sections, relative links, and that every
-referenced ID (Dnn, ADR-nnnn, F-*, V-*, Q-*, AC-*, S-scenarios) is defined where it must be.
+Checks: required files, feature-spec and ADR sections, relative links, that every
+referenced ID (Dnn, ADR-nnnn, F-*, V-*, Q-*, AC-*, S-scenarios) is defined where it must be,
+that every [DECISION] label carries a D/ADR id, and that "AGENTS.md §N" references exist.
 Exit code 0 = all checks passed, 1 = failures (printed).
 """
 from __future__ import annotations
@@ -152,7 +153,7 @@ def check_ids() -> None:
             fail(f"ADR-{a} referenced but no file docs/adr/{a}-*.md")
 
     defined_f = set(re.findall(r"^- (F-[A-Z]+-\d+)\b", sources, flags=re.M))
-    for fid in sorted(collect(r"\bF-(?:LIC|FFI|SDK|SPEC|BOT)-\d+\b", files)):
+    for fid in sorted(collect(r"\bF-(?:LIC|FFI|SDK|SPEC|BOT|PUSH)-\d+\b", files)):
         if fid not in defined_f:
             fail(f"fact {fid} referenced but not defined in SOURCES.md")
 
@@ -176,8 +177,9 @@ def check_scenarios() -> None:
     files = md_files()
     catalogue = (DOCS / "testing" / "UNREAD_REGRESSION_TESTS.md").read_text() + \
         (DOCS / "testing" / "INTEGRATION_TESTS.md").read_text()
-    defined = set(re.findall(r"\b(S\d{2}|S-[A-Z0-9]+-\d+)\b", catalogue))
-    for sid in sorted(collect(r"\b(S\d{2}|S-[A-Z0-9]+-\d+)\b", files)):
+    scenario_re = r"\b(S\d{2}[a-z]?|S-[A-Z0-9]+-\d+)\b"
+    defined = set(re.findall(scenario_re, catalogue))
+    for sid in sorted(collect(scenario_re, files)):
         if sid not in defined:
             fail(f"scenario {sid} referenced but not in the testing catalogues")
 
@@ -197,6 +199,33 @@ def check_labels_and_stale() -> None:
                 fail(f"{f.relative_to(ROOT)}: unknown statement label [{label}]")
 
 
+DECISION_LABEL_RE = re.compile(r"\*\*\[DECISION[^\]]*\]")  # labels are bold; prose mentions are not
+LABEL_DEFINITION_ROW = "| **[DECISION]** |"  # the label's own definition in docs/README.md
+
+
+def check_decision_labels() -> None:
+    """Every [DECISION ...] label must name the decision it records (docs/README.md, AGENTS.md §15)."""
+    for f in md_files():
+        for line_no, line in enumerate(f.read_text().splitlines(), start=1):
+            if line.startswith(LABEL_DEFINITION_ROW):
+                continue
+            for label in DECISION_LABEL_RE.findall(line):
+                if not re.search(r"\bD\d+\b|\bADR-\d{4}\b", label):
+                    fail(f"{f.relative_to(ROOT)}:{line_no}: {label.lstrip('*')} has no D/ADR id")
+
+
+def check_agents_sections() -> None:
+    """References like "AGENTS.md §12" must point at an existing "## 12." heading."""
+    agents = (ROOT / "AGENTS.md").read_text()
+    sections = set(re.findall(r"^## (\d+)\.", agents, flags=re.M))
+    ref_re = re.compile(r"AGENTS\.md\)?\s*§\s*(\d+)((?:\s*(?:,|and)\s*§\s*\d+)*)")
+    for f in md_files():
+        for m in ref_re.finditer(f.read_text()):
+            for num in [m.group(1)] + re.findall(r"\d+", m.group(2)):
+                if num not in sections:
+                    fail(f"{f.relative_to(ROOT)}: reference to missing AGENTS.md §{num}")
+
+
 def main() -> int:
     check_required()
     check_feature_specs()
@@ -205,6 +234,8 @@ def main() -> int:
     check_ids()
     check_scenarios()
     check_labels_and_stale()
+    check_decision_labels()
+    check_agents_sections()
     if failures:
         print(f"validate-docs: {len(failures)} problem(s)")
         for msg in failures:
