@@ -20,6 +20,13 @@ struct ErrorMapperTests {
         #expect(ErrorMapper.map(.notFound) == .notFound)
     }
 
+    @Test("a rejected login (M_FORBIDDEN) is wrong credentials, not a permissions error")
+    func loginForbidden() {
+        let forbidden = ClientError.MatrixApi(kind: .forbidden, code: "M_FORBIDDEN", msg: "", details: nil)
+        #expect(ErrorMapper.mapLogin(forbidden) == .unauthorized(soft: false))
+        #expect(ErrorMapper.map(forbidden) == .forbidden)
+    }
+
     @Test("build errors map to discovery outcomes")
     func build() {
         #expect(ErrorMapper.map(ClientBuildError.ServerUnreachable(message: "x")) == .network(retryable: true))

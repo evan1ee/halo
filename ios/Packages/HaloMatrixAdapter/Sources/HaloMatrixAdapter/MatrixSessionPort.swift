@@ -66,12 +66,19 @@ public actor MatrixSessionPort: SessionPort {
         do {
             let client = try await makeClient(
                 homeserver: server.homeserverURL.absoluteString, storeID: newStoreID, passphrase: passphrase)
-            try await client.login(
-                username: credentials.username, password: credentials.password,
-                initialDeviceName: credentials.deviceDisplayName, deviceId: nil)
+            do {
+                try await client.login(
+                    username: credentials.username, password: credentials.password,
+                    initialDeviceName: credentials.deviceDisplayName, deviceId: nil)
+            } catch {
+                Self.removeStore(baseDirectory, newStoreID)
+                throw ErrorMapper.mapLogin(error)
+            }
             let stored = try Self.stored(from: client.session(), storeID: newStoreID, passphrase: passphrase)
             adopt(client, storeID: newStoreID, session: try client.session())
             return stored
+        } catch let error as HaloError {
+            throw error
         } catch {
             Self.removeStore(baseDirectory, newStoreID)
             throw ErrorMapper.map(error)

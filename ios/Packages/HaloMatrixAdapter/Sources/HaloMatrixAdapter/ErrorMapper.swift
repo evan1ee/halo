@@ -16,6 +16,13 @@ enum ErrorMapper {
         }
     }
 
+    /// For the login call only: Synapse answers wrong credentials with `M_FORBIDDEN` (found by
+    /// `SessionPortContract` against infra/dev), which anywhere else means "not allowed".
+    static func mapLogin(_ error: any Error) -> HaloError {
+        let mapped = map(error)
+        return mapped == .forbidden ? .unauthorized(soft: false) : mapped
+    }
+
     static func map(_ error: ClientError) -> HaloError {
         switch error {
         case .MatrixApi(let kind, _, _, _): return map(kind)

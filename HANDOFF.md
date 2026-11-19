@@ -18,8 +18,10 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
 - `HaloMatrixAdapter`: `ErrorMapper`, `MatrixBootstrap`, `MatrixSessionPort` (actor; discovery, password login, restore, logout, token-refresh
   events; payload JSON holds SDK session + per-login store dir + random store passphrase, Keychain-only), `MatrixRoomListPort`
   (dynamic adapters, ordered mapping, `.unread` filter → `.unsupported` until M1). SDK API names verified in the pinned package source.
-- 8 adapter tests pass in `xcodebuild … test` (6 run, 2 contract tests skipped: need env `HALO_DEV_SERVER/USER/PASSWORD/ROOMS`).
-  **Docker isn't installed on this Mac, so the contracts have NOT run against infra/dev.**
+- OrbStack installed; `infra/dev` up, `smoke.sh` passes. **9 adapter tests pass against it** (`SessionPortContract` and
+  `RoomListPortContract` with 2 rooms), run with `TEST_RUNNER_HALO_DEV_SERVER/USER/PASSWORD/ROOMS` set for `xcodebuild … test`.
+  Bug found by the contract and fixed with a regression test: Synapse answers a wrong password with `M_FORBIDDEN`, now mapped to
+  `unauthorized(soft: false)` for the login call only (`ErrorMapper.mapLogin`).
 - V-CI-2 resolved (CI 6.2.4 floor vs Xcode Swift 6.4.2; all packages pass on both).
 - `HaloMatrixAdapter` package added; pinned SDK 26.11.17 resolves, links and builds for the iOS Simulator; 1 smoke test passes via
   `xcodebuild -scheme HaloMatrixAdapter -destination 'platform=iOS Simulator,name=iPhone 17' test`. The xcframework has no macOS
@@ -51,7 +53,8 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 - Docs: `docs/OPEN_QUESTIONS.md` (V-CI-2), `docs/development/DEVELOPMENT_SETUP.md` §2, `docs/ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
-- Contract suites unrun against a real homeserver (no Docker here). Tried Synapse 1.165.0 natively via pip (`PIP_CERT=/etc/ssl/cert.pem`; plain pip fails TLS verification on this Mac): its Rust extension is rejected by the macOS 27 loader ("mis-aligned LINKEDIT"), so only a container (Docker/Colima/OrbStack) will work. `prepush.sh` doesn't build/test the adapter (needs xcodebuild).
+- Contract tests are env-gated and are reported as skipped (not passed) without a homeserver; `prepush.sh` doesn't build/test the adapter.
+- Docker CLI on this Mac hangs on the `osxkeychain` credential helper (image pulls fail with "error getting credentials"). Workaround used: a throwaway `DOCKER_CONFIG` plus a stub `docker-credential-osxkeychain` first in PATH; the user's config was not touched. Native Synapse via pip doesn't load on macOS 27. `prepush.sh` doesn't build/test the adapter (needs xcodebuild).
 - `RefreshDelegate.saveSessionInKeychain` uses `try?` when encoding a refreshed session (no logger yet); add `HaloLog` + a test when HaloPlatform lands.
 - Sync service is started on first room-list use and stopped only at logout (no lifecycle owner yet).
 - PR #1 CI results haven't been checked yet — first task of the next session.
@@ -63,7 +66,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 
 ## 6. Next steps
 1. Push this branch / open a PR; check CI.
-2. Install Docker (or use another machine), `infra/dev` up, create a user, then run the adapter tests with `HALO_DEV_*` set; fix what the contracts find.
+2. (Done) contracts pass on infra/dev. Keep running them after every adapter change.
 3. M0b continued — Xcode project (`one.mbm.halo`, `HALO_NAMESPACE` in `ios/Config/Base.xcconfig`) →
    HaloPlatform Keychain + log sink → adapter public-API rule in `check-boundaries` → V-SQL-1, V-APPLE-1 → exit criterion.
 4. Without a Mac: V-APPLE-1 from Apple docs; M1 prep — Halo's Sygnal pushkin in `infra/sygnal/` with tests and `pushkin.yml` (ADR-0015).
