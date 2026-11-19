@@ -1,0 +1,14 @@
+name: boundaries
+# Module boundaries and forbidden patterns (MODULE_BOUNDARIES §2, AGENTS.md §17).
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/check-boundaries.sh
