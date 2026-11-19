@@ -14,6 +14,16 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   pass; SwiftLint skipped (not configured). Nothing iOS-specific has been built anywhere.
 
 ## 2. Completed work
+**2026-11-19 (latest+11) — Q-XCODEGEN resolved; first physical-device run**
+- Founder decision: adopt XcodeGen. `ios/project.yml` is now in the repo (ADR-0017; Q-XCODEGEN resolved; DEVELOPMENT_SETUP updated). The generated project is committed. The development
+  team is not in the spec: pass `DEVELOPMENT_TEAM=<id>` (Xcode had written one into the project; regeneration drops it).
+- Device: iPhone 16 (physical, connected). `xcodebuild -project ios/Halo.xcodeproj -scheme Halo-Debug -destination 'id=<udid>' DEVELOPMENT_TEAM=<team> -allowProvisioningUpdates build` succeeds with the
+  Apple Development identity (this registers the app IDs/capabilities in the founder's developer account); `devicectl device install app` + `process launch one.mbm.halo` installed and launched
+  it; the process stays running and the NSE is embedded. NOT verified: what the screen shows (no screenshot tool for the device), Keychain access group / app group at runtime, sign-in,
+  and anything about pushes. The dev Synapse listens on 127.0.0.1 only and Debug.xcconfig points at 127.0.0.1, so signing in from the phone needs Synapse exposed on the LAN (and an ATS
+  exception for http) — not done.
+- G-NSE still open: needs a push path (Sygnal + APNs key) to measure the NSE budget on this device.
+
 **2026-11-19 (latest+10) — M2: formatted-body rendering**
 - `TimelineEvent.formattedBody` (the sender's HTML, untouched), mapped from the SDK's `TextMessageContent.formatted` (HTML only). `FeatureTimeline/HTMLText` renders a fixed subset to
   `AttributedString`: b/strong, i/em, s/del/strike, code, a (http, https, mailto, matrix only), br, p/div/pre/blockquote/headings as line breaks, ul/ol/li as bullets, `mx-reply` dropped,
@@ -175,7 +185,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 ## 6. Next steps
 1. Push this branch / open a PR; check CI.
 2. (Done) contracts pass on infra/dev. Keep running them after every adapter change.
-3. M2 next (docs/features/MESSAGING.md): emoji picker, formatted-body rendering, offline send test (AC-M1). M1 remaining: first real persisted data (read-intent/notification stores arrive with M3), video/audio/file display, QR/emoji verification, NSE spike and G-NSE. Answer Q-XCODEGEN before adding the next package to the app.
+3. M2 next (docs/features/MESSAGING.md): emoji picker, formatted-body rendering, offline send test (AC-M1). M1 remaining: first real persisted data (read-intent/notification stores arrive with M3), video/audio/file display, QR/emoji verification, NSE spike and G-NSE.
 4. Without a Mac: V-APPLE-1 from Apple docs; M1 prep — Halo's Sygnal pushkin in `infra/sygnal/` with tests and `pushkin.yml` (ADR-0015).
 
 ## 7. Next Session Prompt
