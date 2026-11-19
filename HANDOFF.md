@@ -14,6 +14,17 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   pass; SwiftLint skipped (not configured). Nothing iOS-specific has been built anywhere.
 
 ## 2. Completed work
+**2026-11-19 (latest+14) — NSE spike: fetch + decrypt + content, with metrics**
+- `NotificationFetchPort` (domain) + `MatrixNotificationPort` (adapter: `NotificationClient` in `MultipleProcesses` mode; `NotificationMapper`: DM → sender as title, group → room title and "Sender: text",
+  encrypted → "Encrypted message", filtered/redacted → suppressed, not found → `.notFound`). `MatrixSessionPort` gained `sendsMessages` and `lightweightRuntime` (the NSE uses `sendsMessages: false`,
+  lightweight runtime per V-NSE-3, holder name "nse"). `HaloPlatform.HaloShared` (namespace, shared Keychain access group on device builds, App Group store directory) now used by both the app and the NSE;
+  Info keys `HaloNamespace`/`HaloKeychainAccessGroup`. **Consequence: the session moved to the shared Keychain group, so the phone must sign in once more.**
+- `ios/NotificationService`: reads the session from the Keychain, restores a client, fetches the event, rewrites title/body/thread id, delivers; on error or `serviceExtensionTimeWillExpire` delivers the
+  generic payload content; never sets a badge. `NSEMetrics` appends one JSON line per push (`outcome`, step durations, `phys_footprint` MB, no content) to `nse-metrics.jsonl` in the App Group container.
+- Checked: prepush passes (adapter 16+ tests incl. mapper tests; app and NSE build signed for the device). NOT yet measured or verified on the device: sign-in under the shared group, that the NSE decrypts,
+  memory and time numbers (G-NSE AC-NSE-1/2), timeout/termination behaviour (AC-NSE-3/4), 100-push run. Not implemented: `notification_record` de-duplication, read-state suppression, badge
+  recomputation (`BadgeCalculator`), communication-notification intents, suppression entitlement (V-PUSH-3), sender avatars.
+
 **2026-11-19 (latest+13) — Push groundwork: Sygnal in infra/dev, pusher registration**
 - `infra/dev`: optional Sygnal v0.15.1 (`--profile push`, config rendered by `infra/dev/sygnal-config.sh` from `sygnal/sygnal.yaml.template`, needs `HALO_APNS_TEAM_ID` and one `secrets/AuthKey_<KEYID>.p8`, both
   gitignored/never committed; app id `one.mbm.halo.dev`, topic `one.mbm.halo`, APNs *sandbox*). Synapse whitelists private ranges for outbound pushes (`ip_range_whitelist`). Sygnal starts and loads the key; no push has been sent.

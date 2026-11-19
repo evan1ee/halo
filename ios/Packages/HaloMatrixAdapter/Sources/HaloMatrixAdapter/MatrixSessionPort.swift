@@ -22,6 +22,8 @@ public actor MatrixSessionPort: SessionPort {
 
     private let baseDirectory: URL
     private let holderName: String
+    private let sendsMessages: Bool
+    private let lightweightRuntime: Bool
     private var client: Client?
     private var syncService: SyncService?
     private var storeID: String?
@@ -29,9 +31,15 @@ public actor MatrixSessionPort: SessionPort {
     private var events: [UUID: AsyncStream<SessionEvent>.Continuation] = [:]
 
     /// - Parameter baseDirectory: where per-login SDK stores live (the App Group container in the app).
-    public init(baseDirectory: URL, holderName: String = "app") {
+    /// - Parameters:
+    ///   - holderName: this process's name for the SDK's cross-process lock ("app" or "nse").
+    ///   - sendsMessages: whether this process owns the unsent-message queues (the app does; the extension must not).
+    ///   - lightweightRuntime: use the SDK's lightweight runtime (the extension does).
+    public init(baseDirectory: URL, holderName: String = "app", sendsMessages: Bool = true, lightweightRuntime: Bool = false) {
         self.baseDirectory = baseDirectory
         self.holderName = holderName
+        self.sendsMessages = sendsMessages
+        self.lightweightRuntime = lightweightRuntime
     }
 
     // MARK: SessionPort
@@ -39,7 +47,7 @@ public actor MatrixSessionPort: SessionPort {
     public func loginDetails(server: String) async throws(HaloError) -> ServerDetails {
         let trimmed = server.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw .invalidInput("SERVER_EMPTY") }
-        try MatrixBootstrap.initialise()
+        try MatrixBootstrap.initialise(lightweightRuntime: lightweightRuntime)
         do {
             let probe = try await ClientBuilder()
                 .serverNameOrHomeserverUrl(serverNameOrUrl: trimmed)
@@ -206,7 +214,7 @@ public actor MatrixSessionPort: SessionPort {
 
     private func adopt(_ client: Client, storeID: String, session: Session) async {
         // Unsent messages survive an app kill and go out when the network returns (MESSAGING FR-3).
-        await client.enableAllSendQueues(enable: true)
+        if sendsMessages { await client.enableAllSendQueues(enable: true) }
         self.client = client
         self.storeID = storeID
     }

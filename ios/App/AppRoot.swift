@@ -27,9 +27,9 @@ final class AppRoot {
             category: .session, sink: OSLogSink(subsystem: namespace),
             minimum: Self.minimumLogLevel, salt: Self.installSalt())
 
-        // The access group is added once the app is signed with a team (M1, shared with the NSE).
-        let keychain = KeychainStore(service: namespace, accessGroup: nil)
-        let session = MatrixSessionPort(baseDirectory: Self.storeDirectory(namespace: namespace))
+        // Shared with the notification extension: the Keychain access group and the App Group container.
+        let keychain = HaloShared.keychain()
+        let session = MatrixSessionPort(baseDirectory: HaloShared.storeDirectory())
         let sessionCoordinator = SessionCoordinator(port: session, keychain: keychain)
         let roomCoordinator = RoomListCoordinator(port: MatrixRoomListPort(session: session))
 
@@ -72,13 +72,5 @@ final class AppRoot {
         let salt = UInt64.random(in: .min ... .max)
         UserDefaults.standard.set(salt, forKey: key)
         return salt
-    }
-
-    /// The App Group container when the app is signed with it, else Application Support (unsigned simulator builds).
-    private static func storeDirectory(namespace: String) -> URL {
-        let fileManager = FileManager.default
-        let base = fileManager.containerURL(forSecurityApplicationGroupIdentifier: "group.\(namespace)")
-            ?? URL.applicationSupportDirectory
-        return base.appendingPathComponent("matrix", isDirectory: true)
     }
 }

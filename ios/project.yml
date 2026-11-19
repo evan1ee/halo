@@ -56,6 +56,11 @@ targets:
     type: app-extension
     platform: iOS
     sources: [NotificationService]
+    dependencies:
+      - package: HaloMatrixAdapter
+      - package: HaloDomain
+      - package: HaloFoundation
+      - package: HaloPlatform
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(HALO_NSE_BUNDLE_ID)

@@ -8,14 +8,16 @@ public enum MatrixBootstrap {
 
     /// Initialises the SDK's tracing and runtime once per process. Nothing is written to stdout:
     /// SDK logs can contain identifiers (SECURITY §6); a privacy-reviewed sink arrives with HaloPlatform.
-    public static func initialise() throws(HaloError) {
+    /// - Parameter lightweightRuntime: a single-threaded Tokio runtime, for the notification extension's memory budget
+    ///   (V-NSE-3). Only the first call in a process decides.
+    public static func initialise(lightweightRuntime: Bool = false) throws(HaloError) {
         let result: Result<Void, HaloError> = done.withLock { isDone in
             guard !isDone else { return .success(()) }
             let config = TracingConfiguration(
                 logLevel: .warn, traceLogPacks: [], extraTargets: [],
                 writeToStdoutOrSystem: false, writeToFiles: nil, sentryConfig: nil
             )
-            do { try initPlatform(config: config, useLightweightTokioRuntime: false) } catch {
+            do { try initPlatform(config: config, useLightweightTokioRuntime: lightweightRuntime) } catch {
                 return .failure(ErrorMapper.map(error))
             }
             isDone = true

@@ -9,6 +9,10 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>HaloNamespace</key>
+	<string>$(HALO_NAMESPACE)</string>
+	<key>HaloKeychainAccessGroup</key>
+	<string>$(HALO_KEYCHAIN_GROUP)</string>
 	<key>HaloPushAppID</key>
 	<string>$(HALO_PUSH_APP_ID)</string>
 	<key>HaloPushGatewayURL</key>
