@@ -50,7 +50,14 @@ enum TimelineMapper {
             reactions: event.reactions.map { reaction in
                 ReactionSummary(key: reaction.key, count: reaction.senders.count, reactedByMe: reaction.senders.contains { $0.senderId == ownUserID })
             },
-            replyTo: replyPreview(of: event.content))
+            replyTo: replyPreview(of: event.content), formattedBody: formattedHTML(of: event.content))
+    }
+
+    /// The HTML body of a text message, if the sender gave one in the standard format.
+    static func formattedHTML(of content: TimelineItemContent) -> String? {
+        guard case .msgLike(let msgLike) = content, case .message(let message) = msgLike.kind, case .text(let text) = message.msgType,
+              let formatted = text.formatted, case .html = formatted.format else { return nil }
+        return formatted.body
     }
 
     /// The quoted message of a reply. Text-like originals give a snippet; anything else (not loaded, encrypted, media)

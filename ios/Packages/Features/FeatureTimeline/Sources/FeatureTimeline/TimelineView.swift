@@ -121,7 +121,7 @@ private struct RowView: View {
                     .overlay(alignment: .leading) { Rectangle().fill(.secondary).frame(width: 2) }
                 }
                 if let image = row.image { ThumbnailView(image: image, model: model) }
-                Text(row.text)
+                Text(row.styled ?? AttributedString(row.text))
                     .padding(8)
                     .background(row.style == .ownMessage ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.15), in: .rect(cornerRadius: 12))
                     .opacity(row.status == nil ? 1 : 0.6)

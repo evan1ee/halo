@@ -182,6 +182,19 @@ struct TimelineViewModelTests {
         #expect(model.replyingTo == nil)
     }
 
+    @Test("a text message with an HTML body gets styled text; a plain one doesn't; edits keep the suffix")
+    func styledText() throws {
+        let model = try model()
+        func message(html: String?, edited: Bool) -> TimelineItem {
+            TimelineItem(id: TimelineItemID("id"), content: .event(TimelineEvent(
+                eventID: nil, sender: nil, senderName: "Alice", timestamp: Date(timeIntervalSince1970: 0), isOwn: false,
+                kind: .text("**b**", isEdited: edited), formattedBody: html)))
+        }
+        #expect(model.row(message(html: nil, edited: false)).styled == nil)
+        let styled = model.row(message(html: "<strong>b</strong>", edited: true)).styled
+        #expect(styled.map { String($0.characters) } == "b (edited)")
+    }
+
     @Test("typing text uses known names, falls back to the user ID, and collapses for many people")
     func typingText() throws {
         let alice = try UserID("@alice:x.org")

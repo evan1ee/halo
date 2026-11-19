@@ -21,6 +21,8 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     public let reactions: [Chip]
     /// The quoted message, shown above the text of a reply.
     public let reply: Reply?
+    /// Styled text for a message that came with an HTML body; the view shows `text` otherwise.
+    public let styled: AttributedString?
 
     public struct Reply: Equatable, Sendable {
         public let sender: String?
@@ -43,8 +45,9 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
 
     init(
         id: String, style: Style, sender: String?, text: String, image: Image? = nil, status: String? = nil,
-        eventID: EventID? = nil, isOwn: Bool = false, reactions: [Chip] = [], reply: Reply? = nil
+        eventID: EventID? = nil, isOwn: Bool = false, reactions: [Chip] = [], reply: Reply? = nil, styled: AttributedString? = nil
     ) {
+        self.styled = styled
         self.reply = reply
         self.eventID = eventID
         self.isOwn = isOwn
@@ -254,7 +257,8 @@ public final class TimelineViewModel {
                 return TimelineRow(
                     id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: edited ? "\(body) (edited)" : body,
                     status: Self.status(of: event.sendState), eventID: event.eventID, isOwn: event.isOwn,
-                    reactions: Self.chips(event.reactions), reply: Self.reply(event.replyTo))
+                    reactions: Self.chips(event.reactions), reply: Self.reply(event.replyTo),
+                    styled: event.formattedBody.map { HTMLText.attributed($0) + AttributedString(edited ? " (edited)" : "") })
             case .notice(let body, _):
                 return TimelineRow(id: id, style: .notice, sender: name, text: body)
             case .emote(let body, _):

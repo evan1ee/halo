@@ -39,11 +39,15 @@ public struct TimelineEvent: Sendable, Equatable {
     public let reactions: [ReactionSummary]
     /// The message this one replies to, if any (docs/features/MESSAGING.md FR-2).
     public let replyTo: ReplyPreview?
+    /// The sender's HTML `formatted_body` for a text message, untouched (the UI renders a safe subset). `nil` for
+    /// plain messages.
+    public let formattedBody: String?
 
     public init(
         eventID: EventID?, sender: UserID?, senderName: String?, timestamp: Date, isOwn: Bool, kind: TimelineEventKind,
-        sendState: SendState = .sent, reactions: [ReactionSummary] = [], replyTo: ReplyPreview? = nil
+        sendState: SendState = .sent, reactions: [ReactionSummary] = [], replyTo: ReplyPreview? = nil, formattedBody: String? = nil
     ) {
+        self.formattedBody = formattedBody
         self.replyTo = replyTo
         self.reactions = reactions
         self.sendState = sendState
