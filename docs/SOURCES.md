@@ -20,11 +20,12 @@ Re-verify at every SDK bump (see [development/BUILD_AND_RELEASE.md](development/
 
 ### F-LIC — licences
 - F-LIC-1 matrix-rust-sdk is Apache-2.0 (root `LICENSE`); `bindings/matrix-sdk-ffi/Cargo.toml` declares `license = "Apache-2.0"`, `publish = false`.
-- F-LIC-2 The iOS dependency tree of `matrix-sdk-ffi` (`cargo metadata --filter-platform aarch64-apple-ios`, default features) has 552 crates and **no GPL/LGPL/AGPL**. MPL-2.0: `uniffi*`, `eyeball-im`, `imbl`, `imbl-sized-chunks`. Full list: [security/inventory/rust-deps-matrix-sdk-ffi.csv](security/inventory/rust-deps-matrix-sdk-ffi.csv).
+- F-LIC-2 The iOS dependency tree of `matrix-sdk-ffi` (`cargo metadata --filter-platform aarch64-apple-ios`, normal + build deps) has 552 crates with default features and **564 with `--features sentry`** — the feature set the upstream Swift build uses (`FFI_FEATURES = "sentry"` in `xtask/src/swift.rs`); the 12 extra crates are MIT/Apache-2.0. **No GPL/LGPL/AGPL** in either. MPL-2.0: `uniffi*`, `eyeball-im`, `imbl`, `imbl-sized-chunks`. Full list: [security/inventory/rust-deps-matrix-sdk-ffi.csv](security/inventory/rust-deps-matrix-sdk-ffi.csv).
 - F-LIC-3 Element X iOS: `LICENSE` = AGPL-3.0, plus `LICENSE-COMMERCIAL` (https://github.com/element-hq/element-x-ios). Only these two files were opened.
 - F-LIC-4 `matrix-rust-components-swift` is Apache-2.0.
 - F-LIC-5 GRDB.swift is MIT.
 - F-LIC-6 evan1ee/matrix-bot is MIT.
+- F-LIC-7 Build/test tools: swift-snapshot-testing (MIT), SwiftLint (MIT), gitleaks (MIT), cargo-deny and cargo-about (MIT / Apache-2.0 dual) — LICENSE files on each default branch.
 
 ### F-FFI — matrix-sdk-ffi (at the pinned rev)
 - F-FFI-1 `crate-type = ["cdylib", "staticlib", "lib"]`; default features include `bundled-sqlite`, `experimental-search`, `rustls-aws-lc-rs`.
