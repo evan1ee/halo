@@ -87,4 +87,4 @@ types, so it is treated as fixed.
 4. Before pushing: `scripts/validate-docs.sh`, `scripts/check-boundaries.sh`, SwiftLint, unit tests.
 
 ## 6. Dependency management
-SwiftPM only. Versions pinned **exactly** (`exact:`) and `Package.resolved` committed. Adding/upgrading a dependency follows AGENTS.md §11.
+SwiftPM only. If `git clone` of GRDB's full history stalls, make a shallow bare mirror of the tag (`git clone --bare --depth 1 --branch v7.12.0 https://github.com/groue/GRDB.swift /tmp/grdb-mirror.git`) and point SwiftPM at it with a *user-level* `~/.swiftpm/configuration/mirrors.json` (`original`: the GRDB URL, `mirror`: `file:///tmp/grdb-mirror.git`); manifests and `Package.resolved` keep the public URL and the exact pin. Versions pinned **exactly** (`exact:`) and `Package.resolved` committed. Adding/upgrading a dependency follows AGENTS.md §11.

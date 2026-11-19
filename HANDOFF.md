@@ -14,6 +14,13 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   pass; SwiftLint skipped (not configured). Nothing iOS-specific has been built anywhere.
 
 ## 2. Completed work
+**2026-11-19 (latest+2) — M1: HaloPersistence and V-SQL-1**
+- `HaloPersistence` package (GRDB 7.12.0 exact): `HaloDatabase` (WAL pool + append-only migrator, `v1-meta`), 2 tests on macOS. **V-SQL-1 resolved**: adapter test
+  `SQLiteCoexistenceTests` runs a syncing SDK client and Halo's database in one simulator process (adapter now 13 tests, all pass against infra/dev).
+- GRDB's full `git clone` stalls on this network; worked around with a shallow bare mirror in `/tmp/grdb-mirror.git` and a **user-level**
+  `~/.swiftpm/configuration/mirrors.json` (outside the repo; DEVELOPMENT_SETUP §6). If `/tmp` is cleaned, recreate the mirror. Not yet in the Xcode app project.
+- `TimelinePortContract` now requires the expected bodies to be the room's first events (later events allowed).
+
 **2026-11-19 (latest+1) — M1: sync lifecycle owner**
 - `SyncPort` (domain, `FakeSyncPort`, `SyncPortContract`), `MatrixSyncPort` (adapter), `SyncCoordinator` (runs while session ready ∧ foreground; backoff
   1…60 s with an injected sleeper; 5 tests, stable over repeated runs). Room list no longer starts sync (`MatrixSessionPort.roomListService()` only creates the
@@ -105,7 +112,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 ## 6. Next steps
 1. Push this branch / open a PR; check CI.
 2. (Done) contracts pass on infra/dev. Keep running them after every adapter change.
-3. M1 remaining (docs/ROADMAP.md): HaloPersistence (GRDB; run the V-SQL-1 runtime check there), media display, verification + recovery, NSE spike and G-NSE. Answer Q-XCODEGEN before adding the next package to the app.
+3. M1 remaining (docs/ROADMAP.md): first real persisted data (read-intent/notification stores arrive with M3), media display, verification + recovery, NSE spike and G-NSE. Answer Q-XCODEGEN before adding the next package to the app.
 4. Without a Mac: V-APPLE-1 from Apple docs; M1 prep — Halo's Sygnal pushkin in `infra/sygnal/` with tests and `pushkin.yml` (ADR-0015).
 
 ## 7. Next Session Prompt

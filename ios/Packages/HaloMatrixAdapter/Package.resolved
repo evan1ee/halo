@@ -1,6 +1,15 @@
 {
-  "originHash" : "c92ddc166185c3528cbc180415e3d3891c3cd7cbf47ce234aeb3569b3891b664",
+  "originHash" : "f194a234da9bf587fcc5f0247d5defc3e1ba2f7c741aa40f7a4794c69b5a7cce",
   "pins" : [
+    {
+      "identity" : "grdb.swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/groue/GRDB.swift",
+      "state" : {
+        "revision" : "92a554cd0d5e8d67cb18993c6054e73fe42c066c",
+        "version" : "7.12.0"
+      }
+    },
     {
       "identity" : "matrix-rust-components-swift",
       "kind" : "remoteSourceControl",

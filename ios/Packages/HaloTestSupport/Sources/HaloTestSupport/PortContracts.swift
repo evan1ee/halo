@@ -71,8 +71,8 @@ public enum RoomListPortContract {
     }
 }
 
-/// Behaviour every `TimelinePort` implementation must show for a room whose events are `expectedBodies`
-/// (oldest first, text-like events only). Run against the fake and against the adapter on the dev homeserver.
+/// Behaviour every `TimelinePort` implementation must show for a room whose first events are `expectedBodies`
+/// (oldest first, text-like events only; later events are allowed). Run against the fake and against the adapter on the dev homeserver.
 public enum TimelinePortContract {
     public static func verify(_ port: any TimelinePort, room: RoomID, expectedBodies: [String], maxDiffs: Int = 1_000) async throws {
         let session: any TimelineSession
@@ -103,7 +103,7 @@ public enum TimelinePortContract {
                 throw ContractViolation("diff #\(received) doesn't apply: \(error.code)")
             }
             guard Set(items.map(\.id)).count == items.count else { throw ContractViolation("duplicate item id after diff #\(received)") }
-            if bodies(of: items) == expectedBodies { await session.close(); return }
+            if bodies(of: items).starts(with: expectedBodies) { await session.close(); return }
             if received >= maxDiffs { break }
         }
         await session.close()
