@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// Turns the HTML subset Matrix clients send in `formatted_body` into styled text (docs/features/MESSAGING.md FR-1,
 /// TIMELINE FR-2). Only a fixed set of tags is honoured; every other tag is dropped but its text stays, and nothing is
@@ -20,7 +21,10 @@ enum HTMLText {
             if bold > 0 { intent.insert(.stronglyEmphasized) }
             if italic > 0 { intent.insert(.emphasized) }
             if strike > 0 { intent.insert(.strikethrough) }
-            if code > 0 { intent.insert(.code) }
+            if code > 0 {
+                intent.insert(.code)
+                piece.font = .system(.body, design: .monospaced)  // `Text` ignores the code intent on its own
+            }
             if !intent.isEmpty { piece.inlinePresentationIntent = intent }
             if let link = links.last, let url = link { piece.link = url }
             result += piece

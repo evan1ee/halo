@@ -17,6 +17,8 @@ struct HTMLTextTests {
         #expect(bold?.1 == .stronglyEmphasized)
         #expect(runs("<b><i>x</i></b>").first?.1 == [.stronglyEmphasized, .emphasized])
         #expect(runs("<code>x</code>").first?.1 == .code)
+        #expect(HTMLText.attributed("<code>x</code>").runs.first?.font != nil)
+        #expect(HTMLText.attributed("x").runs.first?.font == nil)
         #expect(runs("<s>x</s>").first?.1 == .strikethrough)
     }
 
