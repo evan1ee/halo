@@ -16,6 +16,9 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   constants and a one-line `.gitleaksignore` for the old commit's fingerprint (history scans see it).
 
 ## 2. Completed work
+**2026-11-20 (latest+20) — Receipts from the user's other devices clear the badge here**
+- `RoomSummary.ownReadThrough`: the adapter reads the newer of the user's `.read`/`.readPrivate` unthreaded receipts (`Room.loadUserReceipt`), resolves the event's time with `loadOrFetchEvent` (cached by event id) and only for rooms that look unread. `RoomListCoordinator` passes it as `localIntent`; `BadgeCoordinator` takes the later of it and the local read position.
+- Checked: HaloApplication 60 tests (new `readElsewhereClears`), adapter builds, `scripts/prepush.sh` passes. NOT checked: V-RS-1 (whether room-list updates fire when only the own receipt changes) and the fetch cost on a device; the adapter mapping has no unit test.
 **2026-11-20 (latest+19) — Local read intent and latest event feed the badge policy**
 - `RoomSummary.latestEvent` (adapter: `Room.latestEvent()`; remote → time + `isOwn`, local echo → own, none/invite → nil) → `RoomReadInputs.latestEvent`. `ReadReceiptCoordinator.positions()` streams the per-room read time;
   `BadgeCoordinator(receipts:)` passes it as `localIntent`, so rule E1 clears a room's attention the moment the user reads it here (even while the server still counts) and a newer event brings it back.
@@ -183,7 +186,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 - Docker Hub rate-limited pulls in the last session (Sygnal image not pulled; Swift 6.3 tag unchecked).
 
 ## 6. Next steps
-0. Receipts: set file protection on halo.sqlite, read `ownReceipt` (V-RS-1) and feed it into the policy (V-RS-1) and feed `localIntent`/`latestEvent` into `ReadStatePolicy`, confirmation rules, true ≥ 50 % visibility, mark as read/unread in the room list.
+0. Receipts: set file protection on halo.sqlite, verify V-RS-1 on a device (own-receipt updates), intent confirmation rules (a)–(c), true ≥ 50 % visibility, mark as read/unread in the room list.
 1. Push this branch / open a PR; check CI.
 2. (Done) contracts pass on infra/dev. Keep running them after every adapter change.
 3. Verify the badge on the phone (enable Badges for Halo in iOS Settings first), then G-NSE hardening: true peak memory, an encrypted room (decrypt/UTD in the NSE), timeout and termination injection (AC-NSE-3/4), 100 pushes, Release build.

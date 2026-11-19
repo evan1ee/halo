@@ -118,4 +118,27 @@ struct BadgeCoordinatorTests {
         try rooms.emit(.set(index: 0, try unread(latest: 200)))
         #expect(await eventually { port.badge == 1 })
     }
+
+    @Test("a receipt your other device sent clears the room here, until a newer event arrives")
+    func readElsewhereClears() async throws {
+        let rooms = FakeRoomListPort()
+        let coordinator = RoomListCoordinator(port: rooms)
+        let port = FakeBadgePort()
+        let badge = BadgeCoordinator(rooms: coordinator, records: FakeNotificationRecords(), port: port)
+        await badge.begin()
+        await coordinator.start()
+        func room(latest: Double, readThrough: Double?) throws -> RoomSummary {
+            RoomSummary(
+                id: try RoomID("!a:x.org"), name: "a", isDirect: false, isEncrypted: false, membership: .joined,
+                read: RoomReadCounts(mode: .allMessages, server: ServerCounts(notification: 3, highlight: 0), sdk: .zero, isMarkedUnread: false),
+                latestEvent: LatestEventRef(timestamp: Date(timeIntervalSince1970: latest), senderIsSelf: false),
+                ownReadThrough: readThrough.map { Date(timeIntervalSince1970: $0) })
+        }
+        try rooms.emit(.reset([try room(latest: 100, readThrough: nil)]))
+        #expect(await eventually { port.badge == 1 })
+        try rooms.emit(.set(index: 0, try room(latest: 100, readThrough: 100)))
+        #expect(await eventually { port.badge == 0 })
+        try rooms.emit(.set(index: 0, try room(latest: 200, readThrough: 100)))
+        #expect(await eventually { port.badge == 1 })
+    }
 }

@@ -57,7 +57,7 @@ public actor BadgeCoordinator {
             let notified = (byRoom[input.roomID] ?? []).map { NotifiedRef(timestamp: $0.timestamp, isMention: $0.isMention) }
             let state = ReadStatePolicy.evaluate(RoomReadInputs(
                 roomID: input.roomID, membership: input.membership, isEncrypted: input.isEncrypted, counts: input.counts,
-                latestEvent: input.latestEvent, localIntent: positions[input.roomID] ?? input.localIntent, unconfirmedNotified: notified))
+                latestEvent: input.latestEvent, localIntent: [positions[input.roomID], input.localIntent].compactMap { $0 }.max(), unconfirmedNotified: notified))
             if state.attention { result.insert(input.roomID) }
         }
         let known = Set(inputs.map(\.roomID))
