@@ -6,6 +6,7 @@ cd "$(dirname "$0")/.."
 failed=0; skipped=()
 step() { echo "== $1"; shift; "$@" || failed=1; }
 
+step "handoff (tip commit + structure, AGENTS.md §18)" python3 scripts/check_handoff.py commit HEAD
 step "docs" scripts/validate-docs.sh
 step "boundaries" scripts/check-boundaries.sh
 

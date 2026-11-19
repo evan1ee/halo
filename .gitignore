@@ -10,6 +10,9 @@ build/
 # SwiftPM
 .build/
 .swiftpm/
+# Python
+__pycache__/
+*.pyc
 # Rust (only if core/ is introduced)
 target/
 # Secrets and local environment

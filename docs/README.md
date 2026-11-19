@@ -43,6 +43,9 @@ Documents mark important statements with one of these labels:
 
 ## Maintenance rules
 
+- [../HANDOFF.md](../HANDOFF.md) (repository root) is updated in the last commit of every push (AGENTS.md §18). It summarises the
+  state and links here; it never holds the only copy of a fact.
+
 - Each fact appears in exactly one place; other documents link to it rather than restating it.
 - A change in behaviour updates the owning document **in the same commit**.
 - `scripts/validate-docs.sh` checks structure, links and labels; it runs in CI.

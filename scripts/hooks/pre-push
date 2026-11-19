@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Session Handoff Rule (AGENTS.md §18): the tip commit of every pushed branch must update HANDOFF.md.
+# Installed by scripts/install-hooks.sh (git config core.hooksPath scripts/hooks).
+exec python3 "$(git rev-parse --show-toplevel)/scripts/check_handoff.py" pre-push "$1"
