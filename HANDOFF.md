@@ -22,7 +22,10 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   from `HALO_APS_ENVIRONMENT`, `HaloPushAppID`/`HaloPushGatewayURL` Info keys (empty gateway in Beta/Release = push off). Debug gateway URL `http://sygnal:5000/_matrix/push/v1/notify` is what Synapse (in Docker) calls.
   Checked: prepush passes (Application 45 tests, adapter compiles incl. a payload test); the signed Debug build has the `aps-environment` entitlement and the Info keys. NOT verified: the permission prompt, a pusher row
   in Synapse (none yet: the phone hasn't signed in with this build), Synapse → Sygnal → APNs → phone delivery, `delete_pusher` on logout (not implemented), the NSE (still pass-through), G-NSE.
-- Next: sign in on the phone, accept the prompts, check `select * from pushers` in Postgres, send a message from another account and watch the Sygnal log.
+- Verified afterwards on the device (iPhone 16, Debug build, `contract`): the pusher row appears in Synapse after sign-in (HTTP, `event_id_only`, our default payload). A message from a second account made
+  Synapse call Sygnal and Sygnal send to APNs sandbox: APNs accepted it (no rejection logged). Two fixes were needed in `infra/dev`: Synapse must be *restarted* after the `ip_range_whitelist` change, and Sygnal needs
+  `convert_device_token_to_hex: false` because Halo registers the hex token (the default expects base64; otherwise APNs answered 400 BadDeviceToken and Synapse deleted the pusher). Whether the notification
+  actually appeared on the phone is for the founder to confirm (the NSE is still pass-through, so it shows the generic "Halo — New message" alert).
 
 **2026-11-19 (latest+12) — M2: emoji picker for reactions**
 - Long-press menu gains "More reactions…": a sheet with a fixed grid of 48 emoji (`TimelineViewModel.pickerEmoji`; the quick row stays 👍 ❤️ 😂). `beginReactionPicker/pickReaction`, unconfirmed rows can't open it.

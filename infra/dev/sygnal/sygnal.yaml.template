@@ -31,3 +31,5 @@ apps:
     team_id: __TEAM_ID__
     topic: one.mbm.halo
     platform: sandbox
+    # Halo registers the hex device token as the pushkey (Sygnal's default expects base64).
+    convert_device_token_to_hex: false
