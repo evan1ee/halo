@@ -1,0 +1,90 @@
+import Foundation
+import HaloDomain
+import HaloFoundation
+import HaloTestSupport
+import Synchronization
+import Testing
+@testable import HaloApplication
+
+@Suite("ReadReceiptCoordinator")
+struct ReadReceiptCoordinatorTests {
+    private final class Clock: Sendable {
+        let value = Mutex(ContinuousClock.now)
+        let sleeps = Mutex<[Duration]>([])
+        func advance(_ d: Duration) { value.withLock { $0 = $0.advanced(by: d) } }
+        /// A sleep that records, advances the clock and returns at once.
+        func sleep(_ d: Duration) { sleeps.withLock { $0.append(d) }; advance(d) }
+    }
+
+    private let room = try! RoomID("!r:halo.localhost")
+    private func event(_ n: Int) -> EventID { try! EventID("$e\(n)") }
+    private func at(_ n: Int) -> Date { Date(timeIntervalSince1970: Double(n)) }
+
+    private func make(private priv: Bool = false) -> (ReadReceiptCoordinator, FakeReadMarkerPort, Clock) {
+        let port = FakeReadMarkerPort()
+        let clock = Clock()
+        let coordinator = ReadReceiptCoordinator(
+            port: port, privateReceipts: priv, now: { clock.value.withLock { $0 } }, sleep: { clock.sleep($0) })
+        return (coordinator, port, clock)
+    }
+
+    private func eventually(_ condition: @Sendable () -> Bool) async -> Bool {
+        for _ in 0..<200_000 { if condition() { return true }; await Task.yield() }
+        return false
+    }
+
+    @Test func firstSeenEventSendsReceiptAndMarker() async {
+        let (c, port, _) = make()
+        await c.reportSeen(room: room, event: event(1), timestamp: at(10))
+        #expect(await eventually { port.receipts.count == 1 && port.markers.count == 1 })
+        #expect(port.receipts == [.init(room: room, event: event(1), isPrivate: false)])
+    }
+
+    @Test func olderOrEqualCandidatesAreIgnored() async {
+        let (c, port, _) = make()
+        await c.reportSeen(room: room, event: event(2), timestamp: at(20))
+        #expect(await eventually { port.receipts.count == 1 })
+        await c.reportSeen(room: room, event: event(1), timestamp: at(10))
+        await c.reportSeen(room: room, event: event(3), timestamp: at(20))
+        await c.flush()
+        #expect(port.receipts.count == 1)
+        #expect(await c.readPosition(of: room) == at(20))
+    }
+
+    @Test func burstWithinIntervalSendsOnlyNewestAfterWaiting() async {
+        let (c, port, clock) = make()
+        await c.reportSeen(room: room, event: event(1), timestamp: at(10))
+        #expect(await eventually { port.receipts.count == 1 })
+        await c.reportSeen(room: room, event: event(2), timestamp: at(20))
+        await c.reportSeen(room: room, event: event(3), timestamp: at(30))
+        #expect(await eventually { port.receipts.count == 2 })
+        #expect(port.receipts.last?.event == event(3))
+        #expect(clock.sleeps.withLock { $0 }.allSatisfy { $0 <= ReadReceiptCoordinator.minimumInterval })
+    }
+
+    @Test func privateSettingUsesPrivateReceipts() async {
+        let (c, port, _) = make(private: true)
+        await c.reportSeen(room: room, event: event(1), timestamp: at(10))
+        #expect(await eventually { port.receipts.count == 1 })
+        #expect(port.receipts.first?.isPrivate == true)
+    }
+
+    @Test func retryableFailureBacksOffAndRetries() async {
+        let (c, port, clock) = make()
+        port.failNextReceipts(with: [.network(retryable: true), .network(retryable: true)])
+        await c.reportSeen(room: room, event: event(1), timestamp: at(10))
+        #expect(await eventually { port.receipts.count == 1 })
+        let sleeps = clock.sleeps.withLock { $0 }
+        #expect(sleeps.contains(.seconds(1)) && sleeps.contains(.seconds(2)))
+    }
+
+    @Test func nonRetryableFailureStopsUntilNewIntentOrFlush() async {
+        let (c, port, _) = make()
+        port.failNextReceipts(with: [.forbidden])
+        await c.reportSeen(room: room, event: event(1), timestamp: at(10))
+        for _ in 0..<1000 { await Task.yield() }
+        #expect(port.receipts.isEmpty)
+        await c.flush()
+        #expect(port.receipts.count == 1)
+    }
+}
