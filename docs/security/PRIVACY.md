@@ -14,7 +14,7 @@ gateway and Apple (APNs metadata), and through explicit user actions (export, sh
 | Typing notices | Homeserver | UX | Room members (toggle in Settings) |
 | Image packs + their media | Homeserver (unencrypted) | Stickers | Server operators, pack room members |
 | Push: room id, event id, counts | Synapse → Sygnal → APNs | Notifications | Push gateway operator, Apple |
-| Account data (`app.halo.*`) | Homeserver (unencrypted) | Sync of favourites, allowlist | Server operator **[DECISION: accepted for stickers prefs; revisit for anything sensitive]** |
+| Account data (`app.halo.*`) | Homeserver (unencrypted) | Sync of favourites, allowlist | Server operator **[DECISION D51: accepted for sticker prefs; revisit for anything sensitive]** |
 | Diagnostics export | Only where the user shares it | Debugging | Recipient |
 | Bot conversations | The bot's room (normal Matrix) | Bot features | The bot backend (by the user's choice to talk to it) |
 

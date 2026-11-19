@@ -74,7 +74,7 @@ D/ADR/F/V/Q/AC/S, ADR sections, statement labels and code fences).
 Full list: [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md).
 
 ## 6. Known risks (top)
-T-NSE, T-RECEIPTS, T-FFI, T-STATE, T-XPROC, L1/L3 (licence drift / upstream relicensing), M1 (solo capacity). See [RISK_REGISTER.md](RISK_REGISTER.md).
+T-NSE, T-RECEIPTS, T-FFI, T-STATE, T-XPROC, L1/L3 (licence drift / upstream relicensing), PROJ-1 (solo capacity). See [RISK_REGISTER.md](RISK_REGISTER.md).
 
 ## 7. Recommended implementation order
 1. **M0 Foundation** — decide Q-BUNDLE; repo skeleton per DEVELOPMENT_SETUP; `infra/dev`; packages with empty-but-compiling targets only where needed by real code; adapter `SessionPort` + `RoomListPort` (password login, room count); V-SQL-1, V-CI-1, V-SDK-1, V-APPLE-1; boundaries + Linux CI.

@@ -40,7 +40,7 @@ that opens both]**.
 | Cache | Policy |
 |---|---|
 | Decoded thumbnails (memory) | LRU 64 MB, cleared on memory warning |
-| SDK media store (disk) | SDK retention policy (`set_media_retention_policy`), default 1 GB / 30 days **[DECISION; V-MEDIA-1]** |
+| SDK media store (disk) | SDK retention policy (`set_media_retention_policy`), default 1 GB / 30 days **[DECISION D55; V-MEDIA-1]** |
 | `sticker_pack_cache` | Refreshed on account-data/room-state change and at most every 6 h; served stale while refreshing |
 | `bot_task` | Derived; rebuild on demand |
 

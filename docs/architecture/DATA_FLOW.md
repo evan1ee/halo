@@ -2,7 +2,7 @@
 
 ## 1. Source-of-truth hierarchy
 
-**[DECISION]** Every fact has exactly one owner. Everything else is a replica, a derivation or an intent.
+**[DECISION ADR-0007, ADR-0006]** Every fact has exactly one owner. Everything else is a replica, a derivation or an intent.
 
 | Fact | Truth | Replica | Halo derived / intent |
 |---|---|---|---|

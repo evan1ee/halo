@@ -7,7 +7,7 @@
 | Beta | Distribution (App Store Connect) | TestFlight internal → external |
 | Release | Distribution | App Store (only after M10 + legal review) |
 
-Archive from Xcode or `xcodebuild archive` on the founder's Mac; upload with Xcode Organizer or `xcrun altool`/Transporter **[DECISION: Xcode Cloud optional later]**.
+Archive from Xcode or `xcodebuild archive` on the founder's Mac; upload with Xcode Organizer or `xcrun altool`/Transporter (Xcode Cloud is a possible later option, not decided).
 
 ## 2. Code signing
 - Team-managed automatic signing for development; distribution certificate and provisioning profiles created in the developer portal, stored in the login keychain and the password manager — never in the repo.

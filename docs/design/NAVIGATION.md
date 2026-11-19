@@ -1,7 +1,7 @@
 # Navigation
 
 ## 1. Structure
-**[DECISION]** A `TabView` with three tabs in the MVP and a fourth in P2. Each tab owns a `NavigationStack` with a typed path.
+**[DECISION D50]** A `TabView` with three tabs in the MVP and a fourth in P2. Each tab owns a `NavigationStack` with a typed path.
 
 | Tab | Root screen | MVP? |
 |---|---|---|

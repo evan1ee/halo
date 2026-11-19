@@ -1,6 +1,7 @@
 # Risk Register
 
-L(ikelihood) / I(mpact): Low · Med · High. Reviewed at every milestone exit.
+L(ikelihood) / I(mpact): Low · Med · High. Reviewed at every milestone exit. IDs use prefixes (`T-`, `L`, `COMPAT-`, `PERF-`, `PROJ-`) that
+don't collide with milestones (M0–M10), priorities (P0–P2), test properties (P1–P10) or unread causes (C1–C13).
 
 ## Technical
 | ID | Risk | L | I | Mitigation | Early signal |
@@ -32,22 +33,22 @@ L(ikelihood) / I(mpact): Low · Med · High. Reviewed at every milestone exit.
 ## Matrix compatibility
 | ID | Risk | L | I | Mitigation |
 |---|---|---|---|---|
-| C1 | Servers without native sliding sync (public phase) | High | High | Clear unsupported-server message; target audience definition |
-| C2 | Few clients support v1.19 image packs yet → Halo packs invisible elsewhere | High | Low | Stickers still render everywhere; legacy read support |
-| C3 | Unencrypted packs surprise users | Med | Med | Notices (spec SHOULD) |
-| C4 | Reaction-based bot protocol races | Med | Low | Pending state machine, confirmation rules |
+| COMPAT-1 | Servers without native sliding sync (public phase) | High | High | Clear unsupported-server message; target audience definition |
+| COMPAT-2 | Few clients support v1.19 image packs yet → Halo packs invisible elsewhere | High | Low | Stickers still render everywhere; legacy read support |
+| COMPAT-3 | Unencrypted packs surprise users | Med | Med | Notices (spec SHOULD) |
+| COMPAT-4 | Reaction-based bot protocol races | Med | Low | Pending state machine, confirmation rules |
 
 ## Performance
 | ID | Risk | L | I | Mitigation |
 |---|---|---|---|---|
-| P1 | Cold start slow for large accounts | Med | Med | Cache-first room list; NFR-1 measurement |
-| P2 | Media cache growth | High | Low | Retention policy + storage screen |
-| P3 | Search index growth (P2) | Med | Med | Evaluate upstream SearchService first |
+| PERF-1 | Cold start slow for large accounts | Med | Med | Cache-first room list; NFR-1 measurement |
+| PERF-2 | Media cache growth | High | Low | Retention policy + storage screen |
+| PERF-3 | Search index growth (P2) | Med | Med | Evaluate upstream SearchService first |
 
 ## Maintenance / project
 | ID | Risk | L | I | Mitigation |
 |---|---|---|---|---|
-| M1 | Solo part-time capacity → slips/abandonment | High | High | Strict milestones, gates, early daily-driver use |
-| M2 | Two ecosystems (Swift + Rust) | Med | Med | No Halo Rust unless G-FFI fails |
-| M3 | Self-hosted infrastructure upkeep | Med | Med | One compose file, stock configs, backups |
-| M4 | Bus factor 1 | High | Med | This documentation + AGENTS.md + scenario suite as specification |
+| PROJ-1 | Solo part-time capacity → slips/abandonment | High | High | Strict milestones, gates, early daily-driver use |
+| PROJ-2 | Two ecosystems (Swift + Rust) | Med | Med | No Halo Rust unless G-FFI fails |
+| PROJ-3 | Self-hosted infrastructure upkeep | Med | Med | One compose file, stock configs, backups |
+| PROJ-4 | Bus factor 1 | High | Med | This documentation + AGENTS.md + scenario suite as specification |

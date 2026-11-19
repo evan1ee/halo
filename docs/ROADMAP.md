@@ -1,7 +1,7 @@
 # Roadmap
 
 Capacity: solo, part-time (D24). Estimates are calendar weeks at ~15 h/week and are **[ASSUMPTION]**s,
-to be re-planned after M0. Each milestone ends with its exit criteria **verified by tests** (see AGENTS.md §9).
+to be re-planned after M0. Each milestone ends with its exit criteria **verified by tests** (see AGENTS.md §0 and §12).
 
 ## Implementation entry criteria (before M0 starts)
 
@@ -67,4 +67,4 @@ flowchart LR
 ```
 
 ## Technical risks per milestone
-See [RISK_REGISTER.md](RISK_REGISTER.md). Highest: T-NSE (M1), T-RECEIPTS (M3), T-STATE (M4), and the capacity risk (register section "Maintenance", M1) across all milestones.
+See [RISK_REGISTER.md](RISK_REGISTER.md). Highest: T-NSE (M1), T-RECEIPTS (M3), T-STATE (M4), and the capacity risk PROJ-1 across all milestones.

@@ -85,3 +85,23 @@ Legend: ✅ active · ⛔ superseded (see the replacing entry)
 | D37 | Clean-room, behaviour-only reference for Element X | ✅ ADR-0013 |
 | D38 | Professional legal review before any public release | ✅ |
 | D39 | Automated licence gate; generated acknowledgements screen | ✅ |
+
+## Engineering defaults (recorded in the Phase 0 review)
+These were stated as decisions inside individual documents without an ID; they are recorded here so every `[DECISION]` label resolves.
+
+| ID | Decision | Status |
+|---|---|---|
+| D49 | Swift 6 language mode with complete strict concurrency checking in every package; zero warnings ([architecture/CONCURRENCY.md](architecture/CONCURRENCY.md) §1) | ✅ |
+| D50 | Navigation: `TabView` with Chats, Stickers, Settings; Activity added in P2; one typed `NavigationStack` per tab ([design/NAVIGATION.md](design/NAVIGATION.md)) | ✅ |
+| D51 | Sticker favourites/recents in account data `app.halo.sticker_prefs` and Halo-created pack rooms in `app.halo.sticker_rooms`; accepted that this account data is readable by the server operator ([features/STICKERS.md](features/STICKERS.md) §3, [security/PRIVACY.md](security/PRIVACY.md) §2) | ✅ |
+| D52 | Personal-pack images are produced at exactly 512 px on the long side, as animated/static WebP or PNG (STICKERS FR-7) | ✅ |
+| D53 | The NSE never runs a `halo.sqlite` migration that takes longer than 1 s; it opens read-only and degrades ([data/MIGRATIONS.md](data/MIGRATIONS.md) §1) | ✅ |
+| D54 | Halo-specific account data uses the `app.halo.*` namespace (final prefix per Q-BUNDLE), versioned JSON with unknown fields preserved ([data/DATA_MODELS.md](data/DATA_MODELS.md) §4) | ✅ |
+| D55 | SDK media cache retention defaults to 1 GB / 30 days ([data/PERSISTENCE.md](data/PERSISTENCE.md) §5; V-MEDIA-1) | ✅ |
+| D56 | Image upload strips location EXIF and converts HEIC → JPEG; max dimension 4096 px, quality 0.85 ([matrix/MEDIA.md](matrix/MEDIA.md) §2) | ✅ |
+| D57 | URL previews are off by default in E2EE rooms ([matrix/MEDIA.md](matrix/MEDIA.md) §3) | ✅ |
+| D58 | Logging through `os.Logger` behind the `HaloLog` facade, subsystem per Q-BUNDLE ([architecture/LOGGING_AND_DIAGNOSTICS.md](architecture/LOGGING_AND_DIAGNOSTICS.md) §1) | ✅ |
+| D59 | No third-party crash SDK in the personal phase: Xcode Organizer/TestFlight reports + MetricKit (revisit: Q-CRASH) | ✅ |
+| D60 | Rooms created by Halo (DMs, private rooms) are encrypted by default ([security/SECURITY.md](security/SECURITY.md) §2) | ✅ |
+| D61 | App-switcher privacy blur when backgrounding, default on ([security/SECURITY.md](security/SECURITY.md) §4) | ✅ |
+| D62 | swift-format default style at 120 columns; SwiftLint only for custom rules ([development/CODE_CONVENTIONS.md](development/CODE_CONVENTIONS.md) §1) | ✅ |

@@ -20,10 +20,10 @@ spec-defined Matrix events** so stickers work in other clients.
 |---|---|---|
 | Pack | `m.room.image_pack` state event in a room; `state_key` = pack id; content `{ images: {shortcode: {url, body?, info?}}, pack?: {display_name?, avatar_url?, usage?: ["sticker","emoticon"], attribution?} }` | Shortcode `^[A-Za-z0-9_-]{1,100}$` |
 | User's enabled packs | `m.image_pack.rooms` account data: `{ rooms: { roomId: { stateKey: {} } } }` | Preserve unknown inner properties when editing (spec) |
-| Personal pack | **[DECISION]** A private, invite-only room owned by the user that holds one or more `m.room.image_pack` events, referenced in `m.image_pack.rooms` | The spec has no per-user account-data pack (v1.19) |
+| Personal pack | **[DECISION D48]** A private, invite-only room owned by the user that holds one or more `m.room.image_pack` events, referenced in `m.image_pack.rooms` | The spec has no per-user account-data pack (v1.19) |
 | Sending | `m.sticker` event: `body` = image body or shortcode; `info` = image info; `url` = mxc | via `Room.send_raw("m.sticker", json)` **[VERIFIED F-FFI-9]** |
 | Rendering | Upstream `MsgLikeKind.Sticker{body, info, source}` **[VERIFIED F-FFI-8]** | |
-| Favourites / recents | **[DECISION]** account data `app.halo.sticker_prefs`: `{ version: 1, favourites: [ {room, pack, shortcode} ], recents: [ {room, pack, shortcode, ts} ] (max 30) }` | Halo-only; other clients ignore it |
+| Favourites / recents | **[DECISION D51]** account data `app.halo.sticker_prefs`: `{ version: 1, favourites: [ {room, pack, shortcode} ], recents: [ {room, pack, shortcode, ts} ] (max 30) }` | Halo-only; other clients ignore it |
 | Halo-created pack rooms | account data `app.halo.sticker_rooms`: `{ version: 1, rooms: [roomId] }` | Used to hide those rooms from the room list |
 | Legacy packs | `im.ponies.user_emotes` (account data), `im.ponies.room_emotes` (state), `im.ponies.emote_rooms` (account data) — **read-only** | **[ASSUMPTION V-ST-3: legacy names as used by FluffyChat/Cinny; verify against MSC2545 history]** |
 
@@ -37,7 +37,7 @@ user first creates a pack or sends a sticker in an E2EE room, and a permanent hi
 - FR-4 Search: case-insensitive prefix/substring on shortcode and body across all visible packs; results ranked favourites > recents > others.
 - FR-5 Long-press preview with animation; actions: send, favourite/unfavourite.
 - FR-6 Tap = send immediately (`m.sticker`); update recents (debounced write of account data, ≤ 1 write / 10 s).
-- FR-7 Create personal pack: name → pick photos (1–120) → per image: convert to animated/static WebP or PNG, max 512×512 (spec SHOULD ≥ 512 — **[DECISION]** we produce exactly 512 px on the long side), upload (`upload_media`) → shortcode (auto from file name, editable, grammar-validated) → write `m.room.image_pack` → add the room to `m.image_pack.rooms` and `app.halo.sticker_rooms`.
+- FR-7 Create personal pack: name → pick photos (1–120) → per image: convert to animated/static WebP or PNG, max 512×512 (spec SHOULD ≥ 512 — **[DECISION D52]** we produce exactly 512 px on the long side), upload (`upload_media`) → shortcode (auto from file name, editable, grammar-validated) → write `m.room.image_pack` → add the room to `m.image_pack.rooms` and `app.halo.sticker_rooms`.
 - FR-8 Render incoming stickers at max 256 pt, animated per D13; tap → preview with pack info if known.
 - FR-9 Animation: autoplay in the visible viewport; respects Reduce Motion (static first frame) and Low Power Mode (static).
 
@@ -77,7 +77,7 @@ sync requests, and Halo can't add types **[VERIFIED F-FFI-9]**. Options:
 | C | Upstream contribution: let `RoomListService` / room subscriptions request extra `required_state` | Best long-term | Upstream timeline unknown |
 | D | Halo-owned bindings (G-FFI fail path) | Full control | Big cost |
 
-**[DECISION, provisional]** Try A in M4 week 1; if empty → B behind `RoomPort` (so A/C/D can replace it later without
+**[DECISION ADR-0011, provisional]** Try A in M4 week 1; if empty → B behind `RoomPort` (so A/C/D can replace it later without
 feature changes); propose C upstream in parallel. Writing uses `Room.send_state_event_raw` **[VERIFIED F-FFI-9]**.
 
 ## 10. Error scenarios

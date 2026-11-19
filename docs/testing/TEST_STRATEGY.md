@@ -32,7 +32,7 @@ CI job `swift-linux` runs `swift test` for these packages **[ASSUMPTION V-CI-1: 
 
 ## 3. Scenario harness (deterministic sync bug reproduction)
 Problem: Halo's real Matrix stack only runs on Apple platforms, but scenario tests must run in Linux CI.
-Approach **[DECISION]**:
+Approach **[DECISION D35, ADR-0009]**:
 1. The **policy under test is pure Swift**. Scenarios feed it with the *same inputs the adapter would produce*.
 2. A Linux **scenario driver** (`tools/scenario-driver`, Swift on Linux, plain HTTP to the CS API) controls several users and devices against a real Synapse (Docker): send events, send receipts from "device B", toggle `m.marked_unread`, change push rules, redact, go "offline".
 3. After each step the driver fetches what the device's SDK would see — `/sync` (sliding sync `POST /_matrix/client/unstable/org.matrix.simplified_msc3575/sync` **[VERIFIED F-SPEC-5]**) for server counts, receipts, account data — and builds `RoomReadInputs` (server-count fields real; SDK-count fields simulated by a reference counter over the fetched events, or captured from the real SDK in local runs).
@@ -46,7 +46,7 @@ Approach **[DECISION]**:
 - Persistence: two `DatabasePool`s on one file in parallel threads performing monotonic upserts → final state = maximum.
 
 ## 5. Offline and reconnect tests
-Scenario driver toggles a Toxiproxy-like proxy **[DECISION: a tiny proxy container in `infra/test`]** between the device's client and Synapse to simulate drops, latency and blackholes during the local FFI runs.
+Scenario driver toggles a Toxiproxy-like proxy **[DECISION ADR-0009: a tiny proxy container in `infra/test`]** between the device's client and Synapse to simulate drops, latency and blackholes during the local FFI runs.
 
 ## 6. Fixtures
 Bot messages: copied **verbatim** from the bot repo's tests (MIT, attribution file in the fixture folder). Spec examples for image packs. Recorded sync traces (anonymised).
@@ -58,4 +58,4 @@ Targets in [../REQUIREMENTS.md](../REQUIREMENTS.md) NFR-1..3; measured with sign
 Encrypted DM push on the lock screen · read on another client → banner gone and the icon badge matches Halo's count while Halo stays in the background (ADR-0015) · airplane mode 1 h → recover · force-quit during sync · low-power mode · 300-room account cold start · sticker send/receive with Element Web · bot card tick with the real bot.
 
 ## 9. Reporting rule
-Test results are reported **as executed**, with commands and output (AGENTS.md §9). "Should pass" isn't a result.
+Test results are reported **as executed**, with commands and output (AGENTS.md §0 step 5, §13). "Should pass" isn't a result.

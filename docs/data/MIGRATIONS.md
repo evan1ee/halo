@@ -2,7 +2,7 @@
 
 ## 1. `halo.sqlite`
 - GRDB `DatabaseMigrator` with named, append-only migrations: `v1_read_state`, `v2_stickers`, `v3_bots`, … Never edit a shipped migration.
-- Migrations run inside the app **and** the NSE (whichever opens the database first); GRDB serialises them through SQLite locking. The NSE refuses to run a migration that takes longer than 1 s (it opens read-only and degrades instead) **[DECISION]**.
+- Migrations run inside the app **and** the NSE (whichever opens the database first); GRDB serialises them through SQLite locking. The NSE refuses to run a migration that takes longer than 1 s (it opens read-only and degrades instead) **[DECISION D53]**.
 - Each migration has a test that starts from every earlier released schema (fixtures in `HaloPersistenceTests/Fixtures/schema-vN.sqlite`) and checks the data.
 - `eraseDatabaseOnSchemaChange` only in debug builds.
 - Failure → recovery per [../architecture/ERROR_HANDLING.md](../architecture/ERROR_HANDLING.md) §4 (move aside, recreate; derived data rebuilds; unsent intents may be lost — logged).

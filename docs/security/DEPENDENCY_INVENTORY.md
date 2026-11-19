@@ -12,6 +12,8 @@ Every dependency that ships in, or builds, the app is listed here. Adding one re
 
 ## 2. Build/test only (not distributed)
 
+None is added yet; each gets its exact version pinned in this table when it's introduced (M0), per AGENTS.md §11 (4).
+
 | Dependency | Licence | Purpose |
 |---|---|---|
 | `pointfreeco/swift-snapshot-testing` | MIT **[VERIFIED F-LIC-7]** | Snapshot tests |

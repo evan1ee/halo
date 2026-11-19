@@ -53,4 +53,4 @@ Don't assume an SDK's licence covers its dependencies: the inventory checks **ev
 - [ ] ⚖️ Legal review of this whole strategy before public release, including the founder's earlier exposure to Element X source (ADR-0013 §Context).
 
 ## 6. Risks
-See [../RISK_REGISTER.md](../RISK_REGISTER.md) L1–L6.
+See [../RISK_REGISTER.md](../RISK_REGISTER.md) L1–L7.

@@ -10,7 +10,7 @@
 - **Errors:** throw `HaloError`; no `fatalError` outside unreachable code with a message; no force unwraps except in tests and on compile-time constants.
 - **Async:** `async/await`; `AsyncStream` for events; no Combine in new code (allowed only to bridge an Apple API).
 - **Logging:** `HaloLog` only, with privacy annotations ([../security/SECURITY.md](../security/SECURITY.md) §6).
-- **Formatting:** swift-format default style **[DECISION]**, 120 columns; SwiftLint for rules not covered (custom rules: no `print`, no `import MatrixRustSDK` outside the adapter, no `try!`).
+- **Formatting:** swift-format default style **[DECISION D62]**, 120 columns; SwiftLint for rules not covered (custom rules: no `print`, no `import MatrixRustSDK` outside the adapter, no `try!`).
 - **Documentation comments** on every public port, policy and coordinator method, including threading and error behaviour.
 
 ## 2. Rust (only for building the SDK from source or `core/halo-ffi` after G-FFI)

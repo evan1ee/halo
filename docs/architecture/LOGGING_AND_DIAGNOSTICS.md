@@ -1,7 +1,7 @@
 # Logging, Diagnostics and Observability
 
 ## 1. Logging
-- **[DECISION]** Swift: Apple `os.Logger` through a thin `HaloLog` facade in `HaloFoundation`, with subsystem
+- **[DECISION D58]** Swift: Apple `os.Logger` through a thin `HaloLog` facade in `HaloFoundation`, with subsystem
   `app.halo` (final ID per Q-BUNDLE) and categories `session`, `sync`, `readstate`, `outbox`, `push`, `nse`,
   `stickers`, `bot`, `db`, `ui`.
 - SDK logs: the adapter calls `init_platform(config: TracingConfiguration, use_lightweight_tokio_runtime:)`
@@ -27,7 +27,7 @@ Settings → Diagnostics → "Export": a zip with app/SDK logs, audit events, DB
 anonymised room snapshots (hashed ids, counts only). Shared through the share sheet; never uploaded automatically.
 
 ## 4. Crash reporting
-- **[DECISION]** No third-party crash SDK in the personal phase. Use Xcode Organizer / TestFlight crash reports
+- **[DECISION D59]** No third-party crash SDK in the personal phase. Use Xcode Organizer / TestFlight crash reports
   and MetricKit (`MXMetricManager`) payloads saved to the diagnostics folder.
 - Revisit before public release ([OPEN Q-CRASH]).
 

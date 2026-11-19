@@ -44,7 +44,7 @@ Editing while the original is still sending · deleting a failed local echo · a
 ## 11. Acceptance criteria
 - AC-M1 Text/reply/edit/reaction/delete show as a local echo immediately and survive an app kill (sent on relaunch).
 - AC-M2 Mentions produce `m.mentions` and pills that render in Element Web.
-- AC-M5 Typing indicator appears within 2 s on the other side.
+- AC-M3 Typing indicator appears within 2 s on the other side.
 
 ## 12. Test requirements
 Unit: composer formatting (Markdown → HTML subset), mention extraction, typing throttle. Integration: S-MSG-1..5. UI: send + reply smoke.

@@ -1,7 +1,7 @@
 # Concurrency Model
 
 ## 1. Language settings
-- **[DECISION]** Swift 6 language mode with strict concurrency checking in every package. Zero
+- **[DECISION D49]** Swift 6 language mode with strict concurrency checking in every package. Zero
   warnings; `@unchecked Sendable` and `nonisolated(unsafe)` need a comment explaining why they're safe and a reviewer's sign-off.
 
 ## 2. Isolation
