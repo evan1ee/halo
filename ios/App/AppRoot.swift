@@ -40,10 +40,11 @@ final class AppRoot {
         let roomCoordinator = RoomListCoordinator(port: MatrixRoomListPort(session: session))
         let suite = "group.\(HaloShared.namespace())"
         records = NotificationRecordStore(suiteName: suite)
-        badge = BadgeCoordinator(rooms: roomCoordinator, records: records, port: SystemBadge(suiteName: suite))
+        let receipts = ReadReceiptCoordinator(port: MatrixReadMarkerPort(session: session))
+        self.receipts = receipts
+        badge = BadgeCoordinator(rooms: roomCoordinator, records: records, port: SystemBadge(suiteName: suite), receipts: receipts)
 
         timelinePort = MatrixTimelinePort(session: session)
-        receipts = ReadReceiptCoordinator(port: MatrixReadMarkerPort(session: session))
         media = MediaLoader(port: MatrixMediaPort(session: session))
         recovery = RecoveryViewModel(coordinator: EncryptionCoordinator(port: MatrixEncryptionPort(session: session), session: sessionCoordinator))
         sync = SyncCoordinator(port: MatrixSyncPort(session: session), session: sessionCoordinator)

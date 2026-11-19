@@ -16,6 +16,12 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   constants and a one-line `.gitleaksignore` for the old commit's fingerprint (history scans see it).
 
 ## 2. Completed work
+**2026-11-20 (latest+19) — Local read intent and latest event feed the badge policy**
+- `RoomSummary.latestEvent` (adapter: `Room.latestEvent()`; remote → time + `isOwn`, local echo → own, none/invite → nil) → `RoomReadInputs.latestEvent`. `ReadReceiptCoordinator.positions()` streams the per-room read time;
+  `BadgeCoordinator(receipts:)` passes it as `localIntent`, so rule E1 clears a room's attention the moment the user reads it here (even while the server still counts) and a newer event brings it back.
+- Checked: HaloApplication 59 tests (new `localIntentClears`), app and adapter build, room-list/session/sync/receipt contracts pass on infra/dev (Timeline/Media contracts need their fixture room). NOT checked: the
+  `latestEvent` mapping has no unit test (the SDK enum needs heavy fixtures) and wasn't observed on the device; own receipts from other devices are still not read back (V-RS-1), so reading on another device doesn't clear here.
+
 **2026-11-20 (latest+18) — Read intents persisted (GRDB) and restored**
 - `ReadIntentPort`/`ReadIntent` (domain), `FakeReadIntents`, `HaloPersistence.ReadIntentStore` + migration `v2-read-intent` (table per docs/data/DATA_MODELS.md; monotonic upsert, a sent intent never reverts to pending,
   scoped by account, `removeSent(createdBefore:)`). `ReadReceiptCoordinator` (also: ReadMarkerPort, 2 s per-room debounce, backoff 1 s → 5 min, `flush()`) saves every intent and the sent state; `restore(from:)` loads them,
@@ -177,7 +183,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/ (ADR-0001…0016, all acce
 - Docker Hub rate-limited pulls in the last session (Sygnal image not pulled; Swift 6.3 tag unchecked).
 
 ## 6. Next steps
-0. Receipts: set file protection on halo.sqlite, feed stored intents into `ReadStatePolicy` (`localIntent`), read `ownReceipt` (V-RS-1) and feed `localIntent`/`latestEvent` into `ReadStatePolicy`, confirmation rules, true ≥ 50 % visibility, mark as read/unread in the room list.
+0. Receipts: set file protection on halo.sqlite, read `ownReceipt` (V-RS-1) and feed it into the policy (V-RS-1) and feed `localIntent`/`latestEvent` into `ReadStatePolicy`, confirmation rules, true ≥ 50 % visibility, mark as read/unread in the room list.
 1. Push this branch / open a PR; check CI.
 2. (Done) contracts pass on infra/dev. Keep running them after every adapter change.
 3. Verify the badge on the phone (enable Badges for Halo in iOS Settings first), then G-NSE hardening: true peak memory, an encrypted room (decrypt/UTD in the NSE), timeout and termination injection (AC-NSE-3/4), 100 pushes, Release build.

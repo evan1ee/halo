@@ -33,6 +33,7 @@ public actor ReadReceiptCoordinator {
     private var intents: [RoomID: Intent] = [:]
     private var lastSend: [RoomID: ContinuousClock.Instant] = [:]
     private var failures: [RoomID: Int] = [:]
+    private var positionBroadcaster = SnapshotBroadcaster<[RoomID: Date]>()
     private var scheduled: [RoomID: Task<Void, Never>] = [:]
     /// Rooms with a send in progress; a second send for the same room would repeat the receipt.
     private var sending: Set<RoomID> = []
@@ -81,10 +82,17 @@ public actor ReadReceiptCoordinator {
             created[intent.room] = intent.createdAt
             if !intent.isSent { schedule(intent.room, after: dueIn(intent.room)) }
         }
+        positionBroadcaster.publish(currentPositions())
     }
 
     /// The privacy setting (D7); applies to receipts sent from now on.
     public func setPrivateReceipts(_ value: Bool) { isPrivate = value }
+
+    /// The event time the user reached in each room on this device, now and after every change (the policy's local
+    /// intent, UNREAD_STATE rule E1).
+    public func positions() -> AsyncStream<[RoomID: Date]> { positionBroadcaster.subscribe(current: currentPositions()) }
+
+    private func currentPositions() -> [RoomID: Date] { intents.mapValues(\.timestamp) }
 
     /// The time of the newest event the user has read in `room` through this coordinator, if any.
     public func readPosition(of room: RoomID) -> Date? { intents[room]?.timestamp }
@@ -95,6 +103,7 @@ public actor ReadReceiptCoordinator {
         if let current = intents[room], timestamp <= current.timestamp { return }
         intents[room] = Intent(event: event, timestamp: timestamp, sent: false)
         created[room] = wallClock()
+        positionBroadcaster.publish(currentPositions())
         failures[room] = nil
         persist(room)
         schedule(room, after: dueIn(room))

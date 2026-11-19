@@ -114,7 +114,8 @@ public final class MatrixRoomListPort: RoomListPort {
             isDirect: isDirect,
             isEncrypted: isEncrypted,
             membership: membership(room.membership()),
-            read: await readCounts(of: room, settings: settings, isEncrypted: isEncrypted, isOneToOne: isDirect)
+            read: await readCounts(of: room, settings: settings, isEncrypted: isEncrypted, isOneToOne: isDirect),
+            latestEvent: latestEvent(await room.latestEvent())
         )
     }
 
@@ -132,6 +133,17 @@ public final class MatrixRoomListPort: RoomListPort {
             server: ServerCounts(notification: Int(info.notificationCount), highlight: Int(info.highlightCount)),
             sdk: SDKCounts(unreadMessages: Int(info.numUnreadMessages), unreadNotifications: Int(info.numUnreadNotifications), unreadMentions: Int(info.numUnreadMentions)),
             isMarkedUnread: info.isMarkedUnread)
+    }
+
+    /// The newest event for the read-state policy. Invites and rooms without events have none; a local echo is the
+    /// user's own event (its time is when it was queued).
+    static func latestEvent(_ value: LatestEventValue) -> LatestEventRef? {
+        func date(_ ms: Timestamp) -> Date { Date(timeIntervalSince1970: Double(ms) / 1000) }
+        switch value {
+        case .none, .remoteInvite: return nil
+        case .remote(let timestamp, _, let isOwn, _, _): return LatestEventRef(timestamp: date(timestamp), senderIsSelf: isOwn)
+        case .local(let timestamp, _, _, _, _): return LatestEventRef(timestamp: date(timestamp), senderIsSelf: true)
+        }
     }
 
     static func mode(_ mode: RoomNotificationMode) -> NotificationMode {

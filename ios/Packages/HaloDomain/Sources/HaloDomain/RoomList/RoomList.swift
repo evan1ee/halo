@@ -11,8 +11,14 @@ public struct RoomSummary: Sendable, Equatable, Identifiable {
     public let membership: Membership
     /// Unread inputs for the read-state policy (`ReadStatePolicy`); `.none` until known.
     public let read: RoomReadCounts
+    /// The newest event the SDK knows in the room (time and whether the user sent it); `nil` when unknown.
+    public let latestEvent: LatestEventRef?
 
-    public init(id: RoomID, name: String?, isDirect: Bool, isEncrypted: Bool, membership: Membership, read: RoomReadCounts = .none) {
+    public init(
+        id: RoomID, name: String?, isDirect: Bool, isEncrypted: Bool, membership: Membership, read: RoomReadCounts = .none,
+        latestEvent: LatestEventRef? = nil
+    ) {
+        self.latestEvent = latestEvent
         self.read = read
         self.id = id
         self.name = name

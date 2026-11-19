@@ -92,4 +92,30 @@ struct BadgeCoordinatorTests {
         await TimelineCoordinator(port: timelines, room: room, records: records).open()
         #expect(records.all().map(\.eventID.rawValue) == ["$2"])
     }
+
+    @Test("reading a room here clears its attention at once, before the server confirms; a newer event brings it back")
+    func localIntentClears() async throws {
+        let rooms = FakeRoomListPort()
+        let coordinator = RoomListCoordinator(port: rooms)
+        let markers = FakeReadMarkerPort()
+        let receipts = ReadReceiptCoordinator(port: markers)
+        let port = FakeBadgePort()
+        let badge = BadgeCoordinator(rooms: coordinator, records: FakeNotificationRecords(), port: port, receipts: receipts)
+        await badge.begin()
+        await coordinator.start()
+        func unread(latest: Double) throws -> RoomSummary {
+            RoomSummary(
+                id: try RoomID("!a:x.org"), name: "a", isDirect: false, isEncrypted: false, membership: .joined,
+                read: RoomReadCounts(mode: .allMessages, server: ServerCounts(notification: 3, highlight: 0), sdk: .zero, isMarkedUnread: false),
+                latestEvent: LatestEventRef(timestamp: Date(timeIntervalSince1970: latest), senderIsSelf: false))
+        }
+        try rooms.emit(.reset([try unread(latest: 100)]))
+        #expect(await eventually { port.badge == 1 })
+
+        await receipts.reportSeen(room: try RoomID("!a:x.org"), event: try EventID("$e"), timestamp: Date(timeIntervalSince1970: 100))
+        #expect(await eventually { port.badge == 0 })
+
+        try rooms.emit(.set(index: 0, try unread(latest: 200)))
+        #expect(await eventually { port.badge == 1 })
+    }
 }
