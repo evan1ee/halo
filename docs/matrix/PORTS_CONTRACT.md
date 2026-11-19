@@ -14,9 +14,9 @@ needs, made of Halo value types, and independent of the SDK version underneath.
 
 | Port | Purpose | Key operations (sketch) | Implemented by |
 |---|---|---|---|
-| `SessionPort` | Auth & session | `loginDetails(server)`, `loginPassword`, `oauthURL`, `completeOAuth(callback)`, `restore(session)`, `logout()`, `sessionUpdates: AsyncStream<SessionEvent>` | Adapter |
+| `SessionPort` | Auth & session | `loginDetails(server:)`, `loginPassword(_:on:)`, `restore(_:)`, `logout()`, `sessionUpdates() -> AsyncStream<SessionEvent>` (lossless) — **in code since M0**; `oauthURL`, `completeOAuth(callback)` added in M5 (MINOR) | Adapter |
 | `SyncPort` | Sync lifecycle | `start()`, `stop()`, `status: AsyncStream<SyncStatus>` (snapshot) | Adapter |
-| `RoomListPort` | Room list | `rooms(filter:) -> AsyncStream<RoomListDiff>`, `loadMore()`, `setFilter(_)` | Adapter |
+| `RoomListPort` | Room list | `rooms(filter:) -> AsyncStream<RoomListDiff>` (lossless; every subscription starts from a known state), `loadMore()`, `setFilter(_:)` — **in code since M0**; `RoomListDiff` mirrors upstream `RoomListEntriesUpdate` | Adapter |
 | `RoomReadStatePort` | Inputs for read state | `updates() -> AsyncStream<RoomReadInputsPart>` (lossless; one full per-room snapshot per change, coalesced by the consumer per room id), `allInputs() async -> [RoomReadInputsPart]` (initial load and reconcile), `ownReceipt(room)` | Adapter |
 | `ReadMarkerPort` | Outbound read state | `sendReceipt(room, event, private:)`, `setFullyRead(room, event)`, `markRoomRead(room, private:) -> EventRef`, `setMarkedUnread(room, Bool)`, `markAllRead()` | Adapter |
 | `TimelinePort` | Timeline of one room | `open(room) -> TimelineSession`; `TimelineSession.items: AsyncStream<TimelineDiff>`, `paginateBackwards(n)`, `send(_ draft)`, `reply`, `edit`, `redact`, `toggleReaction`, `sendImage`, `sendRawMessage(type, contentJSON)` | Adapter |
@@ -28,9 +28,11 @@ needs, made of Halo value types, and independent of the SDK version underneath.
 | `NotificationFetchPort` | NSE | `notification(room, event) -> FetchedNotification` | Adapter |
 | `PusherPort` | Pushers | `register(token, gateway)`, `unregister()` | Adapter |
 | `ReadIntentStore`, `NotificationRecordStore`, `AuditStore`, `StickerPackCache`, `BotTaskStore` | Halo persistence | CRUD with monotonic guards (sticker favourites/recents are account data via `AccountDataPort`, not a store) | HaloPersistence |
-| `SystemNotificationsPort`, `BadgePort`, `KeychainPort`, `BackgroundTaskPort` | OS | deliver/remove notifications, set badge, secrets, BG scheduling | HaloPlatform |
+| `SystemNotificationsPort`, `BadgePort`, `KeychainPort` (**in code since M0**: `read`/`write`/`delete` of a `KeychainItem`), `BackgroundTaskPort` | OS | deliver/remove notifications, set badge, secrets, BG scheduling | HaloPlatform |
 
 Exact signatures are written in code in M0–M1 and must match the intent of this table; any deviation updates this document.
+Ports live in `ios/Packages/HaloDomain/Sources/HaloDomain/Ports/` and use typed throws (`throws(HaloError)`), so the compiler enforces
+rule 3. Fakes and the contract suites (`SessionPortContract`, `RoomListPortContract`) are in `HaloTestSupport`.
 
 ## 3. Mapping responsibilities (adapter)
 - Upstream `RoomInfo` → `RoomReadInputsPart` and `RoomSummary`. `RoomReadInputsPart` is the adapter's share of `RoomReadInputs`

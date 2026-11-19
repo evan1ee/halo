@@ -7,8 +7,10 @@
 - **Value types first:** domain models are `struct`/`enum`, `Sendable`, `Equatable`; classes only for identity/lifecycle (view models, adapters).
 - **View models:** `@MainActor @Observable final class XViewModel`; inputs via `init` (dependencies) and intent methods (`func didTapSend()`); no SwiftUI types in view models except `@Observable`.
 - **Views:** small, composable; no business logic; previews use fakes from `HaloTestSupport`.
-- **Errors:** throw `HaloError`; no `fatalError` outside unreachable code with a message; no force unwraps except in tests and on compile-time constants.
+- **Errors:** throw `HaloError` — ports and coordinators use typed throws (`throws(HaloError)`); no `fatalError` outside unreachable code with a message; no force unwraps except in tests and on compile-time constants.
 - **Async:** `async/await`; `AsyncStream` for events; no Combine in new code (allowed only to bridge an Apple API).
+- **Locks:** where an actor doesn't fit (e.g. a type that must satisfy a synchronous protocol requirement), use `Mutex` from the
+  standard library's `Synchronization` module instead of `@unchecked Sendable`.
 - **Logging:** `HaloLog` only, with privacy annotations ([../security/SECURITY.md](../security/SECURITY.md) §6).
 - **Formatting:** swift-format default style **[DECISION D62]**, 120 columns; SwiftLint for rules not covered (custom rules: no `print`, no `import MatrixRustSDK` outside the adapter, no `try!`).
 - **Documentation comments** on every public port, policy and coordinator method, including threading and error behaviour.

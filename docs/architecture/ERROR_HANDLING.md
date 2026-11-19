@@ -5,7 +5,7 @@
 Upstream `ClientError` and other FFI errors **never** leave the adapter. The adapter maps them to:
 
 ```swift
-// HaloDomain — illustrative signature, not implementation
+// HaloFoundation — implemented in ios/Packages/HaloFoundation/Sources/HaloFoundation/HaloError.swift
 public enum HaloError: Error, Sendable, Equatable {
   case network(retryable: Bool)          // offline, timeout, 5xx, rate limit (with retryAfter in context)
   case unauthorized(soft: Bool)          // token invalid → soft logout or full logout

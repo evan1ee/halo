@@ -9,7 +9,7 @@ import what it doesn't declare) and by `scripts/check-boundaries.sh` (planned fo
 
 | Module | Layer | Responsibility | May depend on | Builds on Linux |
 |---|---|---|---|---|
-| `HaloFoundation` | base (cross-cutting) | Logging facade, redaction, `HaloError` base, clocks, IDs | — | ✅ |
+| `HaloFoundation` | base (cross-cutting) | `HaloError`, Matrix identifiers (`UserID`, `RoomID`, `EventID`, `DeviceID`), seeded RNG for deterministic jitter and property tests; later the logging facade, redaction and clocks | — | ✅ |
 | `HaloDomain` | 3 | Value models, **ports** (protocols), pure policies: `ReadStatePolicy`, `BadgeCalculator`, `ImagePackParser`, `BotTemplateParser` registry | HaloFoundation | ✅ |
 | `HaloApplication` | 2 | Use cases and coordinators (session, sync, read state, outbox, notifications, stickers, bot index) | HaloDomain, HaloFoundation | ✅ (no UIKit/UserNotifications) |
 | `HaloMatrixAdapter` | 4 | Implements Matrix ports using `MatrixRustSDK`; maps upstream types ⇄ domain values | HaloDomain, HaloFoundation, **MatrixRustSDK** | ❌ |
@@ -18,7 +18,7 @@ import what it doesn't declare) and by `scripts/check-boundaries.sh` (planned fo
 | `HaloDesignSystem` | 1 | Tokens, components, HTML-subset → `AttributedString` renderer | HaloFoundation | ❌ |
 | `HaloBotRendering` | 1 | `BotMessageRenderer`: cards for parsed templates, generic fallback | HaloDomain, HaloDesignSystem | ❌ |
 | `Feature*` (Auth, RoomList, Timeline, Composer, RoomDetails, Profile, Settings, Stickers, BotActivity) | 1–2 | Screens + `@Observable` view models | HaloApplication, HaloDomain, HaloDesignSystem, HaloBotRendering (Timeline, BotActivity only), HaloFoundation | ❌ |
-| `HaloTestSupport` | test | Fakes of every port, fixture loaders, scenario builders | HaloDomain, HaloApplication, HaloFoundation | ✅ |
+| `HaloTestSupport` | test | Fakes of every port, the shared port contract suites, fixture loaders, scenario builders | HaloDomain, HaloFoundation (not HaloApplication: its tests use these fakes, and SwiftPM forbids package cycles) | ✅ |
 | `Halo` (app target) | root | `AppContainer`, scene setup, deep links | all | ❌ |
 | `HaloNotificationService` (NSE target) | root | NSE entry point; the notification pipeline | HaloApplication, HaloDomain, HaloMatrixAdapter, HaloPersistence, HaloPlatform, HaloFoundation | ❌ |
 

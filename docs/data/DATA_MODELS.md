@@ -6,8 +6,10 @@ Three kinds of model, never mixed:
 3. **Upstream FFI types**: only inside `HaloMatrixAdapter`.
 
 ## 1. Identifiers
-`UserID`, `RoomID`, `EventID`, `DeviceID`, `TransactionID`, `MXCURI`: wrapper structs around `String` with validation of
-the sigil (`@`, `!`, `$`) and the server name where relevant. `AccountID = UserID`. `TimelineItemID` wraps the upstream unique id.
+`UserID`, `RoomID`, `EventID`, `DeviceID` (in `HaloFoundation`, M0), later `TransactionID`, `MXCURI`: wrapper structs around
+`String` with validation of the sigil (`@`, `!`, `$`), the 255-byte limit, and the server name for user IDs (room IDs don't require
+one: not every room version includes it). Their `description` is redacted, so interpolating one into a log line never leaks it
+(SECURITY §6); the raw value is `rawValue`. `AccountID = UserID`. `TimelineItemID` wraps the upstream unique id.
 
 ## 2. Domain models (key ones)
 
