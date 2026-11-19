@@ -1,6 +1,6 @@
 # Phase 0 — Documentation Completeness Report
 
-Date: 2026-11-19 · Branch: `claude/blissful-galileo-3400g9` · Status: **complete and reviewed (§9), awaiting approval for Phase 1**.
+Date: 2026-11-19 · Branch: `claude/blissful-galileo-3400g9` · Status: **complete and reviewed (§9); founder decisions recorded (§10)**. Remaining before the Xcode project is created: the value of the namespace root `N` (D63).
 
 ## 1. Files created
 
@@ -8,7 +8,7 @@ Date: 2026-11-19 · Branch: `claude/blissful-galileo-3400g9` · Status: **comple
 |---|---|
 | Root | `AGENTS.md` (engineering contract), `CLAUDE.md`, `README.md`, `CONTRIBUTING.md`, `LICENSE` (proprietary), `.gitignore`, `.github/workflows/docs.yml` |
 | Product | `docs/README.md`, `PRODUCT_VISION.md`, `REQUIREMENTS.md`, `ROADMAP.md`, `GLOSSARY.md` |
-| Decisions and tracking | `DECISION_LOG.md` (D1–D62, superseded entries kept), `adr/` (README, TEMPLATE, ADR-0001…0014 accepted, ADR-0015/0016 proposed), `OPEN_QUESTIONS.md`, `RISK_REGISTER.md`, `SOURCES.md`, this report |
+| Decisions and tracking | `DECISION_LOG.md` (D1–D66, superseded entries kept), `adr/` (README, TEMPLATE, ADR-0001…0016, all accepted), `OPEN_QUESTIONS.md`, `RISK_REGISTER.md`, `SOURCES.md`, this report |
 | Architecture (9) | `OVERVIEW`, `SYSTEM_DESIGN`, `MODULE_BOUNDARIES`, `DATA_FLOW`, `CONCURRENCY`, `ERROR_HANDLING`, `BACKGROUND_EXECUTION`, `LOGGING_AND_DIAGNOSTICS`, `ARCHITECTURE_DECISIONS` |
 | Matrix (8) | `SDK_INTEGRATION`, `RUST_FFI`, `PORTS_CONTRACT`, `SYNC_ENGINE`, `UNREAD_STATE`, `READ_RECEIPTS`, `PUSH_NOTIFICATIONS`, `MEDIA` |
 | Feature specs (13 + template) | `AUTHENTICATION`, `ENCRYPTION_AND_DEVICES`, `ROOM_LIST`, `TIMELINE`, `MESSAGING`, `MEDIA_ATTACHMENTS`, `NOTIFICATIONS`, `ROOM_MANAGEMENT`, `USER_PROFILES`, `SETTINGS`, `STICKERS`, `BOT_MESSAGES`, `BOT_ACTIVITY` |
@@ -33,7 +33,7 @@ decisions are preserved in `DECISION_LOG.md`. No application code, UI or placeho
 | 5 | Important decisions have ADRs | ✅ | 14 ADRs incl. all required topics (monorepo, SDK integration, UniFFI vs C, SwiftUI state, persistence, unread source of truth, module boundaries, testing) + push, stickers, bots, licensing, iOS target |
 | 6 | AGENTS.md actionable | ✅ | Mandatory procedure, ownership table, conventions, real commands with availability, forbidden patterns; the 10 required instructions are explicit (§0, §4, §11–13) |
 | 7 | No contradictory requirements | ✅ | Superseded decisions are marked (D3, D8, D12, D27, D40 → D44, D46, D47, D48); stale references checked by the validator |
-| 8 | Unresolved technical risks identified | ✅ | RISK_REGISTER (30 risks) + OPEN_QUESTIONS (30 validation items of which 2 resolved, 11 open decisions) |
+| 8 | Unresolved technical risks identified | ✅ | RISK_REGISTER (31 risks) + OPEN_QUESTIONS (31 validation items of which 2 resolved; 11 decision items, 4 decided in §10) |
 | 9 | Prioritised roadmap | ✅ | ROADMAP M0–M10 with gates G-FFI and G-UNREAD |
 | 10 | Entry criteria for implementation | ✅ | ROADMAP "Implementation entry criteria" + §6 below |
 
@@ -44,7 +44,7 @@ D/ADR/F/V/Q/AC/S, ADR sections, statement labels and code fences).
 1. **Swift-first over the unmodified upstream FFI binary** (ADR-0002, D44). Verified that upstream FFI objects can't be extended by another crate (F-FFI-3); a Halo-owned UniFFI layer is the planned fallback behind the same ports (gate G-FFI).
 2. **Halo-owned ports** are the stable contract; only `HaloMatrixAdapter` imports `MatrixRustSDK` (ADR-0004).
 3. **Read-state reconciliation policy** (pure Swift, one function for the app and the NSE): server owns read positions and counts, SDK owns client counts, Halo owns only intents and notification records; badge = rooms needing attention, always recomputed (ADR-0007, D47).
-4. **Push** via self-hosted Sygnal, `event_id_only`, NSE decrypt + local badge (ADR-0010).
+4. **Push** via self-hosted Sygnal, `event_id_only`, NSE decrypt + local badge (ADR-0010). **Pushes are hints, never truth** (D65): Halo's Sygnal pushkin turns count-only pushes into background pushes and no push sets `aps.badge` (ADR-0015). The NSE has its own gate G-NSE at the end of M1 (ADR-0016).
 5. **Stickers on the stable Matrix v1.19 image packs** (`m.room.image_pack`, `m.image_pack.rooms`) — a change from the interview's `im.ponies.*` plan after verifying the spec (ADR-0011, D48). Stickers v1 stays in the MVP (D45).
 6. **Bots without bot changes**: strict versioned template parsers, the bot's existing reaction protocol (verified from its source), a derived task index that never claims authority (ADR-0012).
 7. **GRDB** for app-owned data, file protection + field encryption (ADR-0006).
@@ -53,10 +53,7 @@ D/ADR/F/V/Q/AC/S, ADR sections, statement labels and code fences).
 ## 4. Outstanding questions (decisions for the founder)
 | ID | Question | Needed by |
 |---|---|---|
-| **Q-BUNDLE** | Bundle ID prefix / App Group / account-data namespace (needs a domain you control) | **before M0** |
-| **Q-DEV-AUTH** | Password login in M0 when `infra/dev` includes MAS (run M0 without MAS, or enable MAS password compatibility) | **before M0** |
-| **Q-PUSH-BADGE** | Accept ADR-0015: stop Synapse's count-only pushes from setting the icon badge (pushkin or relay) | **before M1** |
-| Q-NSE-GATE | Accept ADR-0016: NSE budget as its own gate G-NSE at the end of M1 | before M1 |
+| Q-BUNDLE | Decided (D63): one project-owned namespace root. **Value of `N` still to record** in DEVELOPMENT_SETUP §3 | before the Xcode project (M0) |
 | Q-SDK-BUILD | When to build the SDK from source instead of the prebuilt package | M5 |
 | Q-E2EE-STRATEGY | Room-key sharing strategy with unverified devices | M2 |
 | Q-MAS-ACCOUNT | Native session list vs MAS account page | M5 |
@@ -83,15 +80,15 @@ T-NSE, T-RECEIPTS, T-FFI, T-STATE, T-XPROC, L1/L3 (licence drift / upstream reli
 1. **M0 Foundation** — decide Q-BUNDLE; repo skeleton per DEVELOPMENT_SETUP; `infra/dev`; packages with empty-but-compiling targets only where needed by real code; adapter `SessionPort` + `RoomListPort` (password login, room count); V-SQL-1, V-CI-1, V-SDK-1, V-APPLE-1; boundaries + Linux CI.
 2. **M1 Read-only client** + **NSE spike** (V-NSE-*), and submit the filtering-entitlement request.
 3. **M2 Messaging.**
-4. **M3 Read-state engine** (policy, outbox, NSE pipeline, scenario driver, auditor) → **gates G-UNREAD and G-FFI**.
+4. **M3 Read-state engine** (policy, outbox, NSE pipeline, scenario driver, auditor) → **gates G-UNREAD and G-FFI**. (G-NSE closes M1.)
 5. **M4 Stickers v1** (V-ST-1 first week) → **M5 hardening = MVP**.
 6. P2: M6 bot cards → M7 Activity → M8 search/saved → M9 gallery/export → M10 threads.
 
 ## 8. Entry criteria for Phase 1
 - [ ] Founder approves this documentation set (or requests changes).
-- [ ] Q-BUNDLE decided (bundle prefix, App Group, account-data namespace).
-- [ ] Q-DEV-AUTH decided (how M0's password login works with or without MAS).
-- [ ] ADR-0015 and ADR-0016 accepted or rejected (needed before M1; listed here so they're decided with the approval).
+- [x] Q-BUNDLE decided (D63) — [ ] value of `N` recorded in DEVELOPMENT_SETUP §3.
+- [x] Q-DEV-AUTH decided (D64: native password login in M0, MAS in M5).
+- [x] ADR-0015 accepted with conditions (D65) and ADR-0016 accepted (D66).
 - [ ] Apple Developer membership and a Mac with the iOS 26 SDK available.
 - [ ] Homeserver domain available for `infra/dev` / personal deployment.
 
@@ -112,3 +109,13 @@ A full read of the documentation before Phase 1 found the issues below; each is 
 | Design | Badge and status tokens failed the 4.5:1 contrast rule; `attention` ≈ `warning` | New `on*` tokens and adjusted colours |
 | Hygiene | 21 `[DECISION]` labels without IDs; risk IDs colliding with milestones/properties; stale `AGENTS.md §9` refs | D49–D62; risk prefixes `COMPAT-`/`PERF-`/`PROJ-`; refs fixed; validator now checks decision IDs and AGENTS § references |
 
+## 10. Founder decisions (2026-11-19)
+Approved by the founder; they don't block M0.
+
+| Item | Decision | Recorded in |
+|---|---|---|
+| Q-BUNDLE | One consistent, project-owned namespace root for the app and all extensions; finalised before M0 | D63; identifiers in [development/DEVELOPMENT_SETUP.md](development/DEVELOPMENT_SETUP.md) §3 |
+| Q-DEV-AUTH | Native Matrix username/password login in M0; MAS deferred to M5 | D64; ROADMAP M0/M5; V-AUTH-1 |
+| ADR-0015 | Accepted with conditions: custom Sygnal module converts count pushes into silent background pushes; the server never controls the badge; the local unread engine is the sole badge authority; the relay is a fallback only | ADR-0015, D65, AGENTS.md §4 principle 9 and §17 |
+| ADR-0016 | Accepted: NSE evaluated at the end of M1, independently of G-FFI; acceptance criteria cover timeout handling, memory, extension termination, network failures and fallback behaviour | ADR-0016, D66, AC-NSE-1…6 (NOTIFICATIONS §11), ROADMAP G-NSE |
+| Principle | Push notifications are synchronisation hints, not the source of truth; the local unread engine, backed by Matrix sync state, is the sole authority for unread counts and the badge | D65; AGENTS.md §4 principle 9 |
