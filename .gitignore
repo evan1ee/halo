@@ -1,0 +1,24 @@
+# macOS / Xcode
+.DS_Store
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+*.ipa
+*.dSYM.zip
+*.dSYM
+# SwiftPM
+.build/
+.swiftpm/
+# Rust (only if core/ is introduced)
+target/
+# Secrets and local environment
+.env
+*.env.local
+*.p8
+*.p12
+*.mobileprovision
+infra/**/data/
+infra/**/secrets/
+# Diagnostics exports
+*.halo-diagnostics.zip
