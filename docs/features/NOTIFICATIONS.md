@@ -49,8 +49,18 @@ AC-U2, AC-U3, AC-U6, AC-U7 plus:
 - AC-N1 An encrypted DM from a verified user shows sender + text in ≥ 95 % of pushes in a 100-push test (rest: generic text, never a crash).
 - AC-N2 An edit never creates a second notification.
 
+**NSE robustness — gate G-NSE, end of M1 (ADR-0016).** Measured on the oldest supported device class (recorded with the results),
+with the app in the background, over a 100-push run of mixed encrypted DMs and group messages unless stated otherwise. The time and
+memory limits are the ones *measured* in V-NSE-1, not assumed values.
+- AC-NSE-1 **Memory:** peak NSE memory stays ≤ 80 % of the NSE memory limit measured on that device; zero memory terminations in the run.
+- AC-NSE-2 **Execution time:** p95 time from `didReceive` to calling the content handler ≤ 50 % of the measured time budget on a normal network; `serviceExtensionTimeWillExpire` fires for none of the 100 pushes.
+- AC-NSE-3 **Timeout handling:** with an injected delay that overruns the budget at each pipeline step in turn, the NSE always delivers from `serviceExtensionTimeWillExpire`: generic content (no message text) and the cached badge; it never crashes, and a `notification_record` exists only if the event had already been fetched (otherwise the app clears the notification by `room_id`, [../matrix/PUSH_NOTIFICATIONS.md](../matrix/PUSH_NOTIFICATIONS.md) §5).
+- AC-NSE-4 **Extension termination:** killing the NSE at each pipeline step in turn leaves `halo.sqlite` consistent (every write committed or rolled back), the next NSE process and the app both acquire the SDK's cross-process lock and proceed without user action, and the notification iOS showed is cleared once the room is read; no `0xdead10cc` terminations while the app writes in the background (V-SQL-2).
+- AC-NSE-5 **Network failures:** with the homeserver unreachable, timing out, or answering 5xx (fault-injection proxy), the NSE delivers generic content within the budget, never shows content it couldn't fetch and decrypt, writes no `notification_record`, and the next app reconcile corrects attention and the badge.
+- AC-NSE-6 **Fallback behaviour:** in every degraded path (timeout, termination, network failure, UTD, all-rooms badge over budget per V-NSE-2) the badge the NSE sets is `BadgeCalculator` over local state or the cached last value of it — never a payload value (D65) — and no event is notified twice (AC-U7).
+
 ## 12. Test requirements
-Unit: the NSE pipeline as a pure function with fakes (de-dup, suppress, content building). Integration: S-PUSH-1..4 with a fake push gateway that calls the pipeline directly (no APNs). Manual: device checklist ([../testing/TEST_STRATEGY.md](../testing/TEST_STRATEGY.md) §8).
+Unit: the NSE pipeline as a pure function with fakes (de-dup, suppress, content building), including every degraded path of AC-NSE-3…6. Device (G-NSE): the AC-NSE run with fault injection through the pipeline's injected ports and a debug-only delay/kill hook (compiled out of Release builds) plus the `infra/test` proxy for network faults; results recorded in the M1 exit report. Integration: S-PUSH-1..4 with a fake push gateway that calls the pipeline directly (no APNs). Manual: device checklist ([../testing/TEST_STRATEGY.md](../testing/TEST_STRATEGY.md) §8).
 
 ## 13. Open questions
-V-NSE-1/2/3, V-PUSH-1..4.
+V-NSE-1/2/3, V-PUSH-1..5, V-SQL-2 (all inputs to G-NSE).

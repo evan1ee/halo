@@ -1,6 +1,6 @@
 # ADR-0016: Treat the NSE budget as its own gate, not a G-FFI criterion
 
-- **Status:** Proposed · **Date:** 2026-11-19 · **Decision IDs:** D44 (amends ADR-0002's G-FFI criteria once accepted) · **Validation:** V-NSE-1, V-NSE-2, V-NSE-3
+- **Status:** Accepted (founder decision 2026-11-19) · **Date:** 2026-11-19 · **Decision IDs:** D44, D66 (amends ADR-0002's G-FFI criteria) · **Validation:** V-NSE-1, V-NSE-2, V-NSE-3, V-SQL-2
 
 ## Context
 ADR-0002 lists three G-FFI criteria and schedules Halo-owned bindings (option 3) if any fails: (a) unread scenarios pass on upstream
@@ -20,7 +20,9 @@ What should happen when the NSE exceeds its budget, given that replacing the bin
 3. Drop decryption in the NSE (generic notifications only).
 
 ## Decision
-**Proposed:** option 2. G-FFI keeps criteria (a) and (b).
+Option 2. G-FFI keeps criteria (a) and (b); G-NSE is evaluated at the end of M1, independently of G-FFI. Its acceptance criteria
+cover **memory usage, execution time, timeout handling, extension termination, network failures and fallback behaviour**:
+AC-NSE-1…6 in [../features/NOTIFICATIONS.md](../features/NOTIFICATIONS.md) §11.
 
 ## Rationale
 The fail path should be the cheapest change that can actually reduce the measured cost. Building the SDK with fewer features is
@@ -31,7 +33,8 @@ encrypted notification content (AC-N1).
 One more gate to track; the feature-trimmed SDK build moves earlier if G-NSE fails (Rust toolchain needed sooner, M2 instead of M5).
 
 ## Consequences
-- ROADMAP gates gain G-NSE (end of M1); ADR-0002's criterion (c) moves there once this ADR is accepted.
+- ROADMAP gates gain G-NSE (end of M1); ADR-0002's criterion (c) moves there.
+- A G-NSE failure triggers only the NSE fail path above; it doesn't by itself fail G-FFI.
 - The NSE spike in M1 records peak memory and duration per configuration (V-NSE-1/3) so the gate has numbers to judge.
 
 ## Verified facts and assumptions

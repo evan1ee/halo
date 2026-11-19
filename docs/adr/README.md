@@ -19,4 +19,4 @@ Format: [TEMPLATE.md](TEMPLATE.md). Numbering is sequential and never reused. An
 | [0013](0013-clean-room-and-licensing.md) | Clean-room development and licence gate | Accepted |
 | [0014](0014-minimum-ios-26.md) | Minimum iOS 26 | Accepted |
 | [0015](0015-count-only-pushes.md) | Count-only pushes must not set the app badge | Accepted with conditions (V-PUSH-5) |
-| [0016](0016-nse-budget-gate.md) | Treat the NSE budget as its own gate (G-NSE) | **Proposed** (Q-NSE-GATE) |
+| [0016](0016-nse-budget-gate.md) | Treat the NSE budget as its own gate (G-NSE) | Accepted (AC-NSE-1…6) |

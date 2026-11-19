@@ -11,9 +11,9 @@
 | V-SQL-1 | The SDK's bundled SQLite (inside the dynamic framework) and GRDB's system SQLite coexist without symbol interposition issues | M0 smoke test: open the SDK client and a GRDB DB in one process, run both, check `sqlite3_libversion()` from each side | M0 | M0 |
 | V-SQL-2 | GRDB `DatabasePool` shared by app + NSE works without `0xdead10cc` terminations when following GRDB's suspension guidance | NSE spike: 100 pushes while the app is backgrounded and writing | M1 | M3 |
 | V-CI-1 | GRDB builds and tests on Linux with system SQLite | `swift test` in the `swift` Docker image | M0 | M0 |
-| V-NSE-1 | NSE memory/time budget suffices for the SDK client + one decryption | Instruments on the oldest supported device; record peak memory and duration over 50 pushes | M1 | M1 |
-| V-NSE-2 | Reading RoomInfo for all rooms in the NSE for the badge fits the budget | Measure with 300 rooms; else use cached badge ± current room | M1 | M3 |
-| V-NSE-3 | `use_lightweight_tokio_runtime = true` lowers NSE memory | A/B measurement in the spike | M1 | — |
+| V-NSE-1 | NSE memory/time budget suffices for the SDK client + one decryption | Instruments on the oldest supported device; record peak memory and duration over 50 pushes | M1 | M1 (G-NSE) |
+| V-NSE-2 | Reading RoomInfo for all rooms in the NSE for the badge fits the budget | Measure with 300 rooms; else use cached badge ± current room | M1 | M1 (G-NSE) |
+| V-NSE-3 | `use_lightweight_tokio_runtime = true` lowers NSE memory | A/B measurement in the spike | M1 | — (G-NSE input) |
 | V-PUSH-1 | Sygnal maps the pusher `default_payload` into the APNs payload as expected (`mutable-content`, generic alert) | Read Sygnal docs; send a test push; inspect the device payload | M1 | M1 |
 | V-PUSH-2 | ~~Count-change pushes arrive as background pushes with our pusher config~~ **Resolved — false with stock Sygnal**: they arrive as `aps.badge`-only pushes [VERIFIED F-PUSH-1, F-PUSH-2]; replaced by V-PUSH-5 and ADR-0015 | — | — | — |
 | V-PUSH-3 | Apple grants `com.apple.developer.usernotifications.filtering` | Submit the request in M1 | M1 → M3 | — (fallback exists) |
@@ -46,7 +46,7 @@
 | Q-BUNDLE | Bundle ID prefix, App Group, account-data namespace | — | **Decided D63**: one project-owned namespace root for app and extensions. Only the value (the founder's domain) remains to be recorded in DEVELOPMENT_SETUP §3 | Value: before the Xcode project is created (M0) |
 | Q-PUSH-BADGE | How to stop Synapse's count-only pushes from setting the icon badge | — | **Decided: ADR-0015 accepted with conditions, D65** — Halo pushkin; relay only as fallback | — |
 | Q-DEV-AUTH | How M0's password login works when `infra/dev` includes MAS | — | **Decided D64**: native Synapse password login in M0; MAS from M5 | — |
-| Q-NSE-GATE | Should the NSE budget be its own gate at the end of M1 instead of a G-FFI criterion (ADR-0016)? | Keep in G-FFI / separate G-NSE | Separate G-NSE | Before M1 |
+| Q-NSE-GATE | NSE budget as its own gate? | — | **Decided: ADR-0016 accepted, D66** — G-NSE at the end of M1 with AC-NSE-1…6 | — |
 | Q-SDK-BUILD | When to switch from the prebuilt SDK to building from source | M0 / before external TestFlight / never | Before the first external TestFlight | M5 |
 | Q-MAS-ACCOUNT | Device/session management for OIDC accounts: native list or MAS account page | Native via SDK / web (`account_url`) | Web page in the MVP | M5 |
 | Q-E2EE-STRATEGY | Room key recipient strategy (share keys with unverified devices?) | SDK default / identity-based / error-on-unverified | SDK default in the MVP; revisit with verification UX | M2 |
