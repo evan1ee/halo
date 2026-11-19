@@ -18,7 +18,7 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
 - `NotificationFetchPort` (domain) + `MatrixNotificationPort` (adapter: `NotificationClient` in `MultipleProcesses` mode; `NotificationMapper`: DM → sender as title, group → room title and "Sender: text",
   encrypted → "Encrypted message", filtered/redacted → suppressed, not found → `.notFound`). `MatrixSessionPort` gained `sendsMessages` and `lightweightRuntime` (the NSE uses `sendsMessages: false`,
   lightweight runtime per V-NSE-3, holder name "nse"). `HaloPlatform.HaloShared` (namespace, shared Keychain access group on device builds, App Group store directory) now used by both the app and the NSE;
-  Info keys `HaloNamespace`/`HaloKeychainAccessGroup`. **Consequence: the session moved to the shared Keychain group, so the phone must sign in once more.**
+  Info keys `HaloNamespace`/`HaloKeychainAccessGroup`. (On a signed build, Keychain items written without a group already live in the first entitlement group, i.e. the shared one, so no re-sign-in was needed.)
 - `ios/NotificationService`: reads the session from the Keychain, restores a client, fetches the event, rewrites title/body/thread id, delivers; on error or `serviceExtensionTimeWillExpire` delivers the
   generic payload content; never sets a badge. `NSEMetrics` appends one JSON line per push (`outcome`, step durations, `phys_footprint` MB, no content) to `nse-metrics.jsonl` in the App Group container.
 - Checked: prepush passes (adapter tests incl. mapper tests; app and NSE build signed for the device). **First on-device run (iPhone 16, Debug build, APNs sandbox, unencrypted room, app in foreground/background mix,
@@ -27,7 +27,7 @@ Updated in the last commit of every push (AGENTS.md §18). Summarises and links;
   unverified until sampled during the fetch and compared with the extension's real limit; the room is not encrypted (decryption/UTD in the NSE untested); no timeout/termination injection (AC-NSE-3/4), no
   100-push run, no cold-device or poor-network run; a Debug build, not Release. The metrics file is copied into the app's Documents at launch in DEBUG builds so
   `xcrun devicectl device copy from --domain-type appDataContainer --domain-identifier one.mbm.halo --source Documents/nse-metrics.jsonl …` can read it (the App Group container itself is not readable from the Mac).
-  No badge appears on the icon (not implemented; see below). NOT yet done: Not implemented: `notification_record` de-duplication, read-state suppression, badge
+  No badge appears on the icon (not implemented; see below). Not implemented: `notification_record` de-duplication, read-state suppression, badge
   recomputation (`BadgeCalculator`), communication-notification intents, suppression entitlement (V-PUSH-3), sender avatars.
 
 **2026-11-19 (latest+13) — Push groundwork: Sygnal in infra/dev, pusher registration**
