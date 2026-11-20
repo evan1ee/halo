@@ -29,6 +29,7 @@ final class AppRoot {
     private let sessionCoordinator: SessionCoordinator
     private let matrixSession: MatrixSessionPort
     private let media: MediaLoader
+    private let roomCoordinator: RoomListCoordinator
     private let log: HaloLog
 
     init() {
@@ -44,6 +45,7 @@ final class AppRoot {
         let sessionCoordinator = SessionCoordinator(port: session, keychain: keychain)
         self.sessionCoordinator = sessionCoordinator
         let roomCoordinator = RoomListCoordinator(port: MatrixRoomListPort(session: session), loadsAllPages: true, hiddenRooms: MatrixHiddenRoomsPort(session: session))
+        self.roomCoordinator = roomCoordinator
         let suite = "group.\(HaloShared.namespace())"
         records = NotificationRecordStore(suiteName: suite)
         let receipts = ReadReceiptCoordinator(port: MatrixReadMarkerPort(session: session), log: log)
@@ -138,7 +140,12 @@ final class AppRoot {
     func makeStickerPanel(room: RoomID, timeline: TimelineViewModel) -> StickerPanelViewModel {
         let creator = StickerPackCreator(port: MatrixStickerPackCreationPort(session: matrixSession), preparer: ImagePreparer(maximumDimension: 512))
         return StickerPanelViewModel(
-            library: stickers, media: media, room: room, newPack: { done in NewPackViewModel(creator: creator, onCreated: done) }, send: { sticker throws(HaloError) in try await timeline.sendSticker(sticker) })
+            library: stickers, media: media, room: room, newPack: { done in NewPackViewModel(creator: creator, onCreated: done) },
+            notice: StickerPanelViewModel.EncryptionNotice(
+                roomIsEncrypted: { [roomCoordinator] in await roomCoordinator.rooms.first { $0.id == room }?.isEncrypted ?? false },
+                isAcknowledged: { UserDefaults.standard.bool(forKey: "halo.stickers.encryptionNoticeSeen") },
+                acknowledge: { UserDefaults.standard.set(true, forKey: "halo.stickers.encryptionNoticeSeen") }),
+            send: { sticker throws(HaloError) in try await timeline.sendSticker(sticker) })
     }
 
     #if DEBUG

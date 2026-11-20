@@ -1,6 +1,6 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-20 · Branch: `feat/m4-sticker-preview` · PRs #1–#19 merged
+Last updated: 2026-11-20 · Branch: `feat/m4-sticker-privacy-notice` · PRs #1–#20 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
@@ -37,7 +37,7 @@ Full list: docs/DECISION_LOG.md (D1–D74), docs/adr/. Most relevant now: D70 au
 `FeatureStickers` (`StickerImage.swift`, `StickerPanelView` preview, `StickerPanelViewModel.previewContent`, `StickerImageTests`), `MediaLoader.content`, `ROADMAP.md`, `HANDOFF.md`. Earlier push: `ClassicSyncEvidenceTests` (`encryptedEvidence`: two SDK clients, encrypted room, all-messages and mentions-only), `docs/testing/UNREAD_REGRESSION_TESTS.md`, `ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
-- Stickers: V-ST-1 resolved (option B), V-ST-2 partly (token refresh on 401 not exercised). Verified against `infra/dev` by contract test `stickers` (env `HALO_DEV_STICKER_ROOM`: a room with `m.room.image_pack` `cats` {wave, dance} enabled in `m.image_pack.rooms`; throwaway account `stickertester` created locally). Long-press preview with animation is built (FR-5, FR-9: `StickerImage`, `AnimatedStickerView`; grid stays static, not checked on screen; `FeatureStickers` UIKit tests run only on the simulator: `xcodebuild -scheme FeatureStickers test`). Not built: editing/deleting packs, hiding pack rooms from the room list, legacy `im.ponies.*` packs (V-ST-3), privacy notice, "unavailable pack" UI. Real sticker images were not loaded (the fixture mxc URLs have no media).
+- Stickers: V-ST-1 resolved (option B), V-ST-2 partly (token refresh on 401 not exercised). Verified against `infra/dev` by contract test `stickers` (env `HALO_DEV_STICKER_ROOM`: a room with `m.room.image_pack` `cats` {wave, dance} enabled in `m.image_pack.rooms`; throwaway account `stickertester` created locally). Long-press preview with animation is built (FR-5, FR-9: `StickerImage`, `AnimatedStickerView`; grid stays static, not checked on screen; `FeatureStickers` UIKit tests run only on the simulator: `xcodebuild -scheme FeatureStickers test`). One-time privacy alert before the first sticker into an encrypted room is built (unit-tested, not seen on screen). Not built: editing/deleting packs, hiding pack rooms from the room list, legacy `im.ponies.*` packs (V-ST-3), "unavailable pack" UI. Real sticker images were not loaded (the fixture mxc URLs have no media).
 - Mentions: the formatted body link and the escaping of a hostile display name (no HTML, emphasis or second link) are verified against `infra/dev` (`mentionsAndEchoes`); `m.mentions`, Element Web pill rendering and `Room.members()` cost in large rooms are not.
 - Pack-creation cleanup (leave/forget after a failure) is not exercised against a server; the success path is. In rooms over 1,000 members, packs with a non-empty state key are only offered if the user enabled them.
 - Each `createPack` contract run leaves one more pack enabled on the test account (the `stickers` test tolerates it).

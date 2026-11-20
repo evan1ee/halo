@@ -130,4 +130,35 @@ struct StickerPanelViewModelTests {
         let with = StickerPanelViewModel(library: library, room: nil, newPack: { done in NewPackViewModel(creator: creator, onCreated: done) }, send: { _ in })
         #expect(with.canCreatePack && with.beginNewPack() != nil)
     }
+
+    @Test("the first sticker into an encrypted room waits for the one-time notice; after confirming it is sent and the notice stays acknowledged")
+    func encryptionNotice() async {
+        var sent: [String] = []
+        var seen = false
+        let pack = StickerPack(ref: ref, displayName: "Cats", avatarURL: nil, usage: [.sticker], attribution: nil, stickers: [sticker("cat_wave")], source: .userEnabled)
+        let library = StickerLibrary(packs: FakeStickerPacks(StickerPackLoad(packs: [pack])), prefs: FakeStickerPrefs())
+        let model = StickerPanelViewModel(
+            library: library, room: room,
+            notice: .init(roomIsEncrypted: { true }, isAcknowledged: { seen }, acknowledge: { seen = true }),
+            send: { sent.append($0.shortcode) })
+        await model.tap(sticker("cat_wave"))
+        #expect(sent.isEmpty && model.pendingNotice?.shortcode == "cat_wave")
+        model.cancelNotice()
+        #expect(model.pendingNotice == nil && sent.isEmpty && !seen)
+        await model.tap(sticker("cat_wave"))
+        await model.confirmNotice()
+        #expect(sent == ["cat_wave"] && seen && model.pendingNotice == nil)
+        await model.tap(sticker("cat_wave"))
+        #expect(sent == ["cat_wave", "cat_wave"] && model.pendingNotice == nil)
+    }
+
+    @Test("an unencrypted room never shows the notice")
+    func plainRoom() async {
+        var sent = 0
+        let model = StickerPanelViewModel(
+            library: StickerLibrary(packs: FakeStickerPacks(), prefs: FakeStickerPrefs()), room: room,
+            notice: .init(roomIsEncrypted: { false }, isAcknowledged: { false }, acknowledge: {}), send: { _ in sent += 1 })
+        await model.tap(sticker("x"))
+        #expect(sent == 1 && model.pendingNotice == nil)
+    }
 }
