@@ -22,6 +22,12 @@ public final class MatrixPushPort: PushPort {
         } catch { throw ErrorMapper.map(error) }
     }
 
+    public func unregister(deviceToken: Data, appID: String) async throws(HaloError) {
+        let client = try await session.signedInClient()
+        let pushkey = deviceToken.map { String(format: "%02x", $0) }.joined()
+        do { try await client.deletePusher(identifiers: PusherIdentifiers(pushkey: pushkey, appId: appID)) } catch { throw ErrorMapper.map(error) }
+    }
+
     /// Generic text only; the real content is fetched and decrypted by the extension.
     static let defaultPayload = #"{"aps":{"mutable-content":1,"alert":{"title":"Halo","body":"New message"}}}"#
 }

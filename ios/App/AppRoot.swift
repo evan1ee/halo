@@ -51,6 +51,7 @@ final class AppRoot {
         push = Self.pushConfiguration().map {
             PushCoordinator(port: MatrixPushPort(session: session), session: sessionCoordinator, appID: $0.appID, gatewayURL: $0.gateway)
         }
+        if let push { Task { await sessionCoordinator.setBeforeSignOut { await push.unregister() } } }
         auth = AuthViewModel(coordinator: sessionCoordinator)
         roomList = RoomListViewModel(session: sessionCoordinator, rooms: roomCoordinator, receipts: receipts)
         #if DEBUG

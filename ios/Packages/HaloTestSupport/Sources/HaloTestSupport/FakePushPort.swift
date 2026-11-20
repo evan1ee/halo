@@ -20,6 +20,7 @@ public final class FakePushPort: PushPort {
     private struct State {
         var registrations: [Registration] = []
         var failures = 0
+        var unregistrations: [Data] = []
     }
 
     private let state = Mutex(State())
@@ -27,6 +28,7 @@ public final class FakePushPort: PushPort {
     public init() {}
 
     public var registrations: [Registration] { state.withLock { $0.registrations } }
+    public var unregistrations: [Data] { state.withLock { $0.unregistrations } }
     public func failNext(_ count: Int = 1) { state.withLock { $0.failures = count } }
 
     public func register(deviceToken: Data, appID: String, gatewayURL: URL, deviceName: String) async throws(HaloError) {
@@ -36,5 +38,9 @@ public final class FakePushPort: PushPort {
             return false
         }
         if fail { throw .network(retryable: true) }
+    }
+
+    public func unregister(deviceToken: Data, appID: String) async throws(HaloError) {
+        state.withLock { $0.unregistrations.append(deviceToken) }
     }
 }

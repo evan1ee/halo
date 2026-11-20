@@ -58,4 +58,17 @@ struct PushCoordinatorTests {
         await coordinator.deviceTokenReceived(Data([2]))
         #expect(push.registrations.map(\.deviceToken) == [Data([0]), Data([1]), Data([2])])
     }
+
+    @Test("signing out removes the pusher first, while the session is still valid")
+    func unregistersOnLogout() async throws {
+        let push = FakePushPort()
+        let (coordinator, session, _) = try await make(push)
+        await session.setBeforeSignOut { await coordinator.unregister() }
+        let token = Data([4, 5, 6])
+        await coordinator.deviceTokenReceived(token)
+        await signIn(session)
+        #expect(await eventually { push.registrations.count == 1 })
+        await session.logout()
+        #expect(push.unregistrations == [token])
+    }
 }
