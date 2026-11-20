@@ -10,6 +10,8 @@ public final class FakeRoomPort: RoomPort {
         var error: HaloError?
         var modes: [RoomNotificationChoice] = []
         var left: [RoomID] = []
+        var accepted: [RoomID] = []
+        var declined: [RoomID] = []
     }
     private let state: Mutex<State>
 
@@ -40,6 +42,19 @@ public final class FakeRoomPort: RoomPort {
             let d = $0.details
             $0.details = RoomDetails(id: d.id, name: d.name, topic: d.topic, isDirect: d.isDirect, isEncrypted: d.isEncrypted, joinedMemberCount: d.joinedMemberCount, notificationMode: mode)
         }
+    }
+
+    public var acceptedInvites: [RoomID] { state.withLock { $0.accepted } }
+    public var declinedInvites: [RoomID] { state.withLock { $0.declined } }
+
+    public func acceptInvite(_ room: RoomID) async throws(HaloError) {
+        if let error = state.withLock({ $0.error }) { throw error }
+        state.withLock { $0.accepted.append(room) }
+    }
+
+    public func declineInvite(_ room: RoomID) async throws(HaloError) {
+        if let error = state.withLock({ $0.error }) { throw error }
+        state.withLock { $0.declined.append(room) }
     }
 
     public func leave(_ room: RoomID) async throws(HaloError) {

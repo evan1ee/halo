@@ -22,6 +22,17 @@ public struct RoomListView: View {
                 List {
                     Section("Rooms: \(count)") {
                         ForEach(rows) { row in
+                            if row.isInvite {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(row.name).fontWeight(.bold)
+                                    Text("Invitation").font(.caption).foregroundStyle(.secondary)
+                                    HStack {
+                                        Button("Accept") { Task { await model.acceptInvite(row.id) } }.buttonStyle(.borderedProminent)
+                                        Button("Decline", role: .destructive) { Task { await model.declineInvite(row.id) } }.buttonStyle(.bordered)
+                                    }
+                                }
+                                .accessibilityIdentifier("invite-\(row.name)")
+                            } else {
                             Button { onSelect(row.id) } label: {
                                 HStack {
                                     Text(row.name).fontWeight(row.hasUnread ? .bold : .regular)
@@ -36,6 +47,7 @@ public struct RoomListView: View {
                                 .swipeActions(edge: .trailing) {
                                     Button("Unread") { Task { await model.markUnread(row.id) } }.tint(.orange)
                                 }
+                            }
                         }
                     }
                 }

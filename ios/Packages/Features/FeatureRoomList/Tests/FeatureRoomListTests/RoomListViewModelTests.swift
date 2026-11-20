@@ -83,3 +83,29 @@ struct RoomListViewModelTests {
         #expect(model.content == .loaded(count: 1, rows: [.init(id: id, name: "A", display: .count(3), hasUnread: true)]))
     }
 }
+
+@MainActor
+@Suite("RoomListViewModel invitations")
+struct RoomListInviteTests {
+    @Test("an invited room is marked as an invitation; accepting and declining go to the port, a failure is shown")
+    func invites() async throws {
+        let id = try RoomID("!inv:x.org")
+        let invited = RoomSummary(id: id, name: "Book club", isDirect: false, isEncrypted: false, membership: .invited)
+        let coordinator = RoomListCoordinator(port: FakeRoomListPort(rooms: [invited]))
+        let port = FakeRoomPort(details: RoomDetails(id: id, name: nil, topic: nil, isDirect: false, isEncrypted: false, joinedMemberCount: 0, notificationMode: .allMessages))
+        let model = RoomListViewModel(
+            session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()), rooms: coordinator, invites: port)
+        await coordinator.start()
+        for await status in await coordinator.statuses() {
+            if case .loaded = status { await model.listChanged(status); break }
+        }
+        #expect(model.content == .loaded(count: 1, rows: [.init(id: id, name: "Book club", display: .dot, hasUnread: true, isInvite: true)]))
+        await model.acceptInvite(id)
+        #expect(port.acceptedInvites == [id] && model.actionError == nil)
+        await model.declineInvite(id)
+        #expect(port.declinedInvites == [id])
+        port.fail(with: .notFound)
+        await model.acceptInvite(id)
+        #expect(model.actionError != nil)
+    }
+}

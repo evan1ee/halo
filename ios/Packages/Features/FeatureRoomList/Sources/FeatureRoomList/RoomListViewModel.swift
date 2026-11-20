@@ -17,8 +17,11 @@ public final class RoomListViewModel {
         public let display: DisplayCount
         /// Unread without needing attention (quiet room): the title is shown bold, with no badge.
         public let hasUnread: Bool
+        /// An invitation not yet answered: the row offers Accept and Decline instead of opening the room.
+        public let isInvite: Bool
 
-        public init(id: RoomID, name: String, display: DisplayCount = .none, hasUnread: Bool = false) {
+        public init(id: RoomID, name: String, display: DisplayCount = .none, hasUnread: Bool = false, isInvite: Bool = false) {
+            self.isInvite = isInvite
             self.id = id
             self.name = name
             self.display = display
@@ -38,6 +41,7 @@ public final class RoomListViewModel {
     private let session: SessionCoordinator
     private let rooms: RoomListCoordinator
     private let receipts: ReadReceiptCoordinator?
+    private let invites: (any RoomPort)?
     private var tasks: [Task<Void, Never>] = []
     private var positions: [RoomID: Date] = [:]
     private var lastStatus: RoomListCoordinator.Status = .idle
@@ -45,7 +49,8 @@ public final class RoomListViewModel {
     /// Set when a swipe action fails; the view shows it and the next successful action clears it.
     public private(set) var actionError: String?
 
-    public init(session: SessionCoordinator, rooms: RoomListCoordinator, receipts: ReadReceiptCoordinator? = nil) {
+    public init(session: SessionCoordinator, rooms: RoomListCoordinator, receipts: ReadReceiptCoordinator? = nil, invites: (any RoomPort)? = nil) {
+        self.invites = invites
         self.session = session
         self.rooms = rooms
         self.receipts = receipts
@@ -62,6 +67,18 @@ public final class RoomListViewModel {
     public func markUnread(_ room: RoomID) async {
         guard let receipts else { return }
         await perform { () async throws(HaloError) in try await receipts.markRoomUnread(room) }
+    }
+
+    /// Accepts an invitation (ROOM_MANAGEMENT FR-6); the room then arrives as joined with the next sync.
+    public func acceptInvite(_ room: RoomID) async {
+        guard let invites else { return }
+        await perform { () async throws(HaloError) in try await invites.acceptInvite(room) }
+    }
+
+    /// Declines an invitation.
+    public func declineInvite(_ room: RoomID) async {
+        guard let invites else { return }
+        await perform { () async throws(HaloError) in try await invites.declineInvite(room) }
     }
 
     private func perform(_ action: () async throws(HaloError) -> Void) async {
@@ -121,7 +138,7 @@ public final class RoomListViewModel {
                     roomID: room.id, membership: room.membership, isEncrypted: room.isEncrypted, counts: room.read,
                     latestEvent: room.latestEvent,
                     localIntent: [positions[room.id], room.ownReadThrough].compactMap { $0 }.max()))
-                return Row(id: room.id, name: room.name ?? "Unnamed room", display: state.display, hasUnread: state.hasUnread)
+                return Row(id: room.id, name: room.name ?? "Unnamed room", display: state.display, hasUnread: state.hasUnread, isInvite: room.membership == .invited)
             }
             content = .loaded(count: count, rows: rows)
         case .failed: content = .failed("The room list couldn't be loaded. Pull to try again.")

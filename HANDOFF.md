@@ -24,7 +24,7 @@ Summary only; details per feature: [docs/development/IMPLEMENTATION_NOTES.md](do
 Full list: docs/DECISION_LOG.md (D1–D75), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-Room info sheet (ROOM_MANAGEMENT FR-1…FR-4): `HaloDomain` (`RoomPort`, `RoomDetails`, `RoomMemberInfo`), `HaloMatrixAdapter/MatrixRoomPort`, `HaloTestSupport/FakeRoomPort`, new package `Features/FeatureRoomDetails` (view model, view, tests), app wiring (`project.yml`, `AppRoot.makeRoomDetails`, info button in `TimelineScreen`), contract `roomManagement`, `scripts/prepush.sh` (tests the new package), ROADMAP, IMPLEMENTATION_NOTES, OUTSTANDING_ISSUES. Checked: `prepush.sh` passed, `Halo-Debug` build, `roomManagement` contract passed against `infra/dev`, sheet seen in the simulator. Not done: member paging, avatars, edit room, create DM/room, invites, user profiles.
+Invitations (ROOM_MANAGEMENT FR-6): `RoomPort.acceptInvite/declineInvite`, `MatrixRoomPort`, `FakeRoomPort`, `RoomListViewModel` (`Row.isInvite`, accept/decline) and `RoomListView` (invitation row with buttons), `AppRoot` wiring, contract `invitations` (peer account creates and invites), tests, ROADMAP. Checked: FeatureRoomList tests, `invitations` contract, `prepush.sh` (see log). Not seen in the simulator; no invite preview or inviter name.
 
 ## 5. Outstanding issues
 Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
@@ -37,7 +37,7 @@ Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISS
 
 ## 6. Next steps
 The queue is docs/ROADMAP.md §"Remaining work", worked by the loop in docs/development/AUTONOMOUS_LOOP.md. Its head:
-1. **M5** rest of ROOM_MANAGEMENT (create DM/room, invites FR-5/6, edit room FR-7) and USER_PROFILES; then the P0 item below.
+1. **M5** rest of ROOM_MANAGEMENT (create DM/room and send invites FR-5, edit room FR-7, invite preview) and USER_PROFILES; then the P0 item below.
 2. **P0** the remaining client-side scenarios on the real stack (S03, S11, S12, S16–S20: restarts, outbox, NSE; most need a device), then re-evaluate G-UNREAD with the founder; measure the first-sync cost on a large account; M4 items after.
 
 ## 7. Next Session Prompt

@@ -220,6 +220,51 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
+    @Test("Invitations: the room arrives as invited, accepting joins it, declining removes it (a peer account creates the rooms)",
+          .enabled(if: env["HALO_DEV_PEER_USER"] != nil))
+    func invitations() async throws {
+        let server = env["HALO_DEV_SERVER"] ?? ""
+        let user = env["HALO_DEV_USER"] ?? ""
+        let peer = PeerInviter(server: server)
+        try await peer.login(env["HALO_DEV_PEER_USER"] ?? "", env["HALO_DEV_PEER_PASSWORD"] ?? "")
+        let toAccept = try RoomID(try await peer.createRoom(name: "Invite accept fixture", invite: "@\(user):halo.localhost"))
+        let toDecline = try RoomID(try await peer.createRoom(name: "Invite decline fixture", invite: "@\(user):halo.localhost"))
+
+        let session = port()
+        let details = try await session.loginDetails(server: server)
+        _ = try await session.loginPassword(PasswordCredentials(username: user, password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"), on: details)
+        try await MatrixSyncPort(session: session).start()
+        let list = MatrixRoomListPort(session: session)
+        let rooms = MatrixRoomPort(session: session)
+        func membership(_ id: RoomID) async -> HaloDomain.Membership? {
+            var iterator = list.rooms(filter: .all).makeAsyncIterator()
+            var items: [RoomSummary] = []
+            while let diff = await iterator.next() {
+                try? RoomListReducer.apply(diff, to: &items)
+                return items.first { $0.id == id }?.membership
+            }
+            return nil
+        }
+        func waitFor(_ id: RoomID, _ expected: HaloDomain.Membership?) async throws -> HaloDomain.Membership? {
+            var seen = await membership(id)
+            for _ in 0..<30 where seen != expected {
+                try await Task.sleep(for: .seconds(1))
+                seen = await membership(id)
+            }
+            return seen
+        }
+        #expect(try await waitFor(toAccept, .invited) == .invited)
+        #expect(try await waitFor(toDecline, .invited) == .invited)
+        try await rooms.acceptInvite(toAccept)
+        #expect(try await waitFor(toAccept, .joined) == .joined)
+        try await rooms.declineInvite(toDecline)
+        #expect(try await waitFor(toDecline, nil) == nil)
+        try await rooms.leave(toAccept)  // leave no room behind: the other contracts expect a fixed room count
+        if let left = try? await session.room(toAccept) { try? await left.forget() }
+        try await session.logout()
+        await peer.logout()
+    }
+
     @Test("An enabled pack whose room the user has left is reported as unavailable, not as a failed load (creates a room and cleans up after itself)")
     func unavailablePack() async throws {
         let session = port()
@@ -962,6 +1007,35 @@ private struct ServerMessages {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
         }
+        let (data, _) = try await URLSession.shared.data(for: request)
+        return (try JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+    }
+}
+
+/// A second account over plain HTTP that creates rooms and invites the contract account.
+private final class PeerInviter: @unchecked Sendable {
+    private let server: String
+    private var token = ""
+    init(server: String) { self.server = server }
+
+    func login(_ user: String, _ password: String) async throws {
+        let reply = try await call("POST", "/login", body: ["type": "m.login.password", "identifier": ["type": "m.id.user", "user": user], "password": password])
+        token = try #require(reply["access_token"] as? String)
+    }
+
+    func createRoom(name: String, invite: String) async throws -> String {
+        let reply = try await call("POST", "/createRoom", body: ["name": name, "preset": "private_chat", "invite": [invite]])
+        return try #require(reply["room_id"] as? String)
+    }
+
+    func logout() async { _ = try? await call("POST", "/logout", body: [:]) }
+
+    private func call(_ method: String, _ path: String, body: [String: Any]) async throws -> [String: Any] {
+        var request = URLRequest(url: try #require(URL(string: server + "/_matrix/client/v3" + path)))
+        request.httpMethod = method
+        if !token.isEmpty { request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization") }
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, _) = try await URLSession.shared.data(for: request)
         return (try JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
     }

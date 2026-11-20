@@ -47,6 +47,16 @@ public final class MatrixRoomPort: RoomPort {
         do { try await client.getNotificationSettings().setRoomNotificationMode(roomId: id.rawValue, mode: sdkMode) } catch { throw ErrorMapper.map(error) }
     }
 
+    public func acceptInvite(_ id: RoomID) async throws(HaloError) {
+        let client = try await session.signedInClient()
+        do { _ = try await client.joinRoomById(roomId: id.rawValue) } catch { throw ErrorMapper.map(error) }
+    }
+
+    public func declineInvite(_ id: RoomID) async throws(HaloError) {
+        let room = try await session.room(id)
+        do { try await room.leave() } catch { throw ErrorMapper.map(error) }
+    }
+
     public func leave(_ id: RoomID) async throws(HaloError) {
         let room = try await session.room(id)
         do { try await room.leave() } catch { throw ErrorMapper.map(error) }

@@ -80,7 +80,7 @@ final class AppRoot {
             }
         }
         auth = AuthViewModel(coordinator: sessionCoordinator)
-        roomList = RoomListViewModel(session: sessionCoordinator, rooms: roomCoordinator, receipts: receipts)
+        roomList = RoomListViewModel(session: sessionCoordinator, rooms: roomCoordinator, receipts: receipts, invites: roomPort)
         #if DEBUG
         Self.exportNSEMetrics(namespace: namespace)
         #endif
