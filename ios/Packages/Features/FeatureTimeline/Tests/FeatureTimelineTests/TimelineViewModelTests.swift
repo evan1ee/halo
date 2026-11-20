@@ -607,3 +607,30 @@ private struct StubPreparer: ImagePreparing {
     }
 
 }
+
+@MainActor
+@Suite("Media preview policy")
+struct MediaPreviewPolicyTests {
+    private func make(allowed: Bool?) throws -> TimelineViewModel {
+        TimelineViewModel(
+            coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: try RoomID("!r:x.org")),
+            previewsAllowed: allowed.map { value in { @Sendable in value } },
+            locale: Locale(identifier: "en_US"), timeZone: TimeZone(identifier: "UTC") ?? .gmt)
+    }
+    private let image = TimelineRow.Image(ref: MediaRef(token: "m1"), aspectRatio: nil)
+
+    @Test("photos are shown unless the setting hides them; a tap shows one photo and only that one (FR-7)")
+    func hidesUntilTapped() async throws {
+        let off = try make(allowed: false)
+        await off.start()
+        #expect(off.previewsHidden && !off.showsPreview(of: image))
+        off.revealPreview(of: image)
+        #expect(off.showsPreview(of: image))
+        #expect(!off.showsPreview(of: .init(ref: MediaRef(token: "m2"), aspectRatio: nil)))
+        for allowed in [true, nil] as [Bool?] {
+            let on = try make(allowed: allowed)
+            await on.start()
+            #expect(!on.previewsHidden && on.showsPreview(of: image))
+        }
+    }
+}

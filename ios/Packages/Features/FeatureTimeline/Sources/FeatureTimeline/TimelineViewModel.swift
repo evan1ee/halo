@@ -174,6 +174,10 @@ public final class TimelineViewModel {
 
     private let coordinator: TimelineCoordinator
     private let media: MediaLoader?
+    private let previewsAllowed: (@Sendable () async -> Bool)?
+    /// `true` when the account's media preview setting asks for a tap before photos in this room are shown (FR-7).
+    public private(set) var previewsHidden = false
+    private var revealedPreviews: Set<MediaRef> = []
     private var observation: Task<Void, Never>?
     private let dateFormatter: DateFormatter
     private let receipts: ReadReceiptCoordinator?
@@ -212,12 +216,13 @@ public final class TimelineViewModel {
     ///   - images: prepares picked photos for sending; without it the composer offers no photo button.
     ///   - receipts: when given together with `room`, the newest visible confirmed event is reported as read.
     public init(
-        coordinator: TimelineCoordinator, media: MediaLoader? = nil, receipts: ReadReceiptCoordinator? = nil, room: RoomID? = nil,
+        coordinator: TimelineCoordinator, media: MediaLoader? = nil, previewsAllowed: (@Sendable () async -> Bool)? = nil, receipts: ReadReceiptCoordinator? = nil, room: RoomID? = nil,
         drafts: DraftCoordinator? = nil, images: (any ImagePreparing)? = nil, readThrough: (@Sendable () async -> Date?)? = nil, dwell: Duration = TimelineViewModel.seenDwell, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
         locale: Locale = .current, timeZone: TimeZone = .current
     ) {
         self.coordinator = coordinator
         self.media = media
+        self.previewsAllowed = previewsAllowed
         self.receipts = receipts
         self.room = room
         self.drafts = drafts
@@ -277,6 +282,7 @@ public final class TimelineViewModel {
         guard observation == nil else { return }
         await restoreDraft()
         readThroughAtOpen = await readThrough?()
+        if let previewsAllowed { previewsHidden = await !previewsAllowed() }
         landed = false
         landingRow = nil
         unreadMarkerID = nil
@@ -529,6 +535,12 @@ public final class TimelineViewModel {
             sendError = (error as? HaloError) == .forbidden ? "You can only change your own messages." : "That didn't work. Try again."
         }
     }
+
+    /// Whether the photo is shown: always, unless the media preview setting hides photos and this one wasn't tapped.
+    public func showsPreview(of image: TimelineRow.Image) -> Bool { !previewsHidden || revealedPreviews.contains(image.ref) }
+
+    /// The user tapped a hidden photo: it loads and stays shown while the room is open.
+    public func revealPreview(of image: TimelineRow.Image) { revealedPreviews.insert(image.ref) }
 
     /// Thumbnail bytes for an image row, or `nil` if it can't be loaded (the row then shows a placeholder).
     public func thumbnail(for image: TimelineRow.Image) async -> Data? {
