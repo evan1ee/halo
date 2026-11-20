@@ -1,6 +1,6 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-20 · Branch: `feat/m4-legacy-packs` · PRs #1–#26 merged
+Last updated: 2026-11-20 · Branch: `feat/m2-media-display` · PRs #1–#27 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
@@ -34,7 +34,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 Full list: docs/DECISION_LOG.md (D1–D74), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-`MatrixStickerPorts` (legacy `im.ponies.*` packs, read-only), `PackRegistry.listedPacks`, tests (`StickerTests`; contract `legacyPacks` leaves no room and clears `im.ponies.emote_rooms`), ROADMAP, OPEN_QUESTIONS (V-ST-3).
+`MediaAttachment` (+`mimeType`, `size`, `duration`), `TimelineMapper` (video/audio/file info), `FeatureTimeline` (`TimelineRow.FileTile`, `openFile`/`closeFile`, `FileTileView`, `QuickLookView`), tests, ROADMAP. Not seen on screen.
 
 ## 5. Outstanding issues
 - Stickers: V-ST-1 resolved (option B), V-ST-2 partly (token refresh on 401 not exercised). Verified against `infra/dev` by contract test `stickers` (env `HALO_DEV_STICKER_ROOM`: a room with `m.room.image_pack` `cats` {wave, dance} enabled in `m.image_pack.rooms`; throwaway account `stickertester` created locally). Long-press preview with animation is built (FR-5, FR-9: `StickerImage`, `AnimatedStickerView`; grid stays static, not checked on screen; `FeatureStickers` UIKit tests run only on the simulator: `xcodebuild -scheme FeatureStickers test`). One-time privacy alert before the first sticker into an encrypted room is built (founder-approved design: acknowledgement per device in `UserDefaults`, recorded only after the send succeeded, cancel discards the sticker and records nothing; the text says sticker images aren't end-to-end encrypted, that access depends on homeserver media storage and access controls, and that other messages are unaffected; unit-tested incl. failed send, cancel and per-device scope (`FeatureStickers` tests also run on the simulator via `xcodebuild`, stricter on Sendable captures); not seen on screen). Not built: editing/deleting packs, "unavailable pack" UI, `im.ponies.user_emotes`. Legacy `im.ponies.room_emotes`/`emote_rooms` packs are read (V-ST-3 verified against infra/dev). Real sticker images were not loaded (the fixture mxc URLs have no media).
@@ -54,6 +54,7 @@ Full list: docs/DECISION_LOG.md (D1–D74), docs/adr/. Most relevant now: D70 au
 - Contract tests: `infra/dev/create-fixtures.py` creates accounts/rooms and writes `~/.config/halo-dev/contract.env`; re-run it before a full `scripts/contract-test.sh` (room count) and with `--new-e2ee` before the Encryption test (recovery can be set up once per account). Verified: 15 of 15 pass (twice in a row; incl. `policyOverRealInputs`) (`pusher`, `ClassicSyncEvidenceTests` incl. `encryptedEvidence`). Contract tests must leave no room on the account (the room count is a fixture); the timeline fixture room grows ~13 events per run.
 
 **Needs the founder** (the loop records these and moves on; AUTONOMOUS_LOOP §5)
+- Simulator: the iPhone 17 simulator's app was signed out while checking file tiles; signing in again through the UI (server field `localhost:8008`) hung on a spinner. Sign in by hand (dev account in `~/.config/halo-dev/contract.env`) before looking at the app.
 - 📱 Device checks: G-NSE AC-NSE-1…6, V-RS-1, file protection on `halo.sqlite`, NSE database access, background push delivery.
 - 👤 Gate outcomes G-UNREAD / G-FFI: evaluation written ([testing/GATE_EVALUATION_M3.md](docs/testing/GATE_EVALUATION_M3.md)); agent recommends G-FFI **pass** (stay upstream, two conditions) and G-UNREAD **stay open** until the classic-sync adapter and the S01–S22 re-run are done (V-RS-7 decided: D73) and the 📱 checks are done; push gateway, APNs keys, TestFlight.
 
