@@ -61,7 +61,7 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 - [x] Hide pack rooms (`one.mbm.halo.sticker_rooms`) from the room list and the badge (`RoomListCoordinator(hiddenRooms:)`; not checked on screen).
 - [x] Long-press preview (FR-5): context-menu preview 240 pt, loads the full file (`MediaLoader.content`), animated (GIF/APNG/WebP frames via ImageIO, max 60) unless Reduce Motion or Low Power Mode (FR-9; `StickerImageTests` on the simulator). Not built: autoplay in the panel grid and the 12-animation cap (grid stays static), a check on screen.
 - [x] Privacy notice: permanent hint in the new-pack form (already there) and a one-time alert before the first sticker into an encrypted room (`StickerPanelViewModel.EncryptionNotice`, per-device flag in `UserDefaults`, recorded only after a successful send; unit-tested, not seen on screen).
-- [ ] "Unavailable pack" UI (referenced room not joined / media 404).
+- [x] "Unavailable pack" UI: packs of a room the user cannot read (403/404) are reported, not a failed load (unit-tested; not seen on screen).
 - [x] Legacy `im.ponies.*` packs (V-ST-3): `im.ponies.emote_rooms` account data → `im.ponies.room_emotes` state of those rooms and of the current room, read-only, `PackSource.legacy`, listed after current-format packs (which win on the same room/key); rooms the user has left are skipped silently. Verified against `infra/dev` (`legacyPacks`). Not built: `im.ponies.user_emotes` (a pack without a room: `PackRef` needs one), the empty-key legacy pack of rooms over 1,000 members.
 - [ ] Simulator UI check of the panel and pack creation; real sticker images loaded from media.
 - [ ] V-ST-2: token refresh on 401 for the pack GET.
