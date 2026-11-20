@@ -1,13 +1,13 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-20 · Branch: `feat/m3-read-state-auditor` · PRs #1–#11 merged
+Last updated: 2026-11-20 · Branch: `docs/m3-gate-evaluation` · PRs #1–#12 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
 - **Milestone:** M0 done; M1 largely done; M2 done except media sending and the offline-send test; **M3 (read-state engine) in progress**. Dev Mac: Xcode 27.2, Swift 6.4.2, iPhone 16.
 - **Checks:** `scripts/prepush.sh` passes (SwiftLint not configured, skipped); `scripts/prepush.sh` now also builds `Halo-Debug` for the simulator. All 12 contract tests (`infra/dev`) pass, none skipped (`scripts/contract-test.sh` after `infra/dev/create-fixtures.py`).
-- **CI:** PRs #1–#11 merged. CI runs only the Linux-portable packages (Foundation, Domain, TestSupport, Application): adapter, persistence, platform, features and the app are tested only by `prepush.sh` on a Mac. `licenses` runs only on SDK/inventory changes.
+- **CI:** PRs #1–#12 merged. CI runs only the Linux-portable packages (Foundation, Domain, TestSupport, Application): adapter, persistence, platform, features and the app are tested only by `prepush.sh` on a Mac. `licenses` runs only on SDK/inventory changes.
 
 ## 2. Completed work (what exists now)
 - Layers: HaloFoundation, HaloDomain (ports, pure `ReadStatePolicy`), HaloApplication (coordinators), HaloPersistence (GRDB: `read_intent`, file protection set), HaloMatrixAdapter (only MatrixRustSDK importer), HaloPlatform, HaloTestSupport (fakes), Features/{Auth,RoomList,Timeline}. Composition root `ios/App/AppRoot.swift`; project generated from `ios/project.yml` (XcodeGen, scheme `Halo-Debug`).
@@ -32,7 +32,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 Full list: docs/DECISION_LOG.md (D1–D70), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-`HaloDomain/ReadState/ReadStateAuditor.swift` (new, with `AuditEventPort`), `HaloPersistence/AuditEventStore.swift` + migration v4, `HaloTestSupport/FakeAuditEvents.swift`, `BadgeCoordinator` (`evaluated`, `setAudit`), `AppRoot`, tests, `LOGGING_AND_DIAGNOSTICS.md`, `ROADMAP.md`, `HANDOFF.md`.
+`docs/testing/GATE_EVALUATION_M3.md` (new), `docs/ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
 - Stickers: V-ST-1 resolved (option B), V-ST-2 partly (token refresh on 401 not exercised). Verified against `infra/dev` by contract test `stickers` (env `HALO_DEV_STICKER_ROOM`: a room with `m.room.image_pack` `cats` {wave, dance} enabled in `m.image_pack.rooms`; throwaway account `stickertester` created locally). Not built: long-press preview/animation (FR-5, FR-9), editing/deleting packs, hiding pack rooms from the room list, legacy `im.ponies.*` packs (V-ST-3), privacy notice, "unavailable pack" UI. Real sticker images were not loaded (the fixture mxc URLs have no media).
@@ -52,13 +52,13 @@ Full list: docs/DECISION_LOG.md (D1–D70), docs/adr/. Most relevant now: D70 au
 
 **Needs the founder** (the loop records these and moves on; AUTONOMOUS_LOOP §5)
 - 📱 Device checks: G-NSE AC-NSE-1…6, V-RS-1, file protection on `halo.sqlite`, NSE database access, background push delivery.
-- 👤 Gate outcomes G-UNREAD / G-FFI at the end of M3 (the agent writes the evaluation); push gateway, APNs keys, TestFlight.
+- 👤 Gate outcomes G-UNREAD / G-FFI: evaluation written ([testing/GATE_EVALUATION_M3.md](docs/testing/GATE_EVALUATION_M3.md)); agent recommends G-FFI **pass** (stay upstream, two conditions) and G-UNREAD **stay open** until V-RS-7 (no server counts on sliding sync) is decided and the 📱 checks are done; V-RS-7 is a product decision; push gateway, APNs keys, TestFlight.
 
 **Deferred (not blocking):** Q-CI-MAC (D71, founder): no macOS CI job for now; `scripts/prepush.sh` stays the only Mac validation gate. Revisit once the build pipeline is stable and a hosted runner is confirmed to have the required Xcode.
 
 ## 6. Next steps
 The queue is docs/ROADMAP.md §"Remaining work", worked by the loop in docs/development/AUTONOMOUS_LOOP.md. Its head:
-1. M3: G-UNREAD/G-FFI write-up (the founder confirms the outcome), then the scenario driver, remaining part (real server output into the Swift model, sliding sync, encrypted rooms), then the auditor.
+1. M3: the scenario driver, remaining part (real server output into the Swift model, sliding sync, encrypted rooms), then the auditor.
 
 ## 7. Next Session Prompt
 ```text
