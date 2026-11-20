@@ -23,6 +23,28 @@ struct RoomListCoordinatorTests {
         #expect(port.loadMoreCalls == 2)
     }
 
+    @Test("sticker pack rooms are left out of the list and the read inputs, also when they become known after the list")
+    func hidesPackRooms() async throws {
+        let port = FakeRoomListPort(rooms: [room(1), room(2), room(3)])
+        let hidden = FakeHiddenRooms([room(2).id])
+        let coordinator = RoomListCoordinator(port: port, hiddenRooms: hidden)
+        let statuses = await coordinator.statuses()
+        let inputs = await coordinator.readInputs()
+        await coordinator.start()
+        #expect(await first(statuses) { $0 == .loaded(roomCount: 2) } != nil)
+        #expect(await coordinator.rooms.map(\.id) == [room(1).id, room(3).id])
+        #expect(await first(inputs) { $0.map(\.roomID) == [room(1).id, room(3).id] } != nil)
+        // A new pack room appears in the account data; the next change of the list picks it up.
+        hidden.set([room(2).id, room(3).id])
+        try port.emit(.pushBack(room(4)))
+        #expect(await first(statuses) { $0 == .loaded(roomCount: 2) } != nil)  // rooms 1 and 4
+        #expect(await coordinator.rooms.map(\.id) == [room(1).id, room(4).id])
+        // A pack room that is un-hidden returns.
+        hidden.set([])
+        try port.emit(.pushBack(room(5)))
+        #expect(await first(statuses) { $0 == .loaded(roomCount: 5) } != nil)
+    }
+
     @Test("publishes the room count as diffs arrive (M0 exit signal)")
     func roomCount() async throws {
         let port = FakeRoomListPort(rooms: [room(1), room(2)])

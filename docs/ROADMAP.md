@@ -46,7 +46,7 @@ founder" and don't block the queue). Tick an item in the pull request that finis
       stable and a hosted runner is confirmed to have the needed Xcode (Q-CI-MAC).
 
 **M3 Read-state engine** (exit: AC-U1–U7 automated green; gates G-UNREAD, G-FFI)
-- [ ] Scenario driver, remaining part: server half of S01/02/04/05/09/10/14/15/22 is done (`tools/scenario-driver/run_scenarios.py`); still to do: feed the real server output into the Swift model, sliding sync, encrypted rooms  ([testing/UNREAD_REGRESSION_TESTS.md](testing/UNREAD_REGRESSION_TESTS.md)).
+- [ ] (waits on the V-RS-7 decision, HANDOFF §5) Scenario driver, remaining part: server half of S01/02/04/05/09/10/14/15/22 is done (`tools/scenario-driver/run_scenarios.py`); still to do: feed the real server output into the Swift model, sliding sync, encrypted rooms  ([testing/UNREAD_REGRESSION_TESTS.md](testing/UNREAD_REGRESSION_TESTS.md)).
 - [x] Read-state auditor core (`ReadStateAuditor`, `audit_event` store capped at 5,000, wired into `BadgeCoordinator`, debug builds). Still open: re-run every 10 minutes in the foreground, TestFlight enablement, diagnostics export and a Settings counter of unexplained events (AC-U8; SETTINGS / M5).
 - [x] Intent confirmation rules (a)–(c) for `read_intent` (a and b deliberately not built: D72), `attempts`/`last_error`, `HaloLog` in `ReadReceiptCoordinator`.
 - [x] D6 check: `onScrollVisibilityChange` fires for `List` rows (checked in the iOS 26.0 simulator against `infra/dev`, 2026-11-20); no fallback needed. Not an automated UI test.
@@ -55,7 +55,7 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 - [ ] 📱 V-RS-1, file-protection class on `halo.sqlite`, NSE access to the database.
 
 **M4 Stickers v1** (exit: AC-S1–S5)
-- [ ] Hide pack rooms (`one.mbm.halo.sticker_rooms`) from the room list.
+- [x] Hide pack rooms (`one.mbm.halo.sticker_rooms`) from the room list and the badge (`RoomListCoordinator(hiddenRooms:)`; not checked on screen).
 - [ ] Long-press preview and animation (FR-5, FR-9); "unavailable pack" UI; privacy notice.
 - [ ] Legacy `im.ponies.*` packs (V-ST-3).
 - [ ] Simulator UI check of the panel and pack creation; real sticker images loaded from media.

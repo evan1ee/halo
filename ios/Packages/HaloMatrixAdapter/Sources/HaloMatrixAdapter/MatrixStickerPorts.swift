@@ -31,6 +31,20 @@ public final class MatrixStickerPrefsPort: StickerPrefsPort {
     }
 }
 
+/// `HiddenRoomsPort` over the account data `one.mbm.halo.sticker_rooms` (served from the SDK's store, which sync keeps current).
+public final class MatrixHiddenRoomsPort: HiddenRoomsPort {
+    private let session: MatrixSessionPort
+
+    public init(session: MatrixSessionPort) { self.session = session }
+
+    public func hiddenRooms() async -> Set<RoomID> {
+        guard let client = try? await session.signedInClient(),
+              let json = try? await client.accountData(eventType: "one.mbm.halo.sticker_rooms"),
+              let object = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else { return [] }
+        return PackRegistry.packRooms(in: object)
+    }
+}
+
 /// `StickerPackPort` reading `m.room.image_pack` state over the Client-Server API (STICKERS §9, option B of V-ST-1).
 /// [VERIFIED against infra/dev] `Room.stateEvents(.roomImagePack)` returns nothing for this custom state type (option A), so
 /// the state is read with a plain authenticated GET. This is the only direct HTTP call of the app besides discovery.

@@ -26,3 +26,9 @@ public protocol StickerPrefsPort: Sendable {
     /// Writes `prefs` as the account data.
     func save(_ prefs: StickerPrefs) async throws(HaloError)
 }
+
+/// The rooms Halo created to hold sticker packs; the room list hides them (STICKERS §2, `one.mbm.halo.sticker_rooms`).
+public protocol HiddenRoomsPort: Sendable {
+    /// The pack rooms listed in the account data; empty when there are none or the data can't be read.
+    func hiddenRooms() async -> Set<RoomID>
+}
