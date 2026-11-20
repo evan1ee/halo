@@ -84,6 +84,12 @@ public enum PackRegistry {
         return content
     }
 
+    /// The rooms listed in `one.mbm.halo.sticker_rooms`. Content from a newer version, or malformed entries, yield what can be read.
+    public static func packRooms(in content: [String: Any]?) -> Set<RoomID> {
+        guard let ids = content?["rooms"] as? [String] else { return [] }
+        return Set(ids.compactMap { try? RoomID($0) })
+    }
+
     /// `one.mbm.halo.sticker_rooms` with `room` added: `{ version: 1, rooms: [roomId] }`; used to hide pack rooms from the
     /// room list. Returns `nil` when the stored content is from a newer version (leave it alone).
     public static func recordingPackRoom(_ room: RoomID, in content: [String: Any]?) -> [String: Any]? {

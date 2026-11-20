@@ -16,12 +16,16 @@ public actor RoomListCoordinator {
     /// How often a subscription is restarted after a diff that doesn't apply before giving up.
     public static let maximumResubscriptions = 3
 
-    public private(set) var rooms: [RoomSummary] = []
+    /// The rooms to show: the list minus the rooms Halo itself created for sticker packs.
+    public var rooms: [RoomSummary] { hidden.isEmpty ? allRooms : allRooms.filter { !hidden.contains($0.id) } }
+    private var allRooms: [RoomSummary] = []
+    private var hidden: Set<RoomID> = []
     public private(set) var status: Status = .idle {
         didSet { if status != oldValue { broadcaster.publish(status) } }
     }
 
     private let port: any RoomListPort
+    private let hiddenRooms: (any HiddenRoomsPort)?
     private let loadsAllPages: Bool
     /// The room count at the last automatic page request; a page that adds no rooms yields no diff, which ends the loop.
     private var requestedAt = 0
@@ -35,7 +39,9 @@ public actor RoomListCoordinator {
 
     /// - Parameter loadsAllPages: keep requesting pages while each one adds rooms, so the badge sees every room
     ///   (UNREAD_STATE: the badge counts all rooms, not the first page).
-    public init(port: any RoomListPort, loadsAllPages: Bool = false) {
+    /// - Parameter hiddenRooms: rooms to leave out of the list and the badge (sticker pack rooms); read again after every change.
+    public init(port: any RoomListPort, loadsAllPages: Bool = false, hiddenRooms: (any HiddenRoomsPort)? = nil) {
+        self.hiddenRooms = hiddenRooms
         self.port = port
         self.loadsAllPages = loadsAllPages
     }
@@ -86,6 +92,22 @@ public actor RoomListCoordinator {
         }
     }
 
+    /// Reads the hidden set again; when it changed, the list and the read inputs are published anew.
+    private func refreshHidden(generation: Int) {
+        guard let hiddenRooms else { return }
+        Task { [weak self] in
+            let value = await hiddenRooms.hiddenRooms()
+            await self?.setHidden(value, generation: generation)
+        }
+    }
+
+    private func setHidden(_ value: Set<RoomID>, generation: Int) {
+        guard generation == self.generation, value != hidden else { return }
+        hidden = value
+        if case .loaded = status { status = .loaded(roomCount: rooms.count) }
+        publishReadInputs()
+    }
+
     private func publishReadInputs() {
         let inputs = rooms.map { RoomReadInputs(roomID: $0.id, membership: $0.membership, isEncrypted: $0.isEncrypted, counts: $0.read, latestEvent: $0.latestEvent, localIntent: $0.ownReadThrough) }
         guard inputs != readInputsCache else { return }
@@ -97,17 +119,18 @@ public actor RoomListCoordinator {
     private func apply(_ diff: RoomListDiff, generation: Int, filter: RoomListFilter) -> Bool {
         guard generation == self.generation else { return false }
         do {
-            try RoomListReducer.apply(diff, to: &rooms)
+            try RoomListReducer.apply(diff, to: &allRooms)
             diffsInSubscription += 1
             // The first diff of a subscription is the port's fresh start (.reset), which always
             // applies; only a later diff proves the stream is healthy again.
             if diffsInSubscription > 1 { consecutiveFailures = 0 }
             status = .loaded(roomCount: rooms.count)
             publishReadInputs()
-            if loadsAllPages, rooms.count > requestedAt {
-                requestedAt = rooms.count
+            if loadsAllPages, allRooms.count > requestedAt {
+                requestedAt = allRooms.count
                 Task { [port] in try? await port.loadMore() }
             }
+            refreshHidden(generation: generation)
             return true
         } catch {
             consecutiveFailures += 1

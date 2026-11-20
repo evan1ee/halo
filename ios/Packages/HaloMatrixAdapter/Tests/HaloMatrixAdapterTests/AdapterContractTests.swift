@@ -269,6 +269,15 @@ struct AdapterContractTests {
         // The images were uploaded: their bytes come back.
         let data = try await MatrixMediaPort(session: session).thumbnail(try #require(found.stickers[0].image), width: 32, height: 32)
         #expect(!data.isEmpty)
+        // The pack room is listed to be hidden from the room list.
+        let hiding = MatrixHiddenRoomsPort(session: session)
+        var hidden: Set<RoomID> = []
+        for _ in 0..<30 {
+            hidden = await hiding.hiddenRooms()
+            if hidden.contains(ref.room) { break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        #expect(hidden.contains(ref.room))
         // Invalid input is refused before anything is uploaded.
         await #expect(throws: HaloError.invalidInput("DUPLICATE_SHORTCODE")) {
             _ = try await creation.createPack(name: "x", images: [images[0], images[0]]) { _, _ in }

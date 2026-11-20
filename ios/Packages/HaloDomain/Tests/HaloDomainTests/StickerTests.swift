@@ -190,5 +190,8 @@ struct PackCreationTests {
         let again = try #require(PackRegistry.recordingPackRoom(room, in: one.merging(["x": true]) { $1 }))
         #expect(again["rooms"] as? [String] == [room.rawValue] && again["x"] as? Bool == true)
         #expect(PackRegistry.recordingPackRoom(room, in: ["version": 2]) == nil)
+        #expect(PackRegistry.packRooms(in: one) == [room])
+        #expect(PackRegistry.packRooms(in: nil).isEmpty && PackRegistry.packRooms(in: ["rooms": "nope"]).isEmpty)
+        #expect(PackRegistry.packRooms(in: ["rooms": [room.rawValue, "not a room id"]]) == [room])
     }
 }
