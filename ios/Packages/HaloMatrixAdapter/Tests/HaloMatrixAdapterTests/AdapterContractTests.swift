@@ -432,4 +432,107 @@ struct AdapterContractTests {
         try await push.unregister(deviceToken: token, appID: appID)  // already gone: must not fail the sign-out
         try await session.logout()
     }
+
+    /// S01/S02/S09-style scenario with the real stack: the adapter's room list over classic sync feeds `ReadStatePolicy`.
+    /// Peer messages and a mention make the room need attention (`.mentions(1)`); a read receipt from another device of the same
+    /// account clears it within a sync; `m.marked_unread` from the other device brings attention back (E5).
+    @Test("Policy over the adapter's real inputs (peer messages, other-device receipt, marked unread)",
+          .enabled(if: env["HALO_DEV_PEER_USER"] != nil && env["HALO_DEV_UNREAD_ROOM"] != nil))
+    func policyOverRealInputs() async throws {
+        let server = env["HALO_DEV_SERVER"] ?? ""
+        let user = env["HALO_DEV_USER"] ?? "", password = env["HALO_DEV_PASSWORD"] ?? ""
+        let me = "@\(user):halo.localhost"
+        let roomID = env["HALO_DEV_UNREAD_ROOM"] ?? ""
+        let http = PolicyHttp(server: server, me: me, roomID: roomID)
+        let peer = try await http.login(env["HALO_DEV_PEER_USER"] ?? "", env["HALO_DEV_PEER_PASSWORD"] ?? "")
+        let other = try await http.login(user, password)
+        // Start from read: the other device's receipt at a fresh event.
+        let baseline = try await http.send(peer, "policy baseline")
+        try await http.read(other, baseline)
+
+        let session = port()
+        let details = try await session.loginDetails(server: server)
+        _ = try await session.loginPassword(PasswordCredentials(username: user, password: password, deviceDisplayName: "contract"), on: details)
+        try await MatrixSyncPort(session: session).start()
+        let rooms = MatrixRoomListPort(session: session)
+        let target = try RoomID(roomID)
+
+        let observed: [String] = try await within(seconds: 120) {
+            var items: [RoomSummary] = []
+            var log: [String] = []
+            var iterator = rooms.rooms(filter: .all).makeAsyncIterator()
+            func next(until done: (RoomReadState) -> Bool, _ label: String) async throws {
+                while let diff = await iterator.next() {
+                    try RoomListReducer.apply(diff, to: &items)
+                    guard let room = items.first(where: { $0.id == target }) else { continue }
+                    let state = ReadStatePolicy.evaluate(RoomReadInputs(
+                        roomID: room.id, membership: room.membership, isEncrypted: room.isEncrypted, counts: room.read,
+                        latestEvent: room.latestEvent, localIntent: room.ownReadThrough))
+                    if done(state) { log.append("\(label): attention \(state.attention), \(state.display), reasons \(state.reasons.map(\.rawValue).sorted())"); return }
+                }
+                throw ContractViolation("stream ended before: \(label)")
+            }
+            try await next(until: { !$0.attention }, "read baseline")
+            for i in 1...3 { _ = try await http.send(peer, "policy plain \(i)") }
+            _ = try await http.send(peer, "policy hello", mention: true)
+            try await next(until: { $0.attention && $0.display == .mentions(1) }, "after peer messages and a mention")
+            let last = try await http.send(peer, "policy last")
+            try await http.read(other, last)
+            try await next(until: { !$0.attention }, "after the other device read")
+            try await http.markUnread(other, true)
+            try await next(until: { $0.attention && $0.reasons.contains(.markedUnread) }, "after the other device marked it unread")
+            try await http.markUnread(other, false)
+            try await next(until: { !$0.attention }, "after the flag was cleared")
+            return log
+        }
+        for line in observed { print("POLICY \(line)") }
+        try await session.logout()
+    }
+}
+
+/// Minimal Matrix client-server calls for the policy scenario (the peer user and the account's second device).
+private struct PolicyHttp: Sendable {
+    let server: String, me: String, roomID: String
+    private func enc(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? s }
+    private func call(_ method: String, _ path: String, token: String? = nil, body: [String: String]) async throws -> [String: String] {
+        guard let url = URL(string: server + "/_matrix/client/v3" + path) else { throw ContractViolation("bad url") }
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token { request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization") }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, _) = try await URLSession.shared.data(for: request)
+        let json = (try JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+        return json.compactMapValues { $0 as? String }
+    }
+    func login(_ name: String, _ password: String) async throws -> String {
+        let r = try await call("POST", "/login", body: ["type": "m.login.password", "user": name, "password": password, "initial_device_display_name": "policy"])
+        guard let token = r["access_token"] else { throw ContractViolation("login failed") }
+        return token
+    }
+    func send(_ token: String, _ text: String, mention: Bool = false) async throws -> String {
+        guard let url = URL(string: server + "/_matrix/client/v3/rooms/\(enc(roomID))/send/m.room.message/\(UUID().uuidString)") else { throw ContractViolation("bad url") }
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        var content: [String: Any] = ["msgtype": "m.text", "body": text]
+        if mention { content["m.mentions"] = ["user_ids": [me]] }
+        request.httpBody = try JSONSerialization.data(withJSONObject: content)
+        let (data, _) = try await URLSession.shared.data(for: request)
+        guard let id = (try JSONSerialization.jsonObject(with: data) as? [String: Any])?["event_id"] as? String else { throw ContractViolation("send failed") }
+        return id
+    }
+    func read(_ token: String, _ event: String) async throws {
+        _ = try await call("POST", "/rooms/\(enc(roomID))/receipt/m.read/\(enc(event))", token: token, body: [:])
+    }
+    func markUnread(_ token: String, _ unread: Bool) async throws {
+        guard let url = URL(string: server + "/_matrix/client/v3/user/\(enc(me))/rooms/\(enc(roomID))/account_data/m.marked_unread") else { throw ContractViolation("bad url") }
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["unread": unread])
+        _ = try await URLSession.shared.data(for: request)
+    }
 }
