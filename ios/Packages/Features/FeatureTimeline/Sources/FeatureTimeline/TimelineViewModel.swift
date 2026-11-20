@@ -28,6 +28,17 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     /// A sticker: its image is shown without a bubble or caption (`text` is the accessibility label).
     public let isSticker: Bool
 
+    /// Whether the row shows its `text` in a bubble. A sticker never does, and neither does an image whose body is just
+    /// its file name ("photo.jpg", which clients put in `body` when there is no caption); a real caption is shown.
+    public var showsText: Bool { !isSticker && !(image != nil && Self.looksLikeFilename(text)) }
+
+    static func looksLikeFilename(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.contains(where: \.isWhitespace), let dot = trimmed.lastIndex(of: "."), dot != trimmed.startIndex else { return false }
+        let ext = trimmed[trimmed.index(after: dot)...]
+        return (1...5).contains(ext.count) && ext.allSatisfy { $0.isLetter || $0.isNumber } && ext.contains(where: \.isLetter)
+    }
+
     public struct Reply: Equatable, Sendable {
         public let sender: String?
         /// `nil` when the original isn't available; the view then says so.

@@ -453,4 +453,16 @@ private struct StubPreparer: ImagePreparing {
         guard data == Data("png".utf8) else { throw .invalidInput("NOT_AN_IMAGE") }
         return OutgoingImage(data: data, filename: filename, mimeType: "image/png", width: 2, height: 1)
     }
+
+    @Test("an image whose body is only its file name shows no text bubble; a caption, a sticker and plain text behave as before")
+    func captionVisibility() {
+        let image = TimelineRow.Image(ref: MediaRef(token: "t"), aspectRatio: 1)
+        func row(_ text: String, image: TimelineRow.Image? = image, sticker: Bool = false) -> TimelineRow {
+            TimelineRow(id: "x", style: .ownMessage, sender: nil, text: text, image: image, isSticker: sticker)
+        }
+        #expect(!row("photo.jpg").showsText && !row("IMG_0042.HEIC").showsText && !row("blue.png").showsText)
+        #expect(row("Look at these flowers").showsText && row("see you at 5.30 pm").showsText && row("v1.2").showsText)
+        #expect(!row("Waving", sticker: true).showsText)
+        #expect(row("photo.jpg", image: nil).showsText)  // plain text that merely looks like a file name stays
+    }
 }
