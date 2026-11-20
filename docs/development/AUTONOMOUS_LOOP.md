@@ -28,7 +28,12 @@ The agent first reads AGENTS.md, HANDOFF.md and this file (AGENTS.md §0).
 6. **Hand off and merge** (§3), tick the item in ROADMAP, then start the next iteration at once. Do not ask whether to continue.
 
 ## 3. Branches, pull requests and merging (D70)
-- One branch per roadmap item (or a coherent slice of one): `feat/<milestone>-<topic>`, `fix/…`, `docs/…` from an up-to-date `main`.
+- **When a pull request, and when just a commit (D75, founder).** A pull request only for a milestone or a big feature (a new
+  screen or flow, a new port/adapter, a cross-layer change, anything that needs CI before it lands). A small change (a fix, a
+  tweak, a polish item, a settings row, docs, a roadmap sub-item) is committed straight to `main` and pushed: no branch, no PR.
+  Small changes are never batched into a branch just to open a PR for them. Before any push to `main`: `scripts/prepush.sh`
+  passes, and HANDOFF.md is in the last commit (AGENTS.md §18). Never push a failing build to `main`.
+- Big features: one branch per feature (or a coherent slice of one): `feat/<milestone>-<topic>` from an up-to-date `main`.
 - Before the push: HANDOFF.md, ROADMAP status, specs, OPEN_QUESTIONS and DECISION_LOG updated (AGENTS.md §18).
 - Open a pull request to `main` (`gh pr create`), body: what, why, checks run and their results, what wasn't verified.
 - **The agent merges its own pull request** when all of these hold:

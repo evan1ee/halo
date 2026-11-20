@@ -123,7 +123,7 @@ verify in the pinned SDK source or mark as [ASSUMPTION] with a V-item. One fact,
 ## 16. Git and commit conventions
 Conventional Commits with a module scope (`feat(read-state): …`); body explains why and cites Dnn/R-ids; one logical change per commit; docs in the same commit;
 never commit secrets or binaries; never rewrite shared history. The last commit of every push includes the updated `HANDOFF.md` (§18).
-Pull requests go to `main`; an agent merges its own only under the conditions of [AUTONOMOUS_LOOP.md](docs/development/AUTONOMOUS_LOOP.md) §3 (D70).
+Pull requests are for milestones and big features only; small changes are committed straight to `main` after `scripts/prepush.sh` (D75). An agent merges its own pull request only under the conditions of [AUTONOMOUS_LOOP.md](docs/development/AUTONOMOUS_LOOP.md) §3 (D70).
 
 ## 17. Forbidden implementation patterns
 - Importing `MatrixRustSDK` outside `HaloMatrixAdapter`; upstream types in public/port signatures.

@@ -20,7 +20,7 @@ Summary only; details per feature: [docs/development/IMPLEMENTATION_NOTES.md](do
 ## 3. Key decisions
 **D73 (founder): V-RS-7 closed.** Classic Matrix sync is the authoritative unread evidence on the production path; push records supplement it; server zero never marks read by itself; a partial or empty evaluation never overwrites the stored attention set; badge from reconciled state; no SDK/Synapse change unless proven necessary; unread correctness and badge persistence are **P0**. Verified: the SDK exposes per-room evidence over `syncV2` (`ClassicSyncEvidenceTests`); classic sync does not solve the NSE's background state (records + cached set stay its inputs). **Implemented by D74:** the adapter runs classic sync (own `syncOnceV2` loop, 8 s long poll), room list from `client.rooms()` plus the rooms each response changed; verified live in the simulator (unread `@1` and bold within seconds).
 
-Full list: docs/DECISION_LOG.md (D1–D74), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
+Full list: docs/DECISION_LOG.md (D1–D75), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
 Settings → Diagnostics (`DiagnosticsView` in FeatureSettings, `AppRoot.diagnosticsReport()`: app/iOS versions and read-state audit counts, no messages, names or account IDs, share button); `SettingsView` takes a `diagnostics` closure; ROADMAP. Checked in the simulator together with the Media picker (both fine). Not built: the diagnostics zip with logs, schema version and sync state (LOGGING_AND_DIAGNOSTICS §3).
@@ -45,7 +45,7 @@ The queue is docs/ROADMAP.md §"Remaining work", worked by the loop in docs/deve
 Context for the loop (Halo, repository evan1ee/halo):
 1. Read AGENTS.md, HANDOFF.md, then docs/development/AUTONOMOUS_LOOP.md. Trust HANDOFF for project state.
    Run scripts/install-hooks.sh once per clone.
-2. The work queue is docs/ROADMAP.md §"Remaining work"; HANDOFF §6 is its head. One branch and one PR per item.
+2. The work queue is docs/ROADMAP.md §"Remaining work"; HANDOFF §6 is its head. Small items: commit to main; PR only for milestones and big features (D75).
 3. Verify every SDK API in the pinned source (ios/SDKVERSION.md); never invent names.
 4. Verify each item: scripts/prepush.sh, the Halo-Debug app build, touched contract tests against infra/dev,
    a simulator check for UI. Report real output; say what you couldn't run.
