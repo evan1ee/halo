@@ -44,6 +44,7 @@ public actor StickerLibrary {
     private let sleep: Sleep
     private var prefs = StickerPrefs()
     private var allPacks: [StickerPack] = []
+    private var currentRoom: RoomID?
     private var unavailablePacks: [PackRef] = []
     private var phase = Phase.unloaded
     private var lastWrite: ContinuousClock.Instant?
@@ -70,6 +71,7 @@ public actor StickerLibrary {
 
     /// Loads packs and prefs for the panel opened in `currentRoom`. Safe to call again to refresh.
     public func load(currentRoom: RoomID?) async {
+        self.currentRoom = currentRoom
         let started = generation
         phase = .loading
         publish()
@@ -87,6 +89,17 @@ public actor StickerLibrary {
             phase = allPacks.isEmpty ? .failed : .partial
         }
         publish()
+    }
+
+    /// Removes the packs that can't be read any more from the user's enabled list, then reloads. A pack that can't be removed
+    /// (offline) stays listed as unavailable and shows up again on the next try.
+    public func removeUnavailablePacks() async {
+        let started = generation
+        for ref in unavailablePacks {
+            do { try await packSource.disable(ref) } catch { continue }
+        }
+        guard generation == started else { return }
+        await load(currentRoom: currentRoom)
     }
 
     /// Forgets everything of the signed-out account, so none of it is shown to, or written into, the next one. A load or

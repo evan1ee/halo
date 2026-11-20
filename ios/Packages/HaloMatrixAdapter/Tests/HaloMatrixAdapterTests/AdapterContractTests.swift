@@ -220,6 +220,14 @@ struct AdapterContractTests {
             load = try await packs.packs(currentRoom: nil)
         }
         #expect(load.unavailable.contains(ref) && !load.packs.contains { $0.ref == ref } && load.failedSources == 0)
+        // Removing it takes it out of the enabled list: it is no longer reported (account data reaches the SDK store with a sync).
+        try await packs.disable(ref)
+        for _ in 0..<30 where load.unavailable.contains(ref) {
+            try await Task.sleep(for: .seconds(1))
+            load = try await packs.packs(currentRoom: nil)
+        }
+        #expect(!load.unavailable.contains(ref))
+        try await packs.disable(ref)  // a second removal is harmless
         // Restore the account data (an empty listing if there was none), so no pack stays enabled.
         try? await client.setAccountData(eventType: "m.image_pack.rooms", content: before ?? "{}")
         try await session.logout()

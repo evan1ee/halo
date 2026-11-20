@@ -26,7 +26,14 @@ public struct StickerPanelView: View {
             // Room for the sheet's drag indicator above the search field.
             .padding(.horizontal, 12).padding(.top, 28).padding(.bottom, 8)
             if let error = model.sendError { Text(error).font(.caption).foregroundStyle(.red) }
-            if let notice = model.unavailableNotice { Text(notice).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("unavailable-packs") }
+            if let notice = model.unavailableNotice {
+                HStack(spacing: 8) {
+                    Text(notice).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("unavailable-packs")
+                    Button("Remove") { Task { await model.removeUnavailablePacks() } }
+                        .font(.caption.bold())
+                        .accessibilityIdentifier("remove-unavailable-packs")
+                }
+            }
             if model.isIncomplete { Text("Some packs couldn't be loaded.").font(.caption).foregroundStyle(.secondary) }
             if let message = model.emptyMessage {
                 Spacer()

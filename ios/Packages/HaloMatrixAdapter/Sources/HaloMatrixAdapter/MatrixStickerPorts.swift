@@ -131,6 +131,16 @@ public final class MatrixStickerPackPort: StickerPackPort {
         return StickerPackLoad(packs: packs, failedSources: failed, unavailable: unavailable)
     }
 
+    public func disable(_ ref: PackRef) async throws(HaloError) {
+        let client = try await session.signedInClient()
+        do {
+            // Read-modify-write of the account data; unknown properties stay (PackRegistry keeps them).
+            let current = try await client.accountData(eventType: "m.image_pack.rooms").flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+            guard let updated = PackRegistry.disabling(ref, in: current) else { return }
+            try await client.setAccountData(eventType: "m.image_pack.rooms", content: String(decoding: try JSONSerialization.data(withJSONObject: updated, options: [.sortedKeys]), as: UTF8.self))
+        } catch { throw ErrorMapper.map(error) }
+    }
+
     private static let legacyType = "im.ponies.room_emotes"
 
     /// The current room's packs. A small room's whole state is read (every state key); a large room's state can be

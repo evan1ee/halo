@@ -90,8 +90,14 @@ public struct TimelineView: View {
                     try? await Task.sleep(for: .milliseconds(250))  // let the scroll settle before history may load
                     landed = true
                 }
-                .onChange(of: rows.last?.id) { _, last in
-                    if let last { withAnimation { proxy.scrollTo(last, anchor: .bottom) } }
+                .task(id: rows.last?.id) {
+                    // A new last row scrolls into view. A tall row (a photo) isn't measured yet at the first jump and would land
+                    // just below the screen (seen in the simulator), so the jump is repeated after the layout settles.
+                    guard landed, let last = rows.last?.id else { return }
+                    for step in 0..<3 {
+                        withAnimation { proxy.scrollTo(last, anchor: .bottom) }
+                        try? await Task.sleep(for: .milliseconds(step == 0 ? 200 : 250))
+                    }
                 }
                 // FR-4: the marker is above the viewport once the user is at the bottom and the marker is out of sight.
                 .overlay(alignment: .top) {
