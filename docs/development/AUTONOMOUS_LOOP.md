@@ -66,7 +66,7 @@ Recorded in HANDOFF §5 under "Needs the founder", then the loop moves on:
 - **Contract-test settings:** `~/.config/halo-dev/contract.env` (mode 600, outside the repository; `HALO_CONTRACT_ENV` overrides
   the path), in the format of [infra/dev/contract.env.example](../../infra/dev/contract.env.example). `scripts/contract-test.sh`
   loads it and never prints values. Accounts in it are throwaway local ones; their passwords never go into the repository, a
-  commit, a log or a pull request. If the file is missing, create throwaway accounts
-  (`docker exec halo-dev-synapse-1 register_new_matrix_user …`) and fixtures, and write the file.
+  commit, a log or a pull request. If the file is missing, run `infra/dev/create-fixtures.py` (accounts, rooms and the file). Before a full contract run re-run it
+  (the room count grows with `createPack`); before the Encryption contract use `--new-e2ee`.
 - An iOS 26 simulator (`iPhone 17` by default; `HALO_SIM` overrides it in `prepush.sh`).
 - `gh` signed in to the repository.
