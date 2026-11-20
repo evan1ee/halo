@@ -1,6 +1,6 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-20 · Branch: `feat/m5-new-chat` · PRs #1–#45 merged
+Last updated: 2026-11-20 · Branch: `main` · PRs #1–#46 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
