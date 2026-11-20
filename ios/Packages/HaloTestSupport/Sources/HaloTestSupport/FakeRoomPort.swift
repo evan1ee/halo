@@ -12,6 +12,7 @@ public final class FakeRoomPort: RoomPort {
         var left: [RoomID] = []
         var edits: [(name: String, topic: String)] = []
         var invites: [[UserID]] = []
+        var favourites: [(room: RoomID, on: Bool)] = []
         var accepted: [RoomID] = []
         var declined: [RoomID] = []
     }
@@ -59,6 +60,13 @@ public final class FakeRoomPort: RoomPort {
     public func invite(_ users: [UserID], to room: RoomID) async throws(HaloError) {
         if let error = state.withLock({ $0.error }) { throw error }
         state.withLock { $0.invites.append(users) }
+    }
+
+    public var favouriteChanges: [(room: RoomID, on: Bool)] { state.withLock { $0.favourites } }
+
+    public func setFavourite(_ favourite: Bool, in room: RoomID) async throws(HaloError) {
+        if let error = state.withLock({ $0.error }) { throw error }
+        state.withLock { $0.favourites.append((room, favourite)) }
     }
 
     public var acceptedInvites: [RoomID] { state.withLock { $0.accepted } }

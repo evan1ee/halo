@@ -23,6 +23,21 @@ struct RoomListCoordinatorTests {
         #expect(port.loadMoreCalls == 2)
     }
 
+    @Test("a change that leaves the read inputs alone (a favourite, a rename) still reaches the summary stream")
+    func summaryChanges() async throws {
+        let port = FakeRoomListPort(rooms: [room(1)])
+        let coordinator = RoomListCoordinator(port: port)
+        let summaries = await coordinator.summaryChanges()
+        await coordinator.start()
+        #expect(await first(summaries) { $0.count == 1 && !$0[0].isFavourite } != nil)
+        let original = room(1)
+        let favourite = RoomSummary(
+            id: original.id, name: original.name, isDirect: original.isDirect, isEncrypted: original.isEncrypted, membership: original.membership,
+            read: original.read, latestEvent: original.latestEvent, ownReadThrough: original.ownReadThrough, isFavourite: true)
+        try port.emit(.set(index: 0, favourite))
+        #expect(await first(summaries) { $0.first?.isFavourite == true } != nil)
+    }
+
     @Test("sticker pack rooms are left out of the list and the read inputs, also when they become known after the list")
     func hidesPackRooms() async throws {
         let port = FakeRoomListPort(rooms: [room(1), room(2), room(3)])

@@ -32,6 +32,8 @@ public actor RoomListCoordinator {
     private var broadcaster = SnapshotBroadcaster<Status>()
     private var readBroadcaster = SnapshotBroadcaster<[RoomReadInputs]>()
     private var readInputsCache: [RoomReadInputs] = []
+    private var summaryBroadcaster = SnapshotBroadcaster<[RoomSummary]>()
+    private var summaryCache: [RoomSummary] = []
     private var subscription: Task<Void, Never>?
     private var generation = 0
     private var consecutiveFailures = 0
@@ -58,6 +60,9 @@ public actor RoomListCoordinator {
     /// The read inputs of every loaded room, now and after each change; latest value wins. Only the rooms the list has
     /// loaded so far are included (the first page until the list pages further). `BadgeCoordinator` evaluates them.
     public func readInputs() -> AsyncStream<[RoomReadInputs]> { readBroadcaster.subscribe(current: readInputsCache) }
+
+    /// The visible rooms whenever any field of any room changed (a rename, a favourite, a new latest event), not only the read inputs.
+    public func summaryChanges() -> AsyncStream<[RoomSummary]> { summaryBroadcaster.subscribe(current: summaryCache) }
 
     public func start(filter: RoomListFilter = .all) {
         consecutiveFailures = 0
@@ -106,6 +111,14 @@ public actor RoomListCoordinator {
         hidden = value
         if case .loaded = status { status = .loaded(roomCount: rooms.count) }
         publishReadInputs()
+        publishSummaries()
+    }
+
+    private func publishSummaries() {
+        let current = rooms
+        guard current != summaryCache else { return }
+        summaryCache = current
+        summaryBroadcaster.publish(current)
     }
 
     private func publishReadInputs() {
@@ -126,6 +139,7 @@ public actor RoomListCoordinator {
             if diffsInSubscription > 1 { consecutiveFailures = 0 }
             status = .loaded(roomCount: rooms.count)
             publishReadInputs()
+            publishSummaries()
             if loadsAllPages, allRooms.count > requestedAt {
                 requestedAt = allRooms.count
                 Task { [port] in try? await port.loadMore() }

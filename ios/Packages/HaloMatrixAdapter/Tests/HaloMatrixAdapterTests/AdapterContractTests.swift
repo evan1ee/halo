@@ -237,6 +237,23 @@ struct AdapterContractTests {
             }
             #expect(invited.contains { $0.isInvited })
         }
+        // Favourite tag: set, then the room list reports it; cleared again.
+        func isFavourite() async -> Bool? {
+            var iterator = MatrixRoomListPort(session: session).rooms(filter: .all).makeAsyncIterator()
+            var items: [RoomSummary] = []
+            guard let diff = await iterator.next() else { return nil }
+            try? RoomListReducer.apply(diff, to: &items)
+            return items.first { $0.id == roomID }?.isFavourite
+        }
+        for target in [true, false] {
+            try await rooms.setFavourite(target, in: roomID)
+            var seen = await isFavourite()
+            for _ in 0..<30 where seen != target {
+                try await Task.sleep(for: .seconds(1))
+                seen = await isFavourite()
+            }
+            #expect(seen == target, "favourite \(target) not reported")
+        }
         try await rooms.leave(roomID)
         if let left = try? await session.room(roomID) { try? await left.forget() }
         try await session.logout()

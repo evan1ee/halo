@@ -16,11 +16,14 @@ public struct RoomSummary: Sendable, Equatable, Identifiable {
     public let latestEvent: LatestEventRef?
     /// The time of the event the user's own newest read receipt (any device) points at; `nil` when unknown or not resolved.
     public let ownReadThrough: Date?
+    /// The user marked the room as a favourite (room tag `m.favourite`).
+    public let isFavourite: Bool
 
     public init(
         id: RoomID, name: String?, isDirect: Bool, isEncrypted: Bool, membership: Membership, read: RoomReadCounts = .none,
-        latestEvent: LatestEventRef? = nil, ownReadThrough: Date? = nil
+        latestEvent: LatestEventRef? = nil, ownReadThrough: Date? = nil, isFavourite: Bool = false
     ) {
+        self.isFavourite = isFavourite
         self.latestEvent = latestEvent
         self.ownReadThrough = ownReadThrough
         self.read = read
