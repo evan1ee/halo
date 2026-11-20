@@ -16,7 +16,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 - Room list rows show the policy's unread indicator (count / mentions / dot, bold when unread) and update when the local read position changes.
 - `RoomListCoordinator(loadsAllPages: true)` (app) keeps paging so the badge sees every room.
 - Pushed events (notification records) at or before the read position (here or another device) no longer count; delivered notifications of rooms without attention are removed by `SystemBadge`.
-- Property tests P1, P2, P5, P5b, P6, P9, P10 (10,000 seeded cases each) in `HaloDomainTests/ReadStatePropertyTests.swift`. P3, P4, P7, P8 and scenarios S01–S22 are not written.
+- Property tests P1–P6, P5b, P9, P10 (10,000 seeded cases each) in `HaloDomainTests/ReadStatePropertyTests.swift`; P7 in `BadgeCoordinatorTests` (records JSON round trip); P8 in `ReadIntentStoreTests` (concurrent upserts). P3 = notified-event order; P4 = re-evaluation, and repeating a notified event never changes attention (counts may; the store dedups by event ID). Scenarios S01–S22 are not written.
 - Sign-out removes the pusher first (`PushPort.unregister` → `deletePusher`, via `SessionCoordinator.setBeforeSignOut`; best effort).
 - Room list swipe: leading "Read" (`markRoomRead`), trailing "Unread" (`setMarkedUnread`).
 
@@ -36,7 +36,7 @@ Everything in `git log origin/main..HEAD`. Key paths: `ios/Packages/HaloApplicat
 - Docker CLI hangs on the `osxkeychain` helper; use a throwaway `DOCKER_CONFIG`.
 
 ## 6. Next steps
-1. M3: true ≥ 50 % visibility; scenario tests S01–S22 and auditor.
+1. M3: true ≥ 50 % visibility; scenario tests S01–S22 (Synapse in Docker, scenario driver) and auditor.
 2. Device checks from section 5; G-NSE hardening (peak memory, encrypted room, timeout injection AC-NSE-3/4, 100 pushes, Release build).
 3. M2 left: offline send test, media sending, mentions. M1 left: video/audio/file, QR/emoji verification. A push gateway for Beta/Release.
 4. Push the branch, open a PR, check CI (after refreshing this file).
