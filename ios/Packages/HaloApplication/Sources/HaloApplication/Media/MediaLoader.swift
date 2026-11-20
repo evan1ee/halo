@@ -49,6 +49,11 @@ public actor MediaLoader {
         }
     }
 
+    /// The full content, for a single large view such as a sticker preview. Not cached: it is read on demand.
+    public func content(_ ref: MediaRef) async throws(HaloError) -> Data {
+        do { return try await port.content(ref) } catch { throw error }
+    }
+
     // MARK: Cache
 
     private func touch(_ key: Key) {
