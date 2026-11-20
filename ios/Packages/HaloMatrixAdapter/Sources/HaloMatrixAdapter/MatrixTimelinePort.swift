@@ -89,6 +89,14 @@ final class MatrixTimelineSession: TimelineSession {
         do { try await timeline.redactEvent(eventOrTransactionId: .eventId(eventId: event.rawValue), reason: nil) } catch { throw ErrorMapper.map(error) }
     }
 
+    func retrySend(localID: String) async throws(HaloError) {
+        do { guard try await timeline.retrySend(itemId: .transactionId(transactionId: localID), target: .event) else { throw HaloError.notFound } } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
+    }
+
+    func abortSend(localID: String) async throws(HaloError) {
+        do { guard try await timeline.abortSend(itemId: .transactionId(transactionId: localID), target: .event) else { throw HaloError.notFound } } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
+    }
+
     func close() async {}
 }
 

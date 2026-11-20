@@ -23,6 +23,8 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     public let reply: Reply?
     /// Styled text for a message that came with an HTML body; the view shows `text` otherwise.
     public let styled: AttributedString?
+    /// The local ID of an own message whose sending failed; the user can retry or delete it.
+    public let failedLocalID: String?
 
     public struct Reply: Equatable, Sendable {
         public let sender: String?
@@ -45,8 +47,10 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
 
     init(
         id: String, style: Style, sender: String?, text: String, image: Image? = nil, status: String? = nil,
-        eventID: EventID? = nil, isOwn: Bool = false, reactions: [Chip] = [], reply: Reply? = nil, styled: AttributedString? = nil
+        eventID: EventID? = nil, isOwn: Bool = false, reactions: [Chip] = [], reply: Reply? = nil, styled: AttributedString? = nil,
+        failedLocalID: String? = nil
     ) {
+        self.failedLocalID = failedLocalID
         self.styled = styled
         self.reply = reply
         self.eventID = eventID
@@ -249,6 +253,18 @@ public final class TimelineViewModel {
         await perform { try await coordinator.delete(event: id) }
     }
 
+    /// Sends a message that failed again.
+    public func retry(_ row: TimelineRow) async {
+        guard let id = row.failedLocalID else { return }
+        await perform { try await coordinator.retrySend(localID: id) }
+    }
+
+    /// Deletes a message that failed to send, so it never goes out.
+    public func discard(_ row: TimelineRow) async {
+        guard let id = row.failedLocalID else { return }
+        await perform { try await coordinator.abortSend(localID: id) }
+    }
+
     /// Loads an own, confirmed text message into the composer for editing.
     public func beginEdit(_ row: TimelineRow) {
         guard let id = row.eventID, row.isOwn, row.style == .ownMessage, row.image == nil else { return }
@@ -366,7 +382,8 @@ public final class TimelineViewModel {
                     id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: edited ? "\(body) (edited)" : body,
                     status: Self.status(of: event.sendState), eventID: event.eventID, isOwn: event.isOwn,
                     reactions: Self.chips(event.reactions), reply: Self.reply(event.replyTo),
-                    styled: event.formattedBody.map { HTMLText.attributed($0) + AttributedString(edited ? " (edited)" : "") })
+                    styled: event.formattedBody.map { HTMLText.attributed($0) + AttributedString(edited ? " (edited)" : "") },
+                    failedLocalID: Self.failedID(event))
             case .notice(let body, _):
                 return TimelineRow(id: id, style: .notice, sender: name, text: body)
             case .emote(let body, _):
@@ -406,6 +423,12 @@ public final class TimelineViewModel {
 
     static func chips(_ reactions: [ReactionSummary]) -> [TimelineRow.Chip] {
         reactions.map { TimelineRow.Chip(key: $0.key, count: $0.count, reactedByMe: $0.reactedByMe) }
+    }
+
+    /// The local ID of a failed own echo, the only kind the user can retry or delete.
+    static func failedID(_ event: TimelineEvent) -> String? {
+        if case .failed = event.sendState, event.eventID == nil { return event.localID }
+        return nil
     }
 
     static func status(of state: SendState) -> String? {

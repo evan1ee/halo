@@ -118,6 +118,12 @@ private struct RowView: View {
         }
     }
 
+    /// Menu for an own message that couldn't be sent.
+    @ViewBuilder private var failedActions: some View {
+        Button("Try again", systemImage: "arrow.clockwise") { Task { await model.retry(row) } }
+        Button("Delete", systemImage: "trash", role: .destructive) { Task { await model.discard(row) } }
+    }
+
     var body: some View {
         switch row.style {
         case .message, .ownMessage:
@@ -152,7 +158,9 @@ private struct RowView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: row.style == .ownMessage ? .trailing : .leading)
-            .contextMenu { if row.eventID != nil { actions } }
+            .contextMenu {
+                if row.eventID != nil { actions } else if row.failedLocalID != nil { failedActions }
+            }
         case .notice:
             Text(row.text).font(.callout).foregroundStyle(.secondary)
         case .emote:

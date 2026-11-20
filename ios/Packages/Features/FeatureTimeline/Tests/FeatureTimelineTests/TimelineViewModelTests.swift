@@ -314,4 +314,20 @@ struct TimelineViewModelTests {
         for _ in 0..<200_000 where port.receipts.isEmpty { await Task.yield() }
         #expect(port.receipts.map(\.event.rawValue) == ["$e2"])
     }
+
+    @Test("only a failed own echo can be retried or deleted from its row")
+    func failedRows() async throws {
+        let room = try RoomID("!r:x.org")
+        func event(_ state: SendState, id: Bool = false, local: String? = "txn") throws -> TimelineEvent {
+            TimelineEvent(
+                eventID: id ? try EventID("$e") : nil, sender: nil, senderName: nil, timestamp: Date(timeIntervalSince1970: 1), isOwn: true,
+                kind: .text("hi", isEdited: false), sendState: state, localID: local)
+        }
+        let model = TimelineViewModel(coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: room), locale: Locale(identifier: "en_US"), timeZone: .gmt)
+        func row(_ e: TimelineEvent) -> TimelineRow { model.row(TimelineItem(id: TimelineItemID("i"), content: .event(e))) }
+        #expect(row(try event(.failed(recoverable: false))).failedLocalID == "txn")
+        #expect(row(try event(.failed(recoverable: true))).failedLocalID == "txn")
+        #expect(row(try event(.sending)).failedLocalID == nil)
+        #expect(row(try event(.sent, id: true, local: nil)).failedLocalID == nil)
+    }
 }

@@ -42,11 +42,15 @@ public struct TimelineEvent: Sendable, Equatable {
     /// The sender's HTML `formatted_body` for a text message, untouched (the UI renders a safe subset). `nil` for
     /// plain messages.
     public let formattedBody: String?
+    /// The local transaction ID while this is an own event the server hasn't confirmed; what `retrySend` and `abortSend` take.
+    public let localID: String?
 
     public init(
         eventID: EventID?, sender: UserID?, senderName: String?, timestamp: Date, isOwn: Bool, kind: TimelineEventKind,
-        sendState: SendState = .sent, reactions: [ReactionSummary] = [], replyTo: ReplyPreview? = nil, formattedBody: String? = nil
+        sendState: SendState = .sent, reactions: [ReactionSummary] = [], replyTo: ReplyPreview? = nil, formattedBody: String? = nil,
+        localID: String? = nil
     ) {
+        self.localID = localID
         self.formattedBody = formattedBody
         self.replyTo = replyTo
         self.reactions = reactions

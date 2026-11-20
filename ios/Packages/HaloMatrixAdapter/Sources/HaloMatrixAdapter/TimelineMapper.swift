@@ -40,7 +40,11 @@ enum TimelineMapper {
 
     static func map(_ event: EventTimelineItem, ownUserID: String) -> HaloDomain.TimelineEvent {
         var eventID: EventID?
-        if case .eventId(let raw) = event.eventOrTransactionId { eventID = try? EventID(raw) }
+        var localID: String?
+        switch event.eventOrTransactionId {
+        case .eventId(let raw): eventID = try? EventID(raw)
+        case .transactionId(let raw): localID = raw
+        }
         var senderName: String?
         if case .ready(let displayName, _, _, _, _) = event.senderProfile { senderName = displayName }
         return HaloDomain.TimelineEvent(
@@ -50,7 +54,8 @@ enum TimelineMapper {
             reactions: event.reactions.map { reaction in
                 ReactionSummary(key: reaction.key, count: reaction.senders.count, reactedByMe: reaction.senders.contains { $0.senderId == ownUserID })
             },
-            replyTo: replyPreview(of: event.content), formattedBody: formattedHTML(of: event.content))
+            replyTo: replyPreview(of: event.content), formattedBody: formattedHTML(of: event.content),
+            localID: localID)
     }
 
     /// The HTML body of a text message, if the sender gave one in the standard format.

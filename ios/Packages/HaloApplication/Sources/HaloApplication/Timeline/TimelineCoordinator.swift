@@ -164,6 +164,18 @@ public actor TimelineCoordinator {
         try await session.delete(event: event)
     }
 
+    /// Sends a failed message again.
+    public func retrySend(localID: String) async throws(HaloError) {
+        guard let session, case .live = status else { throw .cancelled }
+        try await session.retrySend(localID: localID)
+    }
+
+    /// Deletes a message that was never sent.
+    public func abortSend(localID: String) async throws(HaloError) {
+        guard let session, case .live = status else { throw .cancelled }
+        try await session.abortSend(localID: localID)
+    }
+
     // MARK: Private
 
     private func subscribe() {

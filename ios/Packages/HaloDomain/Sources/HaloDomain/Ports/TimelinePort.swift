@@ -42,5 +42,11 @@ public protocol TimelineSession: Sendable {
     /// Deletes (redacts) the user's own message.
     func delete(event: EventID) async throws(HaloError)
 
+    /// Sends a failed local echo again (`TimelineEvent.localID`). Throws `.notFound` if the echo is gone (it was sent or deleted meanwhile).
+    func retrySend(localID: String) async throws(HaloError)
+
+    /// Deletes a local echo that hasn't been sent (or is failed), so it is never sent. Throws `.notFound` if it already went out.
+    func abortSend(localID: String) async throws(HaloError)
+
     func close() async
 }

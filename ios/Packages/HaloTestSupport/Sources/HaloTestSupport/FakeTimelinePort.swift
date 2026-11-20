@@ -16,6 +16,7 @@ public final class FakeTimelinePort: TimelinePort {
         var typing: [UserID] = []
         var typingContinuations: [UUID: AsyncStream<[UserID]>.Continuation] = [:]
         var typingCalls: [Bool] = []
+        var retried: [String] = []
     }
 
     private let rooms = Mutex<[RoomID: Room]>([:])
@@ -48,6 +49,8 @@ public final class FakeTimelinePort: TimelinePort {
     /// The `setTyping` values received, in order.
     public func typingCalls(in id: RoomID) -> [Bool] { rooms.withLock { $0[id]?.typingCalls ?? [] } }
 
+    /// The `retrySend` local IDs received, in order.
+    public func retried(in id: RoomID) -> [String] { rooms.withLock { $0[id]?.retried ?? [] } }
     public func sentTexts(in id: RoomID) -> [String] { rooms.withLock { $0[id]?.sent ?? [] } }
     public func openSessions(in id: RoomID) -> Int { rooms.withLock { $0[id]?.openSessions ?? 0 } }
     public func paginateCalls(in id: RoomID) -> Int { rooms.withLock { $0[id]?.paginateCalls ?? 0 } }
@@ -197,6 +200,34 @@ public final class FakeTimelinePort: TimelinePort {
             guard let (index, item) = found, case .event(let event) = item.content else { throw .notFound }
             guard let changed = change(event) else { throw .forbidden }
             try port.emit(.set(index: index, TimelineItem(id: item.id, content: .event(changed))), in: room)
+        }
+
+        func retrySend(localID: String) async throws(HaloError) {
+            let found = localEcho(localID)
+            guard let (index, item) = found, case .event(let e) = item.content else { throw .notFound }
+            let sending = TimelineEvent(
+                eventID: nil, sender: e.sender, senderName: e.senderName, timestamp: e.timestamp, isOwn: true, kind: e.kind, sendState: .sending,
+                replyTo: e.replyTo, localID: localID)
+            try port.emit(.set(index: index, TimelineItem(id: item.id, content: .event(sending))), in: room)
+            port.rooms.withLock { $0[room]?.retried.append(localID) }
+            let sent = TimelineEvent(
+                eventID: try? EventID("$fake-\(UUID().uuidString.prefix(8))"), sender: e.sender, senderName: e.senderName, timestamp: e.timestamp,
+                isOwn: true, kind: e.kind, sendState: .sent, replyTo: e.replyTo)
+            try port.emit(.set(index: index, TimelineItem(id: item.id, content: .event(sent))), in: room)
+        }
+
+        func abortSend(localID: String) async throws(HaloError) {
+            guard let (index, _) = localEcho(localID) else { throw .notFound }
+            try port.emit(.remove(index: index), in: room)
+        }
+
+        private func localEcho(_ localID: String) -> (Int, TimelineItem)? {
+            port.rooms.withLock { rooms in
+                for (index, item) in (rooms[room]?.items ?? []).enumerated() {
+                    if case .event(let e) = item.content, e.localID == localID, e.eventID == nil { return (index, item) }
+                }
+                return nil
+            }
         }
 
         func close() async { port.rooms.withLock { $0[room]?.openSessions -= 1 } }

@@ -162,4 +162,26 @@ struct TimelineCoordinatorTests {
         _ = await wait(coordinator) { if case .live = $0 { true } else { false } }
         await #expect(throws: HaloError.notFound) { try await coordinator.delete(event: someEvent) }  // unknown event
     }
+
+    @Test("a failed echo can be retried or deleted; both refuse when closed or when the echo is gone")
+    func failedEchoes() async throws {
+        let port = FakeTimelinePort()
+        let room = try RoomID("!r:x.org")
+        func failed(_ n: Int) -> TimelineItem {
+            TimelineItem(id: TimelineItemID("l\(n)"), content: .event(TimelineEvent(
+                eventID: nil, sender: nil, senderName: nil, timestamp: Date(timeIntervalSince1970: Double(n)), isOwn: true,
+                kind: .text("m\(n)", isEdited: false), sendState: .failed(recoverable: false), localID: "txn\(n)")))
+        }
+        port.addRoom(room, items: [failed(1), failed(2)])
+        let coordinator = TimelineCoordinator(port: port, room: room)
+        await #expect(throws: HaloError.cancelled) { try await coordinator.retrySend(localID: "txn1") }
+        await #expect(throws: HaloError.cancelled) { try await coordinator.abortSend(localID: "txn1") }
+        await coordinator.open()
+        _ = await wait(coordinator) { if case .live = $0 { true } else { false } }
+        try await coordinator.retrySend(localID: "txn1")
+        #expect(port.retried(in: room) == ["txn1"])
+        try await coordinator.abortSend(localID: "txn2")
+        await #expect(throws: HaloError.notFound) { try await coordinator.abortSend(localID: "txn2") }
+        await #expect(throws: HaloError.notFound) { try await coordinator.retrySend(localID: "txn1") }  // sent meanwhile
+    }
 }
