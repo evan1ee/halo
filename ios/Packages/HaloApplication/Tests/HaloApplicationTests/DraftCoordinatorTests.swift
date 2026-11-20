@@ -40,4 +40,20 @@ struct DraftCoordinatorTests {
         #expect(await coordinator.draft(for: room) == "kept")
         #expect(await DraftCoordinator(store: store).draft(for: room) == "")
     }
+
+    @Test("reset drops the previous account's drafts and store; the next store gets none of them")
+    func resetOnAccountChange() async {
+        let first = FakeDrafts()
+        let coordinator = DraftCoordinator(store: first)
+        await coordinator.save("for A only", for: room)
+        await coordinator.reset()
+        #expect(await coordinator.draft(for: room) == "")
+        await coordinator.save("typed while signed out", for: room)
+        #expect(first.stored[room] == "for A only")
+        await coordinator.reset()
+        let second = FakeDrafts()
+        await coordinator.attach(second)
+        #expect(second.stored.isEmpty)
+        #expect(await coordinator.draft(for: room) == "")
+    }
 }

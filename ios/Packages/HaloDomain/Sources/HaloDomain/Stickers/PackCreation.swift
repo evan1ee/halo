@@ -74,6 +74,16 @@ public enum PackRegistry {
         return content
     }
 
+    /// `m.image_pack.rooms` without `ref`; `nil` (leave it alone) when it isn't listed. A room left with no packs is removed.
+    public static func disabling(_ ref: PackRef, in content: [String: Any]?) -> [String: Any]? {
+        guard var content, var rooms = content["rooms"] as? [String: Any], var packs = rooms[ref.room.rawValue] as? [String: Any],
+              packs[ref.stateKey] != nil else { return nil }
+        packs[ref.stateKey] = nil
+        rooms[ref.room.rawValue] = packs.isEmpty ? nil : packs
+        content["rooms"] = rooms
+        return content
+    }
+
     /// `one.mbm.halo.sticker_rooms` with `room` added: `{ version: 1, rooms: [roomId] }`; used to hide pack rooms from the
     /// room list. Returns `nil` when the stored content is from a newer version (leave it alone).
     public static func recordingPackRoom(_ room: RoomID, in content: [String: Any]?) -> [String: Any]? {

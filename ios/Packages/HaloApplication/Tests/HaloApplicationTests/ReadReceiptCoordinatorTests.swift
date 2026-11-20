@@ -40,6 +40,26 @@ struct ReadReceiptCoordinatorTests {
         #expect(port.receipts == [.init(room: room, event: event(1), isPrivate: false)])
     }
 
+    @Test("reset forgets the previous account: nothing of it is sent, and the next account's older intents are restored")
+    func resetOnAccountChange() async {
+        let (c, port, _) = make()
+        // Non-retryable failures leave the intent unsent with no retry scheduled (at most two attempts happen before
+        // the reset: the scheduled one and the flush).
+        port.failNextReceipts(with: [.forbidden, .forbidden, .forbidden])
+        await c.reportSeen(room: room, event: event(9), timestamp: at(90))
+        #expect(await eventually { port.receipts.isEmpty && port.markers.isEmpty })
+        await c.flush()
+        await c.reset()
+        #expect(await c.readPosition(of: room) == nil)
+        port.failNextReceipts(with: [])
+        await c.flush()
+        #expect(port.receipts.isEmpty)
+        let next = FakeReadIntents([ReadIntent(room: room, event: event(1), timestamp: at(10), createdAt: Date(timeIntervalSince1970: 999_000))])
+        await c.restore(from: next)
+        #expect(await c.readPosition(of: room) == at(10))
+        #expect(await eventually { port.receipts.map(\.event) == [event(1)] })
+    }
+
     @Test func olderOrEqualCandidatesAreIgnored() async {
         let (c, port, _) = make()
         await c.reportSeen(room: room, event: event(2), timestamp: at(20))

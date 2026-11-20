@@ -80,6 +80,16 @@ sync requests, and Halo can't add types **[VERIFIED F-FFI-9]**. Options:
 **[VERIFIED 2026-11-20, V-ST-1]** Option A returns nothing on Synapse 1.165 / SDK 26.11.17; Halo uses option B (`MatrixStickerPackPort`). **[DECISION ADR-0011, provisional]** Try A in M4 week 1; if empty → B behind `RoomPort` (so A/C/D can replace it later without
 feature changes); propose C upstream in parallel. Writing uses `Room.send_state_event_raw` **[VERIFIED F-FFI-9]**.
 
+**[DECISION D68]** Packs of the current room: the whole room state (`GET …/state`) is read only for rooms with at most
+1,000 joined members (`Room.joinedMembersCount()`, local; a room not known locally is read whole); in larger rooms the state can be many megabytes, so only the
+pack with the empty state key (`GET …/state/m.room.image_pack/`) is read there. A room's packs are kept in memory for 10
+minutes (`RoomPackCache`); failures are not kept. Known limit: a large room's packs with a non-empty state key are not
+offered unless the user enabled them (source 1). Requests use an ephemeral `URLSession` (no disk cache, no cookies).
+
+**Pack creation cleanup.** If anything fails after the pack room was created (room not known within 30 s, state write,
+account data), the pack is removed from `m.image_pack.rooms` again and the room is left and forgotten, so no empty
+"Sticker pack" room stays in the room list and trying again doesn't make a second one. Uploaded media stay on the server.
+
 ## 10. Error scenarios
 Upload failure (resume) · state write forbidden (not admin in that room) · account-data write conflict (read-modify-write with retry; preserve unknown keys) · referenced room not joined (spec: show "unavailable pack") · media 404.
 

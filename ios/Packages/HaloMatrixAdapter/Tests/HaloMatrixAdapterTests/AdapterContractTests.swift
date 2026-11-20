@@ -93,17 +93,20 @@ struct AdapterContractTests {
         var load = StickerPackLoad(packs: [], failedSources: 0)
         for _ in 0..<60 {
             load = try await packs.packs(currentRoom: nil)
-            if !load.packs.isEmpty { break }
+            if load.packs.contains(where: { $0.ref.stateKey == "cats" }) { break }
             try await Task.sleep(for: .seconds(1))
         }
-        let pack = try #require(load.packs.first, "no pack read: option A of V-ST-1 does not work, failedSources=\(load.failedSources)")
+        // The account may hold more enabled packs (each `createPack` run adds one); this test is about the fixture's.
+        let cats = PackRef(room: room, stateKey: "cats")
+        let pack = try #require(load.packs.first { $0.ref == cats }, "fixture pack not read, failedSources=\(load.failedSources)")
         #expect(pack.ref == PackRef(room: room, stateKey: "cats") && pack.displayName == "Cats" && pack.source == .userEnabled)
         #expect(pack.stickers.map(\.shortcode) == ["dance", "wave"])
         #expect(pack.stickers.allSatisfy { $0.image != nil })
 
         // The same pack, found as the current room's pack.
         let asRoomPack = try await packs.packs(currentRoom: room)
-        #expect(asRoomPack.packs.count == 1)  // not listed twice
+        #expect(asRoomPack.packs.filter { $0.ref == cats }.count == 1)  // not listed twice
+        #expect(asRoomPack.failedSources == 0)
 
         // Prefs round trip through account data.
         let prefsPort = MatrixStickerPrefsPort(session: session)
@@ -160,10 +163,12 @@ struct AdapterContractTests {
         // The room has one member, the user; members() excludes the user.
         #expect(try await opened.members().isEmpty)
 
-        // A mention becomes a link in the formatted body.
+        // A mention becomes a link in the formatted body. The name is hostile (display names are chosen by their owner):
+        // it must come out as plain text, not as HTML, emphasis or a second link.
         let me = try UserID("@\(env["HALO_DEV_USER"] ?? ""):halo.localhost")
         let marker = UUID().uuidString.prefix(6)
-        try await opened.send(text: "hello @Tester \(marker)", mentions: [Mention(user: me, name: "Tester")])
+        let hostile = "T<b>*x*</b>](https://phish)"
+        try await opened.send(text: "hello @\(hostile) \(marker)", mentions: [Mention(user: me, name: hostile)])
         let body: String? = try await within(seconds: 60) {
             var items: [HaloDomain.TimelineItem] = []
             for await diff in stream {
@@ -177,6 +182,8 @@ struct AdapterContractTests {
             return nil
         }
         #expect(body?.contains("https://matrix.to/#/\(me.rawValue)") == true, "formatted body: \(body ?? "nil")")
+        #expect(body?.contains("<b>") == false && body?.contains("<em>") == false && body?.contains("href=\"https://phish") == false,
+                "formatted body: \(body ?? "nil")")
 
         // Retrying or aborting an echo that doesn't exist reports an error instead of crashing.
         await #expect(throws: HaloError.notFound) { try await opened.retrySend(localID: "no-such-echo") }

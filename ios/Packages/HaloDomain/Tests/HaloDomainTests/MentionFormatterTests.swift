@@ -32,4 +32,12 @@ struct MentionFormatterTests {
         let odd = Mention(user: try! UserID("@x:x.org"), name: "A]b")
         #expect(MentionFormatter.apply("@A]b", mentions: [odd]).markdown == "[@A\\]b](https://matrix.to/#/@x:x.org)")
     }
+
+    @Test("a hostile display name can't inject HTML, emphasis or a link into the formatted body")
+    func hostileNames() throws {
+        let evil = Mention(user: try UserID("@e:x.org"), name: "x</a><a href=\"https://phish\">*hi*")
+        let markdown = MentionFormatter.apply("@\(evil.name) ok", mentions: [evil]).markdown
+        #expect(markdown == #"[@x\<\/a\>\<a href\=\"https\:\/\/phish\"\>\*hi\*](https://matrix.to/#/@e:x.org) ok"#)
+        #expect(MentionFormatter.escape("Zoë_🙂 (B)") == #"Zoë\_🙂 \(B\)"#)
+    }
 }

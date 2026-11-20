@@ -114,4 +114,21 @@ struct StickerLibraryTests {
         await library.load(currentRoom: nil)
         #expect(await library.search("cat").map(\.shortcode) == ["cat_wave"])
     }
+
+    @Test("reset forgets the previous account, so its favourites and recents are never written into the next one")
+    func resetOnAccountChange() async throws {
+        var mine = StickerPrefs()
+        mine.toggleFavourite(sticker("a").ref)
+        let (library, _, store, _) = make(packs: StickerPackLoad(packs: [pack(["a", "b"])]), prefs: mine)
+        await library.load(currentRoom: room)
+        await library.reset()
+        let cleared = try #require(await library.snapshots().first { _ in true })
+        #expect(cleared == StickerLibrary.Snapshot())
+        store.setRemote(nil)  // the next account has no prefs yet
+        await library.load(currentRoom: room)
+        await library.recordSent(sticker("b"))
+        let written = try #require(store.saves.last)
+        #expect(written.favourites.isEmpty)
+        #expect(written.recents.map(\.sticker.shortcode) == ["b"])
+    }
 }

@@ -166,7 +166,7 @@ struct PackCreationTests {
     }
 
     @Test("enabling a pack keeps other packs and unknown properties, and is idempotent")
-    func enabling() {
+    func enabling() throws {
         let ref = PackRef(room: room, stateKey: "pack")
         let existing: [String: Any] = ["rooms": ["!other:x.org": ["p": ["note": 1]]], "extra": "keep"]
         let once = PackRegistry.enabling(ref, in: existing)
@@ -176,6 +176,11 @@ struct PackCreationTests {
         #expect((rooms?[room.rawValue] as? [String: Any])?["pack"] != nil)
         #expect(NSDictionary(dictionary: PackRegistry.enabling(ref, in: once)).isEqual(to: once))
         #expect((PackRegistry.enabling(ref, in: nil)["rooms"] as? [String: Any])?.count == 1)
+        // Disabling undoes enabling and keeps everything else; a pack that isn't listed leaves the content alone.
+        let undone = try #require(PackRegistry.disabling(ref, in: once))
+        #expect(NSDictionary(dictionary: undone).isEqual(to: existing))
+        #expect(PackRegistry.disabling(ref, in: existing) == nil)
+        #expect(PackRegistry.disabling(ref, in: nil) == nil)
     }
 
     @Test("the pack-room list gets each room once, keeps unknown keys, and refuses a newer version")

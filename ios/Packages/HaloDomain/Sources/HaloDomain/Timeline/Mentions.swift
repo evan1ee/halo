@@ -45,7 +45,7 @@ public enum MentionFormatter {
         var index = text.startIndex
         while index < text.endIndex {
             if text[index] == "@", let (mention, end) = match(candidates, in: text, at: index) {
-                output += "[@\(escape(mention.name))](https://matrix.to/#/\(mention.user.rawValue))"
+                output += "[@\(escape(mention.name))](https://matrix.to/#/\(link(mention.user)))"
                 if !users.contains(mention.user) { users.append(mention.user) }
                 index = end
             } else {
@@ -67,12 +67,32 @@ public enum MentionFormatter {
         return nil
     }
 
-    private static func escape(_ name: String) -> String {
+    /// The user ID as a URL fragment. Current user IDs only use these characters; anything else (historical IDs) is
+    /// percent-encoded so it can't end the link.
+    static func link(_ user: UserID) -> String {
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@:._=-/+")
+        return user.rawValue.addingPercentEncoding(withAllowedCharacters: allowed) ?? user.rawValue
+    }
+
+    /// The name as literal link text. Display names are chosen by other users, so every ASCII punctuation character is
+    /// backslash-escaped (CommonMark): no emphasis, no nested link, and no raw HTML such as `<a href=…>` can reach the
+    /// formatted body of the user's own message.
+    static func escape(_ name: String) -> String {
         var result = ""
-        for character in name {
-            if "\\[]".contains(character) { result.append("\\") }
-            result.append(character)
+        for scalar in name.unicodeScalars {
+            if scalar.isASCII, scalar.properties.generalCategory.isPunctuationOrSymbol { result.append("\\") }
+            result.unicodeScalars.append(scalar)
         }
         return result
+    }
+}
+
+private extension Unicode.GeneralCategory {
+    var isPunctuationOrSymbol: Bool {
+        switch self {
+        case .connectorPunctuation, .dashPunctuation, .openPunctuation, .closePunctuation, .initialPunctuation,
+             .finalPunctuation, .otherPunctuation, .mathSymbol, .currencySymbol, .modifierSymbol, .otherSymbol: true
+        default: false
+        }
     }
 }

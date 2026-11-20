@@ -48,17 +48,26 @@ final class AppRoot {
         let receipts = ReadReceiptCoordinator(port: MatrixReadMarkerPort(session: session))
         self.receipts = receipts
         drafts = DraftCoordinator()
-        stickers = StickerLibrary(packs: MatrixStickerPackPort(session: session), prefs: MatrixStickerPrefsPort(session: session))
+        let stickers = StickerLibrary(packs: MatrixStickerPackPort(session: session), prefs: MatrixStickerPrefsPort(session: session))
+        self.stickers = stickers
         badge = BadgeCoordinator(rooms: roomCoordinator, records: records, port: SystemBadge(suiteName: suite), receipts: receipts)
 
         timelinePort = MatrixTimelinePort(session: session)
         media = MediaLoader(port: MatrixMediaPort(session: session))
         recovery = RecoveryViewModel(coordinator: EncryptionCoordinator(port: MatrixEncryptionPort(session: session), session: sessionCoordinator))
         sync = SyncCoordinator(port: MatrixSyncPort(session: session), session: sessionCoordinator)
-        push = Self.pushConfiguration().map {
+        let push = Self.pushConfiguration().map {
             PushCoordinator(port: MatrixPushPort(session: session), session: sessionCoordinator, appID: $0.appID, gatewayURL: $0.gateway)
         }
-        if let push { Task { await sessionCoordinator.setBeforeSignOut { await push.unregister() } } }
+        self.push = push
+        // While the session is still valid: send what is pending for this account, then remove the pusher.
+        Task {
+            await sessionCoordinator.setBeforeSignOut {
+                await receipts.flush()
+                await stickers.flush()
+                await push?.unregister()
+            }
+        }
         auth = AuthViewModel(coordinator: sessionCoordinator)
         roomList = RoomListViewModel(session: sessionCoordinator, rooms: roomCoordinator, receipts: receipts)
         #if DEBUG
@@ -67,20 +76,40 @@ final class AppRoot {
         log.info("app launched")
     }
 
-    /// Opens Halo's database for each signed-in account and restores the read intents it holds. Runs for the life of the app.
+    /// Opens Halo's database for each signed-in account and restores the read intents and drafts it holds. When the
+    /// account changes or signs out, everything kept in memory for the previous one is dropped first, so nothing of it is
+    /// shown to, sent as, or written into the next account. Runs for the life of the app.
     func followReadIntents() async {
+        var current: UserID?
         for await state in await sessionCoordinator.states() {
-            guard case .ready(let user) = state else { continue }
-            do {
-                let directory = HaloShared.storeDirectory().appendingPathComponent("halo", isDirectory: true)
-                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-                let database = try HaloDatabase(path: directory.appendingPathComponent("halo.sqlite").path)
-                await receipts.restore(from: ReadIntentStore(database: database, account: user))
-                await drafts.attach(DraftStore(database: database, account: user))
-            } catch {
-                // Without a database, receipts still work from memory; there is nothing to restore.
+            switch state {
+            case .ready(let user):
+                guard user != current else { continue }  // the same account again (e.g. after a soft logout)
+                if current != nil { await resetAccountState() }
+                current = user
+                do {
+                    let directory = HaloShared.storeDirectory().appendingPathComponent("halo", isDirectory: true)
+                    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                    let database = try HaloDatabase(path: directory.appendingPathComponent("halo.sqlite").path)
+                    await receipts.restore(from: ReadIntentStore(database: database, account: user))
+                    await drafts.attach(DraftStore(database: database, account: user))
+                } catch {
+                    // Without a database, receipts and drafts still work from memory; there is nothing to restore.
+                }
+            case .signedOut:
+                guard current != nil else { continue }
+                current = nil
+                await resetAccountState()
+            default:
+                continue
             }
         }
+    }
+
+    private func resetAccountState() async {
+        await receipts.reset()
+        await drafts.reset()
+        await stickers.reset()
     }
 
     private static func pushConfiguration() -> (appID: String, gateway: URL)? {

@@ -7,6 +7,8 @@ import HaloFoundation
 public actor DraftCoordinator {
     private var store: (any DraftPort)?
     private var cache: [RoomID: String] = [:]
+    /// Bumped by `reset()`; a read still running for the previous account doesn't fill the cache.
+    private var generation = 0
 
     public init(store: (any DraftPort)? = nil) { self.store = store }
 
@@ -19,9 +21,17 @@ public actor DraftCoordinator {
     /// The draft of `room`: what was typed in this run, else what the store holds.
     public func draft(for room: RoomID) async -> String {
         if let text = cache[room] { return text }
-        guard let store, let text = try? await store.draft(for: room) else { return "" }
+        let started = generation
+        guard let store, let text = try? await store.draft(for: room), generation == started else { return "" }
         cache[room] = text
         return text
+    }
+
+    /// Forgets the signed-out account's drafts and detaches its store; the next account's store is attached later.
+    public func reset() {
+        generation += 1
+        store = nil
+        cache = [:]
     }
 
     /// Remembers `text` as the draft of `room`; blank text removes it. Writes are best effort.

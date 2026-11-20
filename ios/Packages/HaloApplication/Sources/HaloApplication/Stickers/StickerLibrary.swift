@@ -45,6 +45,8 @@ public actor StickerLibrary {
     private var lastWrite: ContinuousClock.Instant?
     private var trailing: Task<Void, Never>?
     private var dirty = false
+    /// Bumped by `reset()`; work that started for the previous account drops its results.
+    private var generation = 0
     private var broadcaster = SnapshotBroadcaster<Snapshot>()
 
     public init(
@@ -64,16 +66,35 @@ public actor StickerLibrary {
 
     /// Loads packs and prefs for the panel opened in `currentRoom`. Safe to call again to refresh.
     public func load(currentRoom: RoomID?) async {
+        let started = generation
         phase = .loading
         publish()
-        if let remote = try? await prefsStore.load() { prefs = prefs.merged(with: remote) }
+        let remote = try? await prefsStore.load()
+        guard generation == started else { return }
+        if let remote { prefs = prefs.merged(with: remote) }
         do {
             let result = try await packSource.packs(currentRoom: currentRoom)
+            guard generation == started else { return }
             allPacks = result.packs.filter(\.offersStickers)
             phase = result.failedSources > 0 ? .partial : .ready
         } catch {
+            guard generation == started else { return }
             phase = allPacks.isEmpty ? .failed : .partial
         }
+        publish()
+    }
+
+    /// Forgets everything of the signed-out account, so none of it is shown to, or written into, the next one. A load or
+    /// write still running for the old account drops its result. Call `flush()` first to keep a pending write.
+    public func reset() {
+        generation += 1
+        trailing?.cancel()
+        trailing = nil
+        prefs = StickerPrefs()
+        allPacks = []
+        phase = .unloaded
+        lastWrite = nil
+        dirty = false
         publish()
     }
 
@@ -121,13 +142,16 @@ public actor StickerLibrary {
     /// not merged here: a union could never carry a removal. (Known limit: a device with a stale list can bring a removed
     /// favourite back when it next loads and writes.)
     private func write() async {
+        let started = generation
         lastWrite = clock()
         dirty = false
         do {
-            if let remote = try await prefsStore.load() { prefs = prefs.merged(with: StickerPrefs(recents: remote.recents)) }
+            let remote = try await prefsStore.load()
+            guard generation == started else { return }
+            if let remote { prefs = prefs.merged(with: StickerPrefs(recents: remote.recents)) }
             try await prefsStore.save(prefs)
         } catch {
-            dirty = true  // kept for the next write
+            if generation == started { dirty = true }  // kept for the next write
         }
     }
 
