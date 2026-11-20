@@ -13,6 +13,11 @@ if [[ ! -f "$env_file" ]]; then
   echo "contract-test: $env_file not found (see docs/development/AUTONOMOUS_LOOP.md §6)" >&2
   exit 2
 fi
+
+# A full run, or the encryption test, needs a fresh E2EE account (recovery can be set up once) and a current room count.
+if [[ $# -eq 0 || " $* " == *" encryption "* || " $* " == *" roomList "* ]]; then
+  "$(dirname "$0")/../infra/dev/create-fixtures.py" --new-e2ee >/dev/null
+fi
 set -a
 # shellcheck disable=SC1090
 source "$env_file"
@@ -25,7 +30,7 @@ fi
 
 only=()
 if [[ $# -eq 0 ]]; then
-  only=(-only-testing:HaloMatrixAdapterTests/AdapterContractTests)
+  only=(-only-testing:HaloMatrixAdapterTests/AdapterContractTests -only-testing:HaloMatrixAdapterTests/ClassicSyncEvidenceTests)
 else
   for name in "$@"; do only+=("-only-testing:HaloMatrixAdapterTests/AdapterContractTests/${name%()}()"); done
 fi

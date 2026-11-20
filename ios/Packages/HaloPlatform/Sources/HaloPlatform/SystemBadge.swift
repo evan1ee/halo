@@ -11,6 +11,13 @@ public struct SystemBadge: BadgePort {
 
     public init(suiteName: String) { attention = AttentionCache(suiteName: suiteName) }
 
+    public func lastAttention() async -> Set<RoomID> { Set(attention.rooms().compactMap { try? RoomID($0) }) }
+
+    public func reset() async {
+        attention.store([])
+        try? await UNUserNotificationCenter.current().setBadgeCount(0)
+    }
+
     public func update(attentionRooms: Set<RoomID>) async {
         attention.store(attentionRooms)
         // Notifications of rooms that no longer need attention are removed from Notification Center (read here, PUSH §5).

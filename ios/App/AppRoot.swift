@@ -117,6 +117,7 @@ final class AppRoot {
     private func resetAccountState() async {
         await receipts.reset()
         await badge.setAudit(nil)
+        await badge.reset()
         await drafts.reset()
         await stickers.reset()
     }

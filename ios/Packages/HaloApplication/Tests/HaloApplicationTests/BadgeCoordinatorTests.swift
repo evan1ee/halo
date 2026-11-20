@@ -205,4 +205,43 @@ struct BadgeCoordinatorTests {
         #expect(event.roomHash == "!abc123" && event.appVersion == "1.0" && !event.inputsJSON.contains("x.org"))
         #expect(try await store.unexplainedCount() == 0)
     }
+
+    private func started(preloaded: Set<String>) async throws -> (FakeRoomListPort, FakeBadgePort, BadgeCoordinator) {
+        let rooms = FakeRoomListPort()
+        let coordinator = RoomListCoordinator(port: rooms)
+        let port = FakeBadgePort()
+        port.preload(Set(try preloaded.map { try RoomID($0) }))
+        let badge = BadgeCoordinator(rooms: coordinator, records: FakeNotificationRecords(), port: port)
+        await badge.begin()
+        await coordinator.start()
+        return (rooms, port, badge)
+    }
+
+    @Test("an empty or partial first evaluation never erases the stored attention (P0): rooms not shown yet keep their state")
+    func partialEvaluationKeepsStoredAttention() async throws {
+        let (rooms, port, badge) = try await started(preloaded: ["!a:x.org", "!b:x.org"])
+        // The list is empty at launch: nothing is written that is smaller than what is stored.
+        try rooms.emit(.reset([]))
+        #expect(await eventually { !port.history.isEmpty && port.history.count >= 2 })
+        #expect(port.history.allSatisfy { $0.count == 2 })
+        // Only room A has loaded, and it is read: A drops, B (not shown yet) stays.
+        try rooms.emit(.reset([try summary("!a:x.org")]))
+        #expect(await eventually { port.badge == 1 })
+        #expect(await badge.attentionRooms == [try RoomID("!b:x.org")])
+        // B loads and is read: now it drops too.
+        try rooms.emit(.reset([try summary("!a:x.org"), try summary("!b:x.org")]))
+        #expect(await eventually { port.badge == 0 })
+    }
+
+    @Test("a room that was shown and then leaves the list is dropped, not carried; reset clears the stored set explicitly")
+    func shownThenGone() async throws {
+        let (rooms, port, badge) = try await started(preloaded: [])
+        try rooms.emit(.reset([try summary("!a:x.org", notify: 1), try summary("!b:x.org", notify: 1)]))
+        #expect(await eventually { port.badge == 2 })
+        try rooms.emit(.reset([try summary("!b:x.org", notify: 1)]))
+        #expect(await eventually { port.badge == 1 })
+        await badge.reset()
+        #expect(port.badge == 0 && port.history.last == [])
+        #expect(await port.lastAttention().isEmpty)
+    }
 }

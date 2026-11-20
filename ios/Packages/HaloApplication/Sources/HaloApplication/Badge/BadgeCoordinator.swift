@@ -18,6 +18,12 @@ public actor BadgeCoordinator {
     private let receipts: ReadReceiptCoordinator?
     private var audit: Audit?
     private var audited: [RoomID: Set<AuditFinding>] = [:]
+    /// Rooms that needed attention at the last write (loaded from the port at launch) and that this run's room list
+    /// hasn't shown yet. They keep their state until the list shows them: an evaluation over a partial or empty list must
+    /// never erase a valid earlier result (V-RS-7 / D73, P0).
+    private var carried: Set<RoomID> = []
+    /// Rooms the list has shown in this run; once shown, a room that disappears from the list is dropped, not carried.
+    private var seen: Set<RoomID> = []
 
     /// Where the read-state auditor writes (LOGGING_AND_DIAGNOSTICS §2): debug and TestFlight builds only.
     public struct Audit: Sendable {
@@ -49,6 +55,7 @@ public actor BadgeCoordinator {
     /// Starts following the room list and the records. Call once at launch.
     public func begin() async {
         guard tasks.isEmpty else { return }
+        carried = await port.lastAttention()
         let roomInputs = await rooms.readInputs()
         let changes = records.changes()
         var follow: [Task<Void, Never>] = []
@@ -67,6 +74,24 @@ public actor BadgeCoordinator {
     public func setAudit(_ audit: Audit?) {
         self.audit = audit
         audited = [:]
+    }
+
+    /// Drops the stored state of `room` (the user left it) so it isn't carried over.
+    public func forget(_ room: RoomID) async {
+        carried.remove(room)
+        seen.insert(room)
+        await recompute()
+    }
+
+    /// Account change or sign-out: forgets everything, including the stored set, and clears the badge.
+    public func reset() async {
+        carried = []
+        seen = []
+        inputs = []
+        attentionRooms = []
+        hasWritten = false
+        audited = [:]
+        await port.reset()
     }
 
     /// The badge value for the current states.
@@ -133,7 +158,10 @@ public actor BadgeCoordinator {
     private func recompute() async {
         let stored = records.all()
         await runAudit(Self.evaluated(inputs: inputs, records: stored, positions: positions))
-        let attention = Self.attention(inputs: inputs, records: stored, positions: positions)
+        seen.formUnion(inputs.map(\.roomID))
+        var attention = Self.attention(inputs: inputs, records: stored, positions: positions)
+        attention.formUnion(carried.subtracting(seen))
+        carried = attention
         guard attention != attentionRooms || !hasWritten else { return }
         hasWritten = true
         attentionRooms = attention
