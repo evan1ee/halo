@@ -36,6 +36,7 @@ public struct RoomListView: View {
                                 .accessibilityIdentifier("invite-\(row.name)")
                             } else {
                             Button { onSelect(row.id) } label: {
+                                VStack(alignment: .leading, spacing: 2) {
                                 HStack {
                                     if row.isFavourite { Image(systemName: "star.fill").foregroundStyle(.yellow).imageScale(.small).accessibilityLabel("Favourite") }
                                     Text(row.name).fontWeight(row.hasUnread ? .bold : .regular)
@@ -43,6 +44,11 @@ public struct RoomListView: View {
                                     Spacer()
                                     if let when = row.lastActivity { Text(Self.activityText(when)).font(.caption).foregroundStyle(.secondary) }
                                     indicator(row.display)
+                                }
+                                if let preview = row.preview {
+                                    Text(preview).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                                        .accessibilityIdentifier("preview-\(row.name)")
+                                }
                                 }
                             }
                             .foregroundStyle(.primary)

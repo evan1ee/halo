@@ -23,11 +23,14 @@ public final class RoomListViewModel {
         public let isMuted: Bool
         /// The time of the newest event; `nil` for a room without one.
         public let lastActivity: Date?
+        /// The newest message as one line ("Ann: see you at 5"); `nil` when there is none to show.
+        public let preview: String?
 
         public init(
             id: RoomID, name: String, display: DisplayCount = .none, hasUnread: Bool = false, isInvite: Bool = false,
-            isFavourite: Bool = false, isMuted: Bool = false, lastActivity: Date? = nil
+            isFavourite: Bool = false, isMuted: Bool = false, lastActivity: Date? = nil, preview: String? = nil
         ) {
+            self.preview = preview
             self.isFavourite = isFavourite
             self.isMuted = isMuted
             self.lastActivity = lastActivity
@@ -184,7 +187,8 @@ public final class RoomListViewModel {
                     localIntent: [positions[room.id], room.ownReadThrough].compactMap { $0 }.max()))
                 return Row(
                     id: room.id, name: room.name ?? "Unnamed room", display: state.display, hasUnread: state.hasUnread, isInvite: room.membership == .invited,
-                    isFavourite: room.isFavourite, isMuted: room.read.mode == .mute, lastActivity: room.latestEvent?.timestamp)
+                    isFavourite: room.isFavourite, isMuted: room.read.mode == .mute, lastActivity: room.latestEvent?.timestamp,
+                    preview: room.preview?.line(isDirect: room.isDirect))
             }
             let matching = zip(await rooms.rooms, rows).filter { Self.includes(filter, room: $0.0, row: $0.1) }.map(\.1)
             content = .loaded(count: filter == .all ? count : matching.count, rows: matching)

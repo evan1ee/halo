@@ -18,11 +18,14 @@ public struct RoomSummary: Sendable, Equatable, Identifiable {
     public let ownReadThrough: Date?
     /// The user marked the room as a favourite (room tag `m.favourite`).
     public let isFavourite: Bool
+    /// The newest message as one line for the room list (ROOM_LIST FR-3); `nil` when the newest event has no text form.
+    public let preview: LatestMessagePreview?
 
     public init(
         id: RoomID, name: String?, isDirect: Bool, isEncrypted: Bool, membership: Membership, read: RoomReadCounts = .none,
-        latestEvent: LatestEventRef? = nil, ownReadThrough: Date? = nil, isFavourite: Bool = false
+        latestEvent: LatestEventRef? = nil, ownReadThrough: Date? = nil, isFavourite: Bool = false, preview: LatestMessagePreview? = nil
     ) {
+        self.preview = preview
         self.isFavourite = isFavourite
         self.latestEvent = latestEvent
         self.ownReadThrough = ownReadThrough
@@ -32,6 +35,28 @@ public struct RoomSummary: Sendable, Equatable, Identifiable {
         self.isDirect = isDirect
         self.isEncrypted = isEncrypted
         self.membership = membership
+    }
+}
+
+/// One line of the newest message: its text (or a label such as "Photo") and who wrote it.
+public struct LatestMessagePreview: Sendable, Equatable {
+    public let text: String
+    /// The sender's display name; `nil` when unknown.
+    public let senderName: String?
+    public let isOwn: Bool
+
+    public init(text: String, senderName: String?, isOwn: Bool) {
+        self.text = text
+        self.senderName = senderName
+        self.isOwn = isOwn
+    }
+
+    /// The line a row shows: "You: …" for the user's own messages, "Name: …" in a group, the bare text in a direct chat.
+    public func line(isDirect: Bool) -> String {
+        if isOwn { return "You: " + text }
+        if isDirect { return text }
+        if let senderName, !senderName.isEmpty { return senderName + ": " + text }
+        return text
     }
 }
 

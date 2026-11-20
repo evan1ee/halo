@@ -29,4 +29,33 @@ struct LatestEventMappingTests {
         #expect(map(.none) == nil)
         #expect(map(.remoteInvite(timestamp: 1_000, inviter: "@b:x", inviterProfile: .pending)) == nil)
     }
+
+    private func message(_ type: MessageType, body: String = "ignored") -> TimelineItemContent {
+        .msgLike(content: MsgLikeContent(
+            kind: .message(content: MessageContent(msgType: type, body: body, isEdited: false, mentions: nil)),
+            inReplyTo: nil, threadRoot: nil, threadSummary: nil))
+    }
+
+    @Test("a text message previews its first line; notices and emotes too; media shows a label")
+    func previewText() {
+        func text(_ body: String) -> MessageType { .text(content: TextMessageContent(body: body, formatted: nil)) }
+        #expect(MatrixRoomListPort.previewText(message(text("hello\nsecond line"))) == "hello")
+        #expect(MatrixRoomListPort.previewText(message(.notice(content: NoticeMessageContent(body: "done", formatted: nil)))) == "done")
+        #expect(MatrixRoomListPort.previewText(message(.emote(content: EmoteMessageContent(body: "waves", formatted: nil)))) == "* waves")
+        #expect(MatrixRoomListPort.previewText(message(.other(msgtype: "x.custom", body: "custom body"))) == "custom body")
+        let redacted = TimelineItemContent.msgLike(content: MsgLikeContent(kind: .redacted, inReplyTo: nil, threadRoot: nil, threadSummary: nil))
+        #expect(MatrixRoomListPort.previewText(redacted) == "Message deleted")
+        #expect(MatrixRoomListPort.previewText(.callInvite) == nil)
+    }
+
+    @Test("the preview carries the sender's display name and whether it is the user's own; invites and empty rooms have none")
+    func previewSender() {
+        let content = message(.text(content: TextMessageContent(body: "hi", formatted: nil)))
+        let ready = ProfileDetails.ready(displayName: "Ann", displayNameAmbiguous: false, avatarUrl: nil, status: nil, call: nil)
+        #expect(MatrixRoomListPort.preview(.remote(timestamp: 1, sender: "@a:x", isOwn: false, profile: ready, content: content)) == LatestMessagePreview(text: "hi", senderName: "Ann", isOwn: false))
+        #expect(MatrixRoomListPort.preview(.remote(timestamp: 1, sender: "@a:x", isOwn: false, profile: .pending, content: content))?.senderName == nil)
+        #expect(MatrixRoomListPort.preview(.local(timestamp: 1, sender: "@a:x", profile: .pending, content: content, state: .isSending))?.isOwn == true)
+        #expect(MatrixRoomListPort.preview(.none) == nil)
+        #expect(MatrixRoomListPort.preview(.remoteInvite(timestamp: 1, inviter: nil, inviterProfile: .pending)) == nil)
+    }
 }

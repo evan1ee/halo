@@ -169,3 +169,22 @@ struct RoomListFilterTests {
         #expect(port.modeChanges == [.allMessages])
     }
 }
+
+@MainActor
+@Suite("RoomListViewModel previews")
+struct RoomListPreviewTests {
+    @Test("a row shows the newest message as one line: the bare text in a direct chat, the sender's name in a group")
+    func previewLines() async throws {
+        let ann = RoomSummary(id: try RoomID("!a:x.org"), name: "Ann", isDirect: true, isEncrypted: false, membership: .joined, preview: LatestMessagePreview(text: "see you", senderName: "Ann", isOwn: false))
+        let club = RoomSummary(id: try RoomID("!b:x.org"), name: "Club", isDirect: false, isEncrypted: false, membership: .joined, preview: LatestMessagePreview(text: "Photo", senderName: "Bob", isOwn: false))
+        let quiet = RoomSummary(id: try RoomID("!c:x.org"), name: "Quiet", isDirect: false, isEncrypted: false, membership: .joined)
+        let coordinator = RoomListCoordinator(port: FakeRoomListPort(rooms: [ann, club, quiet]))
+        let model = RoomListViewModel(session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()), rooms: coordinator)
+        await coordinator.start()
+        for await status in await coordinator.statuses() {
+            if case .loaded = status { await model.listChanged(status); break }
+        }
+        guard case .loaded(_, let rows) = model.content else { Issue.record("not loaded"); return }
+        #expect(rows.map(\.preview) == ["see you", "Bob: Photo", nil])
+    }
+}

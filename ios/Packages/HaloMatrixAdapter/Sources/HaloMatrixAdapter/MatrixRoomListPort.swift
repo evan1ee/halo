@@ -141,7 +141,8 @@ public final class MatrixRoomListPort: RoomListPort {
             read: read,
             latestEvent: latestEvent(await room.latestEvent()),
             ownReadThrough: await ownReadThrough(of: room, counts: read),
-            isFavourite: (try? await room.roomInfo())?.isFavourite ?? false
+            isFavourite: (try? await room.roomInfo())?.isFavourite ?? false,
+            preview: preview(await room.latestEvent())
         )
     }
 
@@ -193,6 +194,48 @@ public final class MatrixRoomListPort: RoomListPort {
         case .none, .remoteInvite: return nil
         case .remote(let timestamp, _, let isOwn, _, _): return LatestEventRef(timestamp: date(timestamp), senderIsSelf: isOwn)
         case .local(let timestamp, _, _, _, _): return LatestEventRef(timestamp: date(timestamp), senderIsSelf: true)
+        }
+    }
+
+    /// One line of the newest message. Messages show their text, media a label; a state change, call or unknown event has none.
+    static func preview(_ value: LatestEventValue) -> LatestMessagePreview? {
+        switch value {
+        case .none, .remoteInvite: return nil
+        case .remote(_, _, let isOwn, let profile, let content): return previewText(content).map { LatestMessagePreview(text: $0, senderName: displayName(profile), isOwn: isOwn) }
+        case .local(_, _, let profile, let content, _): return previewText(content).map { LatestMessagePreview(text: $0, senderName: displayName(profile), isOwn: true) }
+        }
+    }
+
+    static func displayName(_ profile: ProfileDetails) -> String? {
+        if case .ready(let name, _, _, _, _) = profile { return name }
+        return nil
+    }
+
+    static func previewText(_ content: TimelineItemContent) -> String? {
+        guard case .msgLike(let like) = content else { return nil }
+        func single(_ text: String) -> String {
+            text.split(whereSeparator: \.isNewline).first.map(String.init) ?? text
+        }
+        switch like.kind {
+        case .message(let message):
+            switch message.msgType {
+            case .text(let text): return single(text.body)
+            case .notice(let notice): return single(notice.body)
+            case .emote(let emote): return "* " + single(emote.body)
+            case .image: return "Photo"
+            case .video: return "Video"
+            case .audio: return "Audio"
+            case .file: return "File"
+            case .gallery: return "Photos"
+            case .location: return "Location"
+            case .other(_, let body): return single(body)
+            }
+        case .sticker: return "Sticker"
+        case .poll(let question, _, _, _, _, _, _): return "Poll: " + single(question)
+        case .redacted: return "Message deleted"
+        case .unableToDecrypt: return "Encrypted message"
+        case .liveLocation: return "Live location"
+        case .other: return nil
         }
     }
 
