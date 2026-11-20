@@ -138,6 +138,52 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
+    @Test("Mentions, members and unknown local echoes (uses HALO_DEV_STICKER_ROOM as a scratch room)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
+    func mentionsAndEchoes() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(
+                username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
+            on: details)
+        try await MatrixSyncPort(session: session).start()
+        let room = try RoomID(env["HALO_DEV_STICKER_ROOM"] ?? "")
+        var timeline: (any TimelineSession)?
+        for _ in 0..<60 {
+            if let opened = try? await MatrixTimelinePort(session: session).open(room: room) { timeline = opened; break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        let opened = try #require(timeline)
+        let stream = opened.items()
+
+        // The room has one member, the user; members() excludes the user.
+        #expect(try await opened.members().isEmpty)
+
+        // A mention becomes a link in the formatted body.
+        let me = try UserID("@\(env["HALO_DEV_USER"] ?? ""):halo.localhost")
+        let marker = UUID().uuidString.prefix(6)
+        try await opened.send(text: "hello @Tester \(marker)", mentions: [Mention(user: me, name: "Tester")])
+        let body: String? = try await within(seconds: 60) {
+            var items: [HaloDomain.TimelineItem] = []
+            for await diff in stream {
+                try ListReducer.apply(diff, to: &items)
+                for item in items {
+                    if case .event(let event) = item.content, event.isOwn, event.eventID != nil, case .text(let text, _) = event.kind, text.contains(String(marker)) {
+                        return event.formattedBody
+                    }
+                }
+            }
+            return nil
+        }
+        #expect(body?.contains("https://matrix.to/#/\(me.rawValue)") == true, "formatted body: \(body ?? "nil")")
+
+        // Retrying or aborting an echo that doesn't exist reports an error instead of crashing.
+        await #expect(throws: HaloError.notFound) { try await opened.retrySend(localID: "no-such-echo") }
+        await #expect(throws: HaloError.notFound) { try await opened.abortSend(localID: "no-such-echo") }
+        await opened.close()
+        try await session.logout()
+    }
+
     @Test("SyncPortContract")
     func sync() async throws {
         let session = port()

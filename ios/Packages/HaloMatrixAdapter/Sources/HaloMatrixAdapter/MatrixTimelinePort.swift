@@ -128,11 +128,13 @@ final class MatrixTimelineSession: TimelineSession {
     }
 
     func retrySend(localID: String) async throws(HaloError) {
-        do { guard try await timeline.retrySend(itemId: .transactionId(transactionId: localID), target: .event) else { throw HaloError.notFound } } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
+        // Purely local: the SDK reports an unknown echo as a generic error, which is `.notFound` here.
+        do { guard try await timeline.retrySend(itemId: .transactionId(transactionId: localID), target: .event) else { throw HaloError.notFound } } catch { throw HaloError.notFound }
     }
 
     func abortSend(localID: String) async throws(HaloError) {
-        do { guard try await timeline.abortSend(itemId: .transactionId(transactionId: localID), target: .event) else { throw HaloError.notFound } } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
+        // Purely local: the SDK reports an unknown echo as a generic error, which is `.notFound` here.
+        do { guard try await timeline.abortSend(itemId: .transactionId(transactionId: localID), target: .event) else { throw HaloError.notFound } } catch { throw HaloError.notFound }
     }
 
     func close() async {}

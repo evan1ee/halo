@@ -32,8 +32,8 @@ Everything in `git log origin/main..HEAD`. Key paths: `ios/Packages/HaloApplicat
 
 ## 5. Outstanding issues
 - Stickers: V-ST-1 resolved (option B), V-ST-2 partly (token refresh on 401 not exercised). Verified against `infra/dev` by contract test `stickers` (env `HALO_DEV_STICKER_ROOM`: a room with `m.room.image_pack` `cats` {wave, dance} enabled in `m.image_pack.rooms`; throwaway account `stickertester` created locally). Not built: long-press preview/animation (FR-5, FR-9), pack creation (FR-7), legacy `im.ponies.*` packs (V-ST-3), privacy notice, "unavailable pack" UI. Real sticker images were not loaded (the fixture mxc URLs have no media).
-- Mentions are unverified against a server/Element Web (pill rendering, `m.mentions`, `Room.members()` cost in large rooms); no adapter contract test.
-- `retrySend`/`abortSend` are unverified against a real server (no contract test in `AdapterContractTests`; only the fake and coordinator tests).
+- Mentions: the formatted body link is verified against `infra/dev` (`mentionsAndEchoes`); `m.mentions`, Element Web pill rendering and `Room.members()` cost in large rooms are not.
+- `retrySend`/`abortSend` verified only for an unknown echo (contract test `mentionsAndEchoes`: `.notFound`); a real failed echo was not retried against the server.
 - Opening a room now clears `m.marked_unread` (`ReadReceiptCoordinator.roomOpened`, called by `TimelineViewModel`; the adapter skips the write when the flag is already clear). Unverified on a device/server.
 - S01–S22 validate Halo against our model of Synapse, not against Synapse; the model's server rules (counts per mode, edits not notifying, own message as implicit receipt) are unverified.
 - Unverified on a device: file protection class on `halo.sqlite` (simulator reports none), V-RS-1 (do own-receipt changes trigger room-list updates?), cost of `loadOrFetchEvent` lookups, kill-and-relaunch resend, NSE access to the database, `deletePusher` (no contract test), paging cost for large accounts, the swipe UI and the unread indicators, the `latestEvent` mapping (no unit test).
