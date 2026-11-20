@@ -1,13 +1,13 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-20 · Branch: `feat/m3-classic-sync-evidence` · PRs #1–#14 merged
+Last updated: 2026-11-20 · Branch: `feat/m3-classic-sync-adapter` · PRs #1–#15 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
 - **Milestone:** M0 done; M1 largely done; M2 done except media sending and the offline-send test; **M3 (read-state engine) in progress**. Dev Mac: Xcode 27.2, Swift 6.4.2, iPhone 16.
 - **Checks:** `scripts/prepush.sh` passes (SwiftLint not configured, skipped); `scripts/prepush.sh` now also builds `Halo-Debug` for the simulator. All 13 contract tests (`infra/dev`) pass, none skipped (`scripts/contract-test.sh` after `infra/dev/create-fixtures.py`).
-- **CI:** PRs #1–#14 merged. CI runs only the Linux-portable packages (Foundation, Domain, TestSupport, Application): adapter, persistence, platform, features and the app are tested only by `prepush.sh` on a Mac. `licenses` runs only on SDK/inventory changes.
+- **CI:** PRs #1–#15 merged. CI runs only the Linux-portable packages (Foundation, Domain, TestSupport, Application): adapter, persistence, platform, features and the app are tested only by `prepush.sh` on a Mac. `licenses` runs only on SDK/inventory changes.
 
 ## 2. Completed work (what exists now)
 - Layers: HaloFoundation, HaloDomain (ports, pure `ReadStatePolicy`), HaloApplication (coordinators), HaloPersistence (GRDB: `read_intent`, file protection set), HaloMatrixAdapter (only MatrixRustSDK importer), HaloPlatform, HaloTestSupport (fakes), Features/{Auth,RoomList,Timeline}. Composition root `ios/App/AppRoot.swift`; project generated from `ios/project.yml` (XcodeGen, scheme `Halo-Debug`).
@@ -29,12 +29,12 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 - Room list swipe: leading "Read" (`markRoomRead`), trailing "Unread" (`setMarkedUnread`).
 
 ## 3. Key decisions
-**D73 (founder): V-RS-7 closed.** Classic Matrix sync is the authoritative unread evidence on the production path; push records supplement it; server zero never marks read by itself; a partial or empty evaluation never overwrites the stored attention set; badge from reconciled state; no SDK/Synapse change unless proven necessary; unread correctness and badge persistence are **P0**. Verified: the SDK exposes per-room evidence over `syncV2` (`ClassicSyncEvidenceTests`); classic sync does not solve the NSE's background state (records + cached set stay its inputs). The adapter still runs sliding sync (counts 0) until the P0 queue item "Classic sync in the adapter" lands.
+**D73 (founder): V-RS-7 closed.** Classic Matrix sync is the authoritative unread evidence on the production path; push records supplement it; server zero never marks read by itself; a partial or empty evaluation never overwrites the stored attention set; badge from reconciled state; no SDK/Synapse change unless proven necessary; unread correctness and badge persistence are **P0**. Verified: the SDK exposes per-room evidence over `syncV2` (`ClassicSyncEvidenceTests`); classic sync does not solve the NSE's background state (records + cached set stay its inputs). **Implemented by D74:** the adapter runs classic sync (own `syncOnceV2` loop, 8 s long poll), room list from `client.rooms()` plus the rooms each response changed; verified live in the simulator (unread `@1` and bold within seconds).
 
-Full list: docs/DECISION_LOG.md (D1–D73), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
+Full list: docs/DECISION_LOG.md (D1–D74), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-`BadgePort` (+`lastAttention`, `reset`), `SystemBadge`, `FakeBadgePort`, `BadgeCoordinator` (carry-over, `forget`, `reset`), `AppRoot`, `ClassicSyncEvidenceTests` (new), `infra/dev/create-fixtures.py` (peer account and unread room), tests, `OPEN_QUESTIONS.md` (V-RS-7 closed), `DECISION_LOG.md` (D73), `ROADMAP.md`, `HANDOFF.md`.
+`MatrixSessionPort` (classic loop, `syncChanges`, `.none` sliding sync), `MatrixSyncPort`, `MatrixRoomListPort` (rewritten), `MatrixTimelinePort` (initial page), `RoomListViewModel` (read-input refresh), contract tests (`createPack` leaves its room; runner refreshes fixtures), `docs/DECISION_LOG.md` (D74), `ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
 - Stickers: V-ST-1 resolved (option B), V-ST-2 partly (token refresh on 401 not exercised). Verified against `infra/dev` by contract test `stickers` (env `HALO_DEV_STICKER_ROOM`: a room with `m.room.image_pack` `cats` {wave, dance} enabled in `m.image_pack.rooms`; throwaway account `stickertester` created locally). Not built: long-press preview/animation (FR-5, FR-9), editing/deleting packs, hiding pack rooms from the room list, legacy `im.ponies.*` packs (V-ST-3), privacy notice, "unavailable pack" UI. Real sticker images were not loaded (the fixture mxc URLs have no media).
@@ -48,6 +48,7 @@ Full list: docs/DECISION_LOG.md (D1–D73), docs/adr/. Most relevant now: D70 au
 - D6 verified in the simulator (iOS 26.0, `infra/dev`): `onScrollVisibilityChange` fires for `List` rows; the receipt followed the newest visible message ("D6 line 4" on opening, "D6 line 15" after scrolling). Not an automated UI test. Observed: a room with 40 unread messages opens at its oldest events ("This is the start of the conversation"), not at the first unread or the bottom; TIMELINE.md §1 specifies landing at the first unread message (or the bottom): queued in ROADMAP M2 leftovers. The room list shows no unread indicator for it (V-RS-7: sliding sync counts are 0).
 - `read_intent`: `receipt_type` always `read`; failed sends count in `attempts`/`last_error` and are logged; confirmation rules (a)/(b) not built (D72), sent intents expire after 7 days.
 - Timeline/Media contract tests need a fixture room (`HALO_DEV_TIMELINE_ROOM`: first, second, notice, waves, redacted message, blue.png). Run contracts with `TEST_RUNNER_HALO_DEV_*`; the server value must be `http://localhost:8008`. Parallel contract tests on one account hang (suite is serialized).
+- Classic sync (D74) not yet measured on a large account (first `/sync` has no filter: all members, default timeline); `loadsAllPages`/paging in `RoomListCoordinator` is now a no-op; sync errors other than retryable network end the loop with `.failed`; cancelling the loop doesn't interrupt the SDK long poll (8 s).
 - Open validation: V-CI-2, V-SQL-1, V-APPLE-1, V-NSE-*, V-PUSH-1/3/5, V-RS-1/5 (V-RS-7 closed by D73).
 - Docker CLI hangs on the `osxkeychain` helper; use a throwaway `DOCKER_CONFIG`.  Compose is missing under a throwaway config: use `docker exec`/`docker restart`.
 - Contract tests: `infra/dev/create-fixtures.py` creates accounts/rooms and writes `~/.config/halo-dev/contract.env`; re-run it before a full `scripts/contract-test.sh` (room count) and with `--new-e2ee` before the Encryption test (recovery can be set up once per account). Verified: 13 of 13 pass (`pusher` and `ClassicSyncEvidenceTests` added).
@@ -60,7 +61,7 @@ Full list: docs/DECISION_LOG.md (D1–D73), docs/adr/. Most relevant now: D70 au
 
 ## 6. Next steps
 The queue is docs/ROADMAP.md §"Remaining work", worked by the loop in docs/development/AUTONOMOUS_LOOP.md. Its head:
-1. **P0** classic sync in the adapter (ROADMAP M3), then S01–S22 on it; M4 items after.
+1. **P0** S01–S22 on classic sync (rest of the scenario driver, encrypted rooms), re-evaluate G-UNREAD; measure the first-sync cost on a large account; M4 items after.
 
 ## 7. Next Session Prompt
 ```text

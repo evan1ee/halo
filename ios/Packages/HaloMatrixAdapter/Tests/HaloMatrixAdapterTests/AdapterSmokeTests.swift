@@ -1,3 +1,4 @@
+import Foundation
 import HaloDomain
 import HaloFoundation
 import MatrixRustSDK
@@ -58,10 +59,21 @@ struct UTDReasonTests {
 
 @Suite("MatrixRoomListPort mapping")
 struct RoomListMappingTests {
-    @Test("filters map to SDK kinds; unread is explicitly unsupported until M1")
+    @Test("unread is explicitly unsupported until M1; every other filter is accepted")
     func filters() throws {
-        #expect(try MatrixRoomListPort.kind(for: .invites) == .invite)
+        for filter in [RoomListFilter.all, .people, .rooms, .favourites, .invites] { try MatrixRoomListPort.kind(for: filter) }
         #expect(throws: HaloError.unsupported("FILTER_UNREAD_M1")) { try MatrixRoomListPort.kind(for: .unread) }
+    }
+
+    @Test("rooms are ordered invites first, then newest latest event first, rooms without events last, ties by id")
+    func ordering() throws {
+        func room(_ id: String, _ time: Int?, invited: Bool = false) throws -> RoomSummary {
+            RoomSummary(
+                id: try RoomID(id), name: id, isDirect: false, isEncrypted: false, membership: invited ? .invited : .joined,
+                latestEvent: time.map { LatestEventRef(timestamp: Date(timeIntervalSince1970: Double($0)), senderIsSelf: false) })
+        }
+        let shuffled = [try room("!e:x", nil), try room("!old:x", 10), try room("!new:x", 20), try room("!inv:x", nil, invited: true), try room("!d:x", nil)]
+        #expect(shuffled.sorted(by: MatrixRoomListPort.order).map(\.id.rawValue) == ["!inv:x", "!new:x", "!old:x", "!d:x", "!e:x"])
     }
 
     @Test("memberships map one to one")

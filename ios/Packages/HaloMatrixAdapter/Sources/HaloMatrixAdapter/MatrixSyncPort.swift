@@ -4,12 +4,12 @@ import HaloFoundation
 import MatrixRustSDK
 import Synchronization
 
-/// `SyncPort` over the SDK `SyncService` (SYNC_ENGINE §1). One state observer is kept for the port's life.
+/// `SyncPort` over the classic sync loop of `MatrixSessionPort` (D73, V-RS-7; SYNC_ENGINE §1). One status observer is kept for the port's life.
 public final class MatrixSyncPort: SyncPort {
     private struct State {
         var status: SyncStatus = .idle
         var continuations: [UUID: AsyncStream<SyncStatus>.Continuation] = [:]
-        var observer: TaskHandle?
+        var observer: UUID?
     }
 
     private let session: MatrixSessionPort
@@ -47,12 +47,12 @@ public final class MatrixSyncPort: SyncPort {
 
     /// (Re)subscribes to the current sync service; the session (and its service) may have changed since the last start.
     private func observe() async throws(HaloError) {
-        let handle = try await session.observeSync { [weak self] sdkState in self?.publish(Self.map(sdkState)) }
+        let handle = await session.observeSync { [weak self] status in self?.publish(status) }
         let previous = state.withLock { state in
             defer { state.observer = handle }
             return state.observer
         }
-        previous?.cancel()
+        if let previous { await session.unobserveSync(previous) }
     }
 
     private func publish(_ status: SyncStatus) {
@@ -61,15 +61,5 @@ public final class MatrixSyncPort: SyncPort {
             return Array(state.continuations.values)
         }
         for continuation in continuations { continuation.yield(status) }
-    }
-
-    static func map(_ state: SyncServiceState) -> SyncStatus {
-        switch state {
-        case .idle: .idle
-        case .running: .running
-        case .offline: .offline
-        case .error: .failed
-        case .terminated: .stopped
-        }
     }
 }

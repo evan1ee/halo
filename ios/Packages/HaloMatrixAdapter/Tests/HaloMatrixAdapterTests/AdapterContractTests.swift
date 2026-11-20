@@ -282,6 +282,8 @@ struct AdapterContractTests {
         await #expect(throws: HaloError.invalidInput("DUPLICATE_SHORTCODE")) {
             _ = try await creation.createPack(name: "x", images: [images[0], images[0]]) { _, _ in }
         }
+        // Leave the pack room again: later tests expect the account to be in HALO_DEV_ROOMS rooms.
+        try await (try await session.room(ref.room)).leave()
         try await session.logout()
     }
 

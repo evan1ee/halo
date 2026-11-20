@@ -25,7 +25,10 @@ public actor MatrixSessionPort: SessionPort {
     private let sendsMessages: Bool
     private let lightweightRuntime: Bool
     private var client: Client?
-    private var syncService: SyncService?
+    private var syncTask: Task<Void, Never>?
+    private var stoppingTask: Task<Void, Never>?
+    private var statusObservers: [UUID: @Sendable (SyncStatus) -> Void] = [:]
+    private var changeObservers: [UUID: AsyncStream<SyncChange>.Continuation] = [:]
     private var storeID: String?
     private var delegate: RefreshDelegate?
     private var events: [UUID: AsyncStream<SessionEvent>.Continuation] = [:]
@@ -105,7 +108,7 @@ public actor MatrixSessionPort: SessionPort {
             let sdkSession = Session(
                 accessToken: payload.accessToken, refreshToken: payload.refreshToken, userId: payload.userID,
                 deviceId: payload.deviceID, homeserverUrl: payload.homeserverURL, oauthData: payload.oauthData,
-                slidingSyncVersion: .native)
+                slidingSyncVersion: .none)
             try await client.restoreSession(session: sdkSession)
             await adopt(client, storeID: payload.storeID, session: sdkSession)
         } catch { throw ErrorMapper.map(error) }
@@ -114,8 +117,7 @@ public actor MatrixSessionPort: SessionPort {
     public func logout() async throws(HaloError) {
         let client = self.client
         let storeID = self.storeID
-        await syncService?.stop()
-        syncService = nil
+        await stopSync()
         self.client = nil
         self.storeID = nil
         delegate = nil
@@ -138,35 +140,98 @@ public actor MatrixSessionPort: SessionPort {
         return stream
     }
 
-    // MARK: Shared with the room list
+    // MARK: Classic sync (V-RS-7 / D73)
 
-    /// The SDK sync service, created on first use but not started: only `MatrixSyncPort` starts and stops it.
-    private func sdkSyncService() async throws(HaloError) -> SyncService {
-        guard let client else { throw .unauthorized(soft: false) }
-        if let syncService { return syncService }
-        do {
-            let service = try await client.syncService().finish()
-            syncService = service
-            return service
-        } catch { throw ErrorMapper.map(error) }
+    /// The rooms one sync response touched (their ids), so the room list refreshes only those.
+    struct SyncChange: Sendable {
+        let joined: Set<String>
+        let invited: Set<String>
+        let left: Set<String>
     }
 
-    /// The room list service. It delivers data once the sync loop runs (`SyncCoordinator`).
-    func roomListService() async throws(HaloError) -> RoomListService {
-        try await sdkSyncService().roomListService()
-    }
-
+    /// Starts the classic `/sync` loop (`Client.syncOnceV2`, sliding sync off): the unread evidence is the server's counts
+    /// plus the SDK's own, per room. Own loop, not `Client.syncV2`, so errors and backoff are visible: a retryable error
+    /// reports `.offline` and retries; any other ends the loop with `.failed` (`SyncCoordinator` restarts it).
     func startSync() async throws(HaloError) {
-        let service = try await sdkSyncService()
-        await service.start()
+        guard let client else { throw .unauthorized(soft: false) }
+        guard syncTask == nil else { return }
+        // A loop that was stopped may still be inside its long poll; two loops must never overlap.
+        let previous = stoppingTask
+        syncTask = Task { [weak self] in
+            await previous?.value
+            guard !Task.isCancelled else { return }
+            await self?.runSync(client)
+        }
     }
 
-    func stopSync() async { await syncService?.stop() }
-
-    /// Subscribes to the sync service's state; the handle must be kept alive by the caller.
-    func observeSync(_ onUpdate: @escaping @Sendable (SyncServiceState) -> Void) async throws(HaloError) -> TaskHandle {
-        try await sdkSyncService().state(listener: SyncStateListener(onUpdate))
+    /// Cancels the loop and returns once it has ended or after a short grace period: the SDK call in flight is a long
+    /// poll (up to 30 s) that may not be interruptible, and a sign-out or a pause must not wait for it. A later `startSync`
+    /// waits for the old loop to end before it begins.
+    func stopSync() async {
+        guard let task = syncTask else { return }
+        syncTask = nil
+        task.cancel()
+        stoppingTask = task
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await task.value }
+            group.addTask { try? await Task.sleep(for: .seconds(1)) }
+            await group.next()
+            group.cancelAll()
+        }
     }
+
+    /// The server long-poll. Cancelling the task does not interrupt the SDK call, and `client.logout()` waits for it, so a
+    /// short poll bounds how long a sign-out or a restart can wait; the cost is one empty request per interval while the app is open.
+    static let longPollMilliseconds: UInt64 = 8_000
+
+    private func runSync(_ client: Client) async {
+        var backoff = Duration.seconds(1)
+        var first = true
+        while !Task.isCancelled {
+            do {
+                let response = try await client.syncOnceV2(settings: SyncSettingsV2(timeoutMs: first ? 0 : Self.longPollMilliseconds, fullState: false))
+                if Task.isCancelled { return }
+                first = false
+                backoff = .seconds(1)
+                publish(status: .running)
+                publish(change: SyncChange(joined: Set(response.rooms.joined), invited: Set(response.rooms.invited), left: Set(response.rooms.left)))
+            } catch {
+                if Task.isCancelled { return }
+                let mapped = ErrorMapper.map(error)
+                guard mapped.isRetryable else {
+                    publish(status: .failed)
+                    syncTask = nil
+                    return
+                }
+                publish(status: .offline)
+                try? await Task.sleep(for: backoff)
+                backoff = min(backoff * 2, .seconds(60))
+            }
+        }
+    }
+
+    private func publish(status: SyncStatus) { for observer in statusObservers.values { observer(status) } }
+    private func publish(change: SyncChange) { for continuation in changeObservers.values { continuation.yield(change) } }
+
+    /// Reports sync status changes until `cancel` (the returned id) is passed to `unobserveSync`.
+    func observeSync(_ onUpdate: @escaping @Sendable (SyncStatus) -> Void) -> UUID {
+        let id = UUID()
+        statusObservers[id] = onUpdate
+        return id
+    }
+
+    func unobserveSync(_ id: UUID) { statusObservers[id] = nil }
+
+    /// The rooms each sync response changed, until the stream ends.
+    func syncChanges() -> AsyncStream<SyncChange> {
+        let (stream, continuation) = AsyncStream<SyncChange>.makeStream(bufferingPolicy: .unbounded)
+        let id = UUID()
+        changeObservers[id] = continuation
+        continuation.onTermination = { [weak self] _ in Task { await self?.dropChangeObserver(id) } }
+        return stream
+    }
+
+    private func dropChangeObserver(_ id: UUID) { changeObservers[id] = nil }
 
     /// The SDK room for `id`; `.notFound` if the client doesn't know it.
     func room(_ id: RoomID) async throws(HaloError) -> Room {
@@ -237,7 +302,7 @@ public actor MatrixSessionPort: SessionPort {
             .serverNameOrHomeserverUrl(serverNameOrUrl: homeserver)
             .sessionPaths(dataPath: data.path, cachePath: cache.path)
             .sqliteStore(config: SqliteStoreBuilder(dataPath: data.path, cachePath: cache.path).passphrase(passphrase: passphrase))
-            .slidingSyncVersionBuilder(versionBuilder: .native)
+            .slidingSyncVersionBuilder(versionBuilder: .none)
             .autoEnableCrossSigning(autoEnableCrossSigning: true)
             .autoEnableBackups(autoEnableBackups: true)
             .crossProcessLockConfig(crossProcessLockConfig: .multiProcess(holderName: holderName))
@@ -292,10 +357,4 @@ private final class RefreshDelegate: ClientSessionDelegate, Sendable {
             onRefresh(stored)
         }
     }
-}
-
-private final class SyncStateListener: SyncServiceStateObserver {
-    private let onUpdate: @Sendable (SyncServiceState) -> Void
-    init(_ onUpdate: @escaping @Sendable (SyncServiceState) -> Void) { self.onUpdate = onUpdate }
-    func onUpdate(state: SyncServiceState) { onUpdate(state) }
 }
