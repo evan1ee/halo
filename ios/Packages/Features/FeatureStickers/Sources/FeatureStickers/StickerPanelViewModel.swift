@@ -153,6 +153,13 @@ public final class StickerPanelViewModel {
         }
     }
 
+    /// Said when packs the user added can't be read any more (they left the room, or the pack was deleted).
+    public var unavailableNotice: String? {
+        let count = snapshot.unavailablePacks.count
+        guard count > 0, !isSearching else { return nil }
+        return count == 1 ? "1 pack you added is unavailable." : "\(count) packs you added are unavailable."
+    }
+
     /// `true` when some pack sources couldn't be read, so the list may be incomplete.
     public var isIncomplete: Bool { snapshot.phase == .partial }
 }

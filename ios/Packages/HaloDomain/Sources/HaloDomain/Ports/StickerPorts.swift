@@ -11,10 +11,14 @@ public struct StickerPackLoad: Sendable, Equatable {
     public let packs: [StickerPack]
     /// How many sources (rooms, account data) couldn't be read, so the panel can say it is incomplete.
     public let failedSources: Int
+    /// Packs the user enabled whose room is gone, not joined any more, or no longer holds the pack (403/404): not a failure
+    /// of the load, so they don't make it "incomplete" (STICKERS §10).
+    public let unavailable: [PackRef]
 
-    public init(packs: [StickerPack], failedSources: Int = 0) {
+    public init(packs: [StickerPack], failedSources: Int = 0, unavailable: [PackRef] = []) {
         self.packs = packs
         self.failedSources = failedSources
+        self.unavailable = unavailable
     }
 }
 

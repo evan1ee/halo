@@ -19,11 +19,14 @@ public actor StickerLibrary {
         public var recents: [Sticker] = []
         /// Favourites whose pack or image is gone; shown greyed out and removable.
         public var unavailableFavourites: [StickerRef] = []
+        /// Enabled packs that can't be read (room left, forgotten or the pack deleted).
+        public var unavailablePacks: [PackRef] = []
 
         public init(
             phase: Phase = .unloaded, packs: [StickerPack] = [], favourites: [Sticker] = [], recents: [Sticker] = [],
-            unavailableFavourites: [StickerRef] = []
+            unavailableFavourites: [StickerRef] = [], unavailablePacks: [PackRef] = []
         ) {
+            self.unavailablePacks = unavailablePacks
             self.phase = phase
             self.packs = packs
             self.favourites = favourites
@@ -41,6 +44,7 @@ public actor StickerLibrary {
     private let sleep: Sleep
     private var prefs = StickerPrefs()
     private var allPacks: [StickerPack] = []
+    private var unavailablePacks: [PackRef] = []
     private var phase = Phase.unloaded
     private var lastWrite: ContinuousClock.Instant?
     private var trailing: Task<Void, Never>?
@@ -76,6 +80,7 @@ public actor StickerLibrary {
             let result = try await packSource.packs(currentRoom: currentRoom)
             guard generation == started else { return }
             allPacks = result.packs.filter(\.offersStickers)
+            unavailablePacks = result.unavailable
             phase = result.failedSources > 0 ? .partial : .ready
         } catch {
             guard generation == started else { return }
@@ -92,6 +97,7 @@ public actor StickerLibrary {
         trailing = nil
         prefs = StickerPrefs()
         allPacks = []
+        unavailablePacks = []
         phase = .unloaded
         lastWrite = nil
         dirty = false
@@ -161,7 +167,8 @@ public actor StickerLibrary {
         let favourites = prefs.favourites.compactMap { index[$0] }
         return Snapshot(
             phase: phase, packs: allPacks, favourites: favourites, recents: prefs.recents.compactMap { index[$0.sticker] },
-            unavailableFavourites: phase == .ready ? prefs.favourites.filter { index[$0] == nil } : [])
+            unavailableFavourites: phase == .ready ? prefs.favourites.filter { index[$0] == nil } : [],
+            unavailablePacks: unavailablePacks)
     }
 
     private func publish() { broadcaster.publish(snapshot()) }

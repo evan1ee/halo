@@ -31,6 +31,9 @@ public actor MatrixSessionPort: SessionPort {
     private var changeObservers: [UUID: AsyncStream<SyncChange>.Continuation] = [:]
     private var storeID: String?
     private var delegate: RefreshDelegate?
+    /// Set when a room's send queue reported an error (which disables that queue); the next successful sync re-enables them.
+    private var sendQueueErrors: SendQueueErrors?
+    private var sendQueueErrorsHandle: TaskHandle?
     private var events: [UUID: AsyncStream<SessionEvent>.Continuation] = [:]
 
     /// - Parameter baseDirectory: where per-login SDK stores live (the App Group container in the app).
@@ -121,6 +124,9 @@ public actor MatrixSessionPort: SessionPort {
         self.client = nil
         self.storeID = nil
         delegate = nil
+        sendQueueErrorsHandle?.cancel()
+        sendQueueErrorsHandle = nil
+        sendQueueErrors = nil
         var failure: HaloError?
         if let client {
             do { try await client.logout() } catch { failure = ErrorMapper.map(error) }
@@ -187,12 +193,19 @@ public actor MatrixSessionPort: SessionPort {
     private func runSync(_ client: Client) async {
         var backoff = Duration.seconds(1)
         var first = true
+        var recovering = false
         while !Task.isCancelled {
             do {
                 let response = try await client.syncOnceV2(settings: SyncSettingsV2(timeoutMs: first ? 0 : Self.longPollMilliseconds, fullState: false))
                 if Task.isCancelled { return }
                 first = false
                 backoff = .seconds(1)
+                // A recoverable send failure (offline) disables that room's send queue until it is enabled again (SDK
+                // `EventSendState.sendingFailed`). The server answers again, so messages that failed meanwhile go out by
+                // themselves (MESSAGING FR-3, verified by the `offlineSend` contract test); at most once per sync.
+                let queueFailed = sendQueueErrors?.take() == true
+                if sendsMessages, recovering || queueFailed { await client.enableAllSendQueues(enable: true) }
+                recovering = false
                 publish(status: .running)
                 publish(change: SyncChange(joined: Set(response.rooms.joined), invited: Set(response.rooms.invited), left: Set(response.rooms.left)))
             } catch {
@@ -204,6 +217,7 @@ public actor MatrixSessionPort: SessionPort {
                     return
                 }
                 publish(status: .offline)
+                recovering = true
                 try? await Task.sleep(for: backoff)
                 backoff = min(backoff * 2, .seconds(60))
             }
@@ -279,7 +293,13 @@ public actor MatrixSessionPort: SessionPort {
 
     private func adopt(_ client: Client, storeID: String, session: Session) async {
         // Unsent messages survive an app kill and go out when the network returns (MESSAGING FR-3).
-        if sendsMessages { await client.enableAllSendQueues(enable: true) }
+        if sendsMessages {
+            await client.enableAllSendQueues(enable: true)
+            let errors = SendQueueErrors()
+            sendQueueErrorsHandle?.cancel()
+            sendQueueErrorsHandle = client.subscribeToSendQueueStatus(listener: errors)
+            sendQueueErrors = errors
+        }
         self.client = client
         self.storeID = storeID
     }
@@ -333,6 +353,15 @@ public actor MatrixSessionPort: SessionPort {
 
 /// Receives token refreshes from the SDK and turns them into `SessionEvent`s (AUTHENTICATION FR-7).
 /// The SDK's own keychain callbacks are served from the last session it told us about.
+/// Records that some room's send queue hit an error (the SDK then disables that room's queue). Only a flag: the callback must
+/// not block or call back into the SDK (AGENTS.md §8); the error itself is shown per message through its local echo.
+private final class SendQueueErrors: SendQueueRoomErrorListener {
+    private let failed = Atomic(false)
+    func onError(roomId: String, error: ClientError) { failed.store(true, ordering: .relaxed) }
+    /// Whether an error was reported since the last call.
+    func take() -> Bool { failed.exchange(false, ordering: .relaxed) }
+}
+
 private final class RefreshDelegate: ClientSessionDelegate, Sendable {
     private let storeID: String
     private let passphrase: String

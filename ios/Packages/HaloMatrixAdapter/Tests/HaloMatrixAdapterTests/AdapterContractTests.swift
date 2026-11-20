@@ -232,6 +232,76 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
+    /// MESSAGING FR-3 offline: messages sent while the server is unreachable fail honestly (recoverable), go out exactly once when it
+    /// is back, by themselves (sync running) or through `retrySend`; an echo removed with `abortSend` never reaches the server. The dev Synapse is paused and resumed by
+    /// `scripts/contract-offline-test.sh`, which sets HALO_DEV_OFFLINE_DIR; without it the test is skipped.
+    @Test("Offline send: failed echoes, delivery after reconnect, retrySend and abortSend (pauses infra/dev; uses HALO_DEV_STICKER_ROOM)",
+          .enabled(if: env["HALO_DEV_OFFLINE_DIR"] != nil && env["HALO_DEV_STICKER_ROOM"] != nil))
+    func offlineSend() async throws {
+        let control = ServerControl(directory: URL(fileURLWithPath: env["HALO_DEV_OFFLINE_DIR"] ?? ""))
+        defer { control.resumeIfPaused() }  // never leave the server paused, whatever failed
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
+            on: details)
+        let sync = MatrixSyncPort(session: session)
+        try await sync.start()
+        let room = try RoomID(env["HALO_DEV_STICKER_ROOM"] ?? "")
+        var timeline: (any TimelineSession)?
+        for _ in 0..<60 {
+            if let opened = try? await MatrixTimelinePort(session: session).open(room: room) { timeline = opened; break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        let opened = try #require(timeline)
+        let mirror = TimelineMirror(opened.items())
+        let tag = UUID().uuidString.prefix(6)
+        let automatic = "offline automatic \(tag)", aborted = "offline aborted \(tag)", retried = "offline retried \(tag)"
+        // The SDK gives up on a request after its retries (30 s timeout each against a paused server): minutes, not seconds.
+        let failing = 120.0
+
+        // 1. Offline: the first message fails (recoverable), the second waits behind it and is aborted.
+        try await control.pause()
+        try await opened.send(text: automatic, mentions: [])
+        try await opened.send(text: aborted, mentions: [])
+        let failedState: SendState = try await mirror.wait(seconds: failing, "\(automatic) failed") { mirror in
+            guard let event = mirror.own(automatic), case .failed = event.sendState else { return nil }
+            return event.sendState
+        }
+        #expect(failedState == .failed(recoverable: true))
+        let abortedID = try await mirror.wait(seconds: 10, "\(aborted) echo") { $0.own(aborted)?.localID }
+        try await opened.abortSend(localID: abortedID)
+        _ = try await mirror.wait(seconds: 10, "\(aborted) removed") { $0.own(aborted) == nil ? true : nil }
+
+        // 2. Back online with sync running: the failed message goes out without any user action.
+        try await control.resume()
+        // Against a paused server the SDK's sync call ends with a generic error, which ends the loop with `.failed`; the app's
+        // `SyncCoordinator` then restarts it. Do the same here (a no-op if the loop is still running).
+        try await sync.start()
+        _ = try await mirror.wait(seconds: 240, "\(automatic) sent") { $0.own(automatic)?.sendState == .sent ? true : nil }
+
+        // 3. Offline again, then back and the user taps retry at once (before the next sync recovers the queue).
+        try await control.pause()
+        try await opened.send(text: retried, mentions: [])
+        let retriedID: String = try await mirror.wait(seconds: failing, "\(retried) failed") { mirror in
+            guard let event = mirror.own(retried), case .failed(recoverable: true) = event.sendState else { return nil }
+            return event.localID
+        }
+        try await control.resume()
+        try await opened.retrySend(localID: retriedID)
+        _ = try await mirror.wait(seconds: 240, "\(retried) sent") { $0.own(retried)?.sendState == .sent ? true : nil }
+        await #expect(throws: HaloError.notFound) { try await opened.abortSend(localID: abortedID) }  // gone for good
+
+        // 4. The server's view (a plain HTTP login of its own): each delivered message exactly once, the aborted one never.
+        let bodies = try await ServerMessages(server: env["HALO_DEV_SERVER"] ?? "", room: room)
+            .bodies(user: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "")
+        #expect(bodies.filter { $0 == automatic }.count == 1, "\(automatic): \(bodies.filter { $0 == automatic }.count) on the server")
+        #expect(bodies.filter { $0 == retried }.count == 1, "\(retried): \(bodies.filter { $0 == retried }.count) on the server")
+        #expect(!bodies.contains(aborted))
+        await opened.close()
+        try await session.logout()
+    }
+
     @Test("Sending an image (uses HALO_DEV_STICKER_ROOM as a scratch room)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
     func sendImage() async throws {
         let session = port()
@@ -373,8 +443,19 @@ struct AdapterContractTests {
         await #expect(throws: HaloError.invalidInput("DUPLICATE_SHORTCODE")) {
             _ = try await creation.createPack(name: "x", images: [images[0], images[0]]) { _, _ in }
         }
-        // Leave the pack room again: later tests expect the account to be in HALO_DEV_ROOMS rooms.
-        try await (try await session.room(ref.room)).leave()
+        // Leave no trace: unlist the pack (otherwise every run adds one enabled pack to the account), then leave and
+        // forget the pack room; later tests expect the account to be in HALO_DEV_ROOMS rooms.
+        let client = try await session.signedInClient()
+        for type in ["m.image_pack.rooms", "one.mbm.halo.sticker_rooms"] {
+            guard let json = try await client.accountData(eventType: type),
+                  var object = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else { continue }
+            if var rooms = object["rooms"] as? [String: Any] { rooms[ref.room.rawValue] = nil; object["rooms"] = rooms }  // enabled packs
+            else if let rooms = object["rooms"] as? [String] { object["rooms"] = rooms.filter { $0 != ref.room.rawValue } }  // hidden rooms
+            try await client.setAccountData(eventType: type, content: String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self))
+        }
+        let local = try await session.room(ref.room)
+        try await local.leave()
+        try? await local.forget()
         try await session.logout()
     }
 
@@ -625,5 +706,123 @@ private struct PolicyHttp: Sendable {
         request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: ["unread": unread])
         _ = try await URLSession.shared.data(for: request)
+    }
+}
+
+/// Pauses and resumes the dev Synapse for `offlineSend`. The simulator can't run docker, so the test writes `<step>.req` into
+/// HALO_DEV_OFFLINE_DIR and `scripts/contract-offline-test.sh` answers with `<step>.ack` ("ok" or the error) once it is done.
+private final class ServerControl: Sendable {
+    private struct State { var step = 0; var paused = false }
+    private let directory: URL
+    private let state = Mutex(State())
+
+    init(directory: URL) { self.directory = directory }
+
+    func pause() async throws { try await request("pause", paused: true) }
+    func resume() async throws { try await request("resume", paused: false) }
+
+    /// For `defer`: asks for a resume without waiting (the script also resumes when it exits).
+    func resumeIfPaused() {
+        let step: Int? = state.withLock { state in
+            guard state.paused else { return nil }
+            state.step += 1
+            state.paused = false
+            return state.step
+        }
+        guard let step else { return }
+        try? Data().write(to: directory.appendingPathComponent("resume-\(step).req"))
+    }
+
+    private func request(_ action: String, paused: Bool) async throws {
+        let step = state.withLock { state in
+            state.step += 1
+            return state.step
+        }
+        let name = "\(action)-\(step)"
+        try Data().write(to: directory.appendingPathComponent(name + ".req"))
+        let ack = directory.appendingPathComponent(name + ".ack")
+        for _ in 0..<600 {
+            if let answer = try? String(contentsOf: ack, encoding: .utf8) {
+                guard answer.trimmingCharacters(in: .whitespacesAndNewlines) == "ok" else { throw ContractViolation("\(name): \(answer)") }
+                state.withLock { $0.paused = paused }
+                return
+            }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        throw ContractViolation("no answer to \(name) within 60 s; run this test through scripts/contract-offline-test.sh")
+    }
+}
+
+/// The timeline kept up to date in the background, so a test can wait for several states of one stream in turn.
+private final class TimelineMirror: Sendable {
+    private let items = Mutex<[HaloDomain.TimelineItem]>([])
+    private let task = Mutex<Task<Void, Never>?>(nil)
+
+    init(_ stream: AsyncStream<HaloDomain.TimelineDiff>) {
+        let consumer = Task { [weak self] in
+            for await diff in stream {
+                guard let self else { return }
+                self.items.withLock { items in
+                    do { try ListReducer.apply(diff, to: &items) } catch { Issue.record("timeline diff didn't apply: \(error)") }
+                }
+            }
+        }
+        task.withLock { $0 = consumer }
+    }
+
+    deinit { task.withLock { $0?.cancel() } }
+
+    /// The own text message with this body, if the timeline holds it.
+    func own(_ body: String) -> HaloDomain.TimelineEvent? {
+        items.withLock { items in
+            for item in items.reversed() {
+                if case .event(let event) = item.content, event.isOwn, case .text(let text, _) = event.kind, text == body { return event }
+            }
+            return nil
+        }
+    }
+
+    /// Polls `probe` until it returns a value; fails after `seconds`.
+    func wait<T: Sendable>(seconds: Double, _ what: String, _ probe: (TimelineMirror) -> T?) async throws -> T {
+        let deadline = ContinuousClock.now + .seconds(seconds)
+        while ContinuousClock.now < deadline {
+            if let value = probe(self) { return value }
+            try await Task.sleep(for: .milliseconds(250))
+        }
+        throw ContractViolation("timed out after \(seconds) s waiting for: \(what)")
+    }
+}
+
+/// The latest message bodies of a room as the server has them, read with a plain HTTP login of its own (logged out again).
+private struct ServerMessages {
+    let server: String
+    let room: RoomID
+
+    func bodies(user: String, password: String) async throws -> [String] {
+        let login = try await call("POST", "/login", body: [
+            "type": "m.login.password", "identifier": ["type": "m.id.user", "user": user], "password": password,
+            "initial_device_display_name": "offline check",
+        ])
+        let token = try #require(login["access_token"] as? String)
+        let room = room.rawValue.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? room.rawValue
+        let page = try await call("GET", "/rooms/\(room)/messages?dir=b&limit=100", token: token)
+        _ = try? await call("POST", "/logout", token: token, body: [:])
+        let chunk = page["chunk"] as? [[String: Any]] ?? []
+        return chunk.compactMap { event in
+            guard event["type"] as? String == "m.room.message" else { return nil }
+            return (event["content"] as? [String: Any])?["body"] as? String
+        }
+    }
+
+    private func call(_ method: String, _ path: String, token: String? = nil, body: [String: Any]? = nil) async throws -> [String: Any] {
+        var request = URLRequest(url: try #require(URL(string: server + "/_matrix/client/v3" + path)))
+        request.httpMethod = method
+        if let token { request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization") }
+        if let body {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        }
+        let (data, _) = try await URLSession.shared.data(for: request)
+        return (try JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
     }
 }

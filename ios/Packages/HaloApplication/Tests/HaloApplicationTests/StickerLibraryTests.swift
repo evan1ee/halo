@@ -67,6 +67,17 @@ struct StickerLibraryTests {
         #expect(after?.phase == .partial && after?.packs.count == 1)
     }
 
+    @Test("an enabled pack that can't be read is listed as unavailable and doesn't make the panel partial; reset forgets it")
+    func unavailablePacks() async throws {
+        let gone = PackRef(room: try RoomID("!gone:x.org"), stateKey: "old")
+        let (library, _, _, _) = make(packs: StickerPackLoad(packs: [pack(["a"])], unavailable: [gone]))
+        await library.load(currentRoom: nil)
+        let snapshot = await library.snapshots().first { _ in true }
+        #expect(snapshot?.phase == .ready && snapshot?.unavailablePacks == [gone] && snapshot?.packs.count == 1)
+        await library.reset()
+        #expect(await library.snapshots().first { _ in true }?.unavailablePacks == [])
+    }
+
     @Test("recents are written at once the first time, then at most once per ten seconds with a trailing write")
     func debounce() async throws {
         let (library, _, store, time) = make(packs: StickerPackLoad(packs: [pack(["a", "b", "c"])]))

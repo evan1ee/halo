@@ -86,6 +86,7 @@ public final class MatrixStickerPackPort: StickerPackPort {
         var packs: [StickerPack] = []
         var seen: Set<PackRef> = []
         var failed = 0
+        var unavailable: [PackRef] = []
 
         func add(_ pack: StickerPack?) {
             guard let pack, !seen.contains(pack.ref) else { return }
@@ -108,6 +109,8 @@ public final class MatrixStickerPackPort: StickerPackPort {
         for ref in await listed("m.image_pack.rooms") {
             do {
                 if let content = try await stateContent(client, room: ref.room, key: ref.stateKey) { add(ImagePackParser.parse(content, ref: ref, source: .userEnabled)) }
+                else { unavailable.append(ref) }  // 404: the room or the pack event is gone
+            } catch is Forbidden { unavailable.append(ref)  // 403: the user is no longer in that room
             } catch { failed += 1 }
         }
 
@@ -125,7 +128,7 @@ public final class MatrixStickerPackPort: StickerPackPort {
                 // Old listings often name rooms the user has since left (403): that is an unavailable pack, not a failed source.
             }
         }
-        return StickerPackLoad(packs: packs, failedSources: failed)
+        return StickerPackLoad(packs: packs, failedSources: failed, unavailable: unavailable)
     }
 
     private static let legacyType = "im.ponies.room_emotes"
@@ -189,9 +192,12 @@ public final class MatrixStickerPackPort: StickerPackPort {
         case 401 where !retried:
             _ = try? await client.accountData(eventType: "m.direct")  // an SDK request refreshes an expired token
             return try await get(client, path, retried: true)
+        case 403: throw Forbidden()
         default: throw URLError(.badServerResponse)
         }
     }
+
+    private struct Forbidden: Error {}
 
     private static func escape(_ component: String) -> String {
         component.addingPercentEncoding(withAllowedCharacters: CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")) ?? component
