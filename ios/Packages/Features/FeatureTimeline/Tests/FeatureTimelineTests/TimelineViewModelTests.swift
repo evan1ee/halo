@@ -38,6 +38,23 @@ struct TimelineViewModelTests {
         #expect(model.row(event(.notice("fyi", isEdited: false))).style == .notice)
     }
 
+    @Test("a message from an allowlisted bot becomes a card when a parser recognises it; anyone else's stays text")
+    func botCards() throws {
+        let model = try model()
+        let html = "Added Task <b>#7</b> for Ann: <i>\"Pay rent\"</i>"
+        func item(sender: String, html: String?) -> TimelineItem {
+            TimelineItem(id: TimelineItemID("id"), content: .event(TimelineEvent(
+                eventID: nil, sender: try? UserID(sender), senderName: "Bot", timestamp: Date(timeIntervalSince1970: 0), isOwn: false,
+                kind: .text("Added Task #7", isEdited: false), formattedBody: html)))
+        }
+        #expect(model.row(item(sender: "@bot:x.org", html: html)).card == nil)  // not on the allowlist
+        model.botSenders = ["@bot:x.org"]
+        #expect(model.row(item(sender: "@bot:x.org", html: html)).card == .taskAdded(id: "7", owner: "Ann", title: "Pay rent"))
+        #expect(model.row(item(sender: "@other:x.org", html: html)).card == nil)
+        #expect(model.row(item(sender: "@bot:x.org", html: "<b>hello</b>")).card == nil)  // no parser matches: plain formatted text
+        #expect(model.row(item(sender: "@bot:x.org", html: nil)).card == nil)
+    }
+
     @Test("undecryptable, deleted and unsupported events are shown honestly, never hidden")
     func placeholders() throws {
         let model = try model()

@@ -40,6 +40,8 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
 
     /// Set for text messages and notices.
     public let source: Source?
+    /// A known bot's message read as a structured card (BOT_MESSAGES Layer 2); `nil` for everything else.
+    public let card: BotCard?
 
     public struct FileTile: Equatable, Sendable {
         public let kind: MediaKind
@@ -85,8 +87,9 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     init(
         id: String, style: Style, sender: String?, text: String, image: Image? = nil, status: String? = nil,
         eventID: EventID? = nil, isOwn: Bool = false, reactions: [Chip] = [], reply: Reply? = nil, styled: AttributedString? = nil,
-        failedLocalID: String? = nil, isSticker: Bool = false, file: FileTile? = nil, source: Source? = nil
+        failedLocalID: String? = nil, isSticker: Bool = false, file: FileTile? = nil, source: Source? = nil, card: BotCard? = nil
     ) {
+        self.card = card
         self.source = source
         self.file = file
         self.failedLocalID = failedLocalID
@@ -115,6 +118,8 @@ public final class TimelineViewModel {
     }
 
     public private(set) var content: Content = .opening
+    /// User IDs of bots whose messages may become cards (Settings → Bots, BOT_MESSAGES §3).
+    public var botSenders: Set<String> = []
     /// The message being typed. Cleared only once the send was accepted, so a failure never loses the text.
     public var draft = "" {
         didSet {
@@ -682,6 +687,12 @@ public final class TimelineViewModel {
 
     static let settingsText = "The room was updated"
 
+    /// The card for a message from an allowlisted bot whose HTML a parser recognises.
+    private func botCard(_ event: TimelineEvent) -> BotCard? {
+        guard let sender = event.sender?.rawValue, botSenders.contains(sender), let html = event.formattedBody else { return nil }
+        return BotTemplates.parse(html)
+    }
+
     func row(_ item: TimelineItem) -> TimelineRow {
         let id = item.id.rawValue
         switch item.content {
@@ -701,7 +712,8 @@ public final class TimelineViewModel {
                     reactions: Self.chips(event.reactions), reply: Self.reply(event.replyTo),
                     styled: event.formattedBody.map { HTMLText.attributed($0) + AttributedString(edited ? " (edited)" : "") },
                     failedLocalID: Self.failedID(event),
-                    source: .init(sender: event.sender?.rawValue, eventID: event.eventID?.rawValue, body: body, formattedBody: event.formattedBody))
+                    source: .init(sender: event.sender?.rawValue, eventID: event.eventID?.rawValue, body: body, formattedBody: event.formattedBody),
+                    card: botCard(event))
             case .notice(let body, _):
                 return TimelineRow(
                     id: id, style: .notice, sender: name, text: body,

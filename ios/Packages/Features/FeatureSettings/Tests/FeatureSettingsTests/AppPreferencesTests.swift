@@ -27,4 +27,14 @@ struct AppPreferencesTests {
         defaults.set("sepia", forKey: AppPreferences.appearanceKey)
         #expect(AppPreferences(defaults: defaults).appearance == .system)
     }
+
+    @Test("the bot allowlist is empty by default and stored as given")
+    func botSenders() throws {
+        let name = "halo.test.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        #expect(AppPreferences(defaults: defaults).botSenders.isEmpty)
+        AppPreferences(defaults: defaults).botSenders = ["@bot:x.org"]
+        #expect(AppPreferences(defaults: defaults).botSenders == ["@bot:x.org"])
+    }
 }

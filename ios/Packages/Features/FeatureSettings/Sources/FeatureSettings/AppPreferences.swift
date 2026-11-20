@@ -8,6 +8,7 @@ public struct AppPreferences: Sendable {
 
     public static let privateReceiptsKey = "halo.privateReadReceipts"
     public static let appearanceKey = "halo.appearance"
+    public static let botSendersKey = "halo.botSenders"
 
     public init(defaults: UserDefaults = .standard) { box = Box(defaults: defaults) }
 
@@ -15,6 +16,13 @@ public struct AppPreferences: Sendable {
     public var privateReceipts: Bool {
         get { box.defaults.bool(forKey: Self.privateReceiptsKey) }
         nonmutating set { box.defaults.set(newValue, forKey: Self.privateReceiptsKey) }
+    }
+
+    /// User IDs whose messages may render as bot cards (Settings → Bots). Kept on this device for now; the spec's account-data sync
+    /// (`one.mbm.halo.bot_allowlist`) is not built.
+    public var botSenders: [String] {
+        get { box.defaults.stringArray(forKey: Self.botSendersKey) ?? [] }
+        nonmutating set { box.defaults.set(newValue, forKey: Self.botSendersKey) }
     }
 
     /// The colour scheme the user chose; `.system` follows the device. Unknown stored values read as `.system`.
