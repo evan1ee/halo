@@ -62,7 +62,10 @@ public final class RecoveryViewModel {
     /// Replaces the existing backup with a new recovery key; call only after the user confirmed.
     public func replaceRecovery() async -> Result<String, RecoverySetupFailure> {
         do {
-            return .success(try await coordinator.replaceRecovery())
+            let key = try await coordinator.replaceRecovery()
+            // A reset doesn't import the new secrets into this device: use the new key at once so the device ends up verified.
+            await coordinator.recover(recoveryKey: key)
+            return .success(key)
         } catch {
             return .failure(RecoverySetupFailure(text: "The recovery key couldn't be created (\(error.code)).", backupExists: false))
         }

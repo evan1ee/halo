@@ -23,7 +23,7 @@ Summary only; details per feature: [docs/development/IMPLEMENTATION_NOTES.md](do
 Full list: docs/DECISION_LOG.md (D1–D75), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-Recovery setup status investigated: after setup the device stays `incomplete` and shows the verify banner (consistent; see OUTSTANDING_ISSUES: consider `recover` with the new key right after setup). Earlier this session: Settings Security (status + recovery setup with confirmed backup replace), Notifications, Storage, Appearance, Diagnostics, sticker grid autoplay. Committed straight to `main` (D75).
+Recovery setup status investigated: after setup the device stays `incomplete` and shows the verify banner (consistent; see OUTSTANDING_ISSUES: `replaceRecovery` now recovers with the new key right after the reset; not checked live). Earlier this session: Settings Security (status + recovery setup with confirmed backup replace), Notifications, Storage, Appearance, Diagnostics, sticker grid autoplay. Committed straight to `main` (D75).
 
 ## 5. Outstanding issues
 Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
