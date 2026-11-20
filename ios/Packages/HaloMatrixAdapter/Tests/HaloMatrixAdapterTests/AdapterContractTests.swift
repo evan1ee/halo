@@ -233,13 +233,14 @@ struct AdapterContractTests {
     }
 
     /// MESSAGING FR-3 offline: messages sent while the server is unreachable fail honestly (recoverable), go out exactly once when it
-    /// is back, by themselves (sync running) or through `retrySend`; an echo removed with `abortSend` never reaches the server. The dev Synapse is paused and resumed by
-    /// `scripts/contract-offline-test.sh`, which sets HALO_DEV_OFFLINE_DIR; without it the test is skipped.
-    @Test("Offline send: failed echoes, delivery after reconnect, retrySend and abortSend (pauses infra/dev; uses HALO_DEV_STICKER_ROOM)",
+    /// is back, by themselves (sync running) or through `retrySend` (sync stopped); an echo removed with `abortSend` never reaches the
+    /// server. The dev Synapse is stopped and started by `scripts/contract-offline-test.sh`, which sets HALO_DEV_OFFLINE_DIR; without
+    /// it the test is skipped.
+    @Test("Offline send: failed echoes, delivery after reconnect, retrySend and abortSend (stops infra/dev; uses HALO_DEV_STICKER_ROOM)",
           .enabled(if: env["HALO_DEV_OFFLINE_DIR"] != nil && env["HALO_DEV_STICKER_ROOM"] != nil))
     func offlineSend() async throws {
         let control = ServerControl(directory: URL(fileURLWithPath: env["HALO_DEV_OFFLINE_DIR"] ?? ""))
-        defer { control.resumeIfPaused() }  // never leave the server paused, whatever failed
+        defer { control.resumeIfPaused() }  // never leave the server down, whatever failed
         let session = port()
         let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
         _ = try await session.loginPassword(
@@ -257,7 +258,7 @@ struct AdapterContractTests {
         let mirror = TimelineMirror(opened.items())
         let tag = UUID().uuidString.prefix(6)
         let automatic = "offline automatic \(tag)", aborted = "offline aborted \(tag)", retried = "offline retried \(tag)"
-        // The SDK gives up on a request after its retries (30 s timeout each against a paused server): minutes, not seconds.
+        // A stopped server fails a send within seconds; a paused one (`docker pause`) took ~90 s (30 s timeouts and retries).
         let failing = 120.0
 
         // 1. Offline: the first message fails (recoverable), the second waits behind it and is aborted.
@@ -275,7 +276,7 @@ struct AdapterContractTests {
 
         // 2. Back online with sync running: the failed message goes out without any user action.
         try await control.resume()
-        // Against a paused server the SDK's sync call ends with a generic error, which ends the loop with `.failed`; the app's
+        // Against a stopped server the SDK's sync call ends with a generic error, which ends the loop with `.failed`; the app's
         // `SyncCoordinator` then restarts it. Do the same here (a no-op if the loop is still running).
         try await sync.start()
         _ = try await mirror.wait(seconds: 240, "\(automatic) sent") { $0.own(automatic)?.sendState == .sent ? true : nil }
@@ -709,7 +710,7 @@ private struct PolicyHttp: Sendable {
     }
 }
 
-/// Pauses and resumes the dev Synapse for `offlineSend`. The simulator can't run docker, so the test writes `<step>.req` into
+/// Takes the dev Synapse down and up again for `offlineSend`. The simulator can't run docker, so the test writes `<step>.req` into
 /// HALO_DEV_OFFLINE_DIR and `scripts/contract-offline-test.sh` answers with `<step>.ack` ("ok" or the error) once it is done.
 private final class ServerControl: Sendable {
     private struct State { var step = 0; var paused = false }

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Runs the offline-send contract test (AdapterContractTests/offlineSend) against infra/dev, pausing and resuming the dev
-# Synapse when the test asks (MESSAGING FR-3). The simulator can't run docker, so the test writes `<step>.req` files into
+# Runs the offline-send contract test (AdapterContractTests/offlineSend) against infra/dev, stopping and starting the dev
+# Synapse when the test asks (`pause-N`/`resume-N` requests; `docker stop`/`start`) (MESSAGING FR-3). The simulator can't run docker, so the test writes `<step>.req` files into
 # $TEST_RUNNER_HALO_DEV_OFFLINE_DIR and this script answers each with `<step>.ack` ("ok" or the error).
 #
 #   scripts/contract-offline-test.sh
 #
-# Synapse is always resumed when the script ends, also on failure or Ctrl-C, and its reachability is checked.
+# Synapse is always started again when the script ends, also on failure or Ctrl-C, and its reachability is checked.
 set -euo pipefail
 
 container="${HALO_SYNAPSE_CONTAINER:-halo-dev-synapse-1}"
@@ -45,7 +45,7 @@ answer() {  # answer <request file>
     pause-*)
       if result="$(docker stop -t 2 "$container" 2>&1)"; then result=ok; fi ;;
     resume-*)
-      # Resuming a container that isn't paused is fine (a test's cleanup may ask twice).
+      # Starting a container that is running is fine (a test's cleanup may ask twice).
       docker start "$container" >/dev/null 2>&1 || true
       result="not reachable after resume"
       for _ in $(seq 1 30); do
