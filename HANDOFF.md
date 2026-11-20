@@ -14,6 +14,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 - Read state: `BadgeCoordinator` = count of rooms with attention from `ReadStatePolicy`; inputs are server/SDK counts, `latestEvent`, the local read position (`ReadReceiptCoordinator.positions()`), the user's own receipt from other devices (`RoomSummary.ownReadThrough`) and notification records.
 - Outbound receipts: timeline rows report visibility (approximation of D6) → `ReadReceiptCoordinator` (monotonic, 2 s debounce, backoff, persisted and restored, 7-day expiry of sent intents) → `MatrixReadMarkerPort`.
 - Room list rows show the policy's unread indicator (count / mentions / dot, bold when unread) and update when the local read position changes.
+- `RoomListCoordinator(loadsAllPages: true)` (app) keeps paging so the badge sees every room.
 - Sign-out removes the pusher first (`PushPort.unregister` → `deletePusher`, via `SessionCoordinator.setBeforeSignOut`; best effort).
 - Room list swipe: leading "Read" (`markRoomRead`), trailing "Unread" (`setMarkedUnread`).
 
@@ -24,7 +25,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/. Most relevant now: D5/D9 
 Everything in `git log origin/main..HEAD`. Key paths: `ios/Packages/HaloApplication/Sources/HaloApplication/{ReadReceipts,Badge,RoomList}`, `HaloMatrixAdapter/.../{MatrixReadMarkerPort,MatrixRoomListPort}.swift`, `HaloPersistence/.../{HaloDatabase,ReadIntentStore}.swift`, `Features/{FeatureTimeline,FeatureRoomList}`, `ios/App/{AppRoot,HaloApp}.swift`.
 
 ## 5. Outstanding issues
-- Unverified on a device: file protection class on `halo.sqlite` (simulator reports none), V-RS-1 (do own-receipt changes trigger room-list updates?), cost of `loadOrFetchEvent` lookups, kill-and-relaunch resend, NSE access to the database, `deletePusher` (no contract test), the swipe UI and the unread indicators, the `latestEvent` mapping (no unit test).
+- Unverified on a device: file protection class on `halo.sqlite` (simulator reports none), V-RS-1 (do own-receipt changes trigger room-list updates?), cost of `loadOrFetchEvent` lookups, kill-and-relaunch resend, NSE access to the database, `deletePusher` (no contract test), paging cost for large accounts, the swipe UI and the unread indicators, the `latestEvent` mapping (no unit test).
 - D6 (≥ 50 % visible for ≥ 0.5 s) is approximated by row appear/disappear.
 - `read_intent`: `receipt_type` always `read`; `attempts`/`last_error` unused; no intent confirmation rules (a)–(c) (sent intents just expire).
 - No `HaloLog` in `ReadReceiptCoordinator` (storage errors only kept in `lastStorageError`).
@@ -33,7 +34,7 @@ Everything in `git log origin/main..HEAD`. Key paths: `ios/Packages/HaloApplicat
 - Docker CLI hangs on the `osxkeychain` helper; use a throwaway `DOCKER_CONFIG`.
 
 ## 6. Next steps
-1. M3: true ≥ 50 % visibility; scenario tests S01–S22 and auditor; paging all rooms for the badge; clear delivered notifications when read elsewhere.
+1. M3: true ≥ 50 % visibility; scenario tests S01–S22 and auditor; clear delivered notifications when read elsewhere.
 2. Device checks from section 5; G-NSE hardening (peak memory, encrypted room, timeout injection AC-NSE-3/4, 100 pushes, Release build).
 3. M2 left: offline send test, media sending, mentions. M1 left: video/audio/file, QR/emoji verification. A push gateway for Beta/Release.
 4. Push the branch, open a PR, check CI (after refreshing this file).

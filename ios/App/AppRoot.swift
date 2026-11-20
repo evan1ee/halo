@@ -37,7 +37,7 @@ final class AppRoot {
         let session = MatrixSessionPort(baseDirectory: HaloShared.storeDirectory())
         let sessionCoordinator = SessionCoordinator(port: session, keychain: keychain)
         self.sessionCoordinator = sessionCoordinator
-        let roomCoordinator = RoomListCoordinator(port: MatrixRoomListPort(session: session))
+        let roomCoordinator = RoomListCoordinator(port: MatrixRoomListPort(session: session), loadsAllPages: true)
         let suite = "group.\(HaloShared.namespace())"
         records = NotificationRecordStore(suiteName: suite)
         let receipts = ReadReceiptCoordinator(port: MatrixReadMarkerPort(session: session))
