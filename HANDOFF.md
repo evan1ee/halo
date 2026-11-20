@@ -1,12 +1,12 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-20 · Branch: `feat/m5-auth-discovery-timeout` · PRs #1–#28 merged
+Last updated: 2026-11-20 · Branch: `feat/m2-send-files` · PRs #1–#29 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
 - **Milestone:** M0 done; M1 largely done; M2 done except media sending and the offline-send test; **M3 (read-state engine) in progress**. Dev Mac: Xcode 27.2, Swift 6.4.2, iPhone 16.
-- **Checks:** `scripts/prepush.sh` passes (SwiftLint not configured, skipped); `scripts/prepush.sh` now also builds `Halo-Debug` for the simulator. All 16 contract tests (`infra/dev`) pass, none skipped (`scripts/contract-test.sh` after `infra/dev/create-fixtures.py`).
+- **Checks:** `scripts/prepush.sh` passes (SwiftLint not configured, skipped); `scripts/prepush.sh` now also builds `Halo-Debug` for the simulator. All 17 contract tests (`infra/dev`) pass, none skipped (`scripts/contract-test.sh` after `infra/dev/create-fixtures.py`).
 - **CI:** PRs #1–#15 merged. CI runs only the Linux-portable packages (Foundation, Domain, TestSupport, Application): adapter, persistence, platform, features and the app are tested only by `prepush.sh` on a Mac. `licenses` runs only on SDK/inventory changes.
 
 ## 2. Completed work (what exists now)
@@ -34,7 +34,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 Full list: docs/DECISION_LOG.md (D1–D74), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-`SessionCoordinator` (20 s discovery timeout, `.network(retryable)` instead of an endless spinner), `FakeSessionPort.delayLoginDetails`, `QuickLookView` (in a navigation controller: title and share button), `TimelineView` (history loads only after the opening scroll; landing now verified in the simulator), tests, ROADMAP.
+`OutgoingFile` (domain), `TimelinePort.sendFile` (+ coordinator, fake, `MatrixTimelinePort` via `sendFile`/`sendAudio`/`sendVideo`), `TimelineViewModel.sendFile`, composer paperclip + `fileImporter`, tests (unit + contract `sendFiles`), ROADMAP.
 
 ## 5. Outstanding issues
 - Stickers: V-ST-1 resolved (option B), V-ST-2 partly (token refresh on 401 not exercised). Verified against `infra/dev` by contract test `stickers` (env `HALO_DEV_STICKER_ROOM`: a room with `m.room.image_pack` `cats` {wave, dance} enabled in `m.image_pack.rooms`; throwaway account `stickertester` created locally). Long-press preview with animation is built (FR-5, FR-9: `StickerImage`, `AnimatedStickerView`; grid stays static, not checked on screen; `FeatureStickers` UIKit tests run only on the simulator: `xcodebuild -scheme FeatureStickers test`). One-time privacy alert before the first sticker into an encrypted room is built (founder-approved design: acknowledgement per device in `UserDefaults`, recorded only after the send succeeded, cancel discards the sticker and records nothing; the text says sticker images aren't end-to-end encrypted, that access depends on homeserver media storage and access controls, and that other messages are unaffected; unit-tested incl. failed send, cancel and per-device scope (`FeatureStickers` tests also run on the simulator via `xcodebuild`, stricter on Sendable captures); not seen on screen). Not built: editing/deleting packs, "unavailable pack" UI, `im.ponies.user_emotes`. Legacy `im.ponies.room_emotes`/`emote_rooms` packs are read (V-ST-3 verified against infra/dev). Real sticker images were not loaded (the fixture mxc URLs have no media).

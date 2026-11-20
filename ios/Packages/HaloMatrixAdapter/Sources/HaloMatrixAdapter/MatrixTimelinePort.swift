@@ -146,6 +146,27 @@ final class MatrixTimelineSession: TimelineSession {
         } catch { throw ErrorMapper.map(error) }
     }
 
+    func sendFile(_ file: OutgoingFile) async throws(HaloError) {
+        try file.validate()
+        let params = UploadParameters(
+            source: .data(bytes: file.data, filename: file.filename), caption: nil, formattedCaption: nil, mentions: nil, inReplyTo: nil)
+        let size = UInt64(file.data.count)
+        do {
+            let handle: SendAttachmentJoinHandle
+            switch file.kind {
+            case .audio:
+                handle = try timeline.sendAudio(params: params, audioInfo: AudioInfo(duration: nil, size: size, mimetype: file.mimeType))
+            case .video:
+                handle = try timeline.sendVideo(
+                    params: params, thumbnailSource: nil,
+                    videoInfo: VideoInfo(duration: nil, height: nil, width: nil, mimetype: file.mimeType, size: size, thumbnailInfo: nil, thumbnailSource: nil, blurhash: nil))
+            case .file:
+                handle = try timeline.sendFile(params: params, fileInfo: FileInfo(mimetype: file.mimeType, size: size, thumbnailInfo: nil, thumbnailSource: nil))
+            }
+            try await handle.join()
+        } catch { throw ErrorMapper.map(error) }
+    }
+
     func retrySend(localID: String) async throws(HaloError) {
         // Purely local: the SDK reports an unknown echo as a generic error, which is `.notFound` here.
         do { guard try await timeline.retrySend(itemId: .transactionId(transactionId: localID), target: .event) else { throw HaloError.notFound } } catch { throw HaloError.notFound }

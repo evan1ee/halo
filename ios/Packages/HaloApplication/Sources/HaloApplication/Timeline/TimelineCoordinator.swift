@@ -152,6 +152,12 @@ public actor TimelineCoordinator {
         try await session.sendImage(image)
     }
 
+    /// Uploads and sends a file, audio or video clip into the open timeline; returns when it is sent.
+    public func sendFile(_ file: OutgoingFile) async throws(HaloError) {
+        guard let session, case .live = status else { throw .cancelled }
+        try await session.sendFile(file)
+    }
+
     /// The people who can be mentioned in the open room.
     public func members() async throws(HaloError) -> [RoomMember] {
         guard let session, case .live = status else { throw .cancelled }

@@ -52,6 +52,9 @@ public protocol TimelineSession: Sendable {
     /// Uploads and sends `image` as an `m.image`. It appears as a local echo while uploading. Returns when the server has the
     /// message or throws. `.invalidInput` for an invalid image (see `OutgoingImage.validate`).
     func sendImage(_ image: OutgoingImage) async throws(HaloError)
+    /// Uploads a file, audio or video clip unchanged and sends it as `m.file`, `m.audio` or `m.video`; returns when it is sent.
+    /// `.invalidInput` for an invalid file (see `OutgoingFile.validate`).
+    func sendFile(_ file: OutgoingFile) async throws(HaloError)
 
     /// Sends a failed local echo again (`TimelineEvent.localID`). Throws `.notFound` if the echo is gone (it was sent or deleted meanwhile).
     func retrySend(localID: String) async throws(HaloError)
