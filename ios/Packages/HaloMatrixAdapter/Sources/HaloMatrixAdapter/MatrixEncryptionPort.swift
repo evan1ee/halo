@@ -49,6 +49,16 @@ public final class MatrixEncryptionPort: EncryptionPort {
         } catch { throw ErrorMapper.map(error) }
     }
 
+    public func resetRecovery() async throws(HaloError) -> String {
+        let encryption = try await session.encryption()
+        do {
+            await encryption.waitForE2eeInitializationTasks()
+            let key = try await encryption.resetRecoveryKey()
+            refresh(encryption)
+            return key
+        } catch { throw ErrorMapper.map(error) }
+    }
+
     // MARK: Internals
 
     private func observe() async throws(HaloError) {

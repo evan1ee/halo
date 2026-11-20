@@ -64,4 +64,15 @@ struct EncryptionCoordinatorTests {
         await session.logout()
         #expect(await wait(coordinator) { $0.status == .unknown } != nil)
     }
+
+    @Test("setting up recovery returns the new key once, leaves the coordinator idle and reports recovery on")
+    func setsUpRecovery() async throws {
+        let port = FakeEncryptionPort(recoveryKey: nil)
+        let (coordinator, _) = try await make(port)
+        _ = await wait(coordinator) { $0.status.recovery == .disabled }
+        let key = try await coordinator.enableRecovery()
+        #expect(key.hasPrefix("FAKE-RECOVERY-KEY"))
+        #expect(await coordinator.snapshot.recovery == .idle)
+        #expect(await wait(coordinator) { $0.status.recovery == .enabled } != nil)
+    }
 }

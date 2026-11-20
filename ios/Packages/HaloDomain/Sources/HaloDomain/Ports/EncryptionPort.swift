@@ -14,4 +14,8 @@ public protocol EncryptionPort: Sendable {
 
     /// Creates secret storage and backup and returns the new recovery key, to be shown to the user once.
     func enableRecovery() async throws(HaloError) -> String
+
+    /// Replaces the account's recovery key and key backup with new ones and returns the new key. Messages that are only
+    /// in the old backup can no longer be restored: callers confirm with the user first.
+    func resetRecovery() async throws(HaloError) -> String
 }

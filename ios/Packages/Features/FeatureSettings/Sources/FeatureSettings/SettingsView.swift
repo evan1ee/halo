@@ -18,6 +18,11 @@ public struct SettingsView: View {
     private let saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)?
     private let diagnostics: (@Sendable () async -> String)?
     private let security: (@MainActor () -> [StorageSize])?
+    private let setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)?
+    @State private var recoveryFailure: SettingsMessage?
+    private let replaceRecovery: (@MainActor () async -> Result<String, SettingsMessage>)?
+    @State private var newRecoveryKey: String?
+    @State private var settingUpRecovery = false
     private let notificationStatus: (@Sendable () async -> String)?
     private let openSystemSettings: (() -> Void)?
     @State private var notifications = ""
@@ -37,12 +42,15 @@ public struct SettingsView: View {
         loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)? = nil,
         saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)? = nil,
         diagnostics: (@Sendable () async -> String)? = nil, storageSizes: (@Sendable () async -> [StorageSize])? = nil,
-        security: (@MainActor () -> [StorageSize])? = nil, notificationStatus: (@Sendable () async -> String)? = nil, openSystemSettings: (() -> Void)? = nil, onSignOut: @escaping () -> Void
+        security: (@MainActor () -> [StorageSize])? = nil, setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil,
+        replaceRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil, notificationStatus: (@Sendable () async -> String)? = nil, openSystemSettings: (() -> Void)? = nil, onSignOut: @escaping () -> Void
     ) {
         self.diagnostics = diagnostics
         self.storageSizes = storageSizes
         self.notificationStatus = notificationStatus
         self.security = security
+        self.setUpRecovery = setUpRecovery
+        self.replaceRecovery = replaceRecovery
         self.openSystemSettings = openSystemSettings
         self.loadMediaPreviews = loadMediaPreviews
         self.saveMediaPreviews = saveMediaPreviews
@@ -110,6 +118,20 @@ public struct SettingsView: View {
             if let security {
                 Section {
                     ForEach(security()) { LabeledContent($0.name, value: $0.text) }
+                    if let setUpRecovery, security().contains(where: { $0.name == "Recovery key" && $0.text == "Not set up" }) {
+                        Button(settingUpRecovery ? "Setting up…" : "Set up recovery key") {
+                            settingUpRecovery = true
+                            Task {
+                                switch await setUpRecovery() {
+                                case .success(let key): newRecoveryKey = key
+                                case .failure(let message): recoveryFailure = message
+                                }
+                                settingUpRecovery = false
+                            }
+                        }
+                        .disabled(settingUpRecovery)
+                        .accessibilityIdentifier("set-up-recovery")
+                    }
                 } header: {
                     Text("Security")
                 } footer: {
@@ -152,10 +174,63 @@ public struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
+        .alert("Recovery key", isPresented: Binding(get: { recoveryFailure != nil }, set: { if !$0 { recoveryFailure = nil } })) {
+            if recoveryFailure?.offersReplace == true, let replaceRecovery {
+                Button("Replace backup", role: .destructive) {
+                    Task {
+                        switch await replaceRecovery() {
+                        case .success(let key): newRecoveryKey = key
+                        case .failure(let message): recoveryFailure = SettingsMessage(message.text)
+                        }
+                    }
+                }
+            }
+            Button(recoveryFailure?.offersReplace == true ? "Cancel" : "OK", role: .cancel) {}
+        } message: { Text(recoveryFailure?.text ?? "") }
+        .sheet(item: Binding(get: { newRecoveryKey.map(RecoveryKeyItem.init) }, set: { if $0 == nil { newRecoveryKey = nil } })) { item in
+            RecoveryKeySheet(key: item.key) { newRecoveryKey = nil }
+        }
         .confirmationDialog("Sign out of Halo?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
             Button("Sign out", role: .destructive, action: onSignOut)
             Button("Cancel", role: .cancel) {}
         }
+    }
+}
+
+/// A user-facing failure text passed from the app into Settings.
+public struct SettingsMessage: Error, Sendable, Equatable {
+    public let text: String
+    /// Offer "Replace" after this message (an existing key backup would be lost).
+    public let offersReplace: Bool
+    public init(_ text: String, offersReplace: Bool = false) { self.text = text; self.offersReplace = offersReplace }
+}
+
+private struct RecoveryKeyItem: Identifiable { let key: String; var id: String { key } }
+
+/// Shows a new recovery key once. It lives only in this sheet's state; closing the sheet drops it.
+private struct RecoveryKeySheet: View {
+    let key: String
+    let done: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Your recovery key").font(.title2.bold())
+                Text("Keep this key somewhere safe, like a password manager. It is the only way to read your encrypted history on a new device. Halo can't show it again.")
+                Text(key)
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.secondary.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+                    .accessibilityIdentifier("recovery-key")
+                ShareLink("Save or copy the key", item: key)
+                Spacer()
+                Button("I've saved it", action: done).buttonStyle(.borderedProminent).frame(maxWidth: .infinity)
+            }
+            .padding()
+        }
+        .interactiveDismissDisabled()
     }
 }
 

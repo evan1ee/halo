@@ -68,6 +68,22 @@ public actor EncryptionCoordinator {
         }
     }
 
+    /// Sets up secret storage and backup and returns the new recovery key, to be shown once and not kept (FR-4).
+    public func enableRecovery() async throws(HaloError) -> String {
+        guard snapshot.recovery != .working else { throw .invalidInput("RECOVERY_BUSY") }
+        snapshot.recovery = .working
+        defer { if snapshot.recovery == .working { snapshot.recovery = .idle } }
+        return try await port.enableRecovery()
+    }
+
+    /// Replaces an existing key backup with a new recovery key. Only after the user confirmed the loss of the old backup.
+    public func replaceRecovery() async throws(HaloError) -> String {
+        guard snapshot.recovery != .working else { throw .invalidInput("RECOVERY_BUSY") }
+        snapshot.recovery = .working
+        defer { if snapshot.recovery == .working { snapshot.recovery = .idle } }
+        return try await port.resetRecovery()
+    }
+
     // MARK: Private
 
     private func sessionReady(_ ready: Bool) {

@@ -60,6 +60,18 @@ private struct RootView: View {
                                     diagnostics: { await root.diagnosticsReport() },
                                     storageSizes: { await root.storageSizes() },
                                     security: { [StorageSize(name: "This device", text: root.recovery.deviceStatus), StorageSize(name: "Recovery key", text: root.recovery.recoveryStatus)] },
+                                    setUpRecovery: {
+                                        switch await root.recovery.setUpRecovery() {
+                                        case .success(let key): .success(key)
+                                        case .failure(let failure): .failure(SettingsMessage(failure.text, offersReplace: failure.backupExists))
+                                        }
+                                    },
+                                    replaceRecovery: {
+                                        switch await root.recovery.replaceRecovery() {
+                                        case .success(let key): .success(key)
+                                        case .failure(let failure): .failure(SettingsMessage(failure.text))
+                                        }
+                                    },
                                     notificationStatus: { await root.notificationStatus() },
                                     openSystemSettings: {
                                         if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }

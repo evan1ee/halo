@@ -59,6 +59,8 @@ public final class FakeEncryptionPort: EncryptionPort {
         return key
     }
 
+    public func resetRecovery() async throws(HaloError) -> String { try await enableRecovery() }
+
     private func publish(_ status: EncryptionStatus) {
         for continuation in state.withLock({ Array($0.continuations.values) }) { continuation.yield(status) }
     }
