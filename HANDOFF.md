@@ -5,7 +5,7 @@ Last updated: 2026-11-20 · Branch: `claude/m0b-adapter-scaffold` · local commi
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
-- **Milestone:** M0 done; M1 and M2 largely done; **M3 (read-state engine) in progress**. Dev Mac: Xcode 27.2, Swift 6.4.2, iPhone 16.
+- **Milestone:** M0 done; M1 largely done; M2 done except media sending and the offline-send test; **M3 (read-state engine) in progress**. Dev Mac: Xcode 27.2, Swift 6.4.2, iPhone 16.
 - **Checks:** `scripts/prepush.sh` passes (SwiftLint not configured, skipped). Contract tests (`infra/dev`) pass for Session, RoomList, Sync, ReadMarker.
 - **CI:** PR #1/#2 merged; this branch's CI results not reviewed. `licenses` runs only on SDK/inventory changes.
 
