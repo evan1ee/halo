@@ -39,6 +39,8 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 
 **Now**
 - [ ] Merge PR #5 (M3 tests, M2 messaging, M4 stickers core) once CI is green on its last push.
+- [ ] `infra/dev` fixture script: create the throwaway accounts and the sticker, timeline and E2EE fixtures and write
+      `~/.config/halo-dev/contract.env`, so all contract tests run (four skip today: Timeline, Media, ReadMarker, Encryption).
 - [ ] CI: macOS job running `xcodebuild test` for HaloMatrixAdapter (unit tests only), HaloPersistence, HaloPlatform, the Feature
       packages, and the app build; add the app build to `scripts/prepush.sh` ([development/CI_CD.md](development/CI_CD.md)).
 

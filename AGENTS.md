@@ -103,7 +103,7 @@ Before adding or upgrading **any** dependency: (1) justify it in the PR/commit; 
 | Module boundary checks | `scripts/check-boundaries.sh` | **M0 (in place)** |
 | Pure package tests (Linux or macOS) | `swift test --package-path ios/Packages/<Package> -Xswiftc -warnings-as-errors` (Linux: `swift:6.2-noble` image) | **M0 (in place)**: HaloFoundation, HaloDomain, HaloTestSupport, HaloApplication |
 | App build | `xcodebuild -project ios/Halo.xcodeproj -scheme Halo-Debug -destination 'platform=iOS Simulator,name=<device>' build` | M0 (macOS only) |
-| Adapter/FFI tests | `xcodebuild … -scheme HaloMatrixAdapterTests test` against `infra/dev` | M1 |
+| Adapter/FFI tests | `xcodebuild … -scheme HaloMatrixAdapter test` (unit, in `prepush.sh`); contracts against `infra/dev`: `scripts/contract-test.sh [test …]` (settings in `~/.config/halo-dev/contract.env`) | **in place** |
 | Scenario suite | `docker compose -f infra/test/docker-compose.yml up -d && swift run --package-path tools/scenario-driver scenario-driver all` | M3 |
 | Secret scan | `gitleaks git --redact .` (gitleaks 8.30.1) | **M0 (in place)** |
 | Rust licence gate | `scripts/rust-license-inventory.py --sdk <checkout at ios/SDKVERSION.md sdk_commit> --check docs/security/inventory/rust-deps-matrix-sdk-ffi.csv` | **M0 (in place)** |
