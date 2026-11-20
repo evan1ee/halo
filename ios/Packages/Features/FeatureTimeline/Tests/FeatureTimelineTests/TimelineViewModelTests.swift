@@ -26,7 +26,8 @@ struct TimelineViewModelTests {
     @Test("text, notice, emote and media rows carry the sender and a readable label")
     func messages() throws {
         let model = try model()
-        #expect(model.row(event(.text("hi", isEdited: false))) == TimelineRow(id: "id", style: .message, sender: "Alice", text: "hi"))
+        let source = TimelineRow.Source(sender: "@alice:x.org", eventID: nil, body: "hi", formattedBody: nil)
+        #expect(model.row(event(.text("hi", isEdited: false))) == TimelineRow(id: "id", style: .message, sender: "Alice", text: "hi", source: source))
         #expect(model.row(event(.text("hi", isEdited: true), own: true)).text == "hi (edited)")
         #expect(model.row(event(.text("hi", isEdited: false), own: true)).style == .ownMessage)
         #expect(model.row(event(.emote("waves", isEdited: false))).text == "Alice waves")

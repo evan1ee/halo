@@ -237,6 +237,7 @@ private struct Composer: View {
 private struct RowView: View {
     let row: TimelineRow
     let model: TimelineViewModel
+    @State private var showingSource = false
 
     /// Long-press menu for confirmed messages: quick reactions, and edit/delete for own messages.
     @ViewBuilder private var actions: some View {
@@ -245,6 +246,7 @@ private struct RowView: View {
         }
         Button("More reactions…", systemImage: "face.smiling") { model.beginReactionPicker(row) }
         Button("Reply", systemImage: "arrowshape.turn.up.left") { model.beginReply(row) }
+        if row.source != nil { Button("View source", systemImage: "chevron.left.forwardslash.chevron.right") { showingSource = true } }
         if row.isOwn {
             if row.style == .ownMessage && row.image == nil { Button("Edit", systemImage: "pencil") { model.beginEdit(row) } }
             Button("Delete", systemImage: "trash", role: .destructive) { Task { await model.delete(row) } }
@@ -295,6 +297,7 @@ private struct RowView: View {
             .contextMenu {
                 if row.eventID != nil { actions } else if row.failedLocalID != nil { failedActions }
             }
+            .sheet(isPresented: $showingSource) { if let source = row.source { MessageSourceView(source: source) } }
         case .notice:
             Text(row.text).font(.callout).foregroundStyle(.secondary)
         case .emote:
@@ -359,7 +362,6 @@ private struct ThumbnailView: View {
         .task(id: model.showsPreview(of: image)) { if isSticker || model.showsPreview(of: image) { data = await model.thumbnail(for: image) } }
     }
 }
-#endif
 
 /// A grid of emoji; tapping one reacts to the message the picker was opened for.
 private struct ReactionPicker: View {
@@ -427,3 +429,25 @@ private struct PaginationTrigger: Hashable {
     let rows: Int
     let ready: Bool
 }
+
+/// "View source" for a text message: who sent it, which event, and the plain and HTML bodies exactly as received.
+private struct MessageSourceView: View {
+    let source: TimelineRow.Source
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if let sender = source.sender { LabeledContent("Sender", value: sender) }
+                if let eventID = source.eventID { LabeledContent("Event", value: eventID) }
+                Section("Body") { Text(source.body).textSelection(.enabled) }
+                if let formatted = source.formattedBody {
+                    Section("Formatted body (HTML)") { Text(formatted).font(.system(.footnote, design: .monospaced)).textSelection(.enabled) }
+                }
+            }
+            .navigationTitle("Message source")
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+    }
+}
+#endif

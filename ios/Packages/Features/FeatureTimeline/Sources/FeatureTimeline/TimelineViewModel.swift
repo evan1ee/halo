@@ -30,6 +30,17 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     /// A file, audio or video attachment, shown as a tile that opens in Quick Look (MEDIA_ATTACHMENTS FR-2…4).
     public let file: FileTile?
 
+    /// What "View source" shows for a text message (BOT_MESSAGES FR-1): the sender, the event and both bodies, untouched.
+    public struct Source: Equatable, Sendable {
+        public let sender: String?
+        public let eventID: String?
+        public let body: String
+        public let formattedBody: String?
+    }
+
+    /// Set for text messages and notices.
+    public let source: Source?
+
     public struct FileTile: Equatable, Sendable {
         public let kind: MediaKind
         public let name: String
@@ -74,8 +85,9 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     init(
         id: String, style: Style, sender: String?, text: String, image: Image? = nil, status: String? = nil,
         eventID: EventID? = nil, isOwn: Bool = false, reactions: [Chip] = [], reply: Reply? = nil, styled: AttributedString? = nil,
-        failedLocalID: String? = nil, isSticker: Bool = false, file: FileTile? = nil
+        failedLocalID: String? = nil, isSticker: Bool = false, file: FileTile? = nil, source: Source? = nil
     ) {
+        self.source = source
         self.file = file
         self.failedLocalID = failedLocalID
         self.isSticker = isSticker
@@ -688,9 +700,12 @@ public final class TimelineViewModel {
                     status: Self.status(of: event.sendState), eventID: event.eventID, isOwn: event.isOwn,
                     reactions: Self.chips(event.reactions), reply: Self.reply(event.replyTo),
                     styled: event.formattedBody.map { HTMLText.attributed($0) + AttributedString(edited ? " (edited)" : "") },
-                    failedLocalID: Self.failedID(event))
+                    failedLocalID: Self.failedID(event),
+                    source: .init(sender: event.sender?.rawValue, eventID: event.eventID?.rawValue, body: body, formattedBody: event.formattedBody))
             case .notice(let body, _):
-                return TimelineRow(id: id, style: .notice, sender: name, text: body)
+                return TimelineRow(
+                    id: id, style: .notice, sender: name, text: body,
+                    source: .init(sender: event.sender?.rawValue, eventID: event.eventID?.rawValue, body: body, formattedBody: event.formattedBody))
             case .emote(let body, _):
                 return TimelineRow(id: id, style: .emote, sender: nil, text: "\(name) \(body)")
             case .media(let attachment):

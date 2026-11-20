@@ -23,7 +23,7 @@ Summary only; details per feature: [docs/development/IMPLEMENTATION_NOTES.md](do
 Full list: docs/DECISION_LOG.md (D1–D75), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-Sticker grid autoplay verified on screen: `infra/dev/add-animated-sticker.py` adds an animated GIF `spin` to the dev pack "cats" (needs Pillow; the `stickers` contract test ignores `spin`). Earlier this session: Settings Security (status, recovery setup, confirmed backup replace), Notifications, Storage, Appearance, Diagnostics. Committed straight to `main` (D75).
+Timeline "View source" (BOT_MESSAGES FR-1): long-press a text message or notice → sender, event ID, body, formatted body (`TimelineRow.Source`, `MessageSourceView`); seen in the simulator; media rows don't have it. Earlier: Settings Security/Notifications/Storage/Appearance/Diagnostics, grid autoplay with the `spin` GIF fixture. Committed straight to `main` (D75).
 
 ## 5. Outstanding issues
 Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
