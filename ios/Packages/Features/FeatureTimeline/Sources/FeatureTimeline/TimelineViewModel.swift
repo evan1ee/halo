@@ -120,6 +120,72 @@ public final class TimelineViewModel {
     public private(set) var content: Content = .opening
     /// User IDs of bots whose messages may become cards (Settings → Bots, BOT_MESSAGES §3).
     public var botSenders: Set<String> = []
+    /// What the room's bot messages say about tasks (BOT_MESSAGES §6); recomputed with every snapshot.
+    public private(set) var botTasks = BotTaskTracker([])
+    /// Tasks the user ticked and the bot hasn't confirmed yet, and those that got no answer in time.
+    private var botTapped: Set<BotTaskTracker.Key> = []
+    private var botUnanswered: Set<BotTaskTracker.Key> = []
+    private var botTimeouts: [BotTaskTracker.Key: Task<Void, Never>] = [:]
+    /// How long to wait for the bot before showing "No response from bot" (BOT_MESSAGES §6).
+    var botTimeout: Duration = .seconds(120)
+
+    public enum BotRowState: Equatable, Sendable {
+        /// Can be ticked.
+        case open
+        /// The 👍 was sent; waiting for the bot's confirmation.
+        case pending
+        /// No confirmation within the timeout; tapping again is allowed.
+        case noResponse
+        case completed
+        /// The creating message isn't known, so there is nothing to react to: read-only (AC-B3).
+        case unavailable
+    }
+
+    /// The state of one row of a bot's todo list.
+    public func botRowState(bot: String?, id: String) -> BotRowState {
+        guard let bot else { return .unavailable }
+        let key = BotTaskTracker.Key(bot: bot, id: id)
+        if botTasks.isCompleted(key) { return .completed }
+        guard botTasks.source(of: key) != nil else { return .unavailable }
+        if botTapped.contains(key) { return .pending }
+        return botUnanswered.contains(key) ? .noResponse : .open
+    }
+
+    /// Ticks a row: one 👍 on the message that created the task, never on the list (BOT_MESSAGES FR-3). Ignored while pending,
+    /// done or unavailable, and no second 👍 is sent when the user already has one on that message.
+    public func tickBotTask(bot: String?, id: String) async {
+        guard let bot else { return }
+        let state = botRowState(bot: bot, id: id)
+        guard state == .open || state == .noResponse else { return }
+        let key = BotTaskTracker.Key(bot: bot, id: id)
+        guard let source = botTasks.source(of: key) else { return }
+        botUnanswered.remove(key)
+        botTapped.insert(key)
+        let alreadyReacted: Bool = {
+            guard case .live(let rows, _, _, _) = content, let target = rows.first(where: { $0.eventID == source.eventID }) else { return false }
+            return target.reactions.contains { $0.key == "👍" && $0.reactedByMe }
+        }()
+        if !alreadyReacted {
+            do { try await coordinator.toggleReaction(on: source.eventID, key: "👍") } catch {
+                botTapped.remove(key)
+                sendError = "That didn't work. Try again."
+                return
+            }
+        }
+        botTimeouts[key]?.cancel()
+        let timeout = botTimeout
+        botTimeouts[key] = Task { [weak self] in
+            try? await Task.sleep(for: timeout)
+            guard !Task.isCancelled else { return }
+            self?.botTimedOut(key)
+        }
+    }
+
+    private func botTimedOut(_ key: BotTaskTracker.Key) {
+        guard botTapped.remove(key) != nil else { return }
+        botUnanswered.insert(key)
+        botTimeouts[key] = nil
+    }
     /// The message being typed. Cleared only once the send was accepted, so a failure never loses the text.
     public var draft = "" {
         didSet {
@@ -613,6 +679,9 @@ public final class TimelineViewModel {
                 if case .event(let event) = item.content, let id = event.eventID { times[id] = event.timestamp }
             }
             eventTimes = times
+            botTasks = botTracker(snapshot.items)
+            botTapped.subtract(botTasks.completed)
+            botUnanswered.subtract(botTasks.completed)
             let rows = Self.collapsingStateRuns(snapshot.items.map(row), items: snapshot.items)
             // Wait until there is something to land on: a message, or the whole (message-less) history. The first snapshots of a
             // freshly opened room hold only the start marker and state events.
@@ -686,6 +755,16 @@ public final class TimelineViewModel {
     }
 
     static let settingsText = "The room was updated"
+
+    private func botTracker(_ items: [TimelineItem]) -> BotTaskTracker {
+        guard !botSenders.isEmpty else { return BotTaskTracker([]) }
+        var messages: [BotTaskTracker.Message] = []
+        for item in items {
+            guard case .event(let event) = item.content, let card = botCard(event), let sender = event.sender?.rawValue else { continue }
+            messages.append(.init(bot: sender, eventID: event.eventID, card: card))
+        }
+        return BotTaskTracker(messages)
+    }
 
     /// The card for a message from an allowlisted bot whose HTML a parser recognises.
     private func botCard(_ event: TimelineEvent) -> BotCard? {

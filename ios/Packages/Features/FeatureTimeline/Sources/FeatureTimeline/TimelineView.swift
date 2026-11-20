@@ -277,7 +277,9 @@ private struct RowView: View {
                 if let image = row.image { ThumbnailView(image: image, model: model, isSticker: row.isSticker).accessibilityLabel(row.isSticker ? row.text : "Image") }
                 if let file = row.file { FileTileView(file: file, isOpening: model.openingRow == row.id, model: model) { Task { await model.openFile(row) } } }
                 if let card = row.card, !showingOriginal {
-                    BotCardView(card: card)
+                    BotCardView(
+                        card: card, state: { model.botRowState(bot: row.source?.sender, id: $0) },
+                        tick: { id in Task { await model.tickBotTask(bot: row.source?.sender, id: id) } })
                     Button("Show original") { showingOriginal = true }.font(.caption2)
                 } else if row.showsText { Text(row.styled ?? AttributedString(row.text))
                     .padding(8)
@@ -458,19 +460,42 @@ private struct MessageSourceView: View {
 /// A bot message as a native card (BOT_MESSAGES FR-2). Read-only: ticking tasks needs the interaction protocol (FR-3).
 private struct BotCardView: View {
     let card: BotCard
+    let state: (String) -> TimelineViewModel.BotRowState
+    let tick: (String) -> Void
+
+    /// One list row: a checkbox the user can tick, then the text, the bot's number and what is going on with it.
+    private func todoRow(_ row: BotCard.TodoRow) -> some View {
+        let rowState = row.isDone ? .completed : state(row.id)
+        let done = rowState == .completed
+        return HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Button { tick(row.id) } label: {
+                Image(systemName: done ? "checkmark.circle.fill" : (rowState == .pending ? "clock" : "circle"))
+                    .foregroundStyle(done ? .green : .secondary)
+            }
+            .buttonStyle(.plain)
+            .disabled(rowState != .open && rowState != .noResponse)
+            .accessibilityLabel(done ? "Done" : "Mark done")
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 6) {
+                    Text(row.text).strikethrough(done).foregroundStyle(done ? .secondary : .primary)
+                    Text("#\(row.id)").font(.caption2).foregroundStyle(.secondary)
+                }
+                switch rowState {
+                case .pending: Text("Waiting for bot…").font(.caption2).foregroundStyle(.secondary)
+                case .noResponse: Text("No response from bot. Tap to try again.").font(.caption2).foregroundStyle(.orange)
+                case .unavailable where !row.isDone: Text("Not available").font(.caption2).foregroundStyle(.secondary)
+                default: EmptyView()
+                }
+            }
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             switch card {
             case .todoList(let title, let rows):
                 Label(title, systemImage: "checklist").font(.subheadline.bold())
-                ForEach(rows, id: \.id) { row in
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Image(systemName: row.isDone ? "checkmark.circle.fill" : "circle").foregroundStyle(row.isDone ? .green : .secondary)
-                        Text(row.text).strikethrough(row.isDone).foregroundStyle(row.isDone ? .secondary : .primary)
-                        Text("#\(row.id)").font(.caption2).foregroundStyle(.secondary)
-                    }
-                }
+                ForEach(rows, id: \.id) { row in todoRow(row) }
             case .taskAdded(let id, let owner, let title):
                 Label("Task #\(id) added", systemImage: "plus.circle").font(.subheadline.bold())
                 Text(title)
