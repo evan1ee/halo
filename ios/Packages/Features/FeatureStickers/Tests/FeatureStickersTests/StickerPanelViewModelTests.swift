@@ -164,19 +164,19 @@ struct StickerPanelViewModelTests {
 
     @Test("a failed send after confirming doesn't record the acknowledgement; the notice returns, and a later success records it once")
     func failedSendKeepsConsent() async {
-        var fail = true
+        let fail = Flag(true)
         var acknowledged = 0
         var seen = false
         let model = StickerPanelViewModel(
             library: StickerLibrary(packs: FakeStickerPacks(), prefs: FakeStickerPrefs()), room: room,
             notice: .init(roomIsEncrypted: { true }, isAcknowledged: { seen }, acknowledge: { seen = true; acknowledged += 1 }),
-            send: { (_: Sticker) async throws(HaloError) in if fail { throw HaloError.network(retryable: true) } })
+            send: { (_: Sticker) async throws(HaloError) in if fail.value { throw HaloError.network(retryable: true) } })
         await model.tap(sticker("a"))
         await model.confirmNotice()
         #expect(!seen && acknowledged == 0 && model.sendError != nil && model.pendingNotice == nil)
         await model.tap(sticker("a"))  // the notice is shown again
         #expect(model.pendingNotice != nil)
-        fail = false
+        fail.value = false
         await model.confirmNotice()
         #expect(seen && acknowledged == 1 && model.sendError == nil)
     }
@@ -208,4 +208,9 @@ struct StickerPanelViewModelTests {
         }
         #expect(sent == 2 && seen)
     }
+}
+
+@MainActor private final class Flag {
+    var value: Bool
+    init(_ value: Bool) { self.value = value }
 }
