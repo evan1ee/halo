@@ -102,9 +102,19 @@ enum TimelineMapper {
                 .media(MediaAttachment(
                     kind: .image, body: message.body, source: ref(content.source),
                     width: content.info?.width.map(Int.init), height: content.info?.height.map(Int.init)))
-            case .video(let content): .media(MediaAttachment(kind: .video, body: message.body, source: ref(content.source)))
-            case .audio(let content): .media(MediaAttachment(kind: .audio, body: message.body, source: ref(content.source)))
-            case .file(let content): .media(MediaAttachment(kind: .file, body: message.body, source: ref(content.source)))
+            case .video(let content):
+                .media(MediaAttachment(
+                    kind: .video, body: message.body, source: ref(content.source),
+                    width: content.info?.width.map(Int.init), height: content.info?.height.map(Int.init),
+                    mimeType: content.info?.mimetype, size: content.info?.size.map(Int.init), duration: content.info?.duration))
+            case .audio(let content):
+                .media(MediaAttachment(
+                    kind: .audio, body: message.body, source: ref(content.source),
+                    mimeType: content.info?.mimetype, size: content.info?.size.map(Int.init), duration: content.info?.duration))
+            case .file(let content):
+                .media(MediaAttachment(
+                    kind: .file, body: message.body, source: ref(content.source),
+                    mimeType: content.info?.mimetype, size: content.info?.size.map(Int.init)))
             default: .unsupported
             }
         case .sticker(let body, _, let source): .sticker(body: body, source: ref(source))

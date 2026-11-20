@@ -27,10 +27,21 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     public let failedLocalID: String?
     /// A sticker: its image is shown without a bubble or caption (`text` is the accessibility label).
     public let isSticker: Bool
+    /// A file, audio or video attachment, shown as a tile that opens in Quick Look (MEDIA_ATTACHMENTS FR-2…4).
+    public let file: FileTile?
 
-    /// Whether the row shows its `text` in a bubble. A sticker never does, and neither does an image whose body is just
-    /// its file name ("photo.jpg", which clients put in `body` when there is no caption); a real caption is shown.
-    public var showsText: Bool { !isSticker && !(image != nil && Self.looksLikeFilename(text)) }
+    public struct FileTile: Equatable, Sendable {
+        public let kind: MediaKind
+        public let name: String
+        /// For example "PDF · 1.2 MB" or "0:42 · 3.4 MB".
+        public let detail: String
+        public let ref: MediaRef
+        public let size: Int?
+    }
+
+    /// Whether the row shows its `text` in a bubble. A sticker never does, nor does a file tile, and neither does an image whose
+    /// body is just its file name ("photo.jpg", which clients put in `body` when there is no caption); a real caption is shown.
+    public var showsText: Bool { !isSticker && file == nil && !(image != nil && Self.looksLikeFilename(text)) }
 
     static func looksLikeFilename(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -61,8 +72,9 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     init(
         id: String, style: Style, sender: String?, text: String, image: Image? = nil, status: String? = nil,
         eventID: EventID? = nil, isOwn: Bool = false, reactions: [Chip] = [], reply: Reply? = nil, styled: AttributedString? = nil,
-        failedLocalID: String? = nil, isSticker: Bool = false
+        failedLocalID: String? = nil, isSticker: Bool = false, file: FileTile? = nil
     ) {
+        self.file = file
         self.failedLocalID = failedLocalID
         self.isSticker = isSticker
         self.styled = styled
@@ -311,6 +323,52 @@ public final class TimelineViewModel {
         }
         return nil
     }
+
+    // MARK: Opening files
+
+    /// A downloaded copy of an attachment, in a temporary folder, shown in Quick Look.
+    public struct OpenedFile: Identifiable, Equatable {
+        public let id = UUID()
+        public let url: URL
+    }
+
+    public private(set) var openedFile: OpenedFile?
+    /// The id of the row whose file is downloading.
+    public private(set) var openingRow: String?
+    public private(set) var openFileError: String?
+    /// Files are read into memory whole for now (`MediaPort.content`); bigger ones wait for a file-based download.
+    public static let openSizeLimit = 50 * 1024 * 1024
+
+    public func openFile(_ row: TimelineRow) async {
+        guard let file = row.file, let media, openingRow == nil else { return }
+        openFileError = nil
+        if let size = file.size, size > Self.openSizeLimit {
+            openFileError = "This file is too large to open here yet (\(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)))."
+            return
+        }
+        openingRow = row.id
+        defer { openingRow = nil }
+        do {
+            let data = try await media.content(file.ref)
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent("halo-open-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            // The name comes from the sender: keep only its last path component so it can't leave the folder.
+            let last = URL(fileURLWithPath: file.name).lastPathComponent
+            let url = directory.appendingPathComponent(last.isEmpty || last == "." || last == ".." ? "file" : last)
+            try data.write(to: url, options: .atomic)
+            openedFile = OpenedFile(url: url)
+        } catch {
+            openFileError = (error as? HaloError) == .network(retryable: true) ? "Can't reach the server. The file wasn't opened." : "The file couldn't be opened."
+        }
+    }
+
+    /// Quick Look was dismissed: the temporary copy is deleted.
+    public func closeFile() {
+        if let url = openedFile?.url { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        openedFile = nil
+    }
+
+    public func dismissOpenFileError() { openFileError = nil }
 
     public func loadEarlier() async { await coordinator.paginateBackwards() }
 
@@ -567,7 +625,11 @@ public final class TimelineViewModel {
                         id: id, style: style, sender: name, text: attachment.body, image: .init(ref: source, aspectRatio: ratio),
                         eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions))
                 }
-                return TimelineRow(id: id, style: style, sender: name, text: "[\(Self.label(attachment.kind))] \(attachment.body)")
+                let label = "[\(Self.label(attachment.kind))] \(attachment.body)"
+                guard let source = attachment.source else { return TimelineRow(id: id, style: style, sender: name, text: label) }
+                return TimelineRow(
+                    id: id, style: style, sender: name, text: label, eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions),
+                    file: .init(kind: attachment.kind, name: attachment.body, detail: Self.fileDetail(attachment), ref: source, size: attachment.size))
             case .sticker(let body, let source):
                 guard let source else { return TimelineRow(id: id, style: .message, sender: name, text: "[Sticker] \(body)") }
                 return TimelineRow(
@@ -619,6 +681,22 @@ public final class TimelineViewModel {
         case .senderVerificationProblem: "Unable to decrypt: the sender's identity has changed or isn't verified."
         case .backupDisabled: "Unable to decrypt this older message. Verify this device with your recovery key to load your key backup."
         }
+    }
+
+    /// "PDF · 1.2 MB", "0:42 · 3.4 MB": what is known about the file, without inventing the rest.
+    static func fileDetail(_ attachment: MediaAttachment) -> String {
+        var parts: [String] = []
+        if let duration = attachment.duration, duration > 0, attachment.kind != .file {
+            let total = Int(duration.rounded())
+            parts.append(String(format: "%d:%02d", total / 60, total % 60))
+        }
+        if attachment.kind == .file {
+            let ext = (attachment.body as NSString).pathExtension
+            if !ext.isEmpty { parts.append(ext.uppercased()) }
+            else if let mime = attachment.mimeType, let sub = mime.split(separator: "/").last { parts.append(sub.uppercased()) }
+        }
+        if let size = attachment.size { parts.append(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)) }
+        return parts.joined(separator: " · ")
     }
 
     private static func label(_ kind: MediaKind) -> String {

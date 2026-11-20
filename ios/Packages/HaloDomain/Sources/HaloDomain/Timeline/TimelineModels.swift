@@ -149,13 +149,24 @@ public struct MediaAttachment: Sendable, Equatable {
     public let source: MediaRef?
     public let width: Int?
     public let height: Int?
+    public let mimeType: String?
+    /// Bytes, when the sender said.
+    public let size: Int?
+    /// Seconds, for audio and video.
+    public let duration: TimeInterval?
 
-    public init(kind: MediaKind, body: String, source: MediaRef?, width: Int? = nil, height: Int? = nil) {
+    public init(
+        kind: MediaKind, body: String, source: MediaRef?, width: Int? = nil, height: Int? = nil,
+        mimeType: String? = nil, size: Int? = nil, duration: TimeInterval? = nil
+    ) {
         self.kind = kind
         self.body = body
         self.source = source
         self.width = width
         self.height = height
+        self.mimeType = mimeType
+        self.size = size
+        self.duration = duration
     }
 }
 
