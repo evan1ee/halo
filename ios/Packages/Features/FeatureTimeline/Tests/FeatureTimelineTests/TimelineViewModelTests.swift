@@ -36,6 +36,9 @@ struct TimelineViewModelTests {
         #expect(image.text == "cat.png" && image.image == .init(ref: MediaRef(token: "t"), aspectRatio: 2))
         #expect(model.row(event(.media(MediaAttachment(kind: .image, body: "x.png", source: nil)))).text == "[Image] x.png")
         #expect(model.row(event(.notice("fyi", isEdited: false))).style == .notice)
+        #expect(model.row(event(.emote("waves", isEdited: false))).source?.body == "waves")
+        #expect(image.source?.body == "cat.png")
+        #expect(model.row(event(.media(MediaAttachment(kind: .file, body: "a.pdf", source: MediaRef(token: "f"))))).source?.body == "a.pdf")
     }
 
     @Test("a message from an allowlisted bot becomes a card when a parser recognises it; anyone else's stays text")

@@ -772,6 +772,10 @@ public final class TimelineViewModel {
         return BotTemplates.parse(html)
     }
 
+    private func plainSource(_ event: TimelineEvent, _ body: String) -> TimelineRow.Source {
+        .init(sender: event.sender?.rawValue, eventID: event.eventID?.rawValue, body: body, formattedBody: event.formattedBody)
+    }
+
     func row(_ item: TimelineItem) -> TimelineRow {
         let id = item.id.rawValue
         switch item.content {
@@ -798,26 +802,26 @@ public final class TimelineViewModel {
                     id: id, style: .notice, sender: name, text: body,
                     source: .init(sender: event.sender?.rawValue, eventID: event.eventID?.rawValue, body: body, formattedBody: event.formattedBody))
             case .emote(let body, _):
-                return TimelineRow(id: id, style: .emote, sender: nil, text: "\(name) \(body)")
+                return TimelineRow(id: id, style: .emote, sender: nil, text: "\(name) \(body)", source: plainSource(event, body))
             case .media(let attachment):
                 let style: TimelineRow.Style = event.isOwn ? .ownMessage : .message
                 if attachment.kind == .image, let source = attachment.source {
                     let ratio = Self.aspectRatio(width: attachment.width, height: attachment.height)
                     return TimelineRow(
                         id: id, style: style, sender: name, text: attachment.body, image: .init(ref: source, aspectRatio: ratio),
-                        eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions))
+                        eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions), source: plainSource(event, attachment.body))
                 }
                 let label = "[\(Self.label(attachment.kind))] \(attachment.body)"
                 guard let source = attachment.source else { return TimelineRow(id: id, style: style, sender: name, text: label) }
                 return TimelineRow(
                     id: id, style: style, sender: name, text: label, eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions),
                     file: .init(kind: attachment.kind, name: attachment.body, detail: Self.fileDetail(attachment), ref: source, size: attachment.size,
-                        thumbnail: attachment.kind == .video ? attachment.thumbnail.map { .init(ref: $0, aspectRatio: Self.aspectRatio(width: attachment.width, height: attachment.height)) } : nil))
+                        thumbnail: attachment.kind == .video ? attachment.thumbnail.map { .init(ref: $0, aspectRatio: Self.aspectRatio(width: attachment.width, height: attachment.height)) } : nil), source: plainSource(event, attachment.body))
             case .sticker(let body, let source):
                 guard let source else { return TimelineRow(id: id, style: .message, sender: name, text: "[Sticker] \(body)") }
                 return TimelineRow(
                     id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: body, image: .init(ref: source, aspectRatio: 1),
-                    eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions), isSticker: true)
+                    eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions), isSticker: true, source: plainSource(event, body))
             case .redacted:
                 return TimelineRow(id: id, style: .placeholder, sender: name, text: "Message deleted")
             case .undecryptable(let reason):
