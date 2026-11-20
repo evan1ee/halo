@@ -32,6 +32,7 @@ final class AppRoot {
     private let sessionCoordinator: SessionCoordinator
     private let matrixSession: MatrixSessionPort
     private let media: MediaLoader
+    private let unrecognisedBots = UnrecognisedBotMessages()
     private let previewPolicy: any MediaPreviewPolicyPort
     private let roomPort: MatrixRoomPort
     private let chatCreation: MatrixChatCreationPort
@@ -153,6 +154,7 @@ final class AppRoot {
             "Halo \(info?["CFBundleShortVersionString"] as? String ?? "?") (\(info?["CFBundleVersion"] as? String ?? "?"))",
             "iOS \(ProcessInfo.processInfo.operatingSystemVersionString)",
         ]
+        lines.append("Bot messages shown as plain text (no template matched), this launch: \(unrecognisedBots.count)")
         if let auditPort {
             let events = (try? await auditPort.all().count).map(String.init) ?? "unavailable"
             let unexplained = (try? await auditPort.unexplainedCount()).map(String.init) ?? "unavailable"
@@ -250,6 +252,7 @@ final class AppRoot {
             // Where to land on opening: the user's own read position (a receipt from any device) at that moment.
             readThrough: { [roomCoordinator] in await roomCoordinator.rooms.first { $0.id == room }?.ownReadThrough })
         model.botSenders = Set(AppPreferences().botSenders)
+        model.unrecognisedBotMessages = unrecognisedBots
         return model
     }
 

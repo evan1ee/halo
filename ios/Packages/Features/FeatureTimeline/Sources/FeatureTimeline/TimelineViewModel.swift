@@ -120,6 +120,8 @@ public final class TimelineViewModel {
     public private(set) var content: Content = .opening
     /// User IDs of bots whose messages may become cards (Settings → Bots, BOT_MESSAGES §3).
     public var botSenders: Set<String> = []
+    /// Reports a known bot's message whose formatted body no template recognised (by event ID; for the diagnostics count).
+    public var unrecognisedBotMessages: UnrecognisedBotMessages?
     /// What the room's bot messages say about tasks (BOT_MESSAGES §6); recomputed with every snapshot.
     public private(set) var botTasks = BotTaskTracker([])
     /// Tasks the user ticked and the bot hasn't confirmed yet, and those that got no answer in time.
@@ -769,7 +771,9 @@ public final class TimelineViewModel {
     /// The card for a message from an allowlisted bot whose HTML a parser recognises.
     private func botCard(_ event: TimelineEvent) -> BotCard? {
         guard let sender = event.sender?.rawValue, botSenders.contains(sender), let html = event.formattedBody else { return nil }
-        return BotTemplates.parse(html)
+        let card = BotTemplates.parse(html)
+        if card == nil, let id = event.eventID?.rawValue { unrecognisedBotMessages?.record(eventID: id) }
+        return card
     }
 
     private func plainSource(_ event: TimelineEvent, _ body: String) -> TimelineRow.Source {

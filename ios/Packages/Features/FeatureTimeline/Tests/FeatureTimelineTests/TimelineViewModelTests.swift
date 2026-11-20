@@ -731,4 +731,23 @@ struct MediaPreviewPolicyTests {
             #expect(!on.previewsHidden && on.showsPreview(of: image))
         }
     }
+
+    @Test("a known bot's message that matches no template is counted once; one that matches, or a stranger's, is not")
+    func unrecognisedBotMessages() throws {
+        let room = try RoomID("!r:x.org")
+        let vm = TimelineViewModel(coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: room))
+        let counter = UnrecognisedBotMessages()
+        vm.botSenders = ["@bot:x.org"]
+        vm.unrecognisedBotMessages = counter
+        func item(_ id: String, sender: String, html: String) throws -> TimelineItem {
+            TimelineItem(id: TimelineItemID(id), content: .event(TimelineEvent(
+                eventID: try EventID("$\(id)"), sender: try UserID(sender), senderName: "B", timestamp: Date(timeIntervalSince1970: 0), isOwn: false,
+                kind: .text("x", isEdited: false), formattedBody: html)))
+        }
+        _ = vm.row(try item("a", sender: "@bot:x.org", html: "<b>something new</b>"))
+        _ = vm.row(try item("a", sender: "@bot:x.org", html: "<b>something new</b>"))
+        _ = vm.row(try item("b", sender: "@bot:x.org", html: "Added Task <b>#1</b> for Ann: <i>\"Milk\"</i>"))
+        _ = vm.row(try item("c", sender: "@other:x.org", html: "<b>hi</b>"))
+        #expect(counter.count == 1)
+    }
 }
