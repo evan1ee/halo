@@ -52,7 +52,7 @@ public struct StickerPanelView: View {
             Button("Send anyway") { Task { await model.confirmNotice() } }
             Button("Cancel", role: .cancel) { model.cancelNotice() }
         } message: {
-            Text("This room is end-to-end encrypted, but sticker images are stored on the server without encryption. Anyone with access to the server can see them.")
+            Text("Your messages in this room are end-to-end encrypted, but this sticker's image is not. Sticker images are stored as ordinary media on your homeserver, so who can see them depends on the homeserver's media storage and access controls. This applies to sticker images only, not to your other messages.")
         }
         .task { await model.start() }
         .onDisappear { Task { await model.stop() } }

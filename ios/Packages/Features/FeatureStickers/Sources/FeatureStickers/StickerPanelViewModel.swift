@@ -94,22 +94,25 @@ public final class StickerPanelViewModel {
         await deliver(sticker)
     }
 
-    /// The user accepted the notice: it won't be shown again, and the held sticker is sent.
+    /// The user accepted the notice: the held sticker is sent. The acknowledgement (per device, not per room) is recorded
+    /// only once the send succeeded, so a failed send doesn't use up the consent and the notice comes back on the next try.
     public func confirmNotice() async {
         guard let sticker = pendingNotice else { return }
         pendingNotice = nil
-        notice?.acknowledge()
-        await deliver(sticker)
+        if await deliver(sticker) { notice?.acknowledge() }
     }
 
     public func cancelNotice() { pendingNotice = nil }
 
-    private func deliver(_ sticker: Sticker) async {
+    @discardableResult
+    private func deliver(_ sticker: Sticker) async -> Bool {
         do {
             try await send(sticker)
             await library.recordSent(sticker)
+            return true
         } catch {
             sendError = error == .network(retryable: true) ? "Can't reach the server. The sticker wasn't sent." : "The sticker couldn't be sent."
+            return false
         }
     }
 

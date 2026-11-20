@@ -161,4 +161,51 @@ struct StickerPanelViewModelTests {
         await model.tap(sticker("x"))
         #expect(sent == 1 && model.pendingNotice == nil)
     }
+
+    @Test("a failed send after confirming doesn't record the acknowledgement; the notice returns, and a later success records it once")
+    func failedSendKeepsConsent() async {
+        var fail = true
+        var acknowledged = 0
+        var seen = false
+        let model = StickerPanelViewModel(
+            library: StickerLibrary(packs: FakeStickerPacks(), prefs: FakeStickerPrefs()), room: room,
+            notice: .init(roomIsEncrypted: { true }, isAcknowledged: { seen }, acknowledge: { seen = true; acknowledged += 1 }),
+            send: { (_: Sticker) async throws(HaloError) in if fail { throw HaloError.network(retryable: true) } })
+        await model.tap(sticker("a"))
+        await model.confirmNotice()
+        #expect(!seen && acknowledged == 0 && model.sendError != nil && model.pendingNotice == nil)
+        await model.tap(sticker("a"))  // the notice is shown again
+        #expect(model.pendingNotice != nil)
+        fail = false
+        await model.confirmNotice()
+        #expect(seen && acknowledged == 1 && model.sendError == nil)
+    }
+
+    @Test("cancelling discards the pending sticker without sending or recording the acknowledgement")
+    func cancelDiscards() async {
+        var sent = 0
+        var seen = false
+        let model = StickerPanelViewModel(
+            library: StickerLibrary(packs: FakeStickerPacks(), prefs: FakeStickerPrefs()), room: room,
+            notice: .init(roomIsEncrypted: { true }, isAcknowledged: { seen }, acknowledge: { seen = true }), send: { _ in sent += 1 })
+        await model.tap(sticker("a"))
+        model.cancelNotice()
+        await model.confirmNotice()  // nothing is pending any more
+        #expect(sent == 0 && !seen && model.pendingNotice == nil)
+    }
+
+    @Test("the acknowledgement is per device: once given, other encrypted rooms don't ask again")
+    func acknowledgementIsNotPerRoom() async {
+        var seen = false
+        var sent = 0
+        let other = try! RoomID("!other:x.org")
+        for target in [room, other] {
+            let model = StickerPanelViewModel(
+                library: StickerLibrary(packs: FakeStickerPacks(), prefs: FakeStickerPrefs()), room: target,
+                notice: .init(roomIsEncrypted: { true }, isAcknowledged: { seen }, acknowledge: { seen = true }), send: { _ in sent += 1 })
+            await model.tap(sticker("a"))
+            if target == room { await model.confirmNotice() }
+        }
+        #expect(sent == 2 && seen)
+    }
 }
