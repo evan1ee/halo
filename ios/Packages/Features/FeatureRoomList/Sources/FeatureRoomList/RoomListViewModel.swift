@@ -75,6 +75,8 @@ public final class RoomListViewModel {
         guard tasks.isEmpty else { return }
         let sessionStates = await session.states()
         let listStatuses = await rooms.statuses()
+        // A change of unread counts keeps the room count, so the status alone would not refresh the rows.
+        let readInputs = await rooms.readInputs()
         var follow: [Task<Void, Never>] = []
         if let receipts {
             let positions = await receipts.positions()
@@ -82,6 +84,9 @@ public final class RoomListViewModel {
                 for await positions in positions { await self?.positionsChanged(positions) }
             })
         }
+        follow.append(Task { [weak self] in
+            for await _ in readInputs { await self?.readInputsChanged() }
+        })
         tasks = follow + [
             Task { [weak self] in
                 for await state in sessionStates { await self?.sessionChanged(state) }
@@ -94,6 +99,10 @@ public final class RoomListViewModel {
 
     func sessionChanged(_ state: SessionCoordinator.State) async {
         if case .ready = state { await rooms.start() } else { await rooms.stop() }
+    }
+
+    func readInputsChanged() async {
+        if case .loaded = lastStatus { await listChanged(lastStatus) }
     }
 
     func positionsChanged(_ positions: [RoomID: Date]) async {

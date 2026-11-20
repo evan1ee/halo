@@ -13,7 +13,13 @@ public final class MatrixTimelinePort: TimelinePort {
     public func open(room id: RoomID) async throws(HaloError) -> any TimelineSession {
         let room = try await session.room(id)
         let own = try await session.ownUserID()
-        do { return MatrixTimelineSession(room: room, timeline: try await room.timeline(), ownUserID: own) } catch { throw ErrorMapper.map(error) }
+        do {
+            let timeline = try await room.timeline()
+            // Classic sync (D73) doesn't pre-fill a timeline the way sliding sync did: it starts empty and fills from the
+            // server. One page is requested at once, in the background; its events arrive through `items()`.
+            Task { _ = try? await timeline.paginateBackwards(numEvents: 20) }
+            return MatrixTimelineSession(room: room, timeline: timeline, ownUserID: own)
+        } catch { throw ErrorMapper.map(error) }
     }
 }
 

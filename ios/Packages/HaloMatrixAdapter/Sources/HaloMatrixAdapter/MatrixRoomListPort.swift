@@ -4,103 +4,126 @@ import HaloFoundation
 import MatrixRustSDK
 import Synchronization
 
-/// `RoomListPort` over `RoomListService.allRooms()` with dynamic adapters (SDK_INTEGRATION §6).
-///
-/// Raw SDK diffs are queued in arrival order by the listener (which never blocks the SDK thread,
-/// AGENTS.md §8) and mapped to domain diffs by one consumer task, so order is preserved.
+/// `RoomListPort` over the client's rooms and the classic sync loop (D73, V-RS-7; SDK_INTEGRATION §6): `Client.rooms()` is
+/// every known room, a sync response names the rooms it changed, and only those summaries are rebuilt. The list is
+/// ordered by the latest event (invites first) and every change is published as a `.reset` of the whole list, which
+/// the coordinator's reducer applies like any other diff. There is nothing to page: all rooms are present at once.
 public final class MatrixRoomListPort: RoomListPort {
     private struct Subscription {
         let id: UUID
-        let controller: RoomListDynamicEntriesController
+        let refresh: AsyncStream<Void>.Continuation
+        let filter: FilterBox
+    }
+
+    private final class FilterBox: Sendable {
+        private let value: Mutex<RoomListFilter>
+        init(_ filter: RoomListFilter) { value = Mutex(filter) }
+        var current: RoomListFilter { get { value.withLock { $0 } } set { value.withLock { $0 = newValue } } }
     }
 
     private let session: MatrixSessionPort
-    private let pageSize: UInt32
     private let current = Mutex<Subscription?>(nil)
 
-    public init(session: MatrixSessionPort, pageSize: UInt32 = 50) {
-        self.session = session
-        self.pageSize = pageSize
-    }
+    public init(session: MatrixSessionPort, pageSize: UInt32 = 50) { self.session = session }
 
     public func rooms(filter: RoomListFilter) -> AsyncStream<RoomListDiff> {
         let (output, continuation) = AsyncStream<RoomListDiff>.makeStream(bufferingPolicy: .unbounded)
         let id = UUID()
-        let task = Task { [session, pageSize] in
-            let (raw, rawContinuation) = AsyncStream<[RoomListEntriesUpdate]>.makeStream(bufferingPolicy: .unbounded)
+        let (refresh, refreshContinuation) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        let filterBox = FilterBox(filter)
+        let task = Task { [session] in
             do {
-                let kind = try Self.kind(for: filter)
-                let service = try await session.roomListService()
-                let settings = try await session.signedInClient().getNotificationSettings()
-                let list = try await service.allRooms()
-                let result = list.entriesWithDynamicAdapters(pageSize: pageSize, listener: Listener(rawContinuation))
-                let controller = result.controller()
-                _ = controller.setFilter(kind: kind)
-                current.withLock { $0 = Subscription(id: id, controller: controller) }
-                // Keeps the SDK subscription alive until this task ends.
-                let handle = result.entriesStream()
-                defer { handle.cancel() }
-                for await updates in raw {
-                    for update in updates { continuation.yield(try await Self.map(update, settings: settings)) }
+                _ = try Self.kind(for: filter)
+                let client = try await session.signedInClient()
+                let settings = await client.getNotificationSettings()
+                var summaries: [String: RoomSummary] = [:]
+                var last: [RoomSummary]?
+                func publish(changed: Set<String>?) async throws(HaloError) {
+                    let known = client.rooms().filter { !$0.isSpace() && [.joined, .invited].contains($0.membership()) }
+                    var present: Set<String> = []
+                    for room in known {
+                        let roomID = room.id()
+                        present.insert(roomID)
+                        if summaries[roomID] == nil || changed?.contains(roomID) == true { summaries[roomID] = try await Self.summary(room, settings) }
+                    }
+                    summaries = summaries.filter { present.contains($0.key) }
+                    var list: [RoomSummary] = []
+                    let chosen = filterBox.current
+                    for room in known {
+                        guard let summary = summaries[room.id()], try await Self.includes(chosen, room: room, summary: summary) else { continue }
+                        list.append(summary)
+                    }
+                    list.sort(by: Self.order)
+                    if list != last {
+                        last = list
+                        continuation.yield(.reset(list))
+                    }
                 }
+                try await publish(changed: nil)
+                let changes = await session.syncChanges()
+                // Sync responses and filter changes feed one loop, so the list is rebuilt one change at a time.
+                let (events, eventContinuation) = AsyncStream<Set<String>?>.makeStream(bufferingPolicy: .unbounded)
+                let forward = Task {
+                    for await change in changes { eventContinuation.yield(change.joined.union(change.invited).union(change.left)) }
+                }
+                let refreshes = Task { for await _ in refresh { eventContinuation.yield(nil) } }
+                defer { forward.cancel(); refreshes.cancel(); eventContinuation.finish() }
+                for await changed in events { try await publish(changed: changed) }
             } catch {
                 // The stream ends; the consumer resubscribes (RoomListCoordinator) and gets a fresh `.reset`.
             }
             continuation.finish()
         }
+        current.withLock { $0 = Subscription(id: id, refresh: refreshContinuation, filter: filterBox) }
         continuation.onTermination = { [weak self] _ in
             task.cancel()
+            refreshContinuation.finish()
             self?.current.withLock { if $0?.id == id { $0 = nil } }
         }
         return output
     }
 
-    public func loadMore() async throws(HaloError) {
-        guard let subscription = current.withLock({ $0 }) else { throw .internal(code: "NO_ROOM_LIST_SUBSCRIPTION") }
-        subscription.controller.addOnePage()
-    }
+    /// Nothing to page: classic sync delivers every room.
+    public func loadMore() async throws(HaloError) {}
 
     public func setFilter(_ filter: RoomListFilter) async throws(HaloError) {
         guard let subscription = current.withLock({ $0 }) else { throw .internal(code: "NO_ROOM_LIST_SUBSCRIPTION") }
-        _ = subscription.controller.setFilter(kind: try Self.kind(for: filter))
+        _ = try Self.kind(for: filter)
+        subscription.filter.current = filter
+        subscription.refresh.yield()
     }
 
     // MARK: Mapping
 
     /// `.unread` needs read-state inputs and arrives with the unread engine (M1); asking for it now is
     /// an explicit error, not a silently wrong list.
-    static func kind(for filter: RoomListFilter) throws(HaloError) -> RoomListEntriesDynamicFilterKind {
+    static func kind(for filter: RoomListFilter) throws(HaloError) {
+        if case .unread = filter { throw .unsupported("FILTER_UNREAD_M1") }
+    }
+
+    static func includes(_ filter: RoomListFilter, room: Room, summary: RoomSummary) async throws(HaloError) -> Bool {
         switch filter {
-        case .all: .all(filters: [.nonSpace, .nonLeft])
-        case .favourites: .all(filters: [.nonSpace, .nonLeft, .favourite])
-        case .invites: .invite
-        case .people: .all(filters: [.nonSpace, .nonLeft, .category(expect: .people)])
-        case .rooms: .all(filters: [.nonSpace, .nonLeft, .category(expect: .group)])
+        case .all: return true
+        case .invites: return summary.membership == .invited
+        case .people: return summary.membership == .joined && summary.isDirect
+        case .rooms: return summary.membership == .joined && !summary.isDirect
+        case .favourites:
+            guard summary.membership == .joined else { return false }
+            return (try? await room.roomInfo())?.isFavourite ?? false
         case .unread: throw .unsupported("FILTER_UNREAD_M1")
         }
     }
 
-    static func map(_ update: RoomListEntriesUpdate, settings: NotificationSettings) async throws(HaloError) -> RoomListDiff {
-        switch update {
-        case .append(let rooms): .append(try await summaries(rooms, settings))
-        case .clear: .clear
-        case .pushFront(let room): .pushFront(try await summary(room, settings))
-        case .pushBack(let room): .pushBack(try await summary(room, settings))
-        case .popFront: .popFront
-        case .popBack: .popBack
-        case .insert(let index, let room): .insert(index: Int(index), try await summary(room, settings))
-        case .set(let index, let room): .set(index: Int(index), try await summary(room, settings))
-        case .remove(let index): .remove(index: Int(index))
-        case .truncate(let length): .truncate(length: Int(length))
-        case .reset(let rooms): .reset(try await summaries(rooms, settings))
+    /// Invites first, then the newest latest event first; rooms without events last, ties by id for a stable order.
+    static func order(_ a: RoomSummary, _ b: RoomSummary) -> Bool {
+        let aInvite = a.membership == .invited, bInvite = b.membership == .invited
+        if aInvite != bInvite { return aInvite }
+        switch (a.latestEvent?.timestamp, b.latestEvent?.timestamp) {
+        case (let x?, let y?) where x != y: return x > y
+        case (nil, .some): return false
+        case (.some, nil): return true
+        default: return a.id.rawValue < b.id.rawValue
         }
-    }
-
-    private static func summaries(_ rooms: [Room], _ settings: NotificationSettings) async throws(HaloError) -> [RoomSummary] {
-        var result: [RoomSummary] = []
-        result.reserveCapacity(rooms.count)
-        for room in rooms { result.append(try await summary(room, settings)) }
-        return result
     }
 
     static func summary(_ room: Room, _ settings: NotificationSettings) async throws(HaloError) -> RoomSummary {
@@ -189,10 +212,4 @@ public final class MatrixRoomListPort: RoomListPort {
         case .banned: .banned
         }
     }
-}
-
-private final class Listener: RoomListEntriesListener {
-    private let continuation: AsyncStream<[RoomListEntriesUpdate]>.Continuation
-    init(_ continuation: AsyncStream<[RoomListEntriesUpdate]>.Continuation) { self.continuation = continuation }
-    func onUpdate(roomEntriesUpdate: [RoomListEntriesUpdate]) { continuation.yield(roomEntriesUpdate) }
 }
