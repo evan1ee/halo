@@ -1,6 +1,6 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-20 · Branch: `feat/m3-classic-sync-adapter` · PRs #1–#15 merged
+Last updated: 2026-11-20 · Branch: `feat/m3-scenario-driver-server-half-2` · PRs #1–#16 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
@@ -34,7 +34,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 Full list: docs/DECISION_LOG.md (D1–D74), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-`MatrixSessionPort` (classic loop, `syncChanges`, `.none` sliding sync), `MatrixSyncPort`, `MatrixRoomListPort` (rewritten), `MatrixTimelinePort` (initial page), `RoomListViewModel` (read-input refresh), contract tests (`createPack` leaves its room; runner refreshes fixtures), `docs/DECISION_LOG.md` (D74), `ROADMAP.md`, `HANDOFF.md`.
+`tools/scenario-driver/run_scenarios.py` (S06, S07, S07b, S08, S13, S21 added), `docs/testing/UNREAD_REGRESSION_TESTS.md`, `ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
 - Stickers: V-ST-1 resolved (option B), V-ST-2 partly (token refresh on 401 not exercised). Verified against `infra/dev` by contract test `stickers` (env `HALO_DEV_STICKER_ROOM`: a room with `m.room.image_pack` `cats` {wave, dance} enabled in `m.image_pack.rooms`; throwaway account `stickertester` created locally). Not built: long-press preview/animation (FR-5, FR-9), editing/deleting packs, hiding pack rooms from the room list, legacy `im.ponies.*` packs (V-ST-3), privacy notice, "unavailable pack" UI. Real sticker images were not loaded (the fixture mxc URLs have no media).
@@ -43,7 +43,7 @@ Full list: docs/DECISION_LOG.md (D1–D74), docs/adr/. Most relevant now: D70 au
 - Each `createPack` contract run leaves one more pack enabled on the test account (the `stickers` test tolerates it).
 - `retrySend`/`abortSend` verified only for an unknown echo (contract test `mentionsAndEchoes`: `.notFound`); a real failed echo was not retried against the server.
 - Opening a room now clears `m.marked_unread` (`ReadReceiptCoordinator.roomOpened`, called by `TimelineViewModel`; the adapter skips the write when the flag is already clear). Unverified on a device/server.
-- S01–S22 validate Halo against a model of Synapse. Verified: count rules (see above) and the server half of 9 scenarios (`tools/scenario-driver/run_scenarios.py`; run it after changing the dev Synapse). Unverified: sliding sync (V-RS-7: Synapse serves 0 counts there), limited timelines, own-receipt delivery to a second device (V-RS-1), the SDK's own counts.
+- S01–S22 validate Halo against a model of Synapse. Verified: count rules (see above) and the server half of 15 scenarios, 28 checks (`tools/scenario-driver/run_scenarios.py`; run it after changing the dev Synapse). Unverified: sliding sync (V-RS-7: Synapse serves 0 counts there), limited timelines, own-receipt delivery to a second device (V-RS-1), the SDK's own counts.
 - Unverified on a device: file protection class on `halo.sqlite` (simulator reports none), V-RS-1 (do own-receipt changes trigger room-list updates?), cost of `loadOrFetchEvent` lookups, kill-and-relaunch resend, NSE access to the database, paging cost for large accounts, the swipe UI and the unread indicators.
 - D6 verified in the simulator (iOS 26.0, `infra/dev`): `onScrollVisibilityChange` fires for `List` rows; the receipt followed the newest visible message ("D6 line 4" on opening, "D6 line 15" after scrolling). Not an automated UI test. Observed: a room with 40 unread messages opens at its oldest events ("This is the start of the conversation"), not at the first unread or the bottom; TIMELINE.md §1 specifies landing at the first unread message (or the bottom): queued in ROADMAP M2 leftovers. The room list shows no unread indicator for it (V-RS-7: sliding sync counts are 0).
 - `read_intent`: `receipt_type` always `read`; failed sends count in `attempts`/`last_error` and are logged; confirmation rules (a)/(b) not built (D72), sent intents expire after 7 days.
@@ -61,7 +61,7 @@ Full list: docs/DECISION_LOG.md (D1–D74), docs/adr/. Most relevant now: D70 au
 
 ## 6. Next steps
 The queue is docs/ROADMAP.md §"Remaining work", worked by the loop in docs/development/AUTONOMOUS_LOOP.md. Its head:
-1. **P0** S01–S22 on classic sync (rest of the scenario driver, encrypted rooms), re-evaluate G-UNREAD; measure the first-sync cost on a large account; M4 items after.
+1. **P0** feed the real server output into the Swift model and SDK-side encrypted-room evidence on classic sync (needs a second SDK client with keys), re-evaluate G-UNREAD; measure the first-sync cost on a large account; M4 items after.
 
 ## 7. Next Session Prompt
 ```text
