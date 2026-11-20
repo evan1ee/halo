@@ -77,7 +77,7 @@ sync requests, and Halo can't add types **[VERIFIED F-FFI-9]**. Options:
 | C | Upstream contribution: let `RoomListService` / room subscriptions request extra `required_state` | Best long-term | Upstream timeline unknown |
 | D | Halo-owned bindings (G-FFI fail path) | Full control | Big cost |
 
-**[DECISION ADR-0011, provisional]** Try A in M4 week 1; if empty → B behind `RoomPort` (so A/C/D can replace it later without
+**[VERIFIED 2026-11-20, V-ST-1]** Option A returns nothing on Synapse 1.165 / SDK 26.11.17; Halo uses option B (`MatrixStickerPackPort`). **[DECISION ADR-0011, provisional]** Try A in M4 week 1; if empty → B behind `RoomPort` (so A/C/D can replace it later without
 feature changes); propose C upstream in parallel. Writing uses `Room.send_state_event_raw` **[VERIFIED F-FFI-9]**.
 
 ## 10. Error scenarios

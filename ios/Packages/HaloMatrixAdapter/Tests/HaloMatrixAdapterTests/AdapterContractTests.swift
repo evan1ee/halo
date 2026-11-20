@@ -76,6 +76,68 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
+    @Test("Stickers (HALO_DEV_STICKER_ROOM holds m.room.image_pack \"cats\" with wave and dance, enabled in m.image_pack.rooms)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
+    func stickers() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(
+                username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
+            on: details)
+        try await MatrixSyncPort(session: session).start()
+        let room = try RoomID(env["HALO_DEV_STICKER_ROOM"] ?? "")
+
+        // V-ST-1 option A: is the image-pack state readable through the SDK? Poll: the room arrives with sync.
+        let packs = MatrixStickerPackPort(session: session)
+        var load = StickerPackLoad(packs: [], failedSources: 0)
+        for _ in 0..<60 {
+            load = try await packs.packs(currentRoom: nil)
+            if !load.packs.isEmpty { break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        let pack = try #require(load.packs.first, "no pack read: option A of V-ST-1 does not work, failedSources=\(load.failedSources)")
+        #expect(pack.ref == PackRef(room: room, stateKey: "cats") && pack.displayName == "Cats" && pack.source == .userEnabled)
+        #expect(pack.stickers.map(\.shortcode) == ["dance", "wave"])
+        #expect(pack.stickers.allSatisfy { $0.image != nil })
+
+        // The same pack, found as the current room's pack.
+        let asRoomPack = try await packs.packs(currentRoom: room)
+        #expect(asRoomPack.packs.count == 1)  // not listed twice
+
+        // Prefs round trip through account data.
+        let prefsPort = MatrixStickerPrefsPort(session: session)
+        var prefs = StickerPrefs()
+        prefs.toggleFavourite(pack.stickers[0].ref)
+        prefs.recordUse(pack.stickers[1].ref, at: Date(timeIntervalSince1970: 1_700_000_000))
+        do { try await prefsPort.save(prefs) } catch { Issue.record("prefs save failed: \(error)") }
+        // The SDK serves account data from its store, which a sync fills in; wait for the write to come back.
+        var loaded: StickerPrefs?
+        for _ in 0..<30 {
+            do { loaded = try await prefsPort.load() } catch { Issue.record("prefs load failed: \(error)"); break }
+            if loaded == prefs { break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        #expect(loaded == prefs)
+
+        // Sending an m.sticker shows up in the timeline as a sticker.
+        let timeline = try await MatrixTimelinePort(session: session).open(room: room)
+        let stream = timeline.items()
+        try await timeline.sendSticker(pack.stickers[1])
+        let seen: Bool = try await within(seconds: 60) {
+            var items: [HaloDomain.TimelineItem] = []
+            for await diff in stream {
+                try ListReducer.apply(diff, to: &items)
+                for item in items {
+                    if case .event(let event) = item.content, case .sticker(let body, _) = event.kind, body == "Waving" { return true }
+                }
+            }
+            return false
+        }
+        #expect(seen)
+        await timeline.close()
+        try await session.logout()
+    }
+
     @Test("SyncPortContract")
     func sync() async throws {
         let session = port()
