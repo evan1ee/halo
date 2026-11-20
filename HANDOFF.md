@@ -47,7 +47,7 @@ Full list: docs/DECISION_LOG.md (D1–D70), docs/adr/. Most relevant now: D70 au
 - No `HaloLog` in `ReadReceiptCoordinator` (storage errors only kept in `lastStorageError`).
 - Timeline/Media contract tests need a fixture room (`HALO_DEV_TIMELINE_ROOM`: first, second, notice, waves, redacted message, blue.png). Run contracts with `TEST_RUNNER_HALO_DEV_*`; the server value must be `http://localhost:8008`. Parallel contract tests on one account hang (suite is serialized).
 - Open validation: V-CI-2, V-SQL-1, V-APPLE-1, V-NSE-*, V-PUSH-1/3/5, V-RS-1/5, V-RS-7 (Synapse sliding sync serves 0 counts).
-- Docker CLI hangs on the `osxkeychain` helper; use a throwaway `DOCKER_CONFIG`.
+- Docker CLI hangs on the `osxkeychain` helper; use a throwaway `DOCKER_CONFIG`.  Compose is missing under a throwaway config: use `docker exec`/`docker restart`.
 - Contract tests: `infra/dev/create-fixtures.py` creates accounts/rooms and writes `~/.config/halo-dev/contract.env`; re-run it before a full `scripts/contract-test.sh` (room count) and with `--new-e2ee` before the Encryption test (recovery can be set up once per account). Verified: 11 of 11 pass.
 
 **Needs the founder** (the loop records these and moves on; AUTONOMOUS_LOOP §5)
