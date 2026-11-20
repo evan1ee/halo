@@ -1,3 +1,4 @@
+import Foundation
 import HaloApplication
 import HaloDomain
 import HaloFoundation
@@ -39,5 +40,25 @@ struct RoomListViewModelTests {
         #expect(model.content == .failed("The room list couldn't be loaded. Pull to try again."))
         await model.listChanged(.idle)
         #expect(model.content == .idle)
+    }
+
+    @Test("unread rooms show their count, and reading one here clears it")
+    func unreadIndicator() async throws {
+        let id = try RoomID("!a:x.org")
+        let unread = RoomSummary(
+            id: id, name: "A", isDirect: false, isEncrypted: false, membership: .joined,
+            read: RoomReadCounts(mode: .allMessages, server: ServerCounts(notification: 2, highlight: 0), sdk: .zero, isMarkedUnread: false),
+            latestEvent: LatestEventRef(timestamp: Date(timeIntervalSince1970: 100), senderIsSelf: false))
+        let coordinator = RoomListCoordinator(port: FakeRoomListPort(rooms: [unread]))
+        let model = RoomListViewModel(
+            session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()), rooms: coordinator,
+            receipts: ReadReceiptCoordinator(port: FakeReadMarkerPort()))
+        await coordinator.start()
+        for await status in await coordinator.statuses() {
+            if case .loaded = status { await model.listChanged(status); break }
+        }
+        #expect(model.content == .loaded(count: 1, rows: [.init(id: id, name: "A", display: .count(2), hasUnread: true)]))
+        await model.positionsChanged([id: Date(timeIntervalSince1970: 100)])
+        #expect(model.content == .loaded(count: 1, rows: [.init(id: id, name: "A")]))
     }
 }

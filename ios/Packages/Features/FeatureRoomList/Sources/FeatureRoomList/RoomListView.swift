@@ -1,4 +1,5 @@
 #if canImport(SwiftUI)
+import HaloDomain
 import HaloFoundation
 import SwiftUI
 
@@ -21,7 +22,14 @@ public struct RoomListView: View {
                 List {
                     Section("Rooms: \(count)") {
                         ForEach(rows) { row in
-                            Button(row.name) { onSelect(row.id) }.foregroundStyle(.primary)
+                            Button { onSelect(row.id) } label: {
+                                HStack {
+                                    Text(row.name).fontWeight(row.hasUnread ? .bold : .regular)
+                                    Spacer()
+                                    indicator(row.display)
+                                }
+                            }
+                            .foregroundStyle(.primary)
                                 .swipeActions(edge: .leading) {
                                     Button("Read") { Task { await model.markRead(row.id) } }.tint(.blue)
                                 }
@@ -40,6 +48,15 @@ public struct RoomListView: View {
             }
         }
         .task { await model.start() }
+    }
+
+    @ViewBuilder private func indicator(_ display: DisplayCount) -> some View {
+        switch display {
+        case .none: EmptyView()
+        case .dot: Circle().fill(.blue).frame(width: 10, height: 10).accessibilityLabel("Unread")
+        case .count(let n): Text("\(n)").font(.caption.bold()).padding(.horizontal, 7).background(.blue, in: Capsule()).foregroundStyle(.white)
+        case .mentions(let n): Text("@\(n)").font(.caption.bold()).padding(.horizontal, 7).background(.red, in: Capsule()).foregroundStyle(.white)
+        }
     }
 }
 #endif
