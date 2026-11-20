@@ -22,6 +22,7 @@ packages:
   FeatureAuth: {path: Packages/Features/FeatureAuth}
   FeatureRoomList: {path: Packages/Features/FeatureRoomList}
   FeatureTimeline: {path: Packages/Features/FeatureTimeline}
+  FeatureStickers: {path: Packages/Features/FeatureStickers}
 targets:
   Halo:
     type: application
@@ -37,6 +38,7 @@ targets:
       - package: FeatureAuth
       - package: FeatureRoomList
       - package: FeatureTimeline
+      - package: FeatureStickers
       - target: HaloNotificationService
         embed: true
     settings:

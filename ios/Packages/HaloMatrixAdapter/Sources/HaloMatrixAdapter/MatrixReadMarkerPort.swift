@@ -37,6 +37,10 @@ public final class MatrixReadMarkerPort: ReadMarkerPort {
 
     public func setMarkedUnread(room: RoomID, _ value: Bool) async throws(HaloError) {
         let sdkRoom = try await session.room(room)
-        do { try await sdkRoom.setUnreadFlag(newValue: value) } catch { throw ErrorMapper.map(error) }
+        do {
+            // Clearing is requested on every room open; don't write account data when the flag is already clear.
+            if !value, try await sdkRoom.roomInfo().isMarkedUnread == false { return }
+            try await sdkRoom.setUnreadFlag(newValue: value)
+        } catch { throw ErrorMapper.map(error) }
     }
 }

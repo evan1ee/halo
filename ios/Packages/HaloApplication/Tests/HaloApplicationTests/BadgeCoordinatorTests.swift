@@ -154,4 +154,29 @@ struct BadgeCoordinatorTests {
         #expect(BadgeCoordinator.attention(inputs: [input], records: [try record(100), try record(150)], positions: read) == [id])
         #expect(BadgeCoordinator.attention(inputs: [input], records: [try record(100)]) == [id])
     }
+
+    /// P7 (UNREAD_REGRESSION_TESTS §2): the app and the extension share records through storage; the badge computed from
+    /// records after an encode/decode round trip, in any stored order, equals the one from the originals and is the size of the attention set.
+    @Test("P7: the badge is identical after the records are serialised, and equals the number of attention rooms")
+    func p7() throws {
+        var rng = SeededRandomNumberGenerator(seed: 77)
+        let modes: [NotificationMode] = [.allMessages, .mentionsAndKeywords, .mute]
+        for n in 0..<300 {
+            let inputs = try (0..<6).map { i -> RoomReadInputs in
+                let s = try summary("!r\(i):x.org", notify: Int.random(in: 0...2, using: &rng), mode: modes.randomElement(using: &rng)!)
+                return RoomReadInputs(
+                    roomID: s.id, membership: s.membership, isEncrypted: false, counts: s.read,
+                    localIntent: Bool.random(using: &rng) ? Date(timeIntervalSince1970: Double(Int.random(in: 0...100, using: &rng))) : nil)
+            }
+            let records = try (0..<Int.random(in: 0...8, using: &rng)).map { k in
+                NotificationRecord(
+                    roomID: try RoomID("!r\(Int.random(in: 0...7, using: &rng)):x.org"), eventID: try EventID("$e\(k)"),
+                    timestamp: Date(timeIntervalSince1970: Double(Int.random(in: 0...100, using: &rng))), isMention: Bool.random(using: &rng))
+            }
+            let stored = try JSONDecoder().decode([NotificationRecord].self, from: JSONEncoder().encode(records.shuffled(using: &rng)))
+            let direct = BadgeCoordinator.attention(inputs: inputs, records: records)
+            #expect(direct == BadgeCoordinator.attention(inputs: inputs, records: stored), "seed 77 case \(n)")
+            #expect(direct.count == BadgeCoordinator.attention(inputs: inputs, records: stored).count, "seed 77 case \(n)")
+        }
+    }
 }

@@ -12,7 +12,7 @@ Send, reply, edit, delete and react reliably, online or offline.
 - I see who is typing.
 
 ## 3. Functional requirements
-- FR-1 Composer: multiline text, Markdown → HTML (`formatted_body`), mentions picker (`@` → members) producing pills and `m.mentions`.
+- FR-1 Composer: multiline text, Markdown → HTML (`formatted_body`), mentions picker (`@` → members) producing pills and `m.mentions`. A display name is set by its owner, so in the link text every ASCII punctuation character is backslash-escaped (no HTML, emphasis or nested link from a name) and the user ID is percent-encoded outside the user-ID grammar.
 - FR-2 Send via `Timeline.send` / `send_reply` / `edit` / `redact_event` / `toggle_reaction` **[VERIFIED F-FFI-8]**.
 - FR-3 Send queue enabled (`enable_all_send_queues`); local echo states: sending → sent → failed (retry / delete via `retry_send` / `abort_send`).
 - FR-4 Typing notices: `typing_notice(true)` while typing (throttled 4 s), false on send/clear; show typing users from `subscribe_to_typing_notifications` **[VERIFIED F-FFI-6]**.

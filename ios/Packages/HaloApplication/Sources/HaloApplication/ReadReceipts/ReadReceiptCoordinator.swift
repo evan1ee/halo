@@ -37,6 +37,8 @@ public actor ReadReceiptCoordinator {
     private var scheduled: [RoomID: Task<Void, Never>] = [:]
     /// Rooms with a send in progress; a second send for the same room would repeat the receipt.
     private var sending: Set<RoomID> = []
+    /// Bumped by `reset()`; a restore still running for the previous account drops its result.
+    private var generation = 0
 
     public init(
         port: any ReadMarkerPort, store: (any ReadIntentPort)? = nil, privateReceipts: Bool = false,
@@ -71,11 +73,13 @@ public actor ReadReceiptCoordinator {
     }
 
     private func load(from store: any ReadIntentPort) async {
+        let started = generation
         let stored: [ReadIntent]
         do {
             try await store.removeSent(createdBefore: wallClock().addingTimeInterval(-Self.sentRetention))
             stored = try await store.all()
-        } catch { lastStorageError = error; return }
+        } catch { if generation == started { lastStorageError = error }; return }
+        guard generation == started else { return }
         for intent in stored {
             if let current = intents[intent.room], current.timestamp >= intent.timestamp { continue }
             intents[intent.room] = Intent(event: intent.event, timestamp: intent.timestamp, sent: intent.isSent)
@@ -83,6 +87,21 @@ public actor ReadReceiptCoordinator {
             if !intent.isSent { schedule(intent.room, after: dueIn(intent.room)) }
         }
         positionBroadcaster.publish(currentPositions())
+    }
+
+    /// Forgets the signed-out account: its intents, timers and store. Nothing of it is sent with the next account's
+    /// session. Call `flush()` first to send what is still pending.
+    public func reset() {
+        generation += 1
+        for task in scheduled.values { task.cancel() }
+        scheduled = [:]
+        intents = [:]
+        created = [:]
+        lastSend = [:]
+        failures = [:]
+        store = nil
+        lastStorageError = nil
+        positionBroadcaster.publish([:])
     }
 
     /// The privacy setting (D7); applies to receipts sent from now on.
@@ -121,6 +140,12 @@ public actor ReadReceiptCoordinator {
         scheduled[room] = nil
         positionBroadcaster.publish(currentPositions())
         persist(room)
+    }
+
+    /// The user opened `room` and it is visible: clears `m.marked_unread` (READ_RECEIPTS §1). Best effort; the flag stays
+    /// set (and the room keeps its attention) if the server can't be reached, and the next open tries again.
+    public func roomOpened(_ room: RoomID) async {
+        do { try await port.setMarkedUnread(room: room, false) } catch { return }
     }
 
     /// "Mark as unread" from the room list.

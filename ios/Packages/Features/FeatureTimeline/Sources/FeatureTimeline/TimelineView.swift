@@ -4,13 +4,21 @@ import SwiftUI
 #if canImport(UIKit)
 import UIKit
 #endif
+import PhotosUI
 
 public struct TimelineView: View {
     private let model: TimelineViewModel
+    private let stickerPanel: (@MainActor () -> AnyView)?
+    @State private var showsStickers = false
 
     @Environment(\.scenePhase) private var scenePhase
 
-    public init(model: TimelineViewModel) { self.model = model }
+    /// - Parameter stickerPanel: the sticker panel for this room, made by the composition root (a feature never imports
+    ///   another feature). Without it the composer has no sticker button.
+    public init(model: TimelineViewModel, stickerPanel: (@MainActor () -> AnyView)? = nil) {
+        self.model = model
+        self.stickerPanel = stickerPanel
+    }
 
     public var body: some View {
         Group {
@@ -39,7 +47,8 @@ public struct TimelineView: View {
                     }
                     ForEach(rows) { row in
                         RowView(row: row, model: model).listRowSeparator(.hidden)
-                            .onAppear { model.rowVisibility(row, isVisible: true) }
+                            // D6: a row counts as seen when at least half of it is on screen; the 0.5 s dwell is in the view model.
+                            .onScrollVisibilityChange(threshold: 0.5) { model.rowVisibility(row, isVisible: $0) }
                             .onDisappear { model.rowVisibility(row, isVisible: false) }
                     }
                 }
@@ -54,7 +63,8 @@ public struct TimelineView: View {
                 }
             }
         }
-        .safeAreaInset(edge: .bottom) { Composer(model: model) }
+        .safeAreaInset(edge: .bottom) { Composer(model: model, onStickers: stickerPanel == nil ? nil : { showsStickers = true }) }
+        .sheet(isPresented: $showsStickers) { stickerPanel?().presentationDetents([.medium, .large]) }
         .sheet(isPresented: Binding(get: { model.reactionTarget != nil }, set: { if !$0 { model.cancelReactionPicker() } })) {
             ReactionPicker(model: model).presentationDetents([.medium])
         }
@@ -66,11 +76,14 @@ public struct TimelineView: View {
 
 private struct Composer: View {
     @Bindable var model: TimelineViewModel
+    let onStickers: (() -> Void)?
+    @State private var picked: PhotosPickerItem?
 
     var body: some View {
         VStack(spacing: 4) {
             if let typing = model.typingText { Text(typing).font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading) }
             if let error = model.sendError { Text(error).font(.caption).foregroundStyle(.red) }
+            if model.isSendingImage { ProgressView("Sending photo…").font(.caption) }
             if model.editing != nil {
                 HStack {
                     Label("Editing message", systemImage: "pencil").font(.caption)
@@ -85,7 +98,30 @@ private struct Composer: View {
                     Button("Cancel") { model.cancelReply() }.font(.caption)
                 }
             }
+            ForEach(model.mentionSuggestions) { member in
+                Button { model.pickMention(member) } label: {
+                    HStack {
+                        Text(member.mentionName)
+                        Spacer()
+                        Text(member.user.rawValue).font(.caption).foregroundStyle(.secondary)
+                    }
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("mention-suggestion")
+            }
             HStack(alignment: .bottom) {
+                if model.canSendImages {
+                    PhotosPicker(selection: $picked, matching: .images) { Image(systemName: "photo").font(.title2) }
+                        .disabled(model.isSendingImage)
+                        .accessibilityLabel("Send a photo")
+                        .accessibilityIdentifier("photo-button")
+                }
+                if let onStickers {
+                    Button(action: onStickers) { Image(systemName: "face.smiling").font(.title2) }
+                        .accessibilityLabel("Stickers")
+                        .accessibilityIdentifier("sticker-button")
+                }
                 TextField("Message", text: $model.draft, axis: .vertical)
                     .lineLimit(1...5)
                     .textFieldStyle(.roundedBorder)
@@ -97,6 +133,14 @@ private struct Composer: View {
         }
         .padding(8)
         .background(.bar)
+        .onChange(of: picked) { _, item in
+            guard let item else { return }
+            picked = nil
+            Task {
+                guard let data = try? await item.loadTransferable(type: Data.self) else { return }
+                await model.sendImage(data: data, filename: item.itemIdentifier ?? "photo")
+            }
+        }
     }
 }
 
@@ -117,6 +161,12 @@ private struct RowView: View {
         }
     }
 
+    /// Menu for an own message that couldn't be sent.
+    @ViewBuilder private var failedActions: some View {
+        Button("Try again", systemImage: "arrow.clockwise") { Task { await model.retry(row) } }
+        Button("Delete", systemImage: "trash", role: .destructive) { Task { await model.discard(row) } }
+    }
+
     var body: some View {
         switch row.style {
         case .message, .ownMessage:
@@ -131,11 +181,11 @@ private struct RowView: View {
                     .padding(.leading, 6)
                     .overlay(alignment: .leading) { Rectangle().fill(.secondary).frame(width: 2) }
                 }
-                if let image = row.image { ThumbnailView(image: image, model: model) }
-                Text(row.styled ?? AttributedString(row.text))
+                if let image = row.image { ThumbnailView(image: image, model: model, isSticker: row.isSticker).accessibilityLabel(row.isSticker ? row.text : "Image") }
+                if !row.isSticker { Text(row.styled ?? AttributedString(row.text))
                     .padding(8)
                     .background(row.style == .ownMessage ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.15), in: .rect(cornerRadius: 12))
-                    .opacity(row.status == nil ? 1 : 0.6)
+                    .opacity(row.status == nil ? 1 : 0.6) }
                 if let status = row.status { Text(status).font(.caption2).foregroundStyle(.secondary) }
                 if !row.reactions.isEmpty {
                     HStack {
@@ -151,7 +201,9 @@ private struct RowView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: row.style == .ownMessage ? .trailing : .leading)
-            .contextMenu { if row.eventID != nil { actions } }
+            .contextMenu {
+                if row.eventID != nil { actions } else if row.failedLocalID != nil { failedActions }
+            }
         case .notice:
             Text(row.text).font(.callout).foregroundStyle(.secondary)
         case .emote:
@@ -170,6 +222,7 @@ private struct RowView: View {
 private struct ThumbnailView: View {
     let image: TimelineRow.Image
     let model: TimelineViewModel
+    var isSticker = false
     @State private var data: Data?
 
     var body: some View {
@@ -185,8 +238,8 @@ private struct ThumbnailView: View {
             #endif
         }
         .aspectRatio(image.aspectRatio ?? 4 / 3, contentMode: .fit)
-        .frame(maxWidth: 240)
-        .clipShape(.rect(cornerRadius: 12))
+        .frame(maxWidth: isSticker ? 160 : 240)
+        .clipShape(.rect(cornerRadius: isSticker ? 0 : 12))
         .task { data = await model.thumbnail(for: image) }
     }
 }

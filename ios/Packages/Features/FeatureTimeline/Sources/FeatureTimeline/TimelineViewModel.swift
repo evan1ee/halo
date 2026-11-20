@@ -23,6 +23,10 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     public let reply: Reply?
     /// Styled text for a message that came with an HTML body; the view shows `text` otherwise.
     public let styled: AttributedString?
+    /// The local ID of an own message whose sending failed; the user can retry or delete it.
+    public let failedLocalID: String?
+    /// A sticker: its image is shown without a bubble or caption (`text` is the accessibility label).
+    public let isSticker: Bool
 
     public struct Reply: Equatable, Sendable {
         public let sender: String?
@@ -45,8 +49,11 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
 
     init(
         id: String, style: Style, sender: String?, text: String, image: Image? = nil, status: String? = nil,
-        eventID: EventID? = nil, isOwn: Bool = false, reactions: [Chip] = [], reply: Reply? = nil, styled: AttributedString? = nil
+        eventID: EventID? = nil, isOwn: Bool = false, reactions: [Chip] = [], reply: Reply? = nil, styled: AttributedString? = nil,
+        failedLocalID: String? = nil, isSticker: Bool = false
     ) {
+        self.failedLocalID = failedLocalID
+        self.isSticker = isSticker
         self.styled = styled
         self.reply = reply
         self.eventID = eventID
@@ -74,11 +81,54 @@ public final class TimelineViewModel {
     /// The message being typed. Cleared only once the send was accepted, so a failure never loses the text.
     public var draft = "" {
         didSet {
-            guard draft != oldValue, editing == nil else { return }
+            guard draft != oldValue, editing == nil, !isRestoringDraft else { return }
+            saveDraft()
+            if mentionQuery != nil { loadMembersIfNeeded() }
             let isTyping = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             Task { [coordinator] in await coordinator.setTyping(isTyping) }
         }
     }
+    /// People that can be mentioned in this room; loaded the first time the user types `@`.
+    public private(set) var members: [RoomMember] = []
+    private var membersRequested = false
+    /// Users picked from the suggestions for the message being written.
+    private var pendingMentions: [Mention] = []
+
+    /// The text after a trailing `@` that starts a word in the draft, or `nil` when the user isn't typing a mention.
+    public var mentionQuery: String? {
+        guard editing == nil, let at = draft.lastIndex(of: "@") else { return nil }
+        if at != draft.startIndex, !draft[draft.index(before: at)].isWhitespace { return nil }
+        let query = draft[draft.index(after: at)...]
+        guard !query.contains(where: \.isWhitespace), query.count <= 30 else { return nil }
+        return String(query)
+    }
+
+    /// Up to five members matching `mentionQuery`.
+    public var mentionSuggestions: [RoomMember] {
+        guard let query = mentionQuery else { return [] }
+        let needle = query.lowercased()
+        let matches = needle.isEmpty ? members : members.filter { member in
+            member.mentionName.lowercased().contains(needle) || member.user.rawValue.lowercased().dropFirst().hasPrefix(needle)
+        }
+        return Array(matches.prefix(5))
+    }
+
+    /// Replaces the `@query` being typed with the member's name and remembers the mention for the send.
+    public func pickMention(_ member: RoomMember) {
+        guard mentionQuery != nil, let at = draft.lastIndex(of: "@") else { return }
+        draft = String(draft[..<at]) + "@\(member.mentionName) "
+        pendingMentions.removeAll { $0.user == member.user }
+        pendingMentions.append(Mention(user: member.user, name: member.mentionName))
+    }
+
+    private func loadMembersIfNeeded() {
+        guard !membersRequested else { return }
+        membersRequested = true
+        Task {
+            if let loaded = try? await coordinator.members() { members = loaded } else { membersRequested = false }
+        }
+    }
+
     /// "Alice is typing…", or `nil` when nobody else is.
     public private(set) var typingText: String?
     public private(set) var isSending = false
@@ -104,12 +154,19 @@ public final class TimelineViewModel {
     private var observation: Task<Void, Never>?
     private let dateFormatter: DateFormatter
     private let receipts: ReadReceiptCoordinator?
+    private let drafts: DraftCoordinator?
+    private let imagePreparer: (any ImagePreparing)?
     private let room: RoomID?
     private let dwell: Duration
     private let sleep: @Sendable (Duration) async throws -> Void
     private var eventTimes: [EventID: Date] = [:]
     private var visible: Set<EventID> = []
     private var isActive = true
+    private var clearedMarkedUnread = false
+    private var isRestoringDraft = false
+    /// The unsent text that was in the composer when an edit began; it comes back when the edit ends.
+    private var stashedDraft = ""
+    private var reportedOwn: EventID?
     private var dwellTask: Task<Void, Never>?
     private var pendingCandidate: EventID?
 
@@ -117,16 +174,20 @@ public final class TimelineViewModel {
     public static let seenDwell: Duration = .milliseconds(500)
 
     /// - Parameters:
+    ///   - drafts: when given together with `room`, the unsent text is kept per room (MESSAGING FR-5).
+    ///   - images: prepares picked photos for sending; without it the composer offers no photo button.
     ///   - receipts: when given together with `room`, the newest visible confirmed event is reported as read.
     public init(
         coordinator: TimelineCoordinator, media: MediaLoader? = nil, receipts: ReadReceiptCoordinator? = nil, room: RoomID? = nil,
-        dwell: Duration = TimelineViewModel.seenDwell, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        drafts: DraftCoordinator? = nil, images: (any ImagePreparing)? = nil, dwell: Duration = TimelineViewModel.seenDwell, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
         locale: Locale = .current, timeZone: TimeZone = .current
     ) {
         self.coordinator = coordinator
         self.media = media
         self.receipts = receipts
         self.room = room
+        self.drafts = drafts
+        self.imagePreparer = images
         self.dwell = dwell
         self.sleep = sleep
         let formatter = DateFormatter()
@@ -152,6 +213,14 @@ public final class TimelineViewModel {
     public func setActive(_ active: Bool) {
         isActive = active
         reevaluateSeen()
+        clearMarkedUnreadIfVisible()
+    }
+
+    /// Opening a room clears `m.marked_unread` once the room is visible, once per opening of the screen.
+    private func clearMarkedUnreadIfVisible() {
+        guard isActive, !clearedMarkedUnread, observation != nil, let receipts, let room else { return }
+        clearedMarkedUnread = true
+        Task { await receipts.roomOpened(room) }
     }
 
     private func reevaluateSeen() {
@@ -171,17 +240,35 @@ public final class TimelineViewModel {
     /// Opens the timeline and follows it. Call when the screen appears.
     public func start() async {
         guard observation == nil else { return }
+        await restoreDraft()
         let statuses = await coordinator.statuses()
         observation = Task { [weak self] in
             for await status in statuses { self?.apply(status) }
         }
         await coordinator.open()
+        clearMarkedUnreadIfVisible()
+    }
+
+    private func restoreDraft() async {
+        guard let drafts, let room else { return }
+        let text = await drafts.draft(for: room)
+        guard draft.isEmpty, editing == nil, !text.isEmpty else { return }
+        isRestoringDraft = true
+        draft = text
+        isRestoringDraft = false
+    }
+
+    private func saveDraft() {
+        guard let drafts, let room else { return }
+        let text = draft
+        Task { await drafts.save(text, for: room) }
     }
 
     /// Closes the timeline. Call when the screen disappears.
     public func stop() async {
         observation?.cancel()
         observation = nil
+        clearedMarkedUnread = false
         await coordinator.close()
     }
 
@@ -198,16 +285,54 @@ public final class TimelineViewModel {
             if let editing {
                 try await coordinator.edit(event: editing, newText: text)
                 self.editing = nil
+                draft = stashedDraft
+                stashedDraft = ""
+                return
             } else if let id = replyingTo?.eventID {
-                try await coordinator.reply(to: id, text: text)
+                try await coordinator.reply(to: id, text: text, mentions: pendingMentions)
                 replyingTo = nil
             } else {
-                try await coordinator.send(text)
+                try await coordinator.send(text, mentions: pendingMentions)
             }
+            pendingMentions = []
             draft = ""
         } catch {
             sendError = error == .network(retryable: true) ? "Can't reach the server. Your message was kept." : "The message couldn't be sent."
         }
+    }
+
+    /// `true` when the composer can attach photos.
+    public var canSendImages: Bool { imagePreparer != nil }
+    /// A photo is being prepared or uploaded.
+    public private(set) var isSendingImage = false
+
+    /// Sends a picked photo: shrinks it, strips its metadata, uploads it. The message shows as a local echo while uploading.
+    public func sendImage(data: Data, filename: String) async {
+        guard let imagePreparer, !isSendingImage else { return }
+        isSendingImage = true
+        sendError = nil
+        defer { isSendingImage = false }
+        do {
+            let image = try await Self.prepare(imagePreparer, data, filename)
+            try await coordinator.sendImage(image)
+        } catch {
+            switch error {
+            case .invalidInput("NOT_AN_IMAGE"): sendError = "That file isn't a picture."
+            case .invalidInput("IMAGE_TOO_LARGE"): sendError = "That picture is too large to send."
+            case .network(retryable: true): sendError = "Can't reach the server. The picture wasn't sent."
+            default: sendError = "The picture couldn't be sent."
+            }
+        }
+    }
+
+    /// Decoding and re-encoding a photo is real work; it runs off the main actor.
+    @concurrent private static func prepare(_ preparer: any ImagePreparing, _ data: Data, _ filename: String) async throws(HaloError) -> OutgoingImage {
+        try preparer.prepare(data: data, filename: filename)
+    }
+
+    /// Sends a sticker from the sticker panel. Throws so the panel can say it failed.
+    public func sendSticker(_ sticker: Sticker) async throws(HaloError) {
+        try await coordinator.sendSticker(sticker)
     }
 
     /// Reacts to a confirmed message, or removes the user's reaction.
@@ -237,9 +362,22 @@ public final class TimelineViewModel {
         await perform { try await coordinator.delete(event: id) }
     }
 
+    /// Sends a message that failed again.
+    public func retry(_ row: TimelineRow) async {
+        guard let id = row.failedLocalID else { return }
+        await perform { try await coordinator.retrySend(localID: id) }
+    }
+
+    /// Deletes a message that failed to send, so it never goes out.
+    public func discard(_ row: TimelineRow) async {
+        guard let id = row.failedLocalID else { return }
+        await perform { try await coordinator.abortSend(localID: id) }
+    }
+
     /// Loads an own, confirmed text message into the composer for editing.
     public func beginEdit(_ row: TimelineRow) {
         guard let id = row.eventID, row.isOwn, row.style == .ownMessage, row.image == nil else { return }
+        if editing == nil { stashedDraft = draft }
         editing = id
         replyingTo = nil
         draft = row.text.replacingOccurrences(of: " (edited)", with: "")
@@ -256,7 +394,8 @@ public final class TimelineViewModel {
 
     public func cancelEdit() {
         editing = nil
-        draft = ""
+        draft = stashedDraft
+        stashedDraft = ""
     }
 
     private func perform(_ action: () async throws -> Void) async {
@@ -282,6 +421,7 @@ public final class TimelineViewModel {
             }
             eventTimes = times
             visible.formIntersection(times.keys)
+            reportOwnMessage(snapshot.items)
             typingText = Self.typingText(snapshot.typing, items: snapshot.items)
             content = .live(
                 rows: Self.collapsingStateRuns(snapshot.items.map(row), items: snapshot.items),
@@ -291,6 +431,20 @@ public final class TimelineViewModel {
         case .failed(let error):
             content = .failed(error == .notFound ? "This room isn't available." : "The timeline couldn't be loaded.")
         }
+    }
+
+    /// Sending a message means the user has read up to it (MESSAGING FR-6, rule E1b): once the newest own message has a
+    /// server event ID it becomes the read position. The coordinator ignores anything not newer than the current one.
+    private func reportOwnMessage(_ items: [TimelineItem]) {
+        guard let receipts, let room else { return }
+        var newest: (id: EventID, time: Date)?
+        for item in items {
+            guard case .event(let event) = item.content, event.isOwn, let id = event.eventID else { continue }
+            if newest == nil || event.timestamp > newest!.time { newest = (id, event.timestamp) }
+        }
+        guard let newest, newest.id != reportedOwn else { return }
+        reportedOwn = newest.id
+        Task { await receipts.reportSeen(room: room, event: newest.id, timestamp: newest.time) }
     }
 
     /// Names come from the timeline's senders; a user without one is shown by user ID (never invented).
@@ -339,7 +493,8 @@ public final class TimelineViewModel {
                     id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: edited ? "\(body) (edited)" : body,
                     status: Self.status(of: event.sendState), eventID: event.eventID, isOwn: event.isOwn,
                     reactions: Self.chips(event.reactions), reply: Self.reply(event.replyTo),
-                    styled: event.formattedBody.map { HTMLText.attributed($0) + AttributedString(edited ? " (edited)" : "") })
+                    styled: event.formattedBody.map { HTMLText.attributed($0) + AttributedString(edited ? " (edited)" : "") },
+                    failedLocalID: Self.failedID(event))
             case .notice(let body, _):
                 return TimelineRow(id: id, style: .notice, sender: name, text: body)
             case .emote(let body, _):
@@ -356,8 +511,11 @@ public final class TimelineViewModel {
                         eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions))
                 }
                 return TimelineRow(id: id, style: style, sender: name, text: "[\(Self.label(attachment.kind))] \(attachment.body)")
-            case .sticker(let body, _):
-                return TimelineRow(id: id, style: .message, sender: name, text: "[Sticker] \(body)")
+            case .sticker(let body, let source):
+                guard let source else { return TimelineRow(id: id, style: .message, sender: name, text: "[Sticker] \(body)") }
+                return TimelineRow(
+                    id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: body, image: .init(ref: source, aspectRatio: 1),
+                    eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions), isSticker: true)
             case .redacted:
                 return TimelineRow(id: id, style: .placeholder, sender: name, text: "Message deleted")
             case .undecryptable(let reason):
@@ -379,6 +537,12 @@ public final class TimelineViewModel {
 
     static func chips(_ reactions: [ReactionSummary]) -> [TimelineRow.Chip] {
         reactions.map { TimelineRow.Chip(key: $0.key, count: $0.count, reactedByMe: $0.reactedByMe) }
+    }
+
+    /// The local ID of a failed own echo, the only kind the user can retry or delete.
+    static func failedID(_ event: TimelineEvent) -> String? {
+        if case .failed = event.sendState, event.eventID == nil { return event.localID }
+        return nil
     }
 
     static func status(of state: SendState) -> String? {

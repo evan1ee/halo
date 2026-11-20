@@ -29,6 +29,25 @@ struct ReadIntentStoreTests {
         #expect(intent.event == e(3) && intent.isSent == false && intent.timestamp == t(30))
     }
 
+    /// P8 (UNREAD_REGRESSION_TESTS §2): concurrent upserts, in a seeded random order, never leave a room behind its newest intent.
+    @Test("P8: concurrent upserts end at the newest intent")
+    func concurrentUpserts() async throws {
+        for seed in UInt64(1)...25 {
+            let store = try store()
+            var rng = SeededRandomNumberGenerator(seed: seed)
+            let order = Array(1...30).shuffled(using: &rng)
+            await withTaskGroup(of: Void.self) { group in
+                for n in order {
+                    group.addTask {
+                        try? await store.save(ReadIntent(room: room, event: e(n), timestamp: t(n), createdAt: t(100 + n)))
+                    }
+                }
+            }
+            let intent = try #require(try await store.all().first, "seed \(seed)")
+            #expect(intent.event == e(30) && intent.timestamp == t(30), "seed \(seed)")
+        }
+    }
+
     @Test("sent intents expire, unsent ones never do")
     func expiry() async throws {
         let store = try store()

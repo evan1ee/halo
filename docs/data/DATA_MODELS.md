@@ -41,6 +41,10 @@ CREATE TABLE read_intent (
   receipt_type TEXT NOT NULL CHECK (receipt_type IN ('read','read_private')),
   PRIMARY KEY (account, room_id)
 );
+CREATE TABLE draft (                                        -- unsent message per room (MESSAGING FR-5); local only
+  account TEXT NOT NULL, room_id TEXT NOT NULL, body TEXT NOT NULL, updated_at INTEGER NOT NULL,
+  PRIMARY KEY (account, room_id)
+);
 CREATE TABLE notification_record (
   account TEXT NOT NULL, event_id TEXT NOT NULL, room_id TEXT NOT NULL,
   event_ts INTEGER NOT NULL, is_mention INTEGER NOT NULL, delivered_at INTEGER NOT NULL,

@@ -1,7 +1,9 @@
 import FeatureAuth
 import FeatureRoomList
+import FeatureStickers
 import FeatureTimeline
 import HaloApplication
+import HaloDomain
 import HaloFoundation
 import SwiftUI
 import UIKit
@@ -36,7 +38,7 @@ private struct RootView: View {
                         Button("Sign out") { Task { await root.auth.signOut() } }.padding()
                     }
                     .navigationDestination(for: RoomID.self) { room in
-                        TimelineScreen(model: root.makeTimeline(room: room))
+                        TimelineScreen(root: root, room: room)
                     }
                 }
             case .softLoggedOut:
@@ -71,8 +73,18 @@ private struct RootView: View {
 
 /// Keeps the view model alive for the lifetime of the pushed screen.
 private struct TimelineScreen: View {
-    @State var model: TimelineViewModel
-    var body: some View { TimelineView(model: model).navigationBarTitleDisplayMode(.inline) }
+    @State private var model: TimelineViewModel
+    @State private var stickers: StickerPanelViewModel
+
+    init(root: AppRoot, room: RoomID) {
+        let timeline = root.makeTimeline(room: room)
+        _model = State(initialValue: timeline)
+        _stickers = State(initialValue: root.makeStickerPanel(room: room, timeline: timeline))
+    }
+
+    var body: some View {
+        TimelineView(model: model, stickerPanel: { AnyView(StickerPanelView(model: stickers)) }).navigationBarTitleDisplayMode(.inline)
+    }
 }
 
 /// Receives the APNs device token and hands it to the push coordinator (PUSH_NOTIFICATIONS §2).

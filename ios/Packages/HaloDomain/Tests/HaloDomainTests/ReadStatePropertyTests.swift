@@ -3,7 +3,7 @@ import HaloFoundation
 import Testing
 @testable import HaloDomain
 
-/// Seeded property tests P1, P2, P5, P5b, P6, P9, P10 of docs/testing/UNREAD_REGRESSION_TESTS.md §2. The seed is part of
+/// Seeded property tests P1–P6, P9, P10 of docs/testing/UNREAD_REGRESSION_TESTS.md §2. The seed is part of
 /// every failure message.
 @Suite("ReadStatePolicy properties")
 struct ReadStatePropertyTests {
@@ -55,6 +55,35 @@ struct ReadStatePropertyTests {
     func p2() {
         forAll { _, state, label in
             if state.attention { #expect(state.display != .none, Comment(rawValue: label)) } else { #expect(state.display == .none, Comment(rawValue: label)) }
+        }
+    }
+
+    private func withNotified(_ a: RoomReadInputs, _ notified: [NotifiedRef]) -> RoomReadInputs {
+        RoomReadInputs(
+            roomID: a.roomID, membership: a.membership, isEncrypted: a.isEncrypted, counts: a.counts, latestEvent: a.latestEvent,
+            localIntent: a.localIntent, unconfirmedNotified: notified)
+    }
+
+    @Test("P3: the order of the notified events never changes the result")
+    func p3() {
+        var rng = SeededRandomNumberGenerator(seed: 3)
+        for n in 0..<cases {
+            let a = random(&rng)
+            let shuffled = withNotified(a, a.unconfirmedNotified.shuffled(using: &rng))
+            #expect(ReadStatePolicy.evaluate(a) == ReadStatePolicy.evaluate(shuffled), Comment(rawValue: "seed 3 case \(n)"))
+        }
+    }
+
+    @Test("P4: re-evaluating gives the same state; repeating a notified event never changes attention (only the count)")
+    func p4() {
+        var rng = SeededRandomNumberGenerator(seed: 4)
+        for n in 0..<cases {
+            let a = random(&rng)
+            let doubled = withNotified(a, a.unconfirmedNotified + a.unconfirmedNotified)
+            let label = Comment(rawValue: "seed 4 case \(n)")
+            #expect(ReadStatePolicy.evaluate(a) == ReadStatePolicy.evaluate(a), label)
+            // NotifiedRef has no event id: the store (keyed by event) deduplicates, so the policy only guarantees attention.
+            #expect(ReadStatePolicy.evaluate(a).attention == ReadStatePolicy.evaluate(doubled).attention, label)
         }
     }
 

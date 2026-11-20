@@ -3,6 +3,7 @@ import HaloDomain
 import HaloFoundation
 import HaloTestSupport
 import MatrixRustSDK
+import Synchronization
 import Testing
 @testable import HaloMatrixAdapter
 
@@ -73,6 +74,205 @@ struct AdapterContractTests {
         try await within(seconds: 60) { try await TimelinePortContract.verifySend(timeline, room: room, text: "sent by the contract \(UUID().uuidString.prefix(8))") }
         try await within(seconds: 90) { try await TimelinePortContract.verifyInteractions(timeline, room: room, text: "interaction \(UUID().uuidString.prefix(8))") }
         try await TimelinePortContract.verifyUnknownRoom(timeline, room: try RoomID("!does-not-exist:localhost"))
+        try await session.logout()
+    }
+
+    @Test("Stickers (HALO_DEV_STICKER_ROOM holds m.room.image_pack \"cats\" with wave and dance, enabled in m.image_pack.rooms)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
+    func stickers() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(
+                username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
+            on: details)
+        try await MatrixSyncPort(session: session).start()
+        let room = try RoomID(env["HALO_DEV_STICKER_ROOM"] ?? "")
+
+        // V-ST-1 option A: is the image-pack state readable through the SDK? Poll: the room arrives with sync.
+        let packs = MatrixStickerPackPort(session: session)
+        var load = StickerPackLoad(packs: [], failedSources: 0)
+        for _ in 0..<60 {
+            load = try await packs.packs(currentRoom: nil)
+            if load.packs.contains(where: { $0.ref.stateKey == "cats" }) { break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        // The account may hold more enabled packs (each `createPack` run adds one); this test is about the fixture's.
+        let cats = PackRef(room: room, stateKey: "cats")
+        let pack = try #require(load.packs.first { $0.ref == cats }, "fixture pack not read, failedSources=\(load.failedSources)")
+        #expect(pack.ref == PackRef(room: room, stateKey: "cats") && pack.displayName == "Cats" && pack.source == .userEnabled)
+        #expect(pack.stickers.map(\.shortcode) == ["dance", "wave"])
+        #expect(pack.stickers.allSatisfy { $0.image != nil })
+
+        // The same pack, found as the current room's pack.
+        let asRoomPack = try await packs.packs(currentRoom: room)
+        #expect(asRoomPack.packs.filter { $0.ref == cats }.count == 1)  // not listed twice
+        #expect(asRoomPack.failedSources == 0)
+
+        // Prefs round trip through account data.
+        let prefsPort = MatrixStickerPrefsPort(session: session)
+        var prefs = StickerPrefs()
+        prefs.toggleFavourite(pack.stickers[0].ref)
+        prefs.recordUse(pack.stickers[1].ref, at: Date(timeIntervalSince1970: 1_700_000_000))
+        do { try await prefsPort.save(prefs) } catch { Issue.record("prefs save failed: \(error)") }
+        // The SDK serves account data from its store, which a sync fills in; wait for the write to come back.
+        var loaded: StickerPrefs?
+        for _ in 0..<30 {
+            do { loaded = try await prefsPort.load() } catch { Issue.record("prefs load failed: \(error)"); break }
+            if loaded == prefs { break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        #expect(loaded == prefs)
+
+        // Sending an m.sticker shows up in the timeline as a sticker.
+        let timeline = try await MatrixTimelinePort(session: session).open(room: room)
+        let stream = timeline.items()
+        try await timeline.sendSticker(pack.stickers[1])
+        let seen: Bool = try await within(seconds: 60) {
+            var items: [HaloDomain.TimelineItem] = []
+            for await diff in stream {
+                try ListReducer.apply(diff, to: &items)
+                for item in items {
+                    if case .event(let event) = item.content, case .sticker(let body, _) = event.kind, body == "Waving" { return true }
+                }
+            }
+            return false
+        }
+        #expect(seen)
+        await timeline.close()
+        try await session.logout()
+    }
+
+    @Test("Mentions, members and unknown local echoes (uses HALO_DEV_STICKER_ROOM as a scratch room)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
+    func mentionsAndEchoes() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(
+                username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
+            on: details)
+        try await MatrixSyncPort(session: session).start()
+        let room = try RoomID(env["HALO_DEV_STICKER_ROOM"] ?? "")
+        var timeline: (any TimelineSession)?
+        for _ in 0..<60 {
+            if let opened = try? await MatrixTimelinePort(session: session).open(room: room) { timeline = opened; break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        let opened = try #require(timeline)
+        let stream = opened.items()
+
+        // The room has one member, the user; members() excludes the user.
+        #expect(try await opened.members().isEmpty)
+
+        // A mention becomes a link in the formatted body. The name is hostile (display names are chosen by their owner):
+        // it must come out as plain text, not as HTML, emphasis or a second link.
+        let me = try UserID("@\(env["HALO_DEV_USER"] ?? ""):halo.localhost")
+        let marker = UUID().uuidString.prefix(6)
+        let hostile = "T<b>*x*</b>](https://phish)"
+        try await opened.send(text: "hello @\(hostile) \(marker)", mentions: [Mention(user: me, name: hostile)])
+        let body: String? = try await within(seconds: 60) {
+            var items: [HaloDomain.TimelineItem] = []
+            for await diff in stream {
+                try ListReducer.apply(diff, to: &items)
+                for item in items {
+                    if case .event(let event) = item.content, event.isOwn, event.eventID != nil, case .text(let text, _) = event.kind, text.contains(String(marker)) {
+                        return event.formattedBody
+                    }
+                }
+            }
+            return nil
+        }
+        #expect(body?.contains("https://matrix.to/#/\(me.rawValue)") == true, "formatted body: \(body ?? "nil")")
+        #expect(body?.contains("<b>") == false && body?.contains("<em>") == false && body?.contains("href=\"https://phish") == false,
+                "formatted body: \(body ?? "nil")")
+
+        // Retrying or aborting an echo that doesn't exist reports an error instead of crashing.
+        await #expect(throws: HaloError.notFound) { try await opened.retrySend(localID: "no-such-echo") }
+        await #expect(throws: HaloError.notFound) { try await opened.abortSend(localID: "no-such-echo") }
+        await opened.close()
+        try await session.logout()
+    }
+
+    @Test("Sending an image (uses HALO_DEV_STICKER_ROOM as a scratch room)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
+    func sendImage() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(
+                username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
+            on: details)
+        try await MatrixSyncPort(session: session).start()
+        let room = try RoomID(env["HALO_DEV_STICKER_ROOM"] ?? "")
+        var timeline: (any TimelineSession)?
+        for _ in 0..<60 {
+            if let opened = try? await MatrixTimelinePort(session: session).open(room: room) { timeline = opened; break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        let opened = try #require(timeline)
+        let stream = opened.items()
+        // A 1×1 PNG.
+        let png = try #require(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="))
+        let name = "contract-\(UUID().uuidString.prefix(6)).png"
+        try await opened.sendImage(OutgoingImage(data: png, filename: name, mimeType: "image/png", width: 1, height: 1))
+        let found: MediaAttachment? = try await within(seconds: 60) {
+            var items: [HaloDomain.TimelineItem] = []
+            for await diff in stream {
+                try ListReducer.apply(diff, to: &items)
+                for item in items {
+                    if case .event(let event) = item.content, event.isOwn, event.eventID != nil, case .media(let attachment) = event.kind, attachment.body == name { return attachment }
+                }
+            }
+            return nil
+        }
+        let attachment = try #require(found)
+        #expect(attachment.kind == .image && attachment.source != nil && attachment.width == 1 && attachment.height == 1)
+        // The bytes come back through the media port.
+        let data = try await MatrixMediaPort(session: session).thumbnail(try #require(attachment.source), width: 64, height: 64)
+        #expect(!data.isEmpty)
+        await #expect(throws: HaloError.invalidInput("NOT_AN_IMAGE")) {
+            try await opened.sendImage(OutgoingImage(data: Data("x".utf8), filename: "x.txt", mimeType: "text/plain", width: nil, height: nil))
+        }
+        await opened.close()
+        try await session.logout()
+    }
+
+    @Test("Creating a sticker pack (creates a room on the dev server)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
+    func createPack() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(
+                username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
+            on: details)
+        try await MatrixSyncPort(session: session).start()
+        let png = try #require(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="))
+        let name = "Contract \(UUID().uuidString.prefix(5))"
+        let images = [
+            NewStickerImage(data: png, mimeType: "image/png", width: 1, height: 1, shortcode: "one"),
+            NewStickerImage(data: png, mimeType: "image/png", width: 1, height: 1, shortcode: "two", body: "Second"),
+        ]
+        let creation = MatrixStickerPackCreationPort(session: session)
+        let ticks = Mutex<[Int]>([])
+        let ref = try await within(seconds: 90) { try await creation.createPack(name: name, images: images) { done, _ in ticks.withLock { $0.append(done) } } }
+        #expect(ticks.withLock { $0 } == [1, 2])
+
+        // Read it back like the panel does.
+        let reader = MatrixStickerPackPort(session: session)
+        var pack: StickerPack?
+        for _ in 0..<30 {
+            pack = try await reader.packs(currentRoom: nil).packs.first { $0.ref == ref }
+            if pack != nil { break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        let found = try #require(pack, "the created pack is not listed in m.image_pack.rooms")
+        #expect(found.displayName == name && found.stickers.map(\.shortcode) == ["one", "two"] && found.offersStickers)
+        #expect(found.stickers[1].body == "Second" && found.stickers.allSatisfy { $0.url.hasPrefix("mxc://") })
+        // The images were uploaded: their bytes come back.
+        let data = try await MatrixMediaPort(session: session).thumbnail(try #require(found.stickers[0].image), width: 32, height: 32)
+        #expect(!data.isEmpty)
+        // Invalid input is refused before anything is uploaded.
+        await #expect(throws: HaloError.invalidInput("DUPLICATE_SHORTCODE")) {
+            _ = try await creation.createPack(name: "x", images: [images[0], images[0]]) { _, _ in }
+        }
         try await session.logout()
     }
 

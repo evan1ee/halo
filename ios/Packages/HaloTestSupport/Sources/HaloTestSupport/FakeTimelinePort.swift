@@ -16,6 +16,13 @@ public final class FakeTimelinePort: TimelinePort {
         var typing: [UserID] = []
         var typingContinuations: [UUID: AsyncStream<[UserID]>.Continuation] = [:]
         var typingCalls: [Bool] = []
+        var retried: [String] = []
+        var members: [RoomMember] = []
+        var stickers: [Sticker] = []
+        var images: [OutgoingImage] = []
+        var imageFailure: HaloError?
+        var stickerFailure: HaloError?
+        var sentMentions: [[UserID]] = []
     }
 
     private let rooms = Mutex<[RoomID: Room]>([:])
@@ -48,6 +55,20 @@ public final class FakeTimelinePort: TimelinePort {
     /// The `setTyping` values received, in order.
     public func typingCalls(in id: RoomID) -> [Bool] { rooms.withLock { $0[id]?.typingCalls ?? [] } }
 
+    /// The `retrySend` local IDs received, in order.
+    public func retried(in id: RoomID) -> [String] { rooms.withLock { $0[id]?.retried ?? [] } }
+    /// The images sent, in order.
+    public func sentImages(in id: RoomID) -> [OutgoingImage] { rooms.withLock { $0[id]?.images ?? [] } }
+    /// The next `sendImage` throws `error`.
+    public func failNextImage(with error: HaloError, in id: RoomID) { rooms.withLock { $0[id]?.imageFailure = error } }
+    /// The stickers sent, in order.
+    public func sentStickers(in id: RoomID) -> [Sticker] { rooms.withLock { $0[id]?.stickers ?? [] } }
+    /// The next `sendSticker` throws `error`.
+    public func failNextSticker(with error: HaloError, in id: RoomID) { rooms.withLock { $0[id]?.stickerFailure = error } }
+    /// The people the room offers for mentions.
+    public func setMembers(_ members: [RoomMember], in id: RoomID) { rooms.withLock { $0[id]?.members = members } }
+    /// The users mentioned (and still in the text) in each sent message, in order.
+    public func sentMentions(in id: RoomID) -> [[UserID]] { rooms.withLock { $0[id]?.sentMentions ?? [] } }
     public func sentTexts(in id: RoomID) -> [String] { rooms.withLock { $0[id]?.sent ?? [] } }
     public func openSessions(in id: RoomID) -> Int { rooms.withLock { $0[id]?.openSessions ?? 0 } }
     public func paginateCalls(in id: RoomID) -> Int { rooms.withLock { $0[id]?.paginateCalls ?? 0 } }
@@ -117,9 +138,30 @@ public final class FakeTimelinePort: TimelinePort {
             port.rooms.withLock { $0[room]?.typingCalls.append(isTyping) }
         }
 
-        func send(text: String) async throws(HaloError) { try await send(text: text, replyTo: nil) }
+        func sendSticker(_ sticker: Sticker) async throws(HaloError) {
+            if let failure = port.rooms.withLock({ rooms -> HaloError? in
+                guard let f = rooms[room]?.stickerFailure else { return nil }
+                rooms[room]?.stickerFailure = nil
+                return f
+            }) { throw failure }
+            port.rooms.withLock { $0[room]?.stickers.append(sticker) }
+        }
 
-        func reply(to event: EventID, text: String) async throws(HaloError) {
+        func sendImage(_ image: OutgoingImage) async throws(HaloError) {
+            try image.validate()
+            if let failure = port.rooms.withLock({ rooms -> HaloError? in
+                guard let f = rooms[room]?.imageFailure else { return nil }
+                rooms[room]?.imageFailure = nil
+                return f
+            }) { throw failure }
+            port.rooms.withLock { $0[room]?.images.append(image) }
+        }
+
+        func members() async throws(HaloError) -> [RoomMember] { port.rooms.withLock { $0[room]?.members ?? [] } }
+
+        func send(text: String, mentions: [Mention]) async throws(HaloError) { try await send(text: text, replyTo: nil, mentions: mentions) }
+
+        func reply(to event: EventID, text: String, mentions: [Mention]) async throws(HaloError) {
             let original: TimelineEvent? = port.rooms.withLock { rooms in
                 for item in rooms[room]?.items ?? [] { if case .event(let e) = item.content, e.eventID == event { return e } }
                 return nil
@@ -127,14 +169,15 @@ public final class FakeTimelinePort: TimelinePort {
             guard let original else { throw .notFound }
             var snippet: String?
             if case .text(let body, _) = original.kind { snippet = body }
-            try await send(text: text, replyTo: ReplyPreview(eventID: event, senderName: original.senderName, snippet: snippet))
+            try await send(text: text, replyTo: ReplyPreview(eventID: event, senderName: original.senderName, snippet: snippet), mentions: mentions)
         }
 
-        private func send(text: String, replyTo: ReplyPreview?) async throws(HaloError) {
+        private func send(text: String, replyTo: ReplyPreview?, mentions: [Mention]) async throws(HaloError) {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { throw .invalidInput("EMPTY_MESSAGE") }
             let count = port.rooms.withLock { rooms -> Int in
                 rooms[room]?.sent.append(trimmed)
+                rooms[room]?.sentMentions.append(MentionFormatter.apply(trimmed, mentions: mentions).users)
                 return rooms[room]?.items.count ?? 0
             }
             let item = TimelineItem(
@@ -197,6 +240,34 @@ public final class FakeTimelinePort: TimelinePort {
             guard let (index, item) = found, case .event(let event) = item.content else { throw .notFound }
             guard let changed = change(event) else { throw .forbidden }
             try port.emit(.set(index: index, TimelineItem(id: item.id, content: .event(changed))), in: room)
+        }
+
+        func retrySend(localID: String) async throws(HaloError) {
+            let found = localEcho(localID)
+            guard let (index, item) = found, case .event(let e) = item.content else { throw .notFound }
+            let sending = TimelineEvent(
+                eventID: nil, sender: e.sender, senderName: e.senderName, timestamp: e.timestamp, isOwn: true, kind: e.kind, sendState: .sending,
+                replyTo: e.replyTo, localID: localID)
+            try port.emit(.set(index: index, TimelineItem(id: item.id, content: .event(sending))), in: room)
+            port.rooms.withLock { $0[room]?.retried.append(localID) }
+            let sent = TimelineEvent(
+                eventID: try? EventID("$fake-\(UUID().uuidString.prefix(8))"), sender: e.sender, senderName: e.senderName, timestamp: e.timestamp,
+                isOwn: true, kind: e.kind, sendState: .sent, replyTo: e.replyTo)
+            try port.emit(.set(index: index, TimelineItem(id: item.id, content: .event(sent))), in: room)
+        }
+
+        func abortSend(localID: String) async throws(HaloError) {
+            guard let (index, _) = localEcho(localID) else { throw .notFound }
+            try port.emit(.remove(index: index), in: room)
+        }
+
+        private func localEcho(_ localID: String) -> (Int, TimelineItem)? {
+            port.rooms.withLock { rooms in
+                for (index, item) in (rooms[room]?.items ?? []).enumerated() {
+                    if case .event(let e) = item.content, e.localID == localID, e.eventID == nil { return (index, item) }
+                }
+                return nil
+            }
         }
 
         func close() async { port.rooms.withLock { $0[room]?.openSessions -= 1 } }

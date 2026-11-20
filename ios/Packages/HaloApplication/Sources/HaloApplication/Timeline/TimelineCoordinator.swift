@@ -120,9 +120,9 @@ public actor TimelineCoordinator {
     }
 
     /// Sends a message into the open timeline; the local echo arrives as a diff. Throws `.cancelled` when the timeline isn't open.
-    public func send(_ text: String) async throws(HaloError) {
+    public func send(_ text: String, mentions: [Mention] = []) async throws(HaloError) {
         guard let session, case .live = status else { throw .cancelled }
-        try await session.send(text: text)
+        try await session.send(text: text, mentions: mentions)
     }
 
     /// The user started, kept up or stopped typing. `true` is sent at most every `typingInterval`; `false` goes out at
@@ -140,10 +140,28 @@ public actor TimelineCoordinator {
         try? await session.setTyping(isTyping)
     }
 
-    /// Replies to a confirmed event of the open timeline.
-    public func reply(to event: EventID, text: String) async throws(HaloError) {
+    /// Sends a sticker into the open timeline (no local echo: it shows when the server confirms).
+    public func sendSticker(_ sticker: Sticker) async throws(HaloError) {
         guard let session, case .live = status else { throw .cancelled }
-        try await session.reply(to: event, text: text)
+        try await session.sendSticker(sticker)
+    }
+
+    /// Uploads and sends an image into the open timeline; returns when it is sent.
+    public func sendImage(_ image: OutgoingImage) async throws(HaloError) {
+        guard let session, case .live = status else { throw .cancelled }
+        try await session.sendImage(image)
+    }
+
+    /// The people who can be mentioned in the open room.
+    public func members() async throws(HaloError) -> [RoomMember] {
+        guard let session, case .live = status else { throw .cancelled }
+        return try await session.members()
+    }
+
+    /// Replies to a confirmed event of the open timeline.
+    public func reply(to event: EventID, text: String, mentions: [Mention] = []) async throws(HaloError) {
+        guard let session, case .live = status else { throw .cancelled }
+        try await session.reply(to: event, text: text, mentions: mentions)
     }
 
     /// Reacts to (or un-reacts from) a confirmed event of the open timeline.
@@ -162,6 +180,18 @@ public actor TimelineCoordinator {
     public func delete(event: EventID) async throws(HaloError) {
         guard let session, case .live = status else { throw .cancelled }
         try await session.delete(event: event)
+    }
+
+    /// Sends a failed message again.
+    public func retrySend(localID: String) async throws(HaloError) {
+        guard let session, case .live = status else { throw .cancelled }
+        try await session.retrySend(localID: localID)
+    }
+
+    /// Deletes a message that was never sent.
+    public func abortSend(localID: String) async throws(HaloError) {
+        guard let session, case .live = status else { throw .cancelled }
+        try await session.abortSend(localID: localID)
     }
 
     // MARK: Private

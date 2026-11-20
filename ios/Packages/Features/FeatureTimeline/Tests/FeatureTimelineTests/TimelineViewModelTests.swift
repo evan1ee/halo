@@ -273,4 +273,184 @@ struct TimelineViewModelTests {
         for _ in 0..<2000 { await Task.yield() }
         #expect(port.receipts.count == 1)
     }
+
+    @Test("opening the room clears m.marked_unread once the screen is visible, not while inactive")
+    func clearsMarkedUnreadOnOpen() async throws {
+        let room = try RoomID("!r:x.org")
+        let port = FakeReadMarkerPort()
+        let receipts = ReadReceiptCoordinator(port: port)
+        try await receipts.markRoomUnread(room)
+        let model = TimelineViewModel(
+            coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: room), receipts: receipts, room: room,
+            dwell: .zero, sleep: { _ in }, locale: Locale(identifier: "en_US"), timeZone: .gmt)
+        model.setActive(false)
+        await model.start()
+        for _ in 0..<2000 { await Task.yield() }
+        #expect(port.unreadFlags[room] == true)
+        model.setActive(true)
+        for _ in 0..<200_000 where port.unreadFlags[room] == true { await Task.yield() }
+        #expect(port.unreadFlags[room] == false)
+        await model.stop()
+    }
+
+    @Test("a confirmed own message becomes the read position; someone else's, or one still sending, doesn't (FR-6)")
+    func ownMessageIsRead() async throws {
+        let room = try RoomID("!r:x.org")
+        let port = FakeReadMarkerPort()
+        let receipts = ReadReceiptCoordinator(port: port)
+        let model = TimelineViewModel(
+            coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: room), receipts: receipts, room: room,
+            dwell: .zero, sleep: { _ in }, locale: Locale(identifier: "en_US"), timeZone: .gmt)
+        func item(_ n: Int, own: Bool, id: Bool = true) throws -> TimelineItem {
+            TimelineItem(id: TimelineItemID("i\(n)"), content: .event(TimelineEvent(
+                eventID: id ? try EventID("$e\(n)") : nil, sender: nil, senderName: "x", timestamp: Date(timeIntervalSince1970: Double(n)),
+                isOwn: own, kind: .text("m\(n)", isEdited: false))))
+        }
+        func live(_ items: [TimelineItem]) { model.apply(.live(.init(items: items, isPaginating: false, reachedStart: true, paginationError: nil))) }
+        live([try item(1, own: false), try item(2, own: true, id: false)])
+        for _ in 0..<2000 { await Task.yield() }
+        #expect(port.receipts.isEmpty)
+        live([try item(1, own: false), try item(2, own: true)])
+        for _ in 0..<200_000 where port.receipts.isEmpty { await Task.yield() }
+        #expect(port.receipts.map(\.event.rawValue) == ["$e2"])
+    }
+
+    @Test("only a failed own echo can be retried or deleted from its row")
+    func failedRows() async throws {
+        let room = try RoomID("!r:x.org")
+        func event(_ state: SendState, id: Bool = false, local: String? = "txn") throws -> TimelineEvent {
+            TimelineEvent(
+                eventID: id ? try EventID("$e") : nil, sender: nil, senderName: nil, timestamp: Date(timeIntervalSince1970: 1), isOwn: true,
+                kind: .text("hi", isEdited: false), sendState: state, localID: local)
+        }
+        let model = TimelineViewModel(coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: room), locale: Locale(identifier: "en_US"), timeZone: .gmt)
+        func row(_ e: TimelineEvent) -> TimelineRow { model.row(TimelineItem(id: TimelineItemID("i"), content: .event(e))) }
+        #expect(row(try event(.failed(recoverable: false))).failedLocalID == "txn")
+        #expect(row(try event(.failed(recoverable: true))).failedLocalID == "txn")
+        #expect(row(try event(.sending)).failedLocalID == nil)
+        #expect(row(try event(.sent, id: true, local: nil)).failedLocalID == nil)
+    }
+
+    @Test("the unsent text is kept per room, restored on return, and survives an edit")
+    func drafts() async throws {
+        let room = try RoomID("!r:x.org")
+        let store = FakeDrafts()
+        let drafts = DraftCoordinator(store: store)
+        func make() -> TimelineViewModel {
+            let port = FakeTimelinePort()
+            port.addRoom(room)
+            return TimelineViewModel(
+                coordinator: TimelineCoordinator(port: port, room: room), room: room, drafts: drafts, locale: Locale(identifier: "en_US"), timeZone: .gmt)
+        }
+        let first = make()
+        first.draft = "not sent yet"
+        for _ in 0..<200_000 where store.stored[room] == nil { await Task.yield() }
+        #expect(store.stored[room] == "not sent yet")
+
+        let second = make()  // the screen is opened again
+        await second.start()
+        #expect(second.draft == "not sent yet")
+        await second.stop()
+
+        let target = TimelineRow(id: "x", style: .ownMessage, sender: nil, text: "old text", eventID: try EventID("$e"), isOwn: true)
+        second.beginEdit(target)
+        #expect(second.draft == "old text")
+        second.cancelEdit()
+        #expect(second.draft == "not sent yet")
+        for _ in 0..<2000 { await Task.yield() }
+        #expect(store.stored[room] == "not sent yet")  // the edit text never replaced the draft
+    }
+
+    @Test("typing @ offers matching members; picking one inserts the name and the send carries the mention")
+    func mentions() async throws {
+        let room = try RoomID("!r:x.org")
+        let alice = RoomMember(user: try UserID("@alice:x.org"), displayName: "Alice")
+        let bob = RoomMember(user: try UserID("@bob:x.org"), displayName: nil)
+        let port = FakeTimelinePort()
+        port.addRoom(room)
+        port.setMembers([alice, bob], in: room)
+        let model = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room), locale: Locale(identifier: "en_US"), timeZone: .gmt)
+        await model.start()
+        for _ in 0..<200_000 { if case .live = model.content { break }; await Task.yield() }
+
+        model.draft = "hello a@b"  // not at a word start
+        #expect(model.mentionQuery == nil)
+        model.draft = "hello @al"
+        #expect(model.mentionQuery == "al")
+        for _ in 0..<200_000 where model.members.isEmpty { await Task.yield() }
+        #expect(model.mentionSuggestions == [alice])
+        model.draft = "hello @"
+        #expect(model.mentionSuggestions == [alice, bob])
+
+        model.draft = "hello @al"
+        model.pickMention(alice)
+        #expect(model.draft == "hello @Alice ")
+        #expect(model.mentionQuery == nil)
+        model.draft += "welcome"
+        await model.send()
+        #expect(port.sentMentions(in: room) == [[alice.user]])
+        #expect(model.draft.isEmpty)
+        await model.stop()
+    }
+
+    @Test("a picked mention whose text was deleted before sending isn't sent")
+    func deletedMention() async throws {
+        let room = try RoomID("!r:x.org")
+        let alice = RoomMember(user: try UserID("@alice:x.org"), displayName: "Alice")
+        let port = FakeTimelinePort()
+        port.addRoom(room)
+        let model = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room), locale: Locale(identifier: "en_US"), timeZone: .gmt)
+        await model.start()
+        for _ in 0..<200_000 { if case .live = model.content { break }; await Task.yield() }
+        model.draft = "@"
+        model.pickMention(alice)
+        model.draft = "never mind"
+        await model.send()
+        #expect(port.sentMentions(in: room) == [[]])
+        await model.stop()
+    }
+
+    @Test("an incoming sticker is an image row without a bubble; one without an image stays a labelled placeholder")
+    func stickerRows() throws {
+        let room = try RoomID("!r:x.org")
+        let model = TimelineViewModel(coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: room), locale: Locale(identifier: "en_US"), timeZone: .gmt)
+        func row(_ source: MediaRef?) -> TimelineRow {
+            model.row(TimelineItem(id: TimelineItemID("s"), content: .event(TimelineEvent(
+                eventID: nil, sender: nil, senderName: "Bob", timestamp: Date(timeIntervalSince1970: 1), isOwn: false, kind: .sticker(body: "wave", source: source)))))
+        }
+        let withImage = row(MediaRef(token: "t"))
+        #expect(withImage.isSticker && withImage.image?.ref == MediaRef(token: "t") && withImage.text == "wave")
+        let without = row(nil)
+        #expect(!without.isSticker && without.text == "[Sticker] wave")
+    }
+
+    @Test("a picked photo is prepared and sent; failures say what went wrong; without a preparer there is no photo button")
+    func photos() async throws {
+        let room = try RoomID("!r:x.org")
+        let port = FakeTimelinePort()
+        port.addRoom(room)
+        let model = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room), images: StubPreparer(), locale: Locale(identifier: "en_US"), timeZone: .gmt)
+        #expect(model.canSendImages)
+        await model.start()
+        for _ in 0..<200_000 { if case .live = model.content { break }; await Task.yield() }
+
+        await model.sendImage(data: Data("png".utf8), filename: "a.png")
+        #expect(port.sentImages(in: room).map(\.filename) == ["a.png"] && model.sendError == nil && !model.isSendingImage)
+        await model.sendImage(data: Data("text".utf8), filename: "a.txt")
+        #expect(model.sendError == "That file isn't a picture." && port.sentImages(in: room).count == 1)
+        port.failNextImage(with: .network(retryable: true), in: room)
+        await model.sendImage(data: Data("png".utf8), filename: "b.png")
+        #expect(model.sendError == "Can't reach the server. The picture wasn't sent.")
+        await model.stop()
+
+        let plain = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room), locale: Locale(identifier: "en_US"), timeZone: .gmt)
+        #expect(!plain.canSendImages)
+    }
+}
+
+private struct StubPreparer: ImagePreparing {
+    func prepare(data: Data, filename: String) throws(HaloError) -> OutgoingImage {
+        guard data == Data("png".utf8) else { throw .invalidInput("NOT_AN_IMAGE") }
+        return OutgoingImage(data: data, filename: filename, mimeType: "image/png", width: 2, height: 1)
+    }
 }
