@@ -1,12 +1,12 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-20 · Branch: `feat/m3-scenario-driver-server-half-2` · PRs #1–#16 merged
+Last updated: 2026-11-20 · Branch: `feat/m3-encrypted-classic-evidence` · PRs #1–#17 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
 - **Milestone:** M0 done; M1 largely done; M2 done except media sending and the offline-send test; **M3 (read-state engine) in progress**. Dev Mac: Xcode 27.2, Swift 6.4.2, iPhone 16.
-- **Checks:** `scripts/prepush.sh` passes (SwiftLint not configured, skipped); `scripts/prepush.sh` now also builds `Halo-Debug` for the simulator. All 13 contract tests (`infra/dev`) pass, none skipped (`scripts/contract-test.sh` after `infra/dev/create-fixtures.py`).
+- **Checks:** `scripts/prepush.sh` passes (SwiftLint not configured, skipped); `scripts/prepush.sh` now also builds `Halo-Debug` for the simulator. All 14 contract tests (`infra/dev`) pass, none skipped (`scripts/contract-test.sh` after `infra/dev/create-fixtures.py`).
 - **CI:** PRs #1–#15 merged. CI runs only the Linux-portable packages (Foundation, Domain, TestSupport, Application): adapter, persistence, platform, features and the app are tested only by `prepush.sh` on a Mac. `licenses` runs only on SDK/inventory changes.
 
 ## 2. Completed work (what exists now)
@@ -34,7 +34,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 Full list: docs/DECISION_LOG.md (D1–D74), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-`tools/scenario-driver/run_scenarios.py` (S06, S07, S07b, S08, S13, S21 added), `docs/testing/UNREAD_REGRESSION_TESTS.md`, `ROADMAP.md`, `HANDOFF.md`.
+`ClassicSyncEvidenceTests` (`encryptedEvidence`: two SDK clients, encrypted room, all-messages and mentions-only), `docs/testing/UNREAD_REGRESSION_TESTS.md`, `ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
 - Stickers: V-ST-1 resolved (option B), V-ST-2 partly (token refresh on 401 not exercised). Verified against `infra/dev` by contract test `stickers` (env `HALO_DEV_STICKER_ROOM`: a room with `m.room.image_pack` `cats` {wave, dance} enabled in `m.image_pack.rooms`; throwaway account `stickertester` created locally). Not built: long-press preview/animation (FR-5, FR-9), editing/deleting packs, hiding pack rooms from the room list, legacy `im.ponies.*` packs (V-ST-3), privacy notice, "unavailable pack" UI. Real sticker images were not loaded (the fixture mxc URLs have no media).
@@ -51,7 +51,7 @@ Full list: docs/DECISION_LOG.md (D1–D74), docs/adr/. Most relevant now: D70 au
 - Classic sync (D74) not yet measured on a large account (first `/sync` has no filter: all members, default timeline); `loadsAllPages`/paging in `RoomListCoordinator` is now a no-op; sync errors other than retryable network end the loop with `.failed`; cancelling the loop doesn't interrupt the SDK long poll (8 s).
 - Open validation: V-CI-2, V-SQL-1, V-APPLE-1, V-NSE-*, V-PUSH-1/3/5, V-RS-1/5 (V-RS-7 closed by D73).
 - Docker CLI hangs on the `osxkeychain` helper; use a throwaway `DOCKER_CONFIG`.  Compose is missing under a throwaway config: use `docker exec`/`docker restart`.
-- Contract tests: `infra/dev/create-fixtures.py` creates accounts/rooms and writes `~/.config/halo-dev/contract.env`; re-run it before a full `scripts/contract-test.sh` (room count) and with `--new-e2ee` before the Encryption test (recovery can be set up once per account). Verified: 13 of 13 pass (`pusher` and `ClassicSyncEvidenceTests` added).
+- Contract tests: `infra/dev/create-fixtures.py` creates accounts/rooms and writes `~/.config/halo-dev/contract.env`; re-run it before a full `scripts/contract-test.sh` (room count) and with `--new-e2ee` before the Encryption test (recovery can be set up once per account). Verified: 14 of 14 pass (`pusher`, `ClassicSyncEvidenceTests` incl. `encryptedEvidence`). Contract tests must leave no room on the account (the room count is a fixture); the timeline fixture room grows ~13 events per run.
 
 **Needs the founder** (the loop records these and moves on; AUTONOMOUS_LOOP §5)
 - 📱 Device checks: G-NSE AC-NSE-1…6, V-RS-1, file protection on `halo.sqlite`, NSE database access, background push delivery.
@@ -61,7 +61,7 @@ Full list: docs/DECISION_LOG.md (D1–D74), docs/adr/. Most relevant now: D70 au
 
 ## 6. Next steps
 The queue is docs/ROADMAP.md §"Remaining work", worked by the loop in docs/development/AUTONOMOUS_LOOP.md. Its head:
-1. **P0** feed the real server output into the Swift model and SDK-side encrypted-room evidence on classic sync (needs a second SDK client with keys), re-evaluate G-UNREAD; measure the first-sync cost on a large account; M4 items after.
+1. **P0** feed the real server output into the Swift model (encrypted evidence on classic sync is verified), re-evaluate G-UNREAD; measure the first-sync cost on a large account; M4 items after.
 
 ## 7. Next Session Prompt
 ```text
