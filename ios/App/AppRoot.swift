@@ -34,6 +34,7 @@ final class AppRoot {
     private let media: MediaLoader
     private let previewPolicy: any MediaPreviewPolicyPort
     private let roomPort: MatrixRoomPort
+    private let chatCreation: MatrixChatCreationPort
     private let roomCoordinator: RoomListCoordinator
     private let log: HaloLog
     private var auditPort: (any AuditEventPort)?
@@ -65,6 +66,7 @@ final class AppRoot {
         media = MediaLoader(port: MatrixMediaPort(session: session))
         previewPolicy = MatrixMediaPreviewPolicyPort(session: session)
         roomPort = MatrixRoomPort(session: session)
+        chatCreation = MatrixChatCreationPort(session: session)
         recovery = RecoveryViewModel(coordinator: EncryptionCoordinator(port: MatrixEncryptionPort(session: session), session: sessionCoordinator))
         sync = SyncCoordinator(port: MatrixSyncPort(session: session), session: sessionCoordinator)
         let push = Self.pushConfiguration().map {
@@ -203,6 +205,9 @@ final class AppRoot {
         }
         do { try await previewPolicy.setSetting(setting); return true } catch { return false }
     }
+
+    /// The "New chat" sheet (ROOM_MANAGEMENT FR-5); `onCreated` gets the room to open.
+    func makeNewChat(onCreated: @escaping @MainActor (RoomID) -> Void) -> NewChatViewModel { NewChatViewModel(port: chatCreation, onCreated: onCreated) }
 
     /// The room info sheet for `room` (ROOM_MANAGEMENT).
     func makeRoomDetails(room: RoomID) -> RoomDetailsViewModel { RoomDetailsViewModel(port: roomPort, room: room) }
