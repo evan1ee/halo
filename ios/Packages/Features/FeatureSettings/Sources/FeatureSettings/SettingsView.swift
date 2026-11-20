@@ -17,6 +17,7 @@ public struct SettingsView: View {
     private let loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)?
     private let saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)?
     private let diagnostics: (@Sendable () async -> String)?
+    private let security: (@MainActor () -> [StorageSize])?
     private let notificationStatus: (@Sendable () async -> String)?
     private let openSystemSettings: (() -> Void)?
     @State private var notifications = ""
@@ -36,11 +37,12 @@ public struct SettingsView: View {
         loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)? = nil,
         saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)? = nil,
         diagnostics: (@Sendable () async -> String)? = nil, storageSizes: (@Sendable () async -> [StorageSize])? = nil,
-        notificationStatus: (@Sendable () async -> String)? = nil, openSystemSettings: (() -> Void)? = nil, onSignOut: @escaping () -> Void
+        security: (@MainActor () -> [StorageSize])? = nil, notificationStatus: (@Sendable () async -> String)? = nil, openSystemSettings: (() -> Void)? = nil, onSignOut: @escaping () -> Void
     ) {
         self.diagnostics = diagnostics
         self.storageSizes = storageSizes
         self.notificationStatus = notificationStatus
+        self.security = security
         self.openSystemSettings = openSystemSettings
         self.loadMediaPreviews = loadMediaPreviews
         self.saveMediaPreviews = saveMediaPreviews
@@ -105,6 +107,15 @@ public struct SettingsView: View {
                     mediaPreviewsLoaded = true
                 }
             }
+            if let security {
+                Section {
+                    ForEach(security()) { LabeledContent($0.name, value: $0.text) }
+                } header: {
+                    Text("Security")
+                } footer: {
+                    Text("A verified device can read your encrypted history. The recovery key restores it on a new device.")
+                }
+            }
             if let notificationStatus {
                 Section {
                     LabeledContent("Notifications", value: notifications)
@@ -148,13 +159,14 @@ public struct SettingsView: View {
     }
 }
 
-/// One line of Settings → Storage.
+/// One name/value line of Settings → Storage or Security.
 public struct StorageSize: Sendable, Identifiable, Equatable {
     public let name: String
-    public let bytes: Int64
+    public let text: String
     public var id: String { name }
-    public init(name: String, bytes: Int64) { self.name = name; self.bytes = bytes }
-    public var formatted: String { ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) }
+    public init(name: String, bytes: Int64) { self.init(name: name, text: ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)) }
+    public init(name: String, text: String) { self.name = name; self.text = text }
+    public var formatted: String { text }
 }
 
 /// A plain-text status report (versions, device, read-state audit counts) to read or share.

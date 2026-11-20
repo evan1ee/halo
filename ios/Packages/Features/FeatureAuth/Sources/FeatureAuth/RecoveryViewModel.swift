@@ -13,6 +13,9 @@ public final class RecoveryViewModel {
     public private(set) var errorMessage: String?
     /// Set when recovery succeeded, so the sheet can close.
     public private(set) var isVerified = false
+    /// Plain-language state for Settings → Security.
+    public private(set) var deviceStatus = "Checking…"
+    public private(set) var recoveryStatus = "Checking…"
 
     public var key = ""
 
@@ -40,6 +43,17 @@ public final class RecoveryViewModel {
 
     func apply(_ snapshot: EncryptionCoordinator.Snapshot) {
         needsRecovery = snapshot.status.needsRecovery
+        deviceStatus = switch snapshot.status.verification {
+        case .verified: "Verified"
+        case .unverified: "Not verified"
+        case .unknown: "Checking…"
+        }
+        recoveryStatus = switch snapshot.status.recovery {
+        case .enabled: "On"
+        case .incomplete: "On, this device needs the key"
+        case .disabled: "Not set up"
+        case .unknown: "Checking…"
+        }
         isVerified = snapshot.status.verification == .verified
         switch snapshot.recovery {
         case .idle:

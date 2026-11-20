@@ -59,6 +59,7 @@ private struct RootView: View {
                                     saveMediaPreviews: { await root.setMediaPreviewChoice($0) },
                                     diagnostics: { await root.diagnosticsReport() },
                                     storageSizes: { await root.storageSizes() },
+                                    security: { [StorageSize(name: "This device", text: root.recovery.deviceStatus), StorageSize(name: "Recovery key", text: root.recovery.recoveryStatus)] },
                                     notificationStatus: { await root.notificationStatus() },
                                     openSystemSettings: {
                                         if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
