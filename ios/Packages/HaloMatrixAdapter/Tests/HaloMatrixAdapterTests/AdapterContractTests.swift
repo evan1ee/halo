@@ -152,6 +152,10 @@ struct AdapterContractTests {
         await #expect(throws: HaloError.notFound) {
             try await markers.sendReceipt(room: try RoomID("!unknown:halo.localhost"), event: event, isPrivate: false)
         }
+        // Room-list actions: the room's latest event is resolved by the adapter; the unread flag round-trips.
+        #expect(try await markers.markRoomRead(room: room, isPrivate: false) != nil)
+        try await markers.setMarkedUnread(room: room, true)
+        try await markers.setMarkedUnread(room: room, false)
         try await session.logout()
     }
 
