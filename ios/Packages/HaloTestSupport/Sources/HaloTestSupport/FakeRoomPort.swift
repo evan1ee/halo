@@ -88,6 +88,11 @@ public final class FakeRoomPort: RoomPort {
     public var acceptedInvites: [RoomID] { state.withLock { $0.accepted } }
     public var declinedInvites: [RoomID] { state.withLock { $0.declined } }
 
+    public func invitePreview(_ room: RoomID) async throws(HaloError) -> RoomInvitePreview {
+        if let error = state.withLock({ $0.error }) { throw error }
+        return RoomInvitePreview(name: "Preview of \(room.rawValue)", topic: "About", memberCount: 3)
+    }
+
     public func acceptInvite(_ room: RoomID) async throws(HaloError) {
         if let error = state.withLock({ $0.error }) { throw error }
         state.withLock { $0.accepted.append(room) }

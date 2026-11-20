@@ -81,6 +81,16 @@ public final class MatrixRoomPort: RoomPort {
         do { _ = try await client.joinRoomById(roomId: id.rawValue) } catch { throw ErrorMapper.map(error) }
     }
 
+    public func invitePreview(_ id: RoomID) async throws(HaloError) -> RoomInvitePreview {
+        let client = try await session.signedInClient()
+        do {
+            let info = try await client.getRoomPreviewFromRoomId(roomId: id.rawValue, viaServers: []).info()
+            return RoomInvitePreview(
+                name: info.name, topic: info.topic, memberCount: Int(clamping: info.numJoinedMembers),
+                avatar: MatrixRoomListPort.avatar(info.avatarUrl))
+        } catch { throw ErrorMapper.map(error) }
+    }
+
     public func declineInvite(_ id: RoomID) async throws(HaloError) {
         let room = try await session.room(id)
         do { try await room.leave() } catch { throw ErrorMapper.map(error) }

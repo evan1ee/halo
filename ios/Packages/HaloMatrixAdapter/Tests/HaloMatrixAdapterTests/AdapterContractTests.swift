@@ -297,6 +297,8 @@ struct AdapterContractTests {
         }
         #expect(try await waitFor(toAccept, .invited) == .invited)
         #expect(try await waitFor(toDecline, .invited) == .invited)
+        let preview = try await rooms.invitePreview(toDecline)
+        #expect(preview.memberCount >= 0)
         try await rooms.acceptInvite(toAccept)
         #expect(try await waitFor(toAccept, .joined) == .joined)
         try await rooms.declineInvite(toDecline)

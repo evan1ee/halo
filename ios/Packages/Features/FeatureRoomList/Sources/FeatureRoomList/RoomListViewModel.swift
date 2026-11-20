@@ -108,6 +108,15 @@ public final class RoomListViewModel {
         await perform { () async throws(HaloError) in try await actions.acceptInvite(room) }
     }
 
+    /// What the user has asked to see of invitations, by room (ROOM_MANAGEMENT FR-6).
+    public private(set) var invitePreviews: [RoomID: RoomInvitePreview] = [:]
+
+    /// Loads the room's topic and size for an invitation row; a failure is shown like any other action error.
+    public func previewInvite(_ room: RoomID) async {
+        guard let actions else { return }
+        await perform { () async throws(HaloError) in self.invitePreviews[room] = try await actions.invitePreview(room) }
+    }
+
     /// Declines an invitation.
     public func declineInvite(_ room: RoomID) async {
         guard let actions else { return }

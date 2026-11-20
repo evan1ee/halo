@@ -27,6 +27,9 @@ public protocol RoomPort: Sendable {
     /// Accepts an invitation: joins the room (FR-6). Throws `.notFound` when the invitation was withdrawn.
     func acceptInvite(_ room: RoomID) async throws(HaloError)
 
+    /// The room's name, topic and size, to show with an invitation. Throws `.notFound` when the room can't be previewed.
+    func invitePreview(_ room: RoomID) async throws(HaloError) -> RoomInvitePreview
+
     /// Declines an invitation: leaves the invited room (FR-6).
     func declineInvite(_ room: RoomID) async throws(HaloError)
 

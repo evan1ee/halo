@@ -100,6 +100,8 @@ struct RoomListInviteTests {
             if case .loaded = status { await model.listChanged(status); break }
         }
         #expect(model.content == .loaded(count: 1, rows: [.init(id: id, name: "Book club", display: .dot, hasUnread: true, isInvite: true, inviter: "Ann")]))
+        await model.previewInvite(id)
+        #expect(model.invitePreviews[id]?.memberCount == 3 && model.actionError == nil)
         await model.acceptInvite(id)
         #expect(port.acceptedInvites == [id] && model.actionError == nil)
         await model.declineInvite(id)

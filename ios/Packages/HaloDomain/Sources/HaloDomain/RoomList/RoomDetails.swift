@@ -81,3 +81,18 @@ public struct RoomMemberInfo: Sendable, Equatable, Identifiable {
 public enum RoomMemberRole: Sendable, Equatable {
     case administrator, moderator, user
 }
+
+/// What an invitation shows before it is accepted: the room's public face (ROOM_MANAGEMENT FR-6).
+public struct RoomInvitePreview: Sendable, Equatable {
+    public let name: String?
+    public let topic: String?
+    public let memberCount: Int
+    public let avatar: MediaRef?
+
+    public init(name: String?, topic: String?, memberCount: Int, avatar: MediaRef? = nil) {
+        self.name = name
+        self.topic = topic
+        self.memberCount = memberCount
+        self.avatar = avatar
+    }
+}

@@ -29,6 +29,13 @@ public struct RoomListView: View {
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text(row.name).fontWeight(.bold)
                                     Text(row.inviter.map { "Invitation from \($0)" } ?? "Invitation").font(.caption).foregroundStyle(.secondary)
+                                    if let preview = model.invitePreviews[row.id] {
+                                        if let topic = preview.topic, !topic.isEmpty { Text(topic).font(.caption) }
+                                        Text("\(preview.memberCount) members").font(.caption).foregroundStyle(.secondary)
+                                    } else {
+                                        Button("Show details") { Task { await model.previewInvite(row.id) } }.font(.caption)
+                                            .accessibilityIdentifier("previewInvite-\(row.name)")
+                                    }
                                     HStack {
                                         Button("Accept") { Task { await model.acceptInvite(row.id) } }.buttonStyle(.borderedProminent)
                                         Button("Decline", role: .destructive) { Task { await model.declineInvite(row.id) } }.buttonStyle(.bordered)
