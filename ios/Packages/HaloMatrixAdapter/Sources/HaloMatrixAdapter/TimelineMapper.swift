@@ -106,7 +106,8 @@ enum TimelineMapper {
                 .media(MediaAttachment(
                     kind: .video, body: message.body, source: ref(content.source),
                     width: content.info?.width.map(Int.init), height: content.info?.height.map(Int.init),
-                    mimeType: content.info?.mimetype, size: content.info?.size.map(Int.init), duration: content.info?.duration))
+                    mimeType: content.info?.mimetype, size: content.info?.size.map(Int.init), duration: content.info?.duration,
+                    thumbnail: content.info?.thumbnailSource.map(ref)))
             case .audio(let content):
                 .media(MediaAttachment(
                     kind: .audio, body: message.body, source: ref(content.source),

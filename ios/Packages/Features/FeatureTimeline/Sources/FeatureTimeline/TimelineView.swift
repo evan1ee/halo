@@ -254,7 +254,7 @@ private struct RowView: View {
                     .overlay(alignment: .leading) { Rectangle().fill(.secondary).frame(width: 2) }
                 }
                 if let image = row.image { ThumbnailView(image: image, model: model, isSticker: row.isSticker).accessibilityLabel(row.isSticker ? row.text : "Image") }
-                if let file = row.file { FileTileView(file: file, isOpening: model.openingRow == row.id) { Task { await model.openFile(row) } } }
+                if let file = row.file { FileTileView(file: file, isOpening: model.openingRow == row.id, model: model) { Task { await model.openFile(row) } } }
                 if row.showsText { Text(row.styled ?? AttributedString(row.text))
                     .padding(8)
                     .background(row.style == .ownMessage ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.15), in: .rect(cornerRadius: 12))
@@ -367,6 +367,7 @@ private struct ReactionPicker: View {
 private struct FileTileView: View {
     let file: TimelineRow.FileTile
     let isOpening: Bool
+    let model: TimelineViewModel
     let open: () -> Void
 
     private var symbol: String {
@@ -379,12 +380,18 @@ private struct FileTileView: View {
 
     var body: some View {
         Button(action: open) {
+            VStack(alignment: .leading, spacing: 8) {
+            if let thumbnail = file.thumbnail {
+                ThumbnailView(image: thumbnail, model: model)
+                    .overlay { Image(systemName: "play.circle.fill").font(.system(size: 44)).foregroundStyle(.white).shadow(radius: 4) }
+            }
             HStack(spacing: 10) {
                 if isOpening { ProgressView() } else { Image(systemName: symbol).font(.title2) }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(file.name).font(.subheadline).lineLimit(2)
                     if !file.detail.isEmpty { Text(file.detail).font(.caption).foregroundStyle(.secondary) }
                 }
+            }
             }
             .padding(10)
             .frame(maxWidth: 260, alignment: .leading)
