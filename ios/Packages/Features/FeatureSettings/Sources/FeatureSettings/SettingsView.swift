@@ -16,6 +16,7 @@ public struct SettingsView: View {
     private let onPrivateReceiptsChange: (Bool) -> Void
     private let loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)?
     private let saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)?
+    private let diagnostics: (@Sendable () async -> String)?
     @State private var mediaPreviews: MediaPreviewChoice = .always
     @State private var mediaPreviewsLoaded = false
     @State private var mediaPreviewsFailed = false
@@ -27,8 +28,10 @@ public struct SettingsView: View {
         version: String, build: String, preferences: AppPreferences = AppPreferences(),
         onPrivateReceiptsChange: @escaping (Bool) -> Void = { _ in },
         loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)? = nil,
-        saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)? = nil, onSignOut: @escaping () -> Void
+        saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)? = nil,
+        diagnostics: (@Sendable () async -> String)? = nil, onSignOut: @escaping () -> Void
     ) {
+        self.diagnostics = diagnostics
         self.loadMediaPreviews = loadMediaPreviews
         self.saveMediaPreviews = saveMediaPreviews
         self.version = version
@@ -86,6 +89,14 @@ public struct SettingsView: View {
                     mediaPreviewsLoaded = true
                 }
             }
+            if let diagnostics {
+                Section {
+                    NavigationLink("Diagnostics") { DiagnosticsView(report: diagnostics) }
+                        .accessibilityIdentifier("diagnostics")
+                } footer: {
+                    Text("A short report you can share when something looks wrong. It holds no messages, names or account IDs.")
+                }
+            }
             Section("About") {
                 LabeledContent("Version", value: "\(version) (\(build))")
                 NavigationLink("Acknowledgements") { AcknowledgementsView() }
@@ -97,6 +108,30 @@ public struct SettingsView: View {
             Button("Sign out", role: .destructive, action: onSignOut)
             Button("Cancel", role: .cancel) {}
         }
+    }
+}
+
+/// A plain-text status report (versions, device, read-state audit counts) to read or share.
+public struct DiagnosticsView: View {
+    private let report: @Sendable () async -> String
+    @State private var text = ""
+
+    public init(report: @escaping @Sendable () async -> String) { self.report = report }
+
+    public var body: some View {
+        ScrollView {
+            Text(text.isEmpty ? "Collecting…" : text)
+                .font(.system(.footnote, design: .monospaced))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .textSelection(.enabled)
+                .accessibilityIdentifier("diagnostics-report")
+        }
+        .navigationTitle("Diagnostics")
+        .toolbar {
+            if !text.isEmpty { ToolbarItem(placement: .primaryAction) { ShareLink(item: text) } }
+        }
+        .task { text = await report() }
     }
 }
 
