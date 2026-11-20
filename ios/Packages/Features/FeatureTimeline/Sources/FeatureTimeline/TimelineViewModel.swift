@@ -423,6 +423,30 @@ public final class TimelineViewModel {
         }
     }
 
+    public private(set) var isSendingFile = false
+
+    /// Sends a picked file, recording or clip as it is. The message shows as a local echo while uploading.
+    public func sendFile(data: Data, filename: String, mimeType: String) async {
+        guard !isSendingFile else { return }
+        isSendingFile = true
+        sendError = nil
+        defer { isSendingFile = false }
+        do {
+            try await coordinator.sendFile(OutgoingFile(data: data, filename: filename, mimeType: mimeType))
+        } catch {
+            switch error {
+            case .invalidInput("FILE_TOO_LARGE"): sendError = "That file is too large to send."
+            case .invalidInput("EMPTY_FILE"): sendError = "That file is empty."
+            case .invalidInput: sendError = "That file can't be sent."
+            case .network(retryable: true): sendError = "Can't reach the server. The file wasn't sent."
+            default: sendError = "The file couldn't be sent."
+            }
+        }
+    }
+
+    public func reportFileTooLarge() { sendError = "That file is too large to send." }
+    public func reportFileUnreadable() { sendError = "That file couldn't be read." }
+
     /// Decoding and re-encoding a photo is real work; it runs off the main actor.
     @concurrent private static func prepare(_ preparer: any ImagePreparing, _ data: Data, _ filename: String) async throws(HaloError) -> OutgoingImage {
         try preparer.prepare(data: data, filename: filename)

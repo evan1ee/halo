@@ -534,6 +534,32 @@ struct TimelineViewModelTests {
         await vm.openFile(row("big.bin", size: TimelineViewModel.openSizeLimit + 1))
         #expect(vm.openedFile == nil && vm.openFileError?.contains("too large") == true)
     }
+
+    @Test("a picked file is sent as it is; too large or empty files and a failing send give honest messages")
+    func sendingFiles() async throws {
+        let room = try RoomID("!r:x.org")
+        let port = FakeTimelinePort()
+        port.addRoom(room)
+        let vm = TimelineViewModel(
+            coordinator: TimelineCoordinator(port: port, room: room), room: room,
+            locale: Locale(identifier: "en_US"), timeZone: TimeZone(identifier: "UTC") ?? .gmt)
+        await vm.start()
+        for _ in 0..<200_000 { if case .live = vm.content { break }; await Task.yield() }
+        await vm.sendFile(data: Data("hello".utf8), filename: "plan.pdf", mimeType: "application/pdf")
+        #expect(port.sentFiles(in: room) == [OutgoingFile(data: Data("hello".utf8), filename: "plan.pdf", mimeType: "application/pdf")])
+        #expect(vm.sendError == nil && !vm.isSendingFile)
+        await vm.sendFile(data: Data(), filename: "empty.txt", mimeType: "text/plain")
+        #expect(vm.sendError == "That file is empty.")
+        await vm.sendFile(data: Data("x".utf8), filename: "a/b.txt", mimeType: "text/plain")
+        #expect(vm.sendError == "That file can't be sent.")
+        port.failNextFile(in: room, with: .network(retryable: true))
+        await vm.sendFile(data: Data("x".utf8), filename: "n.txt", mimeType: "text/plain")
+        #expect(vm.sendError == "Can't reach the server. The file wasn't sent.")
+        #expect(port.sentFiles(in: room).count == 1)
+        #expect(OutgoingFile(data: Data(), filename: "a", mimeType: "audio/mp4").kind == .audio)
+        #expect(OutgoingFile(data: Data(), filename: "a", mimeType: "video/mp4").kind == .video)
+        #expect(OutgoingFile(data: Data(), filename: "a", mimeType: "application/zip").kind == .file)
+    }
 }
 
 private struct StubPreparer: ImagePreparing {

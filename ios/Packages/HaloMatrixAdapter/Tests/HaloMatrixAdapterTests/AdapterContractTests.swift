@@ -275,6 +275,57 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
+    @Test("Sending a file, an audio clip and a video (uses HALO_DEV_STICKER_ROOM as a scratch room)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
+    func sendFiles() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
+            on: details)
+        try await MatrixSyncPort(session: session).start()
+        let room = try RoomID(env["HALO_DEV_STICKER_ROOM"] ?? "")
+        var timeline: (any TimelineSession)?
+        for _ in 0..<60 {
+            if let opened = try? await MatrixTimelinePort(session: session).open(room: room) { timeline = opened; break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        let opened = try #require(timeline)
+        let stream = opened.items()
+        let tag = UUID().uuidString.prefix(6)
+        let sent: [(name: String, mime: String, kind: MediaKind)] = [
+            ("doc-\(tag).txt", "text/plain", .file), ("clip-\(tag).m4a", "audio/mp4", .audio), ("movie-\(tag).mp4", "video/mp4", .video),
+        ]
+        for file in sent {
+            try await opened.sendFile(OutgoingFile(data: Data("contract \(file.name)".utf8), filename: file.name, mimeType: file.mime))
+        }
+        let found: [String: MediaAttachment] = try await within(seconds: 90) {
+            var items: [HaloDomain.TimelineItem] = []
+            var seen: [String: MediaAttachment] = [:]
+            for await diff in stream {
+                try ListReducer.apply(diff, to: &items)
+                for item in items {
+                    if case .event(let event) = item.content, event.isOwn, event.eventID != nil, case .media(let attachment) = event.kind,
+                       sent.contains(where: { $0.name == attachment.body }) { seen[attachment.body] = attachment }
+                }
+                if seen.count == sent.count { return seen }
+            }
+            return seen
+        }
+        for file in sent {
+            let attachment = try #require(found[file.name], "\(file.name) did not arrive")
+            #expect(attachment.kind == file.kind && attachment.mimeType == file.mime && attachment.size == "contract \(file.name)".utf8.count && attachment.source != nil)
+        }
+        // The bytes come back through the media port.
+        let text = try #require(found[sent[0].name])
+        let data = try await MatrixMediaPort(session: session).content(try #require(text.source))
+        #expect(String(decoding: data, as: UTF8.self) == "contract \(sent[0].name)")
+        await #expect(throws: HaloError.invalidInput("EMPTY_FILE")) {
+            try await opened.sendFile(OutgoingFile(data: Data(), filename: "x.txt", mimeType: "text/plain"))
+        }
+        await opened.close()
+        try await session.logout()
+    }
+
     @Test("Creating a sticker pack (creates a room on the dev server)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
     func createPack() async throws {
         let session = port()

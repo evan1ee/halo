@@ -1,6 +1,7 @@
 #if canImport(SwiftUI)
 import HaloDomain
 import SwiftUI
+import UniformTypeIdentifiers
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -103,12 +104,14 @@ private struct Composer: View {
     @Bindable var model: TimelineViewModel
     let onStickers: (() -> Void)?
     @State private var picked: PhotosPickerItem?
+    @State private var choosingFile = false
 
     var body: some View {
         VStack(spacing: 4) {
             if let typing = model.typingText { Text(typing).font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading) }
             if let error = model.sendError { Text(error).font(.caption).foregroundStyle(.red) }
             if model.isSendingImage { ProgressView("Sending photo…").font(.caption) }
+            if model.isSendingFile { ProgressView("Sending file…").font(.caption) }
             if model.editing != nil {
                 HStack {
                     Label("Editing message", systemImage: "pencil").font(.caption)
@@ -142,6 +145,10 @@ private struct Composer: View {
                         .accessibilityLabel("Send a photo")
                         .accessibilityIdentifier("photo-button")
                 }
+                Button { choosingFile = true } label: { Image(systemName: "paperclip").font(.title2) }
+                    .disabled(model.isSendingFile)
+                    .accessibilityLabel("Send a file")
+                    .accessibilityIdentifier("file-button")
                 if let onStickers {
                     Button(action: onStickers) { Image(systemName: "face.smiling").font(.title2) }
                         .accessibilityLabel("Stickers")
@@ -158,6 +165,20 @@ private struct Composer: View {
         }
         .padding(8)
         .background(.bar)
+        .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.item]) { result in
+            guard case .success(let url) = result else { return }
+            Task {
+                // The picked file lives outside the app's sandbox: access is granted only while this scope is open.
+                let opened = url.startAccessingSecurityScopedResource()
+                defer { if opened { url.stopAccessingSecurityScopedResource() } }
+                let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+                // Checked before reading, so a huge file never gets loaded into memory.
+                guard size <= OutgoingFile.maximumBytes else { model.reportFileTooLarge(); return }
+                guard let data = try? Data(contentsOf: url) else { model.reportFileUnreadable(); return }
+                let type = UTType(filenameExtension: url.pathExtension)
+                await model.sendFile(data: data, filename: url.lastPathComponent, mimeType: type?.preferredMIMEType ?? "application/octet-stream")
+            }
+        }
         .onChange(of: picked) { _, item in
             guard let item else { return }
             picked = nil
