@@ -23,7 +23,8 @@ public struct StickerPanelView: View {
                         .accessibilityIdentifier("new-pack")
                 }
             }
-            .padding(8)
+            // Room for the sheet's drag indicator above the search field.
+            .padding(.horizontal, 12).padding(.top, 28).padding(.bottom, 8)
             if let error = model.sendError { Text(error).font(.caption).foregroundStyle(.red) }
             if model.isIncomplete { Text("Some packs couldn't be loaded.").font(.caption).foregroundStyle(.secondary) }
             if let message = model.emptyMessage {
