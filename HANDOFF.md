@@ -1,12 +1,12 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-20 · Branch: `feat/infra-dev-fixtures` · PR #5 merged
+Last updated: 2026-11-20 · Branch: `feat/ci-macos` · PRs #1–#6 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
 - **Milestone:** M0 done; M1 largely done; M2 done except media sending and the offline-send test; **M3 (read-state engine) in progress**. Dev Mac: Xcode 27.2, Swift 6.4.2, iPhone 16.
-- **Checks:** `scripts/prepush.sh` passes (SwiftLint not configured, skipped); the app target builds (`Halo-Debug`, simulator; prepush doesn't build it). All 11 contract tests (`infra/dev`) pass, none skipped (`scripts/contract-test.sh` after `infra/dev/create-fixtures.py`).
+- **Checks:** `scripts/prepush.sh` passes (SwiftLint not configured, skipped); `scripts/prepush.sh` now also builds `Halo-Debug` for the simulator. All 11 contract tests (`infra/dev`) pass, none skipped (`scripts/contract-test.sh` after `infra/dev/create-fixtures.py`).
 - **CI:** PRs #1–#5 merged. CI runs only the Linux-portable packages (Foundation, Domain, TestSupport, Application): adapter, persistence, platform, features and the app are tested only by `prepush.sh` on a Mac. `licenses` runs only on SDK/inventory changes.
 
 ## 2. Completed work (what exists now)
@@ -31,7 +31,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 Full list: docs/DECISION_LOG.md (D1–D70), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-`infra/dev/create-fixtures.py` (new), `scripts/contract-test.sh`, `infra/dev/contract.env.example` (new), `infra/dev/README.md`, `docs/development/AUTONOMOUS_LOOP.md`, `docs/ROADMAP.md`, `HANDOFF.md`.
+`scripts/prepush.sh` (app build), `docs/ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
 - Stickers: V-ST-1 resolved (option B), V-ST-2 partly (token refresh on 401 not exercised). Verified against `infra/dev` by contract test `stickers` (env `HALO_DEV_STICKER_ROOM`: a room with `m.room.image_pack` `cats` {wave, dance} enabled in `m.image_pack.rooms`; throwaway account `stickertester` created locally). Not built: long-press preview/animation (FR-5, FR-9), editing/deleting packs, hiding pack rooms from the room list, legacy `im.ponies.*` packs (V-ST-3), privacy notice, "unavailable pack" UI. Real sticker images were not loaded (the fixture mxc URLs have no media).
@@ -52,12 +52,12 @@ Full list: docs/DECISION_LOG.md (D1–D70), docs/adr/. Most relevant now: D70 au
 
 **Needs the founder** (the loop records these and moves on; AUTONOMOUS_LOOP §5)
 - 📱 Device checks: G-NSE AC-NSE-1…6, V-RS-1, file protection on `halo.sqlite`, NSE database access, background push delivery.
+- 👤 Q-CI-MAC: a macOS CI job (Mac-only packages + app build) costs runner minutes and needs Xcode 27 on the runner; decide whether to add it, or keep `prepush.sh` as the only Mac gate.
 - 👤 Gate outcomes G-UNREAD / G-FFI at the end of M3 (the agent writes the evaluation); push gateway, APNs keys, TestFlight.
 
 ## 6. Next steps
 The queue is docs/ROADMAP.md §"Remaining work", worked by the loop in docs/development/AUTONOMOUS_LOOP.md. Its head:
-1. macOS CI job for the Mac-only packages and the app build; app build in `scripts/prepush.sh`.
-2. M3: scenario driver running S01–S22 against Synapse in `infra/test`, then the auditor.
+1. M3: scenario driver running S01–S22 against Synapse in `infra/test`, then the auditor.
 
 ## 7. Next Session Prompt
 ```text
