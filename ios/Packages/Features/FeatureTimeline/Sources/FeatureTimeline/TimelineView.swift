@@ -46,13 +46,16 @@ public struct TimelineView: View {
                         .task(id: rows.count) { if paginationError == nil { await model.loadEarlier() } }
                     }
                     ForEach(rows) { row in
-                        RowView(row: row, model: model).listRowSeparator(.hidden)
+                        RowView(row: row, model: model)
                             // D6: a row counts as seen when at least half of it is on screen; the 0.5 s dwell is in the view model.
                             .onScrollVisibilityChange(threshold: 0.5) { model.rowVisibility(row, isVisible: $0) }
                             .onDisappear { model.rowVisibility(row, isVisible: false) }
+                            .listRowSeparator(.hidden, edges: .all)
                     }
                 }
                 .listStyle(.plain)
+                .listSectionSeparator(.hidden)
+                .listRowSeparatorTint(.clear)
                 .defaultScrollAnchor(.bottom)
                 .accessibilityIdentifier("timeline")
                 // A newer last row (own echo or incoming message) scrolls into view. Earlier history prepended at the
