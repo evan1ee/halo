@@ -164,6 +164,18 @@ private struct Composer: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("mention-suggestion")
             }
+            if let photo = model.pendingPhoto {
+                HStack(spacing: 10) {
+                    #if canImport(UIKit)
+                    if let image = UIImage(data: photo.data) { Image(uiImage: image).resizable().scaledToFill().frame(width: 56, height: 56).clipShape(.rect(cornerRadius: 8)) }
+                    #endif
+                    Text("Photo ready. Add a caption below, or send as is.").font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button { model.removePendingPhoto() } label: { Image(systemName: "xmark.circle.fill") }
+                        .accessibilityLabel("Remove photo")
+                        .accessibilityIdentifier("remove-photo")
+                }
+            }
             HStack(alignment: .bottom) {
                 if model.canSendImages {
                     PhotosPicker(selection: $picked, matching: .images) { Image(systemName: "photo").font(.title2) }
@@ -210,7 +222,7 @@ private struct Composer: View {
             picked = nil
             Task {
                 guard let data = try? await item.loadTransferable(type: Data.self) else { return }
-                await model.sendImage(data: data, filename: item.itemIdentifier ?? "photo")
+                await model.attachPhoto(data: data, filename: item.itemIdentifier ?? "photo")
             }
         }
     }
