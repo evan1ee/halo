@@ -84,6 +84,18 @@ public enum PackRegistry {
         return content
     }
 
+    /// The packs listed in `m.image_pack.rooms` or the legacy `im.ponies.emote_rooms` (same shape):
+    /// `{ rooms: { roomId: { stateKey: {} } } }`, in a stable order. Malformed entries are skipped.
+    public static func listedPacks(in content: [String: Any]?) -> [PackRef] {
+        guard let rooms = content?["rooms"] as? [String: Any] else { return [] }
+        var refs: [PackRef] = []
+        for roomKey in rooms.keys.sorted() {
+            guard let room = try? RoomID(roomKey), let keys = (rooms[roomKey] as? [String: Any])?.keys else { continue }
+            refs += keys.sorted().map { PackRef(room: room, stateKey: $0) }
+        }
+        return refs
+    }
+
     /// The rooms listed in `one.mbm.halo.sticker_rooms`. Content from a newer version, or malformed entries, yield what can be read.
     public static func packRooms(in content: [String: Any]?) -> Set<RoomID> {
         guard let ids = content?["rooms"] as? [String] else { return [] }
