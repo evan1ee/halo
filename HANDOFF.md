@@ -15,6 +15,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 - Outbound receipts: timeline rows report visibility (approximation of D6) → `ReadReceiptCoordinator` (monotonic, 2 s debounce, backoff, persisted and restored, 7-day expiry of sent intents) → `MatrixReadMarkerPort`.
 - Room list rows show the policy's unread indicator (count / mentions / dot, bold when unread) and update when the local read position changes.
 - `RoomListCoordinator(loadsAllPages: true)` (app) keeps paging so the badge sees every room.
+- Pushed events (notification records) at or before the read position (here or another device) no longer count; delivered notifications of rooms without attention are removed by `SystemBadge`.
 - Sign-out removes the pusher first (`PushPort.unregister` → `deletePusher`, via `SessionCoordinator.setBeforeSignOut`; best effort).
 - Room list swipe: leading "Read" (`markRoomRead`), trailing "Unread" (`setMarkedUnread`).
 
@@ -34,7 +35,7 @@ Everything in `git log origin/main..HEAD`. Key paths: `ios/Packages/HaloApplicat
 - Docker CLI hangs on the `osxkeychain` helper; use a throwaway `DOCKER_CONFIG`.
 
 ## 6. Next steps
-1. M3: true ≥ 50 % visibility; scenario tests S01–S22 and auditor; clear delivered notifications when read elsewhere.
+1. M3: true ≥ 50 % visibility; scenario tests S01–S22 and auditor.
 2. Device checks from section 5; G-NSE hardening (peak memory, encrypted room, timeout injection AC-NSE-3/4, 100 pushes, Release build).
 3. M2 left: offline send test, media sending, mentions. M1 left: video/audio/file, QR/emoji verification. A push gateway for Beta/Release.
 4. Push the branch, open a PR, check CI (after refreshing this file).

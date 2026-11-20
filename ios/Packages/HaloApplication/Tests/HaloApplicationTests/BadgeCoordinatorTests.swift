@@ -141,4 +141,17 @@ struct BadgeCoordinatorTests {
         try rooms.emit(.set(index: 0, try room(latest: 200, readThrough: 100)))
         #expect(await eventually { port.badge == 1 })
     }
+
+    @Test("a pushed event the user already read doesn't count, a newer one does")
+    func recordsAreReadThrough() throws {
+        let id = try RoomID("!a:x.org")
+        let input = RoomReadInputs(roomID: id, membership: .joined, isEncrypted: true, counts: .none)
+        func record(_ t: Double) throws -> NotificationRecord {
+            NotificationRecord(roomID: id, eventID: try EventID("$e\(Int(t))"), timestamp: Date(timeIntervalSince1970: t), isMention: false)
+        }
+        let read = [id: Date(timeIntervalSince1970: 100)]
+        #expect(BadgeCoordinator.attention(inputs: [input], records: [try record(100)], positions: read).isEmpty)
+        #expect(BadgeCoordinator.attention(inputs: [input], records: [try record(100), try record(150)], positions: read) == [id])
+        #expect(BadgeCoordinator.attention(inputs: [input], records: [try record(100)]) == [id])
+    }
 }

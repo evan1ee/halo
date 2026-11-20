@@ -54,10 +54,14 @@ public actor BadgeCoordinator {
         let byRoom = Dictionary(grouping: records, by: \.roomID)
         var result: Set<RoomID> = []
         for input in inputs {
-            let notified = (byRoom[input.roomID] ?? []).map { NotifiedRef(timestamp: $0.timestamp, isMention: $0.isMention) }
+            // A pushed event the user has read (here, or on another device) is no longer unread.
+            let readThrough = [positions[input.roomID], input.localIntent].compactMap { $0 }.max()
+            let notified = (byRoom[input.roomID] ?? [])
+                .filter { record in readThrough.map { record.timestamp > $0 } ?? true }
+                .map { NotifiedRef(timestamp: $0.timestamp, isMention: $0.isMention) }
             let state = ReadStatePolicy.evaluate(RoomReadInputs(
                 roomID: input.roomID, membership: input.membership, isEncrypted: input.isEncrypted, counts: input.counts,
-                latestEvent: input.latestEvent, localIntent: [positions[input.roomID], input.localIntent].compactMap { $0 }.max(), unconfirmedNotified: notified))
+                latestEvent: input.latestEvent, localIntent: readThrough, unconfirmedNotified: notified))
             if state.attention { result.insert(input.roomID) }
         }
         let known = Set(inputs.map(\.roomID))
