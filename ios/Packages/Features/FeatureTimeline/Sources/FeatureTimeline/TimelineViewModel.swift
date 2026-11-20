@@ -111,6 +111,7 @@ public final class TimelineViewModel {
     private var visible: Set<EventID> = []
     private var isActive = true
     private var clearedMarkedUnread = false
+    private var reportedOwn: EventID?
     private var dwellTask: Task<Void, Never>?
     private var pendingCandidate: EventID?
 
@@ -293,6 +294,7 @@ public final class TimelineViewModel {
             }
             eventTimes = times
             visible.formIntersection(times.keys)
+            reportOwnMessage(snapshot.items)
             typingText = Self.typingText(snapshot.typing, items: snapshot.items)
             content = .live(
                 rows: Self.collapsingStateRuns(snapshot.items.map(row), items: snapshot.items),
@@ -302,6 +304,20 @@ public final class TimelineViewModel {
         case .failed(let error):
             content = .failed(error == .notFound ? "This room isn't available." : "The timeline couldn't be loaded.")
         }
+    }
+
+    /// Sending a message means the user has read up to it (MESSAGING FR-6, rule E1b): once the newest own message has a
+    /// server event ID it becomes the read position. The coordinator ignores anything not newer than the current one.
+    private func reportOwnMessage(_ items: [TimelineItem]) {
+        guard let receipts, let room else { return }
+        var newest: (id: EventID, time: Date)?
+        for item in items {
+            guard case .event(let event) = item.content, event.isOwn, let id = event.eventID else { continue }
+            if newest == nil || event.timestamp > newest!.time { newest = (id, event.timestamp) }
+        }
+        guard let newest, newest.id != reportedOwn else { return }
+        reportedOwn = newest.id
+        Task { await receipts.reportSeen(room: room, event: newest.id, timestamp: newest.time) }
     }
 
     /// Names come from the timeline's senders; a user without one is shown by user ID (never invented).

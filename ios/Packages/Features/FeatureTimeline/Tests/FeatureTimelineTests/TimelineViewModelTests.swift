@@ -292,4 +292,26 @@ struct TimelineViewModelTests {
         #expect(port.unreadFlags[room] == false)
         await model.stop()
     }
+
+    @Test("a confirmed own message becomes the read position; someone else's, or one still sending, doesn't (FR-6)")
+    func ownMessageIsRead() async throws {
+        let room = try RoomID("!r:x.org")
+        let port = FakeReadMarkerPort()
+        let receipts = ReadReceiptCoordinator(port: port)
+        let model = TimelineViewModel(
+            coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: room), receipts: receipts, room: room,
+            dwell: .zero, sleep: { _ in }, locale: Locale(identifier: "en_US"), timeZone: .gmt)
+        func item(_ n: Int, own: Bool, id: Bool = true) throws -> TimelineItem {
+            TimelineItem(id: TimelineItemID("i\(n)"), content: .event(TimelineEvent(
+                eventID: id ? try EventID("$e\(n)") : nil, sender: nil, senderName: "x", timestamp: Date(timeIntervalSince1970: Double(n)),
+                isOwn: own, kind: .text("m\(n)", isEdited: false))))
+        }
+        func live(_ items: [TimelineItem]) { model.apply(.live(.init(items: items, isPaginating: false, reachedStart: true, paginationError: nil))) }
+        live([try item(1, own: false), try item(2, own: true, id: false)])
+        for _ in 0..<2000 { await Task.yield() }
+        #expect(port.receipts.isEmpty)
+        live([try item(1, own: false), try item(2, own: true)])
+        for _ in 0..<200_000 where port.receipts.isEmpty { await Task.yield() }
+        #expect(port.receipts.map(\.event.rawValue) == ["$e2"])
+    }
 }
