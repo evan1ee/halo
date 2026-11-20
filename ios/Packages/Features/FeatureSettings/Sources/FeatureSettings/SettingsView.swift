@@ -60,6 +60,7 @@ public struct SettingsView: View {
         self.onPrivateReceiptsChange = onPrivateReceiptsChange
         self.onSignOut = onSignOut
         _privateReceipts = State(initialValue: preferences.privateReceipts)
+
     }
 
     public var body: some View {
@@ -86,6 +87,7 @@ public struct SettingsView: View {
                 }
                 .accessibilityIdentifier("appearance")
             }
+            BotsSection(preferences: preferences)
             if loadMediaPreviews != nil, saveMediaPreviews != nil {
                 Section {
                     Picker("Show photos", selection: $mediaPreviews) {
@@ -194,6 +196,57 @@ public struct SettingsView: View {
             Button("Sign out", role: .destructive, action: onSignOut)
             Button("Cancel", role: .cancel) {}
         }
+    }
+}
+
+/// Settings → Bots: the accounts whose recognised messages show as cards.
+private struct BotsSection: View {
+    let preferences: AppPreferences
+    @State private var senders: [String]
+    @State private var newBot = ""
+
+    init(preferences: AppPreferences) {
+        self.preferences = preferences
+        _senders = State(initialValue: preferences.botSenders)
+    }
+
+    static func looksLikeUserID(_ text: String) -> Bool {
+        text.hasPrefix("@") && text.contains(":") && !text.contains(" ") && text.count > 3 && !text.hasSuffix(":")
+    }
+
+    var body: some View {
+        Section {
+            ForEach(senders, id: \.self) { Text($0).font(.callout) }
+                .onDelete { offsets in
+                    senders.remove(atOffsets: offsets)
+                    preferences.botSenders = senders
+                }
+            HStack {
+                field
+                Button("Add", action: add).buttonStyle(.borderless).disabled(!Self.looksLikeUserID(trimmed))
+            }
+        } header: {
+            Text("Bots")
+        } footer: {
+            Text("Messages from these accounts that Halo recognises are shown as cards, with the original one tap away. Applies to rooms you open from now on.")
+        }
+    }
+
+    private var trimmed: String { newBot.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    @ViewBuilder private var field: some View {
+        #if os(iOS)
+        TextField("@bot:server.org", text: $newBot).textInputAutocapitalization(.never).autocorrectionDisabled()
+        #else
+        TextField("@bot:server.org", text: $newBot)
+        #endif
+    }
+
+    private func add() {
+        guard Self.looksLikeUserID(trimmed), !senders.contains(trimmed) else { return }
+        senders.append(trimmed)
+        preferences.botSenders = senders
+        newBot = ""
     }
 }
 

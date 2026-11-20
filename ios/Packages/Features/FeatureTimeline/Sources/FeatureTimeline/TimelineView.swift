@@ -238,6 +238,7 @@ private struct RowView: View {
     let row: TimelineRow
     let model: TimelineViewModel
     @State private var showingSource = false
+    @State private var showingOriginal = false
 
     /// Long-press menu for confirmed messages: quick reactions, and edit/delete for own messages.
     @ViewBuilder private var actions: some View {
@@ -275,7 +276,10 @@ private struct RowView: View {
                 }
                 if let image = row.image { ThumbnailView(image: image, model: model, isSticker: row.isSticker).accessibilityLabel(row.isSticker ? row.text : "Image") }
                 if let file = row.file { FileTileView(file: file, isOpening: model.openingRow == row.id, model: model) { Task { await model.openFile(row) } } }
-                if row.showsText { Text(row.styled ?? AttributedString(row.text))
+                if let card = row.card, !showingOriginal {
+                    BotCardView(card: card)
+                    Button("Show original") { showingOriginal = true }.font(.caption2)
+                } else if row.showsText { Text(row.styled ?? AttributedString(row.text))
                     .padding(8)
                     .background(row.style == .ownMessage ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.15), in: .rect(cornerRadius: 12))
                     .opacity(row.status == nil ? 1 : 0.6) }
@@ -448,6 +452,42 @@ private struct MessageSourceView: View {
             .navigationTitle("Message source")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
+    }
+}
+
+/// A bot message as a native card (BOT_MESSAGES FR-2). Read-only: ticking tasks needs the interaction protocol (FR-3).
+private struct BotCardView: View {
+    let card: BotCard
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            switch card {
+            case .todoList(let title, let rows):
+                Label(title, systemImage: "checklist").font(.subheadline.bold())
+                ForEach(rows, id: \.id) { row in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Image(systemName: row.isDone ? "checkmark.circle.fill" : "circle").foregroundStyle(row.isDone ? .green : .secondary)
+                        Text(row.text).strikethrough(row.isDone).foregroundStyle(row.isDone ? .secondary : .primary)
+                        Text("#\(row.id)").font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+            case .taskAdded(let id, let owner, let title):
+                Label("Task #\(id) added", systemImage: "plus.circle").font(.subheadline.bold())
+                Text(title)
+                if let owner { Text("for \(owner)").font(.caption).foregroundStyle(.secondary) }
+            case .reminderSet(let id, let when, let title):
+                Label("Reminder #\(id)", systemImage: "alarm").font(.subheadline.bold())
+                Text(title)
+                if let when { Text(when).font(.caption).foregroundStyle(.secondary) }
+            case .taskDone(let title):
+                Label("Done: \(title)", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+            case .taskDeleted(let title):
+                Label("Deleted: \(title)", systemImage: "trash").foregroundStyle(.secondary)
+            }
+        }
+        .padding(10)
+        .background(Color.secondary.opacity(0.15), in: .rect(cornerRadius: 12))
+        .accessibilityIdentifier("bot-card")
     }
 }
 #endif
