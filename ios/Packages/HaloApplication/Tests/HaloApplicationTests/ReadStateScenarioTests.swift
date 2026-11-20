@@ -407,19 +407,26 @@ struct ReadStateScenarioTests {
         #expect(await rig.attention() == [r])
         #expect(await rig.state(r).reasons.contains(.markedUnread))
 
-        // Opening the room should clear the flag on the server (READ_RECEIPTS §1). Nothing does yet.
+        // Opening the room (the timeline view model calls `roomOpened` once it is visible) clears the flag.
         await rig.view(r, id)
+        await rig.receipts.roomOpened(r)
         await rig.settle()
-        withKnownIssue("opening a room doesn't clear m.marked_unread yet (READ_RECEIPTS §1)") {
-            #expect(rig.port.unreadFlags[r] == false)
-        }
+        #expect(rig.port.unreadFlags[r] == false)
+        rig.sync()
+        #expect(await rig.attention().isEmpty)
 
-        // The room-list "Read" swipe does clear it.
-        rig.port.setLatestEvent(id, in: r)
-        try await rig.receipts.markRoomRead(r, latestEventTime: rig.world.ts(id))
+        // The room-list "Read" swipe clears it too.
+        let other = rig.addRoom()
+        let id2 = rig.send(other)
+        rig.a2Reads(other, id2)
+        rig.markUnreadOnA2(other)
+        rig.sync()
+        #expect(await rig.attention() == [other])
+        rig.port.setLatestEvent(id2, in: other)
+        try await rig.receipts.markRoomRead(other, latestEventTime: rig.world.ts(id2))
         await rig.settle()
         rig.sync()
-        #expect(rig.port.unreadFlags[r] == false)
+        #expect(rig.port.unreadFlags[other] == false)
         #expect(await rig.attention().isEmpty)
     }
 

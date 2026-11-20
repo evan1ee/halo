@@ -137,6 +137,14 @@ struct ReadReceiptCoordinatorTests {
         #expect(await c.readPosition(of: room) == at(70))
     }
 
+    @Test func roomOpenedClearsTheMarkedUnreadFlagWithoutSendingReceipts() async throws {
+        let (c, port, _) = make()
+        try await c.markRoomUnread(room)
+        await c.roomOpened(room)
+        #expect(port.unreadFlags[room] == false)
+        #expect(port.receipts.isEmpty)
+    }
+
     @Test func markRoomReadInARoomWithoutEventsOnlyClearsTheFlag() async throws {
         let (c, port, _) = make()
         try await c.markRoomRead(room, latestEventTime: nil)

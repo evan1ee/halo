@@ -273,4 +273,23 @@ struct TimelineViewModelTests {
         for _ in 0..<2000 { await Task.yield() }
         #expect(port.receipts.count == 1)
     }
+
+    @Test("opening the room clears m.marked_unread once the screen is visible, not while inactive")
+    func clearsMarkedUnreadOnOpen() async throws {
+        let room = try RoomID("!r:x.org")
+        let port = FakeReadMarkerPort()
+        let receipts = ReadReceiptCoordinator(port: port)
+        try await receipts.markRoomUnread(room)
+        let model = TimelineViewModel(
+            coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: room), receipts: receipts, room: room,
+            dwell: .zero, sleep: { _ in }, locale: Locale(identifier: "en_US"), timeZone: .gmt)
+        model.setActive(false)
+        await model.start()
+        for _ in 0..<2000 { await Task.yield() }
+        #expect(port.unreadFlags[room] == true)
+        model.setActive(true)
+        for _ in 0..<200_000 where port.unreadFlags[room] == true { await Task.yield() }
+        #expect(port.unreadFlags[room] == false)
+        await model.stop()
+    }
 }

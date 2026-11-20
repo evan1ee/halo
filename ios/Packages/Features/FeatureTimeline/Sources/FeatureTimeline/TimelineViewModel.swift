@@ -110,6 +110,7 @@ public final class TimelineViewModel {
     private var eventTimes: [EventID: Date] = [:]
     private var visible: Set<EventID> = []
     private var isActive = true
+    private var clearedMarkedUnread = false
     private var dwellTask: Task<Void, Never>?
     private var pendingCandidate: EventID?
 
@@ -152,6 +153,14 @@ public final class TimelineViewModel {
     public func setActive(_ active: Bool) {
         isActive = active
         reevaluateSeen()
+        clearMarkedUnreadIfVisible()
+    }
+
+    /// Opening a room clears `m.marked_unread` once the room is visible, once per opening of the screen.
+    private func clearMarkedUnreadIfVisible() {
+        guard isActive, !clearedMarkedUnread, observation != nil, let receipts, let room else { return }
+        clearedMarkedUnread = true
+        Task { await receipts.roomOpened(room) }
     }
 
     private func reevaluateSeen() {
@@ -176,12 +185,14 @@ public final class TimelineViewModel {
             for await status in statuses { self?.apply(status) }
         }
         await coordinator.open()
+        clearMarkedUnreadIfVisible()
     }
 
     /// Closes the timeline. Call when the screen disappears.
     public func stop() async {
         observation?.cancel()
         observation = nil
+        clearedMarkedUnread = false
         await coordinator.close()
     }
 

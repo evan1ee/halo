@@ -27,7 +27,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/. Most relevant now: D5/D9 
 Everything in `git log origin/main..HEAD`. Key paths: `ios/Packages/HaloApplication/Sources/HaloApplication/{ReadReceipts,Badge,RoomList}`, `HaloMatrixAdapter/.../{MatrixReadMarkerPort,MatrixRoomListPort}.swift`, `HaloPersistence/.../{HaloDatabase,ReadIntentStore}.swift`, `Features/{FeatureTimeline,FeatureRoomList}`, `ios/App/{AppRoot,HaloApp}.swift`.
 
 ## 5. Outstanding issues
-- Opening a room does not clear `m.marked_unread` (READ_RECEIPTS §1); `withKnownIssue` in S09 flips to a failure once fixed.
+- Opening a room now clears `m.marked_unread` (`ReadReceiptCoordinator.roomOpened`, called by `TimelineViewModel`; the adapter skips the write when the flag is already clear). Unverified on a device/server.
 - S01–S22 validate Halo against our model of Synapse, not against Synapse; the model's server rules (counts per mode, edits not notifying, own message as implicit receipt) are unverified.
 - Unverified on a device: file protection class on `halo.sqlite` (simulator reports none), V-RS-1 (do own-receipt changes trigger room-list updates?), cost of `loadOrFetchEvent` lookups, kill-and-relaunch resend, NSE access to the database, `deletePusher` (no contract test), paging cost for large accounts, the swipe UI and the unread indicators, the `latestEvent` mapping (no unit test).
 - D6 (≥ 50 % visible for ≥ 0.5 s) is approximated by row appear/disappear.
@@ -38,7 +38,7 @@ Everything in `git log origin/main..HEAD`. Key paths: `ios/Packages/HaloApplicat
 - Docker CLI hangs on the `osxkeychain` helper; use a throwaway `DOCKER_CONFIG`.
 
 ## 6. Next steps
-1. M3: true ≥ 50 % visibility; clear `m.marked_unread` when a room is opened (S09 known issue); the Docker scenario driver to run S01–S22 against Synapse; the auditor.
+1. M3: true ≥ 50 % visibility; the Docker scenario driver to run S01–S22 against Synapse; the auditor.
 2. Device checks from section 5; G-NSE hardening (peak memory, encrypted room, timeout injection AC-NSE-3/4, 100 pushes, Release build).
 3. M2 left: offline send test, media sending, mentions. M1 left: video/audio/file, QR/emoji verification. A push gateway for Beta/Release.
 4. Push the branch, open a PR, check CI (after refreshing this file).

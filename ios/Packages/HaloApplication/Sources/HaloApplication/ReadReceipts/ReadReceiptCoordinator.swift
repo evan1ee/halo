@@ -123,6 +123,12 @@ public actor ReadReceiptCoordinator {
         persist(room)
     }
 
+    /// The user opened `room` and it is visible: clears `m.marked_unread` (READ_RECEIPTS §1). Best effort; the flag stays
+    /// set (and the room keeps its attention) if the server can't be reached, and the next open tries again.
+    public func roomOpened(_ room: RoomID) async {
+        do { try await port.setMarkedUnread(room: room, false) } catch { return }
+    }
+
     /// "Mark as unread" from the room list.
     public func markRoomUnread(_ room: RoomID) async throws(HaloError) {
         try await port.setMarkedUnread(room: room, true)
