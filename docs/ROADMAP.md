@@ -60,7 +60,7 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 **M4 Stickers v1** (exit: AC-S1–S5)
 - [x] Hide pack rooms (`one.mbm.halo.sticker_rooms`) from the room list and the badge (`RoomListCoordinator(hiddenRooms:)`; not checked on screen).
 - [x] Long-press preview (FR-5): context-menu preview 240 pt, loads the full file (`MediaLoader.content`), animated (GIF/APNG/WebP frames via ImageIO, max 60) unless Reduce Motion or Low Power Mode (FR-9; `StickerImageTests` on the simulator). Not built: autoplay in the panel grid and the 12-animation cap (grid stays static), a check on screen.
-- [x] Privacy notice: permanent hint in the new-pack form (already there) and a one-time alert before the first sticker into an encrypted room (`StickerPanelViewModel.EncryptionNotice`, flag in `UserDefaults`; unit-tested, not seen on screen).
+- [x] Privacy notice: permanent hint in the new-pack form (already there) and a one-time alert before the first sticker into an encrypted room (`StickerPanelViewModel.EncryptionNotice`, per-device flag in `UserDefaults`, recorded only after a successful send; unit-tested, not seen on screen).
 - [ ] "Unavailable pack" UI (referenced room not joined / media 404).
 - [ ] Legacy `im.ponies.*` packs (V-ST-3).
 - [ ] Simulator UI check of the panel and pack creation; real sticker images loaded from media.
