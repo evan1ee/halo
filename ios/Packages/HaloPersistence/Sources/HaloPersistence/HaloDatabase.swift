@@ -61,6 +61,14 @@ public struct HaloDatabase: Sendable {
                 )
                 """)
         }
+        migrator.registerMigration("v3-draft") { db in
+            try db.execute(sql: """
+                CREATE TABLE draft (
+                  account TEXT NOT NULL, room_id TEXT NOT NULL, body TEXT NOT NULL, updated_at INTEGER NOT NULL,
+                  PRIMARY KEY (account, room_id)
+                )
+                """)
+        }
         return migrator
     }
 }

@@ -330,4 +330,34 @@ struct TimelineViewModelTests {
         #expect(row(try event(.sending)).failedLocalID == nil)
         #expect(row(try event(.sent, id: true, local: nil)).failedLocalID == nil)
     }
+
+    @Test("the unsent text is kept per room, restored on return, and survives an edit")
+    func drafts() async throws {
+        let room = try RoomID("!r:x.org")
+        let store = FakeDrafts()
+        let drafts = DraftCoordinator(store: store)
+        func make() -> TimelineViewModel {
+            let port = FakeTimelinePort()
+            port.addRoom(room)
+            return TimelineViewModel(
+                coordinator: TimelineCoordinator(port: port, room: room), room: room, drafts: drafts, locale: Locale(identifier: "en_US"), timeZone: .gmt)
+        }
+        let first = make()
+        first.draft = "not sent yet"
+        for _ in 0..<200_000 where store.stored[room] == nil { await Task.yield() }
+        #expect(store.stored[room] == "not sent yet")
+
+        let second = make()  // the screen is opened again
+        await second.start()
+        #expect(second.draft == "not sent yet")
+        await second.stop()
+
+        let target = TimelineRow(id: "x", style: .ownMessage, sender: nil, text: "old text", eventID: try EventID("$e"), isOwn: true)
+        second.beginEdit(target)
+        #expect(second.draft == "old text")
+        second.cancelEdit()
+        #expect(second.draft == "not sent yet")
+        for _ in 0..<2000 { await Task.yield() }
+        #expect(store.stored[room] == "not sent yet")  // the edit text never replaced the draft
+    }
 }

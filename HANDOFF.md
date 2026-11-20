@@ -19,6 +19,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 - Property tests P1–P6, P5b, P9, P10 (10,000 seeded cases each) in `HaloDomainTests/ReadStatePropertyTests.swift`; P7 in `BadgeCoordinatorTests` (records JSON round trip); P8 in `ReadIntentStoreTests` (concurrent upserts). P3 = notified-event order; P4 = re-evaluation, and repeating a notified event never changes attention (counts may; the store dedups by event ID). Scenarios S01–S22 are written as model-based tests (`HaloApplicationTests/ReadStateScenarioTests.swift`: real policy and coordinators over an in-process model of Synapse and A1's sync; not run against a real server).
 - Sign-out removes the pusher first (`PushPort.unregister` → `deletePusher`, via `SessionCoordinator.setBeforeSignOut`; best effort).
 - Messaging: a confirmed own message becomes the read position (FR-6, `TimelineViewModel.reportOwnMessage`); failed local echoes can be retried or deleted from the long-press menu (FR-3: `TimelineEvent.localID`, `TimelineSession.retrySend/abortSend`, adapter over `Timeline.retrySend/abortSend`).
+- Drafts (FR-5): `DraftPort` → `DraftStore` (table `draft`, migration `v3-draft`) behind `DraftCoordinator` (in-memory first, store attached after sign-in); `TimelineViewModel` restores and saves the composer text per room and keeps it across an edit.
 - Room list swipe: leading "Read" (`markRoomRead`), trailing "Unread" (`setMarkedUnread`).
 
 ## 3. Key decisions
@@ -42,7 +43,7 @@ Everything in `git log origin/main..HEAD`. Key paths: `ios/Packages/HaloApplicat
 ## 6. Next steps
 1. M3: device check of the ≥ 50 % visibility; the Docker scenario driver to run S01–S22 against Synapse; the auditor.
 2. Device checks from section 5; G-NSE hardening (peak memory, encrypted room, timeout injection AC-NSE-3/4, 100 pushes, Release build).
-3. M2 left: drafts (FR-5), mentions (FR-1), offline send test, media sending. M1 left: video/audio/file, QR/emoji verification. A push gateway for Beta/Release.
+3. M2 left: mentions (FR-1), offline send test, media sending. M1 left: video/audio/file, QR/emoji verification. A push gateway for Beta/Release.
 4. Push the branch, open a PR, check CI (after refreshing this file).
 
 ## 7. Next Session Prompt

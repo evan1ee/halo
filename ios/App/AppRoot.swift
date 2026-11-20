@@ -23,6 +23,7 @@ final class AppRoot {
     private let records: NotificationRecordStore
     private let timelinePort: MatrixTimelinePort
     let receipts: ReadReceiptCoordinator
+    let drafts: DraftCoordinator
     private let sessionCoordinator: SessionCoordinator
     private let media: MediaLoader
 
@@ -42,6 +43,7 @@ final class AppRoot {
         records = NotificationRecordStore(suiteName: suite)
         let receipts = ReadReceiptCoordinator(port: MatrixReadMarkerPort(session: session))
         self.receipts = receipts
+        drafts = DraftCoordinator()
         badge = BadgeCoordinator(rooms: roomCoordinator, records: records, port: SystemBadge(suiteName: suite), receipts: receipts)
 
         timelinePort = MatrixTimelinePort(session: session)
@@ -69,6 +71,7 @@ final class AppRoot {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 let database = try HaloDatabase(path: directory.appendingPathComponent("halo.sqlite").path)
                 await receipts.restore(from: ReadIntentStore(database: database, account: user))
+                await drafts.attach(DraftStore(database: database, account: user))
             } catch {
                 // Without a database, receipts still work from memory; there is nothing to restore.
             }
@@ -84,7 +87,7 @@ final class AppRoot {
 
     /// A view model for the timeline of `room`; each screen gets its own coordinator and session.
     func makeTimeline(room: RoomID) -> TimelineViewModel {
-        TimelineViewModel(coordinator: TimelineCoordinator(port: timelinePort, room: room, records: records), media: media, receipts: receipts, room: room)
+        TimelineViewModel(coordinator: TimelineCoordinator(port: timelinePort, room: room, records: records), media: media, receipts: receipts, room: room, drafts: drafts)
     }
 
     #if DEBUG
