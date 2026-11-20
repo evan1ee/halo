@@ -638,6 +638,27 @@ struct TimelineViewModelTests {
         #expect(vm.row(event(.media(MediaAttachment(kind: .file, body: "a.bin", source: MediaRef(token: "x"), thumbnail: MediaRef(token: "t"))))).file?.thumbnail == nil)
     }
 
+    @Test("someone else's message carries the sender's picture, your own does not, and the bytes load small")
+    func senderAvatars() async throws {
+        let port = FakeMediaPort()
+        let ref = MediaRef(token: "alice-avatar")
+        port.add(ref, data: Data([9, 8]))
+        let vm = TimelineViewModel(
+            coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: try RoomID("!r:x.org")), media: MediaLoader(port: port),
+            locale: Locale(identifier: "en_US"), timeZone: TimeZone(identifier: "UTC") ?? .gmt)
+        func item(own: Bool) throws -> TimelineItem {
+            TimelineItem(
+                id: TimelineItemID("id"),
+                content: .event(TimelineEvent(
+                    eventID: nil, sender: try UserID("@alice:x.org"), senderName: "Alice", timestamp: Date(timeIntervalSince1970: 0),
+                    isOwn: own, kind: .text("hi", isEdited: false), senderAvatar: ref)))
+        }
+        #expect(vm.row(try item(own: false)).avatar == ref)
+        #expect(vm.row(try item(own: true)).avatar == nil)
+        #expect(await vm.avatarData(ref) == Data([9, 8]))
+        #expect(await vm.avatarData(MediaRef(token: "missing")) == nil)
+    }
+
     @Test("opening a file downloads it into a temporary folder, shows it, and deleting it again on close; big files are refused")
     func openingFiles() async throws {
         let port = FakeMediaPort()

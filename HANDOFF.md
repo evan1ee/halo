@@ -1,6 +1,6 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-20 · Branch: `main` · PRs #1–#48 merged
+Last updated: 2026-11-21 · Branch: `main` · PRs #1–#48 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
@@ -9,7 +9,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 - **Checks:** `scripts/prepush.sh` passes (SwiftLint not configured, skipped); `scripts/prepush.sh` now also builds `Halo-Debug` for the simulator. All 17 contract tests (`infra/dev`) pass, none skipped (`scripts/contract-test.sh` after `infra/dev/create-fixtures.py`).
 - **CI:** PRs #1–#15 merged. CI runs only the Linux-portable packages (Foundation, Domain, TestSupport, Application): adapter, persistence, platform, features and the app are tested only by `prepush.sh` on a Mac. `licenses` runs only on SDK/inventory changes.
 
-- **Loop state (2026-11-20):** what is left that needs no device, signing, gate decision or product decision is small polish: avatars in the timeline, a room preview for invitations, the bot reaction menu (FR-4, product detail), V-ST-2 (needs an expiring token the dev Synapse can't give). The loop paused here; restart it to take those.
+- **Loop state (2026-11-20):** what is left that needs no device, signing, gate decision or product decision is small polish: a room preview for invitations, the bot reaction menu (FR-4, product detail), V-ST-2 (needs an expiring token the dev Synapse can't give). The loop paused here; restart it to take those.
 
 ## 2. Completed work (what exists now)
 Summary only; details per feature: [docs/development/IMPLEMENTATION_NOTES.md](docs/development/IMPLEMENTATION_NOTES.md).
@@ -26,7 +26,7 @@ Summary only; details per feature: [docs/development/IMPLEMENTATION_NOTES.md](do
 Full list: docs/DECISION_LOG.md (D1–D75), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-Diagnostics shows how many bot messages matched no template (`UnrecognisedBotMessages`). The bot-task timeout test now polls instead of sleeping (it flaked under `prepush.sh`). New package `HaloDesignSystem` (shared `AvatarCircle`); avatars in room info header and member rows. Room photo change/remove in the room info sheet (`RoomPort.setAvatar`). Own profile photo (Settings → Account → Profile; `ProfilePort.setOwnAvatar`; contract-tested, picker not used on screen). "View source" also on media, sticker and emote rows. Invitation rows name the inviter (`RoomSummary.inviter`). Member paging in the room info sheet (`loadMoreMembers`, "Show more members"); adapter sorts before paging. Room list avatars: `RoomSummary.avatar`, `MatrixRoomListPort.avatar`, `RoomListViewModel.avatarData/Row.avatar`, `AvatarView` in `RoomListView`, composition passes `MediaLoader`; test in FeatureRoomList. Not seen with a real avatar image (dev accounts have none). Before: room list preview (ROOM_LIST FR-3): `RoomSummary.preview` / `LatestMessagePreview` (HaloDomain), `MatrixRoomListPort.preview/previewText`, `RoomListViewModel.Row.preview`, `RoomListView` (one line under the name), tests in HaloDomain, the adapter and FeatureRoomList, ROADMAP. Checked: package tests, adapter unit tests (via `prepush.sh`, passed), `Halo-Debug` build, seen in the simulator. Earlier this session: room list v2 (PR 48), user profiles (PR 47), edit/invite, new chat (PR 46), invitations, room info (PR 45).
+Avatars beside others' messages in the timeline (`TimelineEvent.senderAvatar`, `TimelineRow.avatar`, `SenderAvatar` view; FeatureTimeline now depends on HaloDesignSystem; not seen with a real avatar). Diagnostics shows how many bot messages matched no template (`UnrecognisedBotMessages`). The bot-task timeout test now polls instead of sleeping (it flaked under `prepush.sh`). New package `HaloDesignSystem` (shared `AvatarCircle`); avatars in room info header and member rows. Room photo change/remove in the room info sheet (`RoomPort.setAvatar`). Own profile photo (Settings → Account → Profile; `ProfilePort.setOwnAvatar`; contract-tested, picker not used on screen). "View source" also on media, sticker and emote rows. Invitation rows name the inviter (`RoomSummary.inviter`). Member paging in the room info sheet (`loadMoreMembers`, "Show more members"); adapter sorts before paging. Room list avatars: `RoomSummary.avatar`, `MatrixRoomListPort.avatar`, `RoomListViewModel.avatarData/Row.avatar`, `AvatarView` in `RoomListView`, composition passes `MediaLoader`; test in FeatureRoomList. Not seen with a real avatar image (dev accounts have none). Before: room list preview (ROOM_LIST FR-3): `RoomSummary.preview` / `LatestMessagePreview` (HaloDomain), `MatrixRoomListPort.preview/previewText`, `RoomListViewModel.Row.preview`, `RoomListView` (one line under the name), tests in HaloDomain, the adapter and FeatureRoomList, ROADMAP. Checked: package tests, adapter unit tests (via `prepush.sh`, passed), `Halo-Debug` build, seen in the simulator. Earlier this session: room list v2 (PR 48), user profiles (PR 47), edit/invite, new chat (PR 46), invitations, room info (PR 45).
 
 ## 5. Outstanding issues
 Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
@@ -39,7 +39,7 @@ Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISS
 
 ## 6. Next steps
 The queue is docs/ROADMAP.md §"Remaining work", worked by the loop in docs/development/AUTONOMOUS_LOOP.md. Its head:
-1. **M5** rest of ROOM_MANAGEMENT (room preview for invitations, avatars in the timeline); then the P0 item below.
+1. **M5** rest of ROOM_MANAGEMENT (room preview for invitations); then the P0 item below.
 2. **P0** the remaining client-side scenarios on the real stack (S03, S11, S12, S16–S20: restarts, outbox, NSE; most need a device), then re-evaluate G-UNREAD with the founder; measure the first-sync cost on a large account; M4 items after.
 
 ## 7. Next Session Prompt

@@ -42,6 +42,8 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     public let source: Source?
     /// A known bot's message read as a structured card (BOT_MESSAGES Layer 2); `nil` for everything else.
     public let card: BotCard?
+    /// The sender's profile picture, for someone else's message; the view shows their initial until it loads.
+    public var avatar: MediaRef?
 
     public struct FileTile: Equatable, Sendable {
         public let kind: MediaKind
@@ -666,6 +668,12 @@ public final class TimelineViewModel {
     public func revealPreview(of image: TimelineRow.Image) { revealedPreviews.insert(image.ref) }
 
     /// Thumbnail bytes for an image row, or `nil` if it can't be loaded (the row then shows a placeholder).
+    /// A sender's profile picture, small; `nil` if it can't be loaded (the view keeps the initial).
+    public func avatarData(_ ref: MediaRef) async -> Data? {
+        guard let media else { return nil }
+        return try? await media.thumbnail(ref, width: 64, height: 64)
+    }
+
     public func thumbnail(for image: TimelineRow.Image) async -> Data? {
         guard let media else { return nil }
         return try? await media.thumbnail(image.ref, width: 600, height: 600)
@@ -781,6 +789,12 @@ public final class TimelineViewModel {
     }
 
     func row(_ item: TimelineItem) -> TimelineRow {
+        var row = baseRow(item)
+        if case .event(let event) = item.content, !event.isOwn { row.avatar = event.senderAvatar }
+        return row
+    }
+
+    private func baseRow(_ item: TimelineItem) -> TimelineRow {
         let id = item.id.rawValue
         switch item.content {
         case .virtual(.dateDivider(let date)):

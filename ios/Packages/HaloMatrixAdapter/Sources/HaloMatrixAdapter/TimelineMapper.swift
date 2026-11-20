@@ -46,7 +46,11 @@ enum TimelineMapper {
         case .transactionId(let raw): localID = raw
         }
         var senderName: String?
-        if case .ready(let displayName, _, _, _, _) = event.senderProfile { senderName = displayName }
+        var senderAvatar: MediaRef?
+        if case .ready(let displayName, _, let avatarUrl, _, _) = event.senderProfile {
+            senderName = displayName
+            senderAvatar = MatrixRoomListPort.avatar(avatarUrl)
+        }
         return HaloDomain.TimelineEvent(
             eventID: eventID, sender: try? UserID(event.sender), senderName: senderName,
             timestamp: date(event.timestamp), isOwn: event.isOwn, kind: kind(of: event.content),
@@ -55,7 +59,7 @@ enum TimelineMapper {
                 ReactionSummary(key: reaction.key, count: reaction.senders.count, reactedByMe: reaction.senders.contains { $0.senderId == ownUserID })
             },
             replyTo: replyPreview(of: event.content), formattedBody: formattedHTML(of: event.content),
-            localID: localID)
+            localID: localID, senderAvatar: senderAvatar)
     }
 
     /// The HTML body of a text message, if the sender gave one in the standard format.

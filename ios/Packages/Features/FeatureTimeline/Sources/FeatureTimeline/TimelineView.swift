@@ -1,4 +1,5 @@
 #if canImport(SwiftUI)
+import HaloDesignSystem
 import HaloDomain
 import SwiftUI
 import UniformTypeIdentifiers
@@ -263,6 +264,8 @@ private struct RowView: View {
     var body: some View {
         switch row.style {
         case .message, .ownMessage:
+            HStack(alignment: .top, spacing: 6) {
+            if row.style == .message { SenderAvatar(name: row.sender ?? "?", ref: row.avatar, model: model) }
             VStack(alignment: row.style == .ownMessage ? .trailing : .leading, spacing: 2) {
                 if let sender = row.sender, row.style == .message { Text(sender).font(.caption).foregroundStyle(.secondary) }
                 if let reply = row.reply {
@@ -304,6 +307,7 @@ private struct RowView: View {
                 if row.eventID != nil { actions } else if row.failedLocalID != nil { failedActions }
             }
             .sheet(isPresented: $showingSource) { if let source = row.source { MessageSourceView(source: source) } }
+            }
         case .notice:
             Text(row.text).font(.callout).foregroundStyle(.secondary)
         case .emote:
@@ -516,3 +520,21 @@ private struct BotCardView: View {
     }
 }
 #endif
+
+/// The small round picture beside someone else's message (their initial until the image loads).
+private struct SenderAvatar: View {
+    let name: String
+    let ref: MediaRef?
+    let model: TimelineViewModel
+    @State private var data: Data?
+
+    var body: some View {
+        AvatarCircle(name: name, imageData: data, size: 28)
+            .accessibilityHidden(true)
+            .task(id: ref) {
+                data = nil
+                guard let ref else { return }
+                data = await model.avatarData(ref)
+            }
+    }
+}

@@ -44,12 +44,15 @@ public struct TimelineEvent: Sendable, Equatable {
     public let formattedBody: String?
     /// The local transaction ID while this is an own event the server hasn't confirmed; what `retrySend` and `abortSend` take.
     public let localID: String?
+    /// The sender's profile picture, if they have one and the SDK has resolved it.
+    public let senderAvatar: MediaRef?
 
     public init(
         eventID: EventID?, sender: UserID?, senderName: String?, timestamp: Date, isOwn: Bool, kind: TimelineEventKind,
         sendState: SendState = .sent, reactions: [ReactionSummary] = [], replyTo: ReplyPreview? = nil, formattedBody: String? = nil,
-        localID: String? = nil
+        localID: String? = nil, senderAvatar: MediaRef? = nil
     ) {
+        self.senderAvatar = senderAvatar
         self.localID = localID
         self.formattedBody = formattedBody
         self.replyTo = replyTo
