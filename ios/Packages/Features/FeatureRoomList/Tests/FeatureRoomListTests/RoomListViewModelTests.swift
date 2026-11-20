@@ -187,4 +187,23 @@ struct RoomListPreviewTests {
         guard case .loaded(_, let rows) = model.content else { Issue.record("not loaded"); return }
         #expect(rows.map(\.preview) == ["see you", "Bob: Photo", nil])
     }
+
+    @Test
+    func avatarRowsAndData() async throws {
+        let ref = MediaRef(token: "avatar-token")
+        let ann = RoomSummary(id: try RoomID("!a:x.org"), name: "Ann", isDirect: true, isEncrypted: false, membership: .joined, avatar: ref)
+        let quiet = RoomSummary(id: try RoomID("!c:x.org"), name: "Quiet", isDirect: false, isEncrypted: false, membership: .joined)
+        let port = FakeMediaPort()
+        port.add(ref, data: Data([1, 2, 3]))
+        let coordinator = RoomListCoordinator(port: FakeRoomListPort(rooms: [ann, quiet]))
+        let model = RoomListViewModel(session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()), rooms: coordinator, media: MediaLoader(port: port))
+        await coordinator.start()
+        for await status in await coordinator.statuses() {
+            if case .loaded = status { await model.listChanged(status); break }
+        }
+        guard case .loaded(_, let rows) = model.content else { Issue.record("not loaded"); return }
+        #expect(rows.map(\.avatar) == [ref, nil])
+        #expect(await model.avatarData(ref) == Data([1, 2, 3]))
+        #expect(await model.avatarData(MediaRef(token: "missing")) == nil)
+    }
 }

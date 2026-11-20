@@ -36,6 +36,8 @@ public struct RoomListView: View {
                                 .accessibilityIdentifier("invite-\(row.name)")
                             } else {
                             Button { onSelect(row.id) } label: {
+                                HStack(spacing: 12) {
+                                AvatarView(name: row.name, ref: row.avatar) { await model.avatarData($0) }
                                 VStack(alignment: .leading, spacing: 2) {
                                 HStack {
                                     if row.isFavourite { Image(systemName: "star.fill").foregroundStyle(.yellow).imageScale(.small).accessibilityLabel("Favourite") }
@@ -48,6 +50,7 @@ public struct RoomListView: View {
                                 if let preview = row.preview {
                                     Text(preview).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
                                         .accessibilityIdentifier("preview-\(row.name)")
+                                }
                                 }
                                 }
                             }
@@ -104,6 +107,35 @@ public struct RoomListView: View {
         case .dot: Circle().fill(.blue).frame(width: 10, height: 10).accessibilityLabel("Unread")
         case .count(let n): Text("\(n)").font(.caption.bold()).padding(.horizontal, 7).background(.blue, in: Capsule()).foregroundStyle(.white)
         case .mentions(let n): Text("@\(n)").font(.caption.bold()).padding(.horizontal, 7).background(.red, in: Capsule()).foregroundStyle(.white)
+        }
+    }
+}
+
+/// A round avatar: the image when there is one and it loads, otherwise the first letter of the name.
+struct AvatarView: View {
+    let name: String
+    let ref: MediaRef?
+    let load: @Sendable (MediaRef) async -> Data?
+    @State private var image: Image?
+
+    var body: some View {
+        ZStack {
+            Circle().fill(.quaternary)
+            if let image {
+                image.resizable().scaledToFill()
+            } else {
+                Text(String(name.first(where: \.isLetter) ?? name.first ?? "?").uppercased()).font(.headline).foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 44, height: 44)
+        .clipShape(Circle())
+        .accessibilityHidden(true)
+        .task(id: ref) {
+            image = nil
+            guard let ref, let data = await load(ref) else { return }
+            #if canImport(UIKit)
+            if let ui = UIImage(data: data) { image = Image(uiImage: ui) }
+            #endif
         }
     }
 }

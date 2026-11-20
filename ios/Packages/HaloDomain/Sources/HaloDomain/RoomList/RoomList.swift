@@ -20,11 +20,15 @@ public struct RoomSummary: Sendable, Equatable, Identifiable {
     public let isFavourite: Bool
     /// The newest message as one line for the room list (ROOM_LIST FR-3); `nil` when the newest event has no text form.
     public let preview: LatestMessagePreview?
+    /// The room's avatar (for a direct chat the other person's); `nil` when it has none.
+    public let avatar: MediaRef?
 
     public init(
         id: RoomID, name: String?, isDirect: Bool, isEncrypted: Bool, membership: Membership, read: RoomReadCounts = .none,
-        latestEvent: LatestEventRef? = nil, ownReadThrough: Date? = nil, isFavourite: Bool = false, preview: LatestMessagePreview? = nil
+        latestEvent: LatestEventRef? = nil, ownReadThrough: Date? = nil, isFavourite: Bool = false, preview: LatestMessagePreview? = nil,
+        avatar: MediaRef? = nil
     ) {
+        self.avatar = avatar
         self.preview = preview
         self.isFavourite = isFavourite
         self.latestEvent = latestEvent

@@ -25,11 +25,15 @@ public final class RoomListViewModel {
         public let lastActivity: Date?
         /// The newest message as one line ("Ann: see you at 5"); `nil` when there is none to show.
         public let preview: String?
+        /// The room's avatar image; `nil` shows the initials.
+        public let avatar: MediaRef?
 
         public init(
             id: RoomID, name: String, display: DisplayCount = .none, hasUnread: Bool = false, isInvite: Bool = false,
-            isFavourite: Bool = false, isMuted: Bool = false, lastActivity: Date? = nil, preview: String? = nil
+            isFavourite: Bool = false, isMuted: Bool = false, lastActivity: Date? = nil, preview: String? = nil,
+            avatar: MediaRef? = nil
         ) {
+            self.avatar = avatar
             self.preview = preview
             self.isFavourite = isFavourite
             self.isMuted = isMuted
@@ -60,6 +64,13 @@ public final class RoomListViewModel {
     private let rooms: RoomListCoordinator
     private let receipts: ReadReceiptCoordinator?
     private let actions: (any RoomPort)?
+    private let media: MediaLoader?
+
+    /// The avatar's image bytes (a small thumbnail); `nil` when there is no loader or the download failed, so the row keeps its initials.
+    public func avatarData(_ ref: MediaRef) async -> Data? {
+        guard let media else { return nil }
+        return try? await media.thumbnail(ref, width: 96, height: 96)
+    }
     private var tasks: [Task<Void, Never>] = []
     private var positions: [RoomID: Date] = [:]
     private var lastStatus: RoomListCoordinator.Status = .idle
@@ -67,7 +78,8 @@ public final class RoomListViewModel {
     /// Set when a swipe action fails; the view shows it and the next successful action clears it.
     public private(set) var actionError: String?
 
-    public init(session: SessionCoordinator, rooms: RoomListCoordinator, receipts: ReadReceiptCoordinator? = nil, actions: (any RoomPort)? = nil) {
+    public init(session: SessionCoordinator, rooms: RoomListCoordinator, receipts: ReadReceiptCoordinator? = nil, actions: (any RoomPort)? = nil, media: MediaLoader? = nil) {
+        self.media = media
         self.actions = actions
         self.session = session
         self.rooms = rooms
@@ -188,7 +200,7 @@ public final class RoomListViewModel {
                 return Row(
                     id: room.id, name: room.name ?? "Unnamed room", display: state.display, hasUnread: state.hasUnread, isInvite: room.membership == .invited,
                     isFavourite: room.isFavourite, isMuted: room.read.mode == .mute, lastActivity: room.latestEvent?.timestamp,
-                    preview: room.preview?.line(isDirect: room.isDirect))
+                    preview: room.preview?.line(isDirect: room.isDirect), avatar: room.avatar)
             }
             let matching = zip(await rooms.rooms, rows).filter { Self.includes(filter, room: $0.0, row: $0.1) }.map(\.1)
             content = .loaded(count: filter == .all ? count : matching.count, rows: matching)

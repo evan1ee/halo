@@ -24,3 +24,5 @@ Moved out of HANDOFF §5. Unverified items, known limits and test-setup notes. R
 - Room info sheet: `joinedMembersCount` of `Room` is 0 under classic sync (seen on infra/dev), so the member count is the larger of it and the loaded joined members (up to 200). Leave on a real room was exercised by the `roomManagement` contract (own room), not tapped in the UI.
 - Room info permissions (`canEditDetails`, `canInvite`) are read once when the sheet opens; on a just-created room the power levels reach the SDK a sync later, so the buttons can be missing until the sheet is reopened.
 - Ignore/unignore: `unignoreUser` right after `ignoreUser` can leave the server's `m.ignored_user_list` unchanged (SDK works from its local copy); `MatrixProfilePort.unignore` reads the list back and retries. Ignoring a user does not yet remove their pending invitations from the room list view.
+
+- `ticking a bot list row … times out otherwise` (FeatureTimeline `TimelineViewModelTests`, `.noResponse`) failed once inside `scripts/prepush.sh` under load and passed 3 of 3 alone: timing-sensitive; make it use an injected clock if it recurs.

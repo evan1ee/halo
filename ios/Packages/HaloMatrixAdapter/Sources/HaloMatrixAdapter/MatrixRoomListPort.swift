@@ -142,8 +142,15 @@ public final class MatrixRoomListPort: RoomListPort {
             latestEvent: latestEvent(await room.latestEvent()),
             ownReadThrough: await ownReadThrough(of: room, counts: read),
             isFavourite: (try? await room.roomInfo())?.isFavourite ?? false,
-            preview: preview(await room.latestEvent())
+            preview: preview(await room.latestEvent()),
+            avatar: avatar(room.avatarUrl())
         )
+    }
+
+    /// The avatar's media reference from its `mxc://` URI; `nil` for none or an unusable URI.
+    static func avatar(_ url: String?) -> MediaRef? {
+        guard let url, !url.isEmpty, let source = try? MediaSource.fromUrl(url: url) else { return nil }
+        return TimelineMapper.ref(source)
     }
 
     /// Event id → time for resolved receipt targets; an event's time never changes.
