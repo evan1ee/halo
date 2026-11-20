@@ -367,6 +367,17 @@ struct AdapterContractTests {
         try await profiles.setOwnDisplayName(original)
         #expect(try await profiles.ownDisplayName() == original)
 
+        // Avatar: only when the account has none, so a real picture is never replaced.
+        if try await profiles.ownAvatar() == nil {
+            let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")!
+            try await profiles.setOwnAvatar(mimeType: "image/png", data: png)
+            let ref = try await profiles.ownAvatar()
+            #expect(ref != nil)
+            if let ref { #expect(try await MatrixMediaPort(session: session).content(ref) == png) }
+            try await profiles.removeOwnAvatar()
+            #expect(try await profiles.ownAvatar() == nil)
+        }
+
         let other = try await profiles.profile(of: peer)
         #expect(other.userID == peer)
 

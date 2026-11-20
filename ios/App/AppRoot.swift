@@ -220,6 +220,7 @@ final class AppRoot {
     /// Settings → Account → Profile: the display name and the ignored users.
     func profileSettings() -> ProfileSettingsActions {
         let port = profilePort
+        let media = media
         return ProfileSettingsActions(
             loadName: { try? await port.ownDisplayName() },
             saveName: { name in (try? await port.setOwnDisplayName(name)) != nil },
@@ -227,7 +228,16 @@ final class AppRoot {
             unignore: { raw in
                 guard let user = try? UserID(raw) else { return false }
                 return (try? await port.unignore(user)) != nil
-            })
+            },
+            loadAvatar: {
+                guard let ref = try? await port.ownAvatar() else { return nil }
+                return try? await media.thumbnail(ref, width: 256, height: 256)
+            },
+            setAvatar: { data in
+                guard let image = try? ImagePreparer(maximumDimension: 512).prepare(data: data, filename: "avatar") else { return false }
+                return (try? await port.setOwnAvatar(mimeType: image.mimeType, data: image.data)) != nil
+            },
+            removeAvatar: { (try? await port.removeOwnAvatar()) != nil })
     }
 
     /// The room info sheet for `room` (ROOM_MANAGEMENT).

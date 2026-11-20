@@ -1,3 +1,4 @@
+import Foundation
 import HaloDomain
 import HaloFoundation
 import Synchronization
@@ -9,6 +10,7 @@ public final class FakeProfilePort: ProfilePort {
         var profiles: [UserID: UserProfile]
         var ignored: [UserID]
         var error: HaloError?
+        var avatar: Data?
     }
     private let state: Mutex<State>
 
@@ -25,6 +27,18 @@ public final class FakeProfilePort: ProfilePort {
     public func ownDisplayName() async throws(HaloError) -> String { try check(); return state.withLock { $0.ownName } }
 
     public func setOwnDisplayName(_ name: String) async throws(HaloError) { try check(); state.withLock { $0.ownName = name } }
+
+    /// The bytes of the avatar last set; `nil` after removal or when none was set.
+    public var storedAvatar: Data? { state.withLock { $0.avatar } }
+
+    public func ownAvatar() async throws(HaloError) -> MediaRef? {
+        try check()
+        return state.withLock { $0.avatar == nil ? nil : MediaRef(token: "own-avatar") }
+    }
+
+    public func setOwnAvatar(mimeType: String, data: Data) async throws(HaloError) { try check(); state.withLock { $0.avatar = data } }
+
+    public func removeOwnAvatar() async throws(HaloError) { try check(); state.withLock { $0.avatar = nil } }
 
     public func profile(of user: UserID) async throws(HaloError) -> UserProfile {
         try check()

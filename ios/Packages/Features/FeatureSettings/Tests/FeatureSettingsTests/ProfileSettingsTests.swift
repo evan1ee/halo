@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import FeatureSettings
 
@@ -47,5 +48,23 @@ struct ProfileSettingsTests {
         let m = model(Log(), name: nil)
         await m.load()
         #expect(!m.isLoaded && m.message != nil)
+    }
+
+    @Test("choosing a photo uploads it and shows it; removing clears it; a refused photo is reported")
+    func avatar() async {
+        final class Box: @unchecked Sendable { var data: Data?; var accept = true }
+        let box = Box()
+        let m = ProfileSettingsModel(actions: ProfileSettingsActions(
+            loadName: { "Ann" }, saveName: { _ in true }, loadIgnored: { [] }, unignore: { _ in true },
+            loadAvatar: { box.data }, setAvatar: { if box.accept { box.data = $0 }; return box.accept }, removeAvatar: { box.data = nil; return true }))
+        await m.load()
+        #expect(m.avatar == nil)
+        await m.choosePhoto(Data([9]))
+        #expect(m.avatar == Data([9]) && m.message == "Photo updated.")
+        await m.removePhoto()
+        #expect(m.avatar == nil)
+        box.accept = false
+        await m.choosePhoto(Data([1]))
+        #expect(m.avatar == nil && m.message?.contains("couldn't be used") == true)
     }
 }

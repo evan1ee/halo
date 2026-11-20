@@ -19,6 +19,21 @@ public final class MatrixProfilePort: ProfilePort {
         do { try await client.setDisplayName(name: name) } catch { throw ErrorMapper.map(error) }
     }
 
+    public func ownAvatar() async throws(HaloError) -> MediaRef? {
+        let client = try await session.signedInClient()
+        do { return MatrixRoomListPort.avatar(try await client.avatarUrl()) } catch { throw ErrorMapper.map(error) }
+    }
+
+    public func setOwnAvatar(mimeType: String, data: Data) async throws(HaloError) {
+        let client = try await session.signedInClient()
+        do { try await client.uploadAvatar(mimeType: mimeType, data: data) } catch { throw ErrorMapper.map(error) }
+    }
+
+    public func removeOwnAvatar() async throws(HaloError) {
+        let client = try await session.signedInClient()
+        do { try await client.removeAvatar() } catch { throw ErrorMapper.map(error) }
+    }
+
     public func profile(of user: UserID) async throws(HaloError) -> HaloDomain.UserProfile {
         let client = try await session.signedInClient()
         do {
