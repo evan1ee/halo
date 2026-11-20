@@ -1,6 +1,6 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-20 · Branch: `feat/m5-bot-ticking` · PRs #1–#43 merged
+Last updated: 2026-11-20 · Branch: `main` · PRs #1–#44 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
