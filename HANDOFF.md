@@ -1,6 +1,6 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-20 · Branch: `main` · PRs #1–#43 merged
+Last updated: 2026-11-20 · Branch: `feat/m5-bot-ticking` · PRs #1–#43 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
@@ -23,7 +23,7 @@ Summary only; details per feature: [docs/development/IMPLEMENTATION_NOTES.md](do
 Full list: docs/DECISION_LOG.md (D1–D75), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-Bot cards (BOT_MESSAGES Layer 2, M5): `HaloDomain/Bots/BotTemplates` (5 strict parsers, accepts `<br>`/`<br/>`/`<br />` because the SDK re-serialises HTML), `TimelineRow.card`, `BotCardView` ("Show original"), Settings → Bots (user-ID allowlist in `AppPreferences.botSenders`, device-local), `TimelineViewModel.botSenders` set by `AppRoot.makeTimeline`; tests (parsers + fuzz, row mapping, prefs); seen in the simulator. Not built: ticking rows (FR-3/4), account-data sync of the allowlist, real-bot fixtures (Q-BOT-OWNER open). Also: timeline View source, Settings Security/Notifications/Storage/Appearance/Diagnostics.
+Bot interaction (BOT_MESSAGES FR-3): `HaloDomain/Bots/BotTaskTracker` (pure; tasks found from `Added Task` messages, done from a newer list or `Marked task as done`), `TimelineViewModel.botRowState/tickBotTask` (👍 once on the creating message, Waiting for bot…, "No response from bot" after 2 min, "Not available" without a creating message), tickable rows in `BotCardView`; tests (tracker, view-model flow); `FakeTimelinePort` keeps `formattedBody` on reaction changes. Seen in the simulator with scripted bot messages. Not built: FR-4 menu, persisted index, the bot's ✅ reaction as confirmation. Earlier: bot cards (PR 43), Settings sections, View source.
 
 ## 5. Outstanding issues
 Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).

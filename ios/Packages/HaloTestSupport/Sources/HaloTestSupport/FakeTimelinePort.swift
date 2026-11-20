@@ -223,7 +223,7 @@ public final class FakeTimelinePort: TimelinePort {
                 } else {
                     reactions.append(ReactionSummary(key: key, count: 1, reactedByMe: true))
                 }
-                return TimelineEvent(eventID: e.eventID, sender: e.sender, senderName: e.senderName, timestamp: e.timestamp, isOwn: e.isOwn, kind: e.kind, sendState: e.sendState, reactions: reactions)
+                return TimelineEvent(eventID: e.eventID, sender: e.sender, senderName: e.senderName, timestamp: e.timestamp, isOwn: e.isOwn, kind: e.kind, sendState: e.sendState, reactions: reactions, replyTo: e.replyTo, formattedBody: e.formattedBody, localID: e.localID)
             }
         }
 

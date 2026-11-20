@@ -55,6 +55,44 @@ struct TimelineViewModelTests {
         #expect(model.row(item(sender: "@bot:x.org", html: nil)).card == nil)
     }
 
+    @Test("ticking a bot list row sends one 👍 to the task's creating message, waits, completes on the bot's list, and times out otherwise")
+    func tickingBotTasks() async throws {
+        let port = FakeTimelinePort()
+        let room = try RoomID("!r:x.org")
+        let bot = "@bot:x.org"
+        func item(_ id: String, _ html: String) throws -> TimelineItem {
+            TimelineItem(id: TimelineItemID(id), content: .event(TimelineEvent(
+                eventID: try EventID("$\(id)"), sender: try UserID(bot), senderName: "Bot", timestamp: Date(timeIntervalSince1970: 0), isOwn: false,
+                kind: .text("x", isEdited: false), formattedBody: html)))
+        }
+        let list = "📋 <b>T:</b><br/>• [<b>#1</b>] Milk<br/>• [<b>#2</b>] Rent<br/>"
+        port.addRoom(room, items: [try item("a", "Added Task <b>#1</b> for Ann: <i>\"Milk\"</i>"), try item("l", list)])
+        let model = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room))
+        model.botSenders = [bot]
+        model.botTimeout = .milliseconds(50)
+        await model.start()
+        for _ in 0..<500_000 { if case .live = model.content { break }; await Task.yield() }
+
+        #expect(model.botRowState(bot: bot, id: "1") == .open)
+        #expect(model.botRowState(bot: bot, id: "2") == .unavailable)  // no creating message seen: read-only
+        await model.tickBotTask(bot: bot, id: "2")
+        #expect(model.botRowState(bot: bot, id: "2") == .unavailable)
+
+        await model.tickBotTask(bot: bot, id: "1")
+        #expect(model.botRowState(bot: bot, id: "1") == .pending)
+        await model.tickBotTask(bot: bot, id: "1")  // ignored while pending: no second 👍 (that would toggle it off)
+        try await Task.sleep(for: .milliseconds(300))  // the 50 ms timeout passes
+        #expect(model.botRowState(bot: bot, id: "1") == .noResponse)
+
+        await model.tickBotTask(bot: bot, id: "1")  // again after the timeout: the 👍 is already there, none is sent
+        #expect(model.botRowState(bot: bot, id: "1") == .pending)
+
+        let done = "📋 <b>T:</b><br/>• [<b>#1</b>] <del>Milk</del> ✅<br/>• [<b>#2</b>] Rent<br/>"
+        try port.emit(.pushBack(try item("l2", done)), in: room)
+        for _ in 0..<500_000 where model.botRowState(bot: bot, id: "1") != .completed { await Task.yield() }
+        #expect(model.botRowState(bot: bot, id: "1") == .completed)
+    }
+
     @Test("undecryptable, deleted and unsupported events are shown honestly, never hidden")
     func placeholders() throws {
         let model = try model()
