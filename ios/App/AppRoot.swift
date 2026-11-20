@@ -35,6 +35,7 @@ final class AppRoot {
     private let previewPolicy: any MediaPreviewPolicyPort
     private let roomPort: MatrixRoomPort
     private let chatCreation: MatrixChatCreationPort
+    private let profilePort: MatrixProfilePort
     private let roomCoordinator: RoomListCoordinator
     private let log: HaloLog
     private var auditPort: (any AuditEventPort)?
@@ -67,6 +68,7 @@ final class AppRoot {
         previewPolicy = MatrixMediaPreviewPolicyPort(session: session)
         roomPort = MatrixRoomPort(session: session)
         chatCreation = MatrixChatCreationPort(session: session)
+        profilePort = MatrixProfilePort(session: session)
         recovery = RecoveryViewModel(coordinator: EncryptionCoordinator(port: MatrixEncryptionPort(session: session), session: sessionCoordinator))
         sync = SyncCoordinator(port: MatrixSyncPort(session: session), session: sessionCoordinator)
         let push = Self.pushConfiguration().map {
@@ -208,6 +210,25 @@ final class AppRoot {
 
     /// The "New chat" sheet (ROOM_MANAGEMENT FR-5); `onCreated` gets the room to open.
     func makeNewChat(onCreated: @escaping @MainActor (RoomID) -> Void) -> NewChatViewModel { NewChatViewModel(port: chatCreation, onCreated: onCreated) }
+
+    /// The profile sheet of a room member (USER_PROFILES); `nil` when the member's ID is not valid.
+    func makeUserProfile(member: RoomMemberInfo, onOpenRoom: @escaping @MainActor (RoomID) -> Void) -> UserProfileViewModel? {
+        guard let user = try? UserID(member.userID) else { return nil }
+        return UserProfileViewModel(profiles: profilePort, chats: chatCreation, user: user, roomDisplayName: member.displayName, isMe: member.isMe, onOpenRoom: onOpenRoom)
+    }
+
+    /// Settings → Account → Profile: the display name and the ignored users.
+    func profileSettings() -> ProfileSettingsActions {
+        let port = profilePort
+        return ProfileSettingsActions(
+            loadName: { try? await port.ownDisplayName() },
+            saveName: { name in (try? await port.setOwnDisplayName(name)) != nil },
+            loadIgnored: { (try? await port.ignoredUsers())?.map(\.rawValue) },
+            unignore: { raw in
+                guard let user = try? UserID(raw) else { return false }
+                return (try? await port.unignore(user)) != nil
+            })
+    }
 
     /// The room info sheet for `room` (ROOM_MANAGEMENT).
     func makeRoomDetails(room: RoomID) -> RoomDetailsViewModel { RoomDetailsViewModel(port: roomPort, room: room) }

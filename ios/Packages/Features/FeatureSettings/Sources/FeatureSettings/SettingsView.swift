@@ -17,6 +17,7 @@ public struct SettingsView: View {
     private let loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)?
     private let saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)?
     private let diagnostics: (@Sendable () async -> String)?
+    private let profile: ProfileSettingsActions?
     private let security: (@MainActor () -> [StorageSize])?
     private let setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)?
     @State private var recoveryFailure: SettingsMessage?
@@ -41,11 +42,12 @@ public struct SettingsView: View {
         onPrivateReceiptsChange: @escaping (Bool) -> Void = { _ in },
         loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)? = nil,
         saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)? = nil,
-        diagnostics: (@Sendable () async -> String)? = nil, storageSizes: (@Sendable () async -> [StorageSize])? = nil,
+        profile: ProfileSettingsActions? = nil, diagnostics: (@Sendable () async -> String)? = nil, storageSizes: (@Sendable () async -> [StorageSize])? = nil,
         security: (@MainActor () -> [StorageSize])? = nil, setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil,
         replaceRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil, notificationStatus: (@Sendable () async -> String)? = nil, openSystemSettings: (() -> Void)? = nil, onSignOut: @escaping () -> Void
     ) {
         self.diagnostics = diagnostics
+        self.profile = profile
         self.storageSizes = storageSizes
         self.notificationStatus = notificationStatus
         self.security = security
@@ -66,6 +68,7 @@ public struct SettingsView: View {
     public var body: some View {
         List {
             Section("Account") {
+                if let profile { NavigationLink("Profile") { ProfileSettingsView(actions: profile) }.accessibilityIdentifier("profile") }
                 Button("Sign out", role: .destructive) { confirmingSignOut = true }
                     .accessibilityIdentifier("sign-out")
             }

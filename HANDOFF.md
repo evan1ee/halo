@@ -1,6 +1,6 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-20 · Branch: `main` · PRs #1–#46 merged
+Last updated: 2026-11-20 · Branch: `feat/m5-profiles` · PRs #1–#46 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
@@ -24,7 +24,7 @@ Summary only; details per feature: [docs/development/IMPLEMENTATION_NOTES.md](do
 Full list: docs/DECISION_LOG.md (D1–D75), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-Room info edit and invite (ROOM_MANAGEMENT FR-7 name/topic, FR-5 invite to an existing room): `RoomDetails` (`canEditDetails`, `canInvite`, `with(...)`), `RoomPort.setDetails/invite`, `MatrixRoomPort`, `FakeRoomPort`, `RoomDetailsViewModel` and `RoomDetailsView` (two alerts), contract `roomManagement` extended, tests, ROADMAP, OUTSTANDING_ISSUES. Checked: FeatureRoomDetails tests, `roomManagement` contract, `prepush.sh`. Not seen on screen. Earlier: invitations, new chat (PR 46), room info (PR 45).
+User profiles (USER_PROFILES FR-1 name, FR-2, FR-3, FR-4): `HaloDomain/ProfilePort`, `MatrixProfilePort`, `FakeProfilePort`, `FeatureRoomDetails` (`UserProfileViewModel/View`, tappable members), `FeatureSettings` (`ProfileSettings`, `ProfileSettingsView`, `Account → Profile`), app wiring (`AppRoot.makeUserProfile/profileSettings`, `TimelineScreen`), contract `profiles`, tests, ROADMAP. Checked: package tests, `profiles` contract, `Halo-Debug` build, `prepush.sh`; both screens seen in the simulator. Earlier this session: edit/invite in the room sheet (main), new chat (PR 46), invitations, room info (PR 45).
 
 ## 5. Outstanding issues
 Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
@@ -37,7 +37,7 @@ Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISS
 
 ## 6. Next steps
 The queue is docs/ROADMAP.md §"Remaining work", worked by the loop in docs/development/AUTONOMOUS_LOOP.md. Its head:
-1. **M5** rest of ROOM_MANAGEMENT (room avatar change, invite preview, member paging) and USER_PROFILES; then the P0 item below.
+1. **M5** rest of ROOM_MANAGEMENT (avatar change for rooms and profile, invite preview, member paging) and the avatar work of USER_PROFILES FR-1 and USER_PROFILES; then the P0 item below.
 2. **P0** the remaining client-side scenarios on the real stack (S03, S11, S12, S16–S20: restarts, outbox, NSE; most need a device), then re-evaluate G-UNREAD with the founder; measure the first-sync cost on a large account; M4 items after.
 
 ## 7. Next Session Prompt

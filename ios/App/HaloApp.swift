@@ -69,6 +69,7 @@ private struct RootView: View {
                                     onPrivateReceiptsChange: { value in Task { await root.receipts.setPrivateReceipts(value) } },
                                     loadMediaPreviews: { await root.mediaPreviewChoice() },
                                     saveMediaPreviews: { await root.setMediaPreviewChoice($0) },
+                                    profile: root.profileSettings(),
                                     diagnostics: { await root.diagnosticsReport() },
                                     storageSizes: { await root.storageSizes() },
                                     security: { [StorageSize(name: "This device", text: root.recovery.deviceStatus), StorageSize(name: "Recovery key", text: root.recovery.recoveryStatus)] },
@@ -96,7 +97,7 @@ private struct RootView: View {
                     }
                     .sheet(item: $newChat) { NewChatView(model: $0) }
                     .navigationDestination(for: RoomID.self) { room in
-                        TimelineScreen(root: root, room: room)
+                        TimelineScreen(root: root, room: room, openRoom: { path.append($0) })
                     }
                 }
             case .softLoggedOut:
@@ -138,8 +139,10 @@ private struct TimelineScreen: View {
     @Environment(\.dismiss) private var dismiss
     private let root: AppRoot
     private let room: RoomID
+    private let openRoom: @MainActor (RoomID) -> Void
 
-    init(root: AppRoot, room: RoomID) {
+    init(root: AppRoot, room: RoomID, openRoom: @escaping @MainActor (RoomID) -> Void) {
+        self.openRoom = openRoom
         self.root = root
         self.room = room
         let timeline = root.makeTimeline(room: room)
@@ -156,7 +159,12 @@ private struct TimelineScreen: View {
                         .accessibilityIdentifier("roomInfo")
                 }
             }
-            .sheet(item: $details) { RoomDetailsView(model: $0, onLeft: { dismiss() }) }
+            .sheet(item: $details) { model in
+                RoomDetailsView(
+                    model: model,
+                    profile: { member in root.makeUserProfile(member: member, onOpenRoom: { room in details = nil; openRoom(room) }) },
+                    onLeft: { dismiss() })
+            }
     }
 }
 
