@@ -16,6 +16,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 - Room list rows show the policy's unread indicator (count / mentions / dot, bold when unread) and update when the local read position changes.
 - `RoomListCoordinator(loadsAllPages: true)` (app) keeps paging so the badge sees every room.
 - Pushed events (notification records) at or before the read position (here or another device) no longer count; delivered notifications of rooms without attention are removed by `SystemBadge`.
+- Property tests P1, P2, P5, P5b, P6, P9, P10 (10,000 seeded cases each) in `HaloDomainTests/ReadStatePropertyTests.swift`. P3, P4, P7, P8 and scenarios S01–S22 are not written.
 - Sign-out removes the pusher first (`PushPort.unregister` → `deletePusher`, via `SessionCoordinator.setBeforeSignOut`; best effort).
 - Room list swipe: leading "Read" (`markRoomRead`), trailing "Unread" (`setMarkedUnread`).
 
