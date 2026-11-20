@@ -80,6 +80,12 @@ public struct TimelineView: View {
         }
         .safeAreaInset(edge: .bottom) { Composer(model: model, onStickers: stickerPanel == nil ? nil : { showsStickers = true }) }
         .sheet(isPresented: $showsStickers) { stickerPanel?().presentationDetents([.medium, .large]) }
+        #if canImport(UIKit)
+        .sheet(item: Binding(get: { model.openedFile }, set: { if $0 == nil { model.closeFile() } })) { QuickLookView(url: $0.url).ignoresSafeArea() }
+        #endif
+        .alert("Can't open file", isPresented: Binding(get: { model.openFileError != nil }, set: { if !$0 { model.dismissOpenFileError() } })) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(model.openFileError ?? "") }
         .sheet(isPresented: Binding(get: { model.reactionTarget != nil }, set: { if !$0 { model.cancelReactionPicker() } })) {
             ReactionPicker(model: model).presentationDetents([.medium])
         }
@@ -197,6 +203,7 @@ private struct RowView: View {
                     .overlay(alignment: .leading) { Rectangle().fill(.secondary).frame(width: 2) }
                 }
                 if let image = row.image { ThumbnailView(image: image, model: model, isSticker: row.isSticker).accessibilityLabel(row.isSticker ? row.text : "Image") }
+                if let file = row.file { FileTileView(file: file, isOpening: model.openingRow == row.id) { Task { await model.openFile(row) } } }
                 if row.showsText { Text(row.styled ?? AttributedString(row.text))
                     .padding(8)
                     .background(row.style == .ownMessage ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.15), in: .rect(cornerRadius: 12))
@@ -289,5 +296,40 @@ private struct ReactionPicker: View {
             .padding()
         }
         .accessibilityIdentifier("reactionPicker")
+    }
+}
+
+/// A file, audio or video attachment: icon, name and details; tapping downloads it and opens Quick Look (which plays audio and
+/// video and offers sharing and saving).
+private struct FileTileView: View {
+    let file: TimelineRow.FileTile
+    let isOpening: Bool
+    let open: () -> Void
+
+    private var symbol: String {
+        switch file.kind {
+        case .audio: "waveform"
+        case .video: "play.rectangle"
+        default: "doc"
+        }
+    }
+
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: 10) {
+                if isOpening { ProgressView() } else { Image(systemName: symbol).font(.title2) }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(file.name).font(.subheadline).lineLimit(2)
+                    if !file.detail.isEmpty { Text(file.detail).font(.caption).foregroundStyle(.secondary) }
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: 260, alignment: .leading)
+            .background(.secondary.opacity(0.15), in: .rect(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .disabled(isOpening)
+        .accessibilityLabel(file.name)
+        .accessibilityHint("Opens the file")
     }
 }

@@ -498,6 +498,42 @@ struct TimelineViewModelTests {
         vm.apply(snapshot([timed("a", 10), timed("c", 30), timed("d", 40)]))
         #expect(vm.landingRow == nil)
     }
+
+    @Test("file, audio and video attachments become tiles with what is known about them; a sender's file name can't leave the temp folder")
+    func fileTiles() async throws {
+        let vm = try model()
+        let pdf = vm.row(event(.media(MediaAttachment(kind: .file, body: "plan.pdf", source: MediaRef(token: "f"), mimeType: "application/pdf", size: 1_200_000))))
+        #expect(pdf.file?.name == "plan.pdf" && pdf.file?.detail.hasPrefix("PDF · ") == true && pdf.file?.detail.contains("MB") == true)
+        #expect(!pdf.showsText && pdf.text == "[File] plan.pdf")
+        let voice = vm.row(event(.media(MediaAttachment(kind: .audio, body: "voice.m4a", source: MediaRef(token: "a"), duration: 42.4))))
+        #expect(voice.file?.detail == "0:42")
+        let video = vm.row(event(.media(MediaAttachment(kind: .video, body: "clip.mp4", source: MediaRef(token: "v"), size: 3_000_000, duration: 75))))
+        #expect(video.file?.detail.hasPrefix("1:15 · ") == true)
+        let noSource = vm.row(event(.media(MediaAttachment(kind: .file, body: "gone.bin", source: nil))))
+        #expect(noSource.file == nil && noSource.text == "[File] gone.bin" && noSource.showsText)
+        #expect(vm.row(event(.media(MediaAttachment(kind: .file, body: "README", source: MediaRef(token: "r"), mimeType: "text/plain")))).file?.detail == "PLAIN")
+    }
+
+    @Test("opening a file downloads it into a temporary folder, shows it, and deleting it again on close; big files are refused")
+    func openingFiles() async throws {
+        let port = FakeMediaPort()
+        let ref = MediaRef(token: "doc")
+        port.add(ref, data: Data("hello".utf8))
+        let vm = TimelineViewModel(
+            coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: try RoomID("!r:x.org")), media: MediaLoader(port: port),
+            locale: Locale(identifier: "en_US"), timeZone: TimeZone(identifier: "UTC") ?? .gmt)
+        func row(_ name: String, size: Int? = nil) -> TimelineRow {
+            vm.row(event(.media(MediaAttachment(kind: .file, body: name, source: ref, size: size))))
+        }
+        await vm.openFile(row("../../evil.txt"))
+        let url = try #require(vm.openedFile?.url)
+        #expect(url.lastPathComponent == "evil.txt" && url.path.contains("halo-open-"))
+        #expect(try Data(contentsOf: url) == Data("hello".utf8))
+        vm.closeFile()
+        #expect(vm.openedFile == nil && !FileManager.default.fileExists(atPath: url.path))
+        await vm.openFile(row("big.bin", size: TimelineViewModel.openSizeLimit + 1))
+        #expect(vm.openedFile == nil && vm.openFileError?.contains("too large") == true)
+    }
 }
 
 private struct StubPreparer: ImagePreparing {
