@@ -154,11 +154,14 @@ public struct MediaAttachment: Sendable, Equatable {
     public let size: Int?
     /// Seconds, for audio and video.
     public let duration: TimeInterval?
+    /// A still picture the sender attached to a video (`info.thumbnail_url`), when there is one.
+    public let thumbnail: MediaRef?
 
     public init(
         kind: MediaKind, body: String, source: MediaRef?, width: Int? = nil, height: Int? = nil,
-        mimeType: String? = nil, size: Int? = nil, duration: TimeInterval? = nil
+        mimeType: String? = nil, size: Int? = nil, duration: TimeInterval? = nil, thumbnail: MediaRef? = nil
     ) {
+        self.thumbnail = thumbnail
         self.kind = kind
         self.body = body
         self.source = source

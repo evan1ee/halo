@@ -37,6 +37,8 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
         public let detail: String
         public let ref: MediaRef
         public let size: Int?
+        /// A video's own still picture, shown above the tile (when the sender attached one).
+        public let thumbnail: Image?
     }
 
     /// Whether the row shows its `text` in a bubble. A sticker never does, nor does a file tile, and neither does an image whose
@@ -658,10 +660,7 @@ public final class TimelineViewModel {
             case .media(let attachment):
                 let style: TimelineRow.Style = event.isOwn ? .ownMessage : .message
                 if attachment.kind == .image, let source = attachment.source {
-                    let ratio: Double? = {
-                    guard let width = attachment.width, let height = attachment.height, height > 0 else { return nil }
-                    return Double(width) / Double(height)
-                }()
+                    let ratio = Self.aspectRatio(width: attachment.width, height: attachment.height)
                     return TimelineRow(
                         id: id, style: style, sender: name, text: attachment.body, image: .init(ref: source, aspectRatio: ratio),
                         eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions))
@@ -670,7 +669,8 @@ public final class TimelineViewModel {
                 guard let source = attachment.source else { return TimelineRow(id: id, style: style, sender: name, text: label) }
                 return TimelineRow(
                     id: id, style: style, sender: name, text: label, eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions),
-                    file: .init(kind: attachment.kind, name: attachment.body, detail: Self.fileDetail(attachment), ref: source, size: attachment.size))
+                    file: .init(kind: attachment.kind, name: attachment.body, detail: Self.fileDetail(attachment), ref: source, size: attachment.size,
+                        thumbnail: attachment.kind == .video ? attachment.thumbnail.map { .init(ref: $0, aspectRatio: Self.aspectRatio(width: attachment.width, height: attachment.height)) } : nil))
             case .sticker(let body, let source):
                 guard let source else { return TimelineRow(id: id, style: .message, sender: name, text: "[Sticker] \(body)") }
                 return TimelineRow(
@@ -725,6 +725,11 @@ public final class TimelineViewModel {
     }
 
     /// "PDF · 1.2 MB", "0:42 · 3.4 MB": what is known about the file, without inventing the rest.
+    static func aspectRatio(width: Int?, height: Int?) -> Double? {
+        guard let width, let height, height > 0 else { return nil }
+        return Double(width) / Double(height)
+    }
+
     static func fileDetail(_ attachment: MediaAttachment) -> String {
         var parts: [String] = []
         if let duration = attachment.duration, duration > 0, attachment.kind != .file {
