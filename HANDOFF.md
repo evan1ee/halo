@@ -1,12 +1,12 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-20 · Branch: `feat/m3-encrypted-classic-evidence` · PRs #1–#17 merged
+Last updated: 2026-11-20 · Branch: `feat/m3-real-inputs-policy` · PRs #1–#18 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
 - **Milestone:** M0 done; M1 largely done; M2 done except media sending and the offline-send test; **M3 (read-state engine) in progress**. Dev Mac: Xcode 27.2, Swift 6.4.2, iPhone 16.
-- **Checks:** `scripts/prepush.sh` passes (SwiftLint not configured, skipped); `scripts/prepush.sh` now also builds `Halo-Debug` for the simulator. All 14 contract tests (`infra/dev`) pass, none skipped (`scripts/contract-test.sh` after `infra/dev/create-fixtures.py`).
+- **Checks:** `scripts/prepush.sh` passes (SwiftLint not configured, skipped); `scripts/prepush.sh` now also builds `Halo-Debug` for the simulator. All 15 contract tests (`infra/dev`) pass, none skipped (`scripts/contract-test.sh` after `infra/dev/create-fixtures.py`).
 - **CI:** PRs #1–#15 merged. CI runs only the Linux-portable packages (Foundation, Domain, TestSupport, Application): adapter, persistence, platform, features and the app are tested only by `prepush.sh` on a Mac. `licenses` runs only on SDK/inventory changes.
 
 ## 2. Completed work (what exists now)
@@ -51,7 +51,7 @@ Full list: docs/DECISION_LOG.md (D1–D74), docs/adr/. Most relevant now: D70 au
 - Classic sync (D74) not yet measured on a large account (first `/sync` has no filter: all members, default timeline); `loadsAllPages`/paging in `RoomListCoordinator` is now a no-op; sync errors other than retryable network end the loop with `.failed`; cancelling the loop doesn't interrupt the SDK long poll (8 s).
 - Open validation: V-CI-2, V-SQL-1, V-APPLE-1, V-NSE-*, V-PUSH-1/3/5, V-RS-1/5 (V-RS-7 closed by D73).
 - Docker CLI hangs on the `osxkeychain` helper; use a throwaway `DOCKER_CONFIG`.  Compose is missing under a throwaway config: use `docker exec`/`docker restart`.
-- Contract tests: `infra/dev/create-fixtures.py` creates accounts/rooms and writes `~/.config/halo-dev/contract.env`; re-run it before a full `scripts/contract-test.sh` (room count) and with `--new-e2ee` before the Encryption test (recovery can be set up once per account). Verified: 14 of 14 pass (`pusher`, `ClassicSyncEvidenceTests` incl. `encryptedEvidence`). Contract tests must leave no room on the account (the room count is a fixture); the timeline fixture room grows ~13 events per run.
+- Contract tests: `infra/dev/create-fixtures.py` creates accounts/rooms and writes `~/.config/halo-dev/contract.env`; re-run it before a full `scripts/contract-test.sh` (room count) and with `--new-e2ee` before the Encryption test (recovery can be set up once per account). Verified: 15 of 15 pass (twice in a row; incl. `policyOverRealInputs`) (`pusher`, `ClassicSyncEvidenceTests` incl. `encryptedEvidence`). Contract tests must leave no room on the account (the room count is a fixture); the timeline fixture room grows ~13 events per run.
 
 **Needs the founder** (the loop records these and moves on; AUTONOMOUS_LOOP §5)
 - 📱 Device checks: G-NSE AC-NSE-1…6, V-RS-1, file protection on `halo.sqlite`, NSE database access, background push delivery.
@@ -61,7 +61,7 @@ Full list: docs/DECISION_LOG.md (D1–D74), docs/adr/. Most relevant now: D70 au
 
 ## 6. Next steps
 The queue is docs/ROADMAP.md §"Remaining work", worked by the loop in docs/development/AUTONOMOUS_LOOP.md. Its head:
-1. **P0** feed the real server output into the Swift model (encrypted evidence on classic sync is verified), re-evaluate G-UNREAD; measure the first-sync cost on a large account; M4 items after.
+1. **P0** the remaining client-side scenarios on the real stack (S03, S11, S12, S16–S20: restarts, outbox, NSE; most need a device), then re-evaluate G-UNREAD with the founder; measure the first-sync cost on a large account; M4 items after.
 
 ## 7. Next Session Prompt
 ```text
