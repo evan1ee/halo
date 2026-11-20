@@ -233,6 +233,41 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
+    @Test("The media preview setting round-trips through account data and is restored (changes the account's setting while it runs)")
+    func mediaPreviewSetting() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
+            on: details)
+        try await MatrixSyncPort(session: session).start()
+        let policy = MatrixMediaPreviewPolicyPort(session: session)
+        let original = await policy.setting()
+        func waitFor(_ expected: MediaPreviewSetting) async throws -> MediaPreviewSetting {
+            var seen = await policy.setting()
+            for _ in 0..<30 where seen != expected {  // account data reaches the SDK store with a sync
+                try await Task.sleep(for: .seconds(1))
+                seen = await policy.setting()
+            }
+            return seen
+        }
+        for target in MediaPreviewSetting.allCases where target != original {
+            try await policy.setSetting(target)
+            #expect(try await waitFor(target) == target)
+        }
+        // Resolution per room: "never" hides everywhere; "always" shows everywhere.
+        let room = try RoomID(env["HALO_DEV_STICKER_ROOM"] ?? "!x:halo.localhost")
+        try await policy.setSetting(.never)
+        _ = try await waitFor(.never)
+        #expect(await policy.previewsAllowed(in: room) == false)
+        try await policy.setSetting(.always)
+        _ = try await waitFor(.always)
+        #expect(await policy.previewsAllowed(in: room) == true)
+        try await policy.setSetting(original)
+        #expect(try await waitFor(original) == original)
+        try await session.logout()
+    }
+
     @Test("Mentions, members and unknown local echoes (uses HALO_DEV_STICKER_ROOM as a scratch room)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
     func mentionsAndEchoes() async throws {
         let session = port()
