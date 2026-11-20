@@ -185,7 +185,7 @@ private struct RowView: View {
                     .overlay(alignment: .leading) { Rectangle().fill(.secondary).frame(width: 2) }
                 }
                 if let image = row.image { ThumbnailView(image: image, model: model, isSticker: row.isSticker).accessibilityLabel(row.isSticker ? row.text : "Image") }
-                if !row.isSticker { Text(row.styled ?? AttributedString(row.text))
+                if row.showsText { Text(row.styled ?? AttributedString(row.text))
                     .padding(8)
                     .background(row.style == .ownMessage ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.15), in: .rect(cornerRadius: 12))
                     .opacity(row.status == nil ? 1 : 0.6) }
@@ -222,6 +222,20 @@ private struct RowView: View {
 }
 
 /// An image row's thumbnail; shows a neutral box while loading or if the download failed.
+/// Photos fit within 240 pt; a sticker is shown in a fixed 200 pt box (the picture's own size is small and mustn't decide).
+private struct ThumbnailSize: ViewModifier {
+    let isSticker: Bool
+    let aspectRatio: Double?
+
+    func body(content: Content) -> some View {
+        if isSticker {
+            content.frame(width: 200, height: 200)
+        } else {
+            content.aspectRatio(aspectRatio ?? 4 / 3, contentMode: .fit).frame(maxWidth: 240)
+        }
+    }
+}
+
 private struct ThumbnailView: View {
     let image: TimelineRow.Image
     let model: TimelineViewModel
@@ -240,8 +254,7 @@ private struct ThumbnailView: View {
             Rectangle().fill(.secondary.opacity(0.2))
             #endif
         }
-        .aspectRatio(image.aspectRatio ?? 4 / 3, contentMode: .fit)
-        .frame(maxWidth: isSticker ? 160 : 240)
+        .modifier(ThumbnailSize(isSticker: isSticker, aspectRatio: image.aspectRatio))
         .clipShape(.rect(cornerRadius: isSticker ? 0 : 12))
         .task { data = await model.thumbnail(for: image) }
     }
