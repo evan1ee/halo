@@ -78,6 +78,15 @@ struct StickerLibraryTests {
         #expect(await library.snapshots().first { _ in true }?.unavailablePacks == [])
     }
 
+    @Test("removing unavailable packs disables each one and reloads for the same room")
+    func removingUnavailable() async throws {
+        let gone = PackRef(room: try RoomID("!gone:x.org"), stateKey: "old")
+        let (library, source, _, _) = make(packs: StickerPackLoad(packs: [pack(["a"])], unavailable: [gone]))
+        await library.load(currentRoom: room)
+        await library.removeUnavailablePacks()
+        #expect(source.disabled == [gone] && source.requests == [room, room])
+    }
+
     @Test("recents are written at once the first time, then at most once per ten seconds with a trailing write")
     func debounce() async throws {
         let (library, _, store, time) = make(packs: StickerPackLoad(packs: [pack(["a", "b", "c"])]))

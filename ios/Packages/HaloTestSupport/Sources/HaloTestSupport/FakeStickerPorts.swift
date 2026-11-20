@@ -8,6 +8,7 @@ public final class FakeStickerPacks: StickerPackPort {
         var load = StickerPackLoad(packs: [])
         var error: HaloError?
         var asked: [RoomID?] = []
+        var disabled: [PackRef] = []
     }
     private let state = Mutex(State())
 
@@ -17,6 +18,10 @@ public final class FakeStickerPacks: StickerPackPort {
     public func fail(with error: HaloError?) { state.withLock { $0.error = error } }
     /// The `currentRoom` of each call.
     public var requests: [RoomID?] { state.withLock { $0.asked } }
+    /// The packs `disable` was called with.
+    public var disabled: [PackRef] { state.withLock { $0.disabled } }
+
+    public func disable(_ ref: PackRef) async throws(HaloError) { state.withLock { $0.disabled.append(ref) } }
 
     public func packs(currentRoom: RoomID?) async throws(HaloError) -> StickerPackLoad {
         let (load, error) = state.withLock { state -> (StickerPackLoad, HaloError?) in

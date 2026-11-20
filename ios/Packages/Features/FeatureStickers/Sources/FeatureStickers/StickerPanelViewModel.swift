@@ -160,6 +160,9 @@ public final class StickerPanelViewModel {
         return count == 1 ? "1 pack you added is unavailable." : "\(count) packs you added are unavailable."
     }
 
+    /// Removes the unavailable packs from the user's list (the notice's button).
+    public func removeUnavailablePacks() async { await library.removeUnavailablePacks() }
+
     /// `true` when some pack sources couldn't be read, so the list may be incomplete.
     public var isIncomplete: Bool { snapshot.phase == .partial }
 }

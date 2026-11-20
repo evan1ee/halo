@@ -5,6 +5,10 @@ public protocol StickerPackPort: Sendable {
     /// The packs the user can use now, in spec order: those enabled in `m.image_pack.rooms`, then `currentRoom`'s own
     /// packs, then legacy ones. Packs that can't be read are left out; `StickerPackLoad.failedSources` says how many.
     func packs(currentRoom: RoomID?) async throws(HaloError) -> StickerPackLoad
+
+    /// Takes `ref` out of the user's enabled packs (`m.image_pack.rooms`), e.g. one whose room is gone. Nothing happens when
+    /// it isn't listed; the pack's room and its stickers are not touched.
+    func disable(_ ref: PackRef) async throws(HaloError)
 }
 
 public struct StickerPackLoad: Sendable, Equatable {
