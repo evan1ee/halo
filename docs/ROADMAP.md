@@ -32,6 +32,49 @@ V-SQL-1, V-APPLE-1, and the exit criterion.
 
 **M0b started (2026-11-19):** V-CI-2 resolved; `ios/Packages/HaloMatrixAdapter` exists and builds against the pinned SDK 26.11.17 for the iOS Simulator. The prebuilt xcframework has no macOS slice, so the adapter builds and tests only through `xcodebuild` with an iOS destination (not `swift build`/`swift test`).
 
+## Remaining work (the loop's queue)
+Ordered work queue for the autonomous loop ([development/AUTONOMOUS_LOOP.md](development/AUTONOMOUS_LOOP.md), D70). Take the first
+unchecked item the agent can do; items marked 📱 need a physical device and 👤 the founder (they go to HANDOFF §5 "Needs the
+founder" and don't block the queue). Tick an item in the pull request that finishes it. Details of each item live in the owning spec.
+
+**Now**
+- [ ] Merge PR #5 (M3 tests, M2 messaging, M4 stickers core) once CI is green on its last push.
+- [ ] CI: macOS job running `xcodebuild test` for HaloMatrixAdapter (unit tests only), HaloPersistence, HaloPlatform, the Feature
+      packages, and the app build; add the app build to `scripts/prepush.sh` ([development/CI_CD.md](development/CI_CD.md)).
+
+**M3 Read-state engine** (exit: AC-U1–U7 automated green; gates G-UNREAD, G-FFI)
+- [ ] Scenario driver (`tools/scenario-driver`, `infra/test`): run S01–S22 against real Synapse ([testing/UNREAD_REGRESSION_TESTS.md](testing/UNREAD_REGRESSION_TESTS.md)).
+- [ ] Read-state auditor (UNREAD_STATE; needed for AC-U8 in M5).
+- [ ] Intent confirmation rules (a)–(c) for `read_intent`, `attempts`/`last_error`, `HaloLog` in `ReadReceiptCoordinator`.
+- [ ] D6 check: does `onScrollVisibilityChange` fire for `List` rows (simulator UI test); fall back to `LazyVStack` if not.
+- [ ] Unit test for the `latestEvent` mapping; contract test for `deletePusher`.
+- [ ] G-UNREAD and G-FFI evaluation written up with the scenario results (👤 founder confirms the gate outcome).
+- [ ] 📱 V-RS-1, file-protection class on `halo.sqlite`, NSE access to the database.
+
+**M4 Stickers v1** (exit: AC-S1–S5)
+- [ ] Hide pack rooms (`one.mbm.halo.sticker_rooms`) from the room list.
+- [ ] Long-press preview and animation (FR-5, FR-9); "unavailable pack" UI; privacy notice.
+- [ ] Legacy `im.ponies.*` packs (V-ST-3).
+- [ ] Simulator UI check of the panel and pack creation; real sticker images loaded from media.
+- [ ] V-ST-2: token refresh on 401 for the pack GET.
+
+**M2 / M1 leftovers**
+- [ ] Offline send test (MESSAGING); kill-and-relaunch resend.
+- [ ] Video, audio and file display and sending (MEDIA_ATTACHMENTS).
+- [ ] QR and emoji device verification (ENCRYPTION_AND_DEVICES).
+- [ ] 📱 G-NSE: AC-NSE-1…6 on a device (peak memory, encrypted room, timeout injection, 100 pushes, Release build).
+
+**M5 MVP hardening** (exit: daily-driver switch, AC-U8)
+- [ ] MAS in `infra/dev` and OIDC login (V-AUTH-1, Q-MAS-ACCOUNT).
+- [ ] Settings (SETTINGS), acknowledgements screen, generic bot-message rendering.
+- [ ] Room management and user profiles left for the MVP (ROOM_MANAGEMENT, USER_PROFILES).
+- [ ] Performance pass (large accounts, room-list paging, `Room.members()` cost).
+- [ ] 👤 Push gateway (Sygnal + pushkin) for Beta/Release, APNs keys, TestFlight build.
+- [ ] 👤📱 AC-U8: 7-day soak with zero unexplained auditor findings.
+
+**P2** — M6 Bot cards (AC-B*), M7 Bot Activity (AC-A*), M8 Search + Saved (V-SEARCH-1), M9 Gallery + Export, M10 Threads: break
+each into items here when M5 is done.
+
 ## Milestones
 
 ```mermaid

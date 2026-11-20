@@ -25,7 +25,7 @@ simulator FFI smoke + contract tests.
 The workflows run on pull requests and on pushes to `main`; work branches get CI results once a pull request is open.
 
 ## 3. Required checks on `main`
-`docs`, `swift-linux`, `boundaries`, `secrets`, and `scenarios` (when applicable). A PR can't merge with failing required checks once branch protection is enabled (collaborators phase).
+`docs`, `swift-linux`, `boundaries`, `secrets`, and `scenarios` (when applicable). A PR can't merge with failing required checks once branch protection is enabled (collaborators phase). Until then the rule is procedural: an agent merges only when every check has passed ([AUTONOMOUS_LOOP.md](AUTONOMOUS_LOOP.md) §3, D70). Branch protection isn't available on the current GitHub plan for this private repository.
 
 ## 4. Delivery
 No automatic TestFlight upload in the personal phase; the release checklist (BUILD_AND_RELEASE §4) is run locally. Revisit with Xcode Cloud or a macOS runner when external testers join.

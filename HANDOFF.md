@@ -28,10 +28,10 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 - Room list swipe: leading "Read" (`markRoomRead`), trailing "Unread" (`setMarkedUnread`).
 
 ## 3. Key decisions
-Full list: docs/DECISION_LOG.md (D1–D69), docs/adr/. Most relevant now: D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
+Full list: docs/DECISION_LOG.md (D1–D70), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-Everything in `git log origin/main..HEAD`. Key paths: `ios/Packages/HaloApplication/Sources/HaloApplication/{ReadReceipts,Badge,RoomList}`, `HaloMatrixAdapter/.../{MatrixReadMarkerPort,MatrixRoomListPort}.swift`, `HaloPersistence/.../{HaloDatabase,ReadIntentStore}.swift`, `Features/{FeatureTimeline,FeatureRoomList}`, `ios/App/{AppRoot,HaloApp}.swift`.
+Docs only: `docs/development/AUTONOMOUS_LOOP.md` (new), `docs/ROADMAP.md` (§"Remaining work" = the loop's queue), `AGENTS.md` (§0 step 8, §16), `docs/DECISION_LOG.md` (D70), `docs/development/CI_CD.md`, `HANDOFF.md`. The code of PR #5 is in `git log origin/main..HEAD`.
 
 ## 5. Outstanding issues
 - Stickers: V-ST-1 resolved (option B), V-ST-2 partly (token refresh on 401 not exercised). Verified against `infra/dev` by contract test `stickers` (env `HALO_DEV_STICKER_ROOM`: a room with `m.room.image_pack` `cats` {wave, dance} enabled in `m.image_pack.rooms`; throwaway account `stickertester` created locally). Not built: long-press preview/animation (FR-5, FR-9), editing/deleting packs, hiding pack rooms from the room list, legacy `im.ponies.*` packs (V-ST-3), privacy notice, "unavailable pack" UI. Real sticker images were not loaded (the fixture mxc URLs have no media).
@@ -48,24 +48,33 @@ Everything in `git log origin/main..HEAD`. Key paths: `ios/Packages/HaloApplicat
 - Timeline/Media contract tests need a fixture room (`HALO_DEV_TIMELINE_ROOM`: first, second, notice, waves, redacted message, blue.png). Run contracts with `TEST_RUNNER_HALO_DEV_*`; the server value must be `http://localhost:8008`. Parallel contract tests on one account hang (suite is serialized).
 - Open validation: V-CI-2, V-SQL-1, V-APPLE-1, V-NSE-*, V-PUSH-1/3/5, V-RS-1/5, V-RS-7 (Synapse sliding sync serves 0 counts).
 - Docker CLI hangs on the `osxkeychain` helper; use a throwaway `DOCKER_CONFIG`.
+- Contract-test fixtures (`HALO_DEV_STICKER_ROOM`, `HALO_DEV_TIMELINE_ROOM`) and test passwords exist only on the dev Mac, outside the repository. A session without them creates a throwaway account (`docker exec halo-dev-synapse-1 register_new_matrix_user …`) and the fixture rooms through the client API; scripting that in `infra/dev` is worth doing early.
+
+**Needs the founder** (the loop records these and moves on; AUTONOMOUS_LOOP §5)
+- 📱 Device checks: G-NSE AC-NSE-1…6, V-RS-1, file protection on `halo.sqlite`, NSE database access, background push delivery.
+- 👤 Gate outcomes G-UNREAD / G-FFI at the end of M3 (the agent writes the evaluation); push gateway, APNs keys, TestFlight.
 
 ## 6. Next steps
-1. M3: device check of the ≥ 50 % visibility; the Docker scenario driver to run S01–S22 against Synapse; the auditor.
-2. Device checks from section 5; G-NSE hardening (peak memory, encrypted room, timeout injection AC-NSE-3/4, 100 pushes, Release build).
-3. M4 left: preview/animation, hide pack rooms, legacy packs, a UI check of the panel and pack creation on a device/simulator. M2 left: offline send test. M1 left: video/audio/file, QR/emoji verification. A push gateway for Beta/Release.
-4. Merge PR #5 after review. Consider a macOS CI job (`xcodebuild test` for adapter/persistence/platform/features, app build) and an app build in `prepush.sh`.
+The queue is docs/ROADMAP.md §"Remaining work", worked by the loop in docs/development/AUTONOMOUS_LOOP.md. Its head:
+1. Merge PR #5 when CI on its last push is green (AUTONOMOUS_LOOP §3), then `git switch main && git pull --ff-only`.
+2. macOS CI job for the Mac-only packages and the app build; app build in `scripts/prepush.sh`.
+3. M3: scenario driver running S01–S22 against Synapse in `infra/test`, then the auditor.
 
 ## 7. Next Session Prompt
 ```text
-Continue development of Halo (repository evan1ee/halo), branch claude/m0b-adapter-scaffold.
+/loop Continuously execute the roadmap in a loop: **Plan → Implement → Verify**. Once a milestone is completed and verified, immediately proceed to the next milestone. Continue autonomously until roadmap finished.
 
-1. Read AGENTS.md, then HANDOFF.md. Trust it for project state; read other docs only as the task needs them.
-   Run scripts/install-hooks.sh once.
-2. Work through HANDOFF.md section 6 autonomously, in small steps: plan, implement, verify, commit,
-   then the next step. Do not ask whether to continue; stop only for a real decision or blocker.
+Context for the loop (Halo, repository evan1ee/halo):
+1. Read AGENTS.md, HANDOFF.md, then docs/development/AUTONOMOUS_LOOP.md. Trust HANDOFF for project state.
+   Run scripts/install-hooks.sh once per clone.
+2. The work queue is docs/ROADMAP.md §"Remaining work"; HANDOFF §6 is its head. One branch and one PR per item.
 3. Verify every SDK API in the pinned source (ios/SDKVERSION.md); never invent names.
-4. Run scripts/prepush.sh and report real output; say what you couldn't run. Tests for every behaviour
-   change; Conventional Commits; docs in the same commit.
-5. Before every git push (AGENTS.md §18): rewrite HANDOFF.md as state and next steps only (no changelog),
-   update ROADMAP/OPEN_QUESTIONS/specs, and include HANDOFF.md in the last commit of the push.
+4. Verify each item: scripts/prepush.sh, the Halo-Debug app build, touched contract tests against infra/dev,
+   a simulator check for UI. Report real output; say what you couldn't run.
+5. Review the diff; fix high/medium findings. Merge your own PR only under AUTONOMOUS_LOOP §3 (all CI checks
+   passed, `gh pr merge --merge --delete-branch`), then branch again from main.
+6. Device, signing, gate-outcome, dependency and product decisions go to HANDOFF §5 "Needs the founder";
+   move on to the next item instead of stopping. Do not ask whether to continue.
+7. Before every git push (AGENTS.md §18): HANDOFF.md rewritten as state and next steps, ROADMAP ticked,
+   specs/OPEN_QUESTIONS/DECISION_LOG updated, HANDOFF.md in the last commit of the push.
 ```
