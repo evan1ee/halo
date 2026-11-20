@@ -27,12 +27,15 @@ public final class RoomListViewModel {
         public let preview: String?
         /// The room's avatar image; `nil` shows the initials.
         public let avatar: MediaRef?
+        /// For an invitation: who sent it.
+        public let inviter: String?
 
         public init(
             id: RoomID, name: String, display: DisplayCount = .none, hasUnread: Bool = false, isInvite: Bool = false,
             isFavourite: Bool = false, isMuted: Bool = false, lastActivity: Date? = nil, preview: String? = nil,
-            avatar: MediaRef? = nil
+            avatar: MediaRef? = nil, inviter: String? = nil
         ) {
+            self.inviter = inviter
             self.avatar = avatar
             self.preview = preview
             self.isFavourite = isFavourite
@@ -200,7 +203,7 @@ public final class RoomListViewModel {
                 return Row(
                     id: room.id, name: room.name ?? "Unnamed room", display: state.display, hasUnread: state.hasUnread, isInvite: room.membership == .invited,
                     isFavourite: room.isFavourite, isMuted: room.read.mode == .mute, lastActivity: room.latestEvent?.timestamp,
-                    preview: room.preview?.line(isDirect: room.isDirect), avatar: room.avatar)
+                    preview: room.preview?.line(isDirect: room.isDirect), avatar: room.avatar, inviter: room.inviter)
             }
             let matching = zip(await rooms.rooms, rows).filter { Self.includes(filter, room: $0.0, row: $0.1) }.map(\.1)
             content = .loaded(count: filter == .all ? count : matching.count, rows: matching)

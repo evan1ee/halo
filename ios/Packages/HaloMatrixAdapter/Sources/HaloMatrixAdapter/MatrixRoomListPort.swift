@@ -143,8 +143,16 @@ public final class MatrixRoomListPort: RoomListPort {
             ownReadThrough: await ownReadThrough(of: room, counts: read),
             isFavourite: (try? await room.roomInfo())?.isFavourite ?? false,
             preview: preview(await room.latestEvent()),
-            avatar: avatar(room.avatarUrl())
+            avatar: avatar(room.avatarUrl()),
+            inviter: await inviterName(room)
         )
+    }
+
+    /// Who invited the user, for an invited room only (one lookup per invitation).
+    static func inviterName(_ room: Room) async -> String? {
+        guard room.membership() == .invited, let member = try? await room.inviter() else { return nil }
+        if let name = member.displayName, !name.isEmpty { return name }
+        return member.userId
     }
 
     /// The avatar's media reference from its `mxc://` URI; `nil` for none or an unusable URI.

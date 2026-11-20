@@ -22,12 +22,15 @@ public struct RoomSummary: Sendable, Equatable, Identifiable {
     public let preview: LatestMessagePreview?
     /// The room's avatar (for a direct chat the other person's); `nil` when it has none.
     public let avatar: MediaRef?
+    /// For an invitation: who invited the user (display name, else Matrix ID); `nil` when unknown or not an invitation.
+    public let inviter: String?
 
     public init(
         id: RoomID, name: String?, isDirect: Bool, isEncrypted: Bool, membership: Membership, read: RoomReadCounts = .none,
         latestEvent: LatestEventRef? = nil, ownReadThrough: Date? = nil, isFavourite: Bool = false, preview: LatestMessagePreview? = nil,
-        avatar: MediaRef? = nil
+        avatar: MediaRef? = nil, inviter: String? = nil
     ) {
+        self.inviter = inviter
         self.avatar = avatar
         self.preview = preview
         self.isFavourite = isFavourite

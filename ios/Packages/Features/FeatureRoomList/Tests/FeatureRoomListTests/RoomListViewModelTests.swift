@@ -90,7 +90,7 @@ struct RoomListInviteTests {
     @Test("an invited room is marked as an invitation; accepting and declining go to the port, a failure is shown")
     func invites() async throws {
         let id = try RoomID("!inv:x.org")
-        let invited = RoomSummary(id: id, name: "Book club", isDirect: false, isEncrypted: false, membership: .invited)
+        let invited = RoomSummary(id: id, name: "Book club", isDirect: false, isEncrypted: false, membership: .invited, inviter: "Ann")
         let coordinator = RoomListCoordinator(port: FakeRoomListPort(rooms: [invited]))
         let port = FakeRoomPort(details: RoomDetails(id: id, name: nil, topic: nil, isDirect: false, isEncrypted: false, joinedMemberCount: 0, notificationMode: .allMessages))
         let model = RoomListViewModel(
@@ -99,7 +99,7 @@ struct RoomListInviteTests {
         for await status in await coordinator.statuses() {
             if case .loaded = status { await model.listChanged(status); break }
         }
-        #expect(model.content == .loaded(count: 1, rows: [.init(id: id, name: "Book club", display: .dot, hasUnread: true, isInvite: true)]))
+        #expect(model.content == .loaded(count: 1, rows: [.init(id: id, name: "Book club", display: .dot, hasUnread: true, isInvite: true, inviter: "Ann")]))
         await model.acceptInvite(id)
         #expect(port.acceptedInvites == [id] && model.actionError == nil)
         await model.declineInvite(id)
@@ -203,6 +203,7 @@ struct RoomListPreviewTests {
         }
         guard case .loaded(_, let rows) = model.content else { Issue.record("not loaded"); return }
         #expect(rows.map(\.avatar) == [ref, nil])
+        #expect(rows.map(\.inviter) == [nil, nil])
         #expect(await model.avatarData(ref) == Data([1, 2, 3]))
         #expect(await model.avatarData(MediaRef(token: "missing")) == nil)
     }

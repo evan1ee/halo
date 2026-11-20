@@ -27,7 +27,7 @@ public struct RoomListView: View {
                             if row.isInvite {
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text(row.name).fontWeight(.bold)
-                                    Text("Invitation").font(.caption).foregroundStyle(.secondary)
+                                    Text(row.inviter.map { "Invitation from \($0)" } ?? "Invitation").font(.caption).foregroundStyle(.secondary)
                                     HStack {
                                         Button("Accept") { Task { await model.acceptInvite(row.id) } }.buttonStyle(.borderedProminent)
                                         Button("Decline", role: .destructive) { Task { await model.declineInvite(row.id) } }.buttonStyle(.bordered)
