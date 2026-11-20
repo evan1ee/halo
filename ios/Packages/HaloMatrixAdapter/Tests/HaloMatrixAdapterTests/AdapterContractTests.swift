@@ -100,7 +100,8 @@ struct AdapterContractTests {
         let cats = PackRef(room: room, stateKey: "cats")
         let pack = try #require(load.packs.first { $0.ref == cats }, "fixture pack not read, failedSources=\(load.failedSources)")
         #expect(pack.ref == PackRef(room: room, stateKey: "cats") && pack.displayName == "Cats" && pack.source == .userEnabled)
-        #expect(pack.stickers.map(\.shortcode) == ["dance", "wave"])
+        // `infra/dev/add-animated-sticker.py` may have added "spin" (an animated GIF): the two fixtures must be there, in order.
+        #expect(pack.stickers.map(\.shortcode).filter { $0 != "spin" } == ["dance", "wave"])
         #expect(pack.stickers.allSatisfy { $0.image != nil })
 
         // The same pack, found as the current room's pack.
