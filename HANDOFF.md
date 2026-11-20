@@ -1,13 +1,13 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-20 · Branch: `feat/m3-latest-event-and-pusher-tests` · PRs #1–#10 merged
+Last updated: 2026-11-20 · Branch: `feat/m3-read-state-auditor` · PRs #1–#11 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
 - **Milestone:** M0 done; M1 largely done; M2 done except media sending and the offline-send test; **M3 (read-state engine) in progress**. Dev Mac: Xcode 27.2, Swift 6.4.2, iPhone 16.
 - **Checks:** `scripts/prepush.sh` passes (SwiftLint not configured, skipped); `scripts/prepush.sh` now also builds `Halo-Debug` for the simulator. All 12 contract tests (`infra/dev`) pass, none skipped (`scripts/contract-test.sh` after `infra/dev/create-fixtures.py`).
-- **CI:** PRs #1–#10 merged. CI runs only the Linux-portable packages (Foundation, Domain, TestSupport, Application): adapter, persistence, platform, features and the app are tested only by `prepush.sh` on a Mac. `licenses` runs only on SDK/inventory changes.
+- **CI:** PRs #1–#11 merged. CI runs only the Linux-portable packages (Foundation, Domain, TestSupport, Application): adapter, persistence, platform, features and the app are tested only by `prepush.sh` on a Mac. `licenses` runs only on SDK/inventory changes.
 
 ## 2. Completed work (what exists now)
 - Layers: HaloFoundation, HaloDomain (ports, pure `ReadStatePolicy`), HaloApplication (coordinators), HaloPersistence (GRDB: `read_intent`, file protection set), HaloMatrixAdapter (only MatrixRustSDK importer), HaloPlatform, HaloTestSupport (fakes), Features/{Auth,RoomList,Timeline}. Composition root `ios/App/AppRoot.swift`; project generated from `ios/project.yml` (XcodeGen, scheme `Halo-Debug`).
@@ -25,13 +25,14 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 - Image sending (M2): `PhotosPicker` in the composer → `TimelineViewModel.sendImage` → `ImagePreparing` (`HaloPlatform.ImagePreparer`: ImageIO, orientation applied, max 2048 px, re-encoded as JPEG/PNG so EXIF/GPS is dropped, animated GIF kept) → `TimelineSession.sendImage` (`Timeline.sendAttachment` with in-memory data). Verified on `infra/dev` by contract test `sendImage` (upload, event in timeline, bytes back through the media port). No caption, no video/audio/file sending.
 - Pack creation (FR-7): `NewPackView/ViewModel` (FeatureStickers, opened by "+" in the panel) → `StickerPackCreator` (512 px via `ImagePreparer`, valid unique shortcodes, 5 MB cap) → `StickerPackCreationPort` (`MatrixStickerPackCreationPort`: uploads, unencrypted private room "Sticker pack: <name>", `m.room.image_pack`, `m.image_pack.rooms` and `one.mbm.halo.sticker_rooms` read-modify-write, unknown keys preserved; on a failure after the room exists the pack is disabled again and the room left and forgotten). Verified on `infra/dev` by contract test `createPack` (round trip through the pack reader and the media port). The `sticker_rooms` list is written but nothing hides those rooms from the room list yet.
 - Account change (D69): on sign-out or a different account, `AppRoot.followReadIntents` calls `reset()` on `ReadReceiptCoordinator`, `DraftCoordinator` and `StickerLibrary` (generation counters drop results of work started for the old account); before sign-out pending receipts and sticker recents are flushed, then the pusher is removed. The same account becoming ready again doesn't reopen the database.
+- Read-state auditor (debug builds): `ReadStateAuditor` + `AuditEventPort`/`AuditEventStore` (`audit_event`, migration `v4-audit-event`, 5,000 rows) wired into `BadgeCoordinator.setAudit` from `AppRoot`; see LOGGING_AND_DIAGNOSTICS §2. Not run on a device; the 10-minute re-run, diagnostics export and Settings counter are not built.
 - Room list swipe: leading "Read" (`markRoomRead`), trailing "Unread" (`setMarkedUnread`).
 
 ## 3. Key decisions
 Full list: docs/DECISION_LOG.md (D1–D70), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-`LatestEventMappingTests.swift` (new), `AdapterContractTests.swift` (+`pusher`), `docs/ROADMAP.md`, `HANDOFF.md`.
+`HaloDomain/ReadState/ReadStateAuditor.swift` (new, with `AuditEventPort`), `HaloPersistence/AuditEventStore.swift` + migration v4, `HaloTestSupport/FakeAuditEvents.swift`, `BadgeCoordinator` (`evaluated`, `setAudit`), `AppRoot`, tests, `LOGGING_AND_DIAGNOSTICS.md`, `ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
 - Stickers: V-ST-1 resolved (option B), V-ST-2 partly (token refresh on 401 not exercised). Verified against `infra/dev` by contract test `stickers` (env `HALO_DEV_STICKER_ROOM`: a room with `m.room.image_pack` `cats` {wave, dance} enabled in `m.image_pack.rooms`; throwaway account `stickertester` created locally). Not built: long-press preview/animation (FR-5, FR-9), editing/deleting packs, hiding pack rooms from the room list, legacy `im.ponies.*` packs (V-ST-3), privacy notice, "unavailable pack" UI. Real sticker images were not loaded (the fixture mxc URLs have no media).
@@ -57,7 +58,7 @@ Full list: docs/DECISION_LOG.md (D1–D70), docs/adr/. Most relevant now: D70 au
 
 ## 6. Next steps
 The queue is docs/ROADMAP.md §"Remaining work", worked by the loop in docs/development/AUTONOMOUS_LOOP.md. Its head:
-1. M3: the scenario driver, remaining part (real server output into the Swift model, sliding sync, encrypted rooms), then the auditor.
+1. M3: G-UNREAD/G-FFI write-up (the founder confirms the outcome), then the scenario driver, remaining part (real server output into the Swift model, sliding sync, encrypted rooms), then the auditor.
 
 ## 7. Next Session Prompt
 ```text

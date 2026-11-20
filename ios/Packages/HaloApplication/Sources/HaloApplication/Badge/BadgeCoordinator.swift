@@ -16,6 +16,23 @@ public actor BadgeCoordinator {
     private let records: any NotificationRecordPort
     private let port: any BadgePort
     private let receipts: ReadReceiptCoordinator?
+    private var audit: Audit?
+    private var audited: [RoomID: Set<AuditFinding>] = [:]
+
+    /// Where the read-state auditor writes (LOGGING_AND_DIAGNOSTICS §2): debug and TestFlight builds only.
+    public struct Audit: Sendable {
+        let port: any AuditEventPort
+        let roomHash: @Sendable (RoomID) -> String
+        let appVersion: String
+        let now: @Sendable () -> Date
+
+        public init(port: any AuditEventPort, roomHash: @escaping @Sendable (RoomID) -> String, appVersion: String, now: @escaping @Sendable () -> Date = { Date() }) {
+            self.port = port
+            self.roomHash = roomHash
+            self.appVersion = appVersion
+            self.now = now
+        }
+    }
     private var positions: [RoomID: Date] = [:]
     private var inputs: [RoomReadInputs] = []
     private var tasks: [Task<Void, Never>] = []
@@ -45,6 +62,13 @@ public actor BadgeCoordinator {
         ]
     }
 
+    /// Starts (or, with `nil`, stops) the auditor. The audit store belongs to an account, so it is attached once the
+    /// account's database is open and detached on sign-out.
+    public func setAudit(_ audit: Audit?) {
+        self.audit = audit
+        audited = [:]
+    }
+
     /// The badge value for the current states.
     public var badge: Int { attentionRooms.count }
 
@@ -52,20 +76,28 @@ public actor BadgeCoordinator {
     /// records but aren't in the loaded list (their only evidence is the push).
     public static func attention(inputs: [RoomReadInputs], records: [NotificationRecord], positions: [RoomID: Date] = [:]) -> Set<RoomID> {
         let byRoom = Dictionary(grouping: records, by: \.roomID)
-        var result: Set<RoomID> = []
+        var result = Set(evaluated(inputs: inputs, records: records, positions: positions).filter(\.state.attention).map(\.input.roomID))
+        let known = Set(inputs.map(\.roomID))
+        for room in byRoom.keys where !known.contains(room) { result.insert(room) }
+        return result
+    }
+
+    /// The policy's output for each room with the inputs it was given (the read position and the unconfirmed pushes folded in).
+    public static func evaluated(inputs: [RoomReadInputs], records: [NotificationRecord], positions: [RoomID: Date] = [:])
+        -> [(input: RoomReadInputs, state: RoomReadState)] {
+        let byRoom = Dictionary(grouping: records, by: \.roomID)
+        var result: [(input: RoomReadInputs, state: RoomReadState)] = []
         for input in inputs {
             // A pushed event the user has read (here, or on another device) is no longer unread.
             let readThrough = [positions[input.roomID], input.localIntent].compactMap { $0 }.max()
             let notified = (byRoom[input.roomID] ?? [])
                 .filter { record in readThrough.map { record.timestamp > $0 } ?? true }
                 .map { NotifiedRef(timestamp: $0.timestamp, isMention: $0.isMention) }
-            let state = ReadStatePolicy.evaluate(RoomReadInputs(
+            let effective = RoomReadInputs(
                 roomID: input.roomID, membership: input.membership, isEncrypted: input.isEncrypted, counts: input.counts,
-                latestEvent: input.latestEvent, localIntent: readThrough, unconfirmedNotified: notified))
-            if state.attention { result.insert(input.roomID) }
+                latestEvent: input.latestEvent, localIntent: readThrough, unconfirmedNotified: notified)
+            result.append((effective, ReadStatePolicy.evaluate(effective)))
         }
-        let known = Set(inputs.map(\.roomID))
-        for room in byRoom.keys where !known.contains(room) { result.insert(room) }
         return result
     }
 
@@ -79,8 +111,29 @@ public actor BadgeCoordinator {
         await recompute()
     }
 
+    /// Writes the findings that are new for a room (a finding that persists isn't written again until it goes away).
+    private func runAudit(_ evaluated: [(input: RoomReadInputs, state: RoomReadState)]) async {
+        guard let audit else { return }
+        var events: [AuditEvent] = []
+        var next: [RoomID: Set<AuditFinding>] = [:]
+        for (input, state) in evaluated {
+            let findings = Set(ReadStateAuditor.audit(input, state: state))
+            if findings.isEmpty { continue }
+            next[input.roomID] = findings
+            for finding in findings.subtracting(audited[input.roomID] ?? []).sorted(by: { $0.reason < $1.reason }) {
+                events.append(AuditEvent(
+                    at: audit.now(), roomHash: audit.roomHash(input.roomID), finding: finding,
+                    inputsJSON: AuditEvent.inputsJSON(for: input), appVersion: audit.appVersion))
+            }
+        }
+        audited = next
+        if !events.isEmpty { try? await audit.port.append(events) }
+    }
+
     private func recompute() async {
-        let attention = Self.attention(inputs: inputs, records: records.all(), positions: positions)
+        let stored = records.all()
+        await runAudit(Self.evaluated(inputs: inputs, records: stored, positions: positions))
+        let attention = Self.attention(inputs: inputs, records: stored, positions: positions)
         guard attention != attentionRooms || !hasWritten else { return }
         hasWritten = true
         attentionRooms = attention
