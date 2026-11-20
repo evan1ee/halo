@@ -17,6 +17,7 @@ public struct SettingsView: View {
     private let loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)?
     private let saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)?
     private let diagnostics: (@Sendable () async -> String)?
+    @AppStorage(AppPreferences.appearanceKey) private var appearance = Appearance.system.rawValue
     @State private var mediaPreviews: MediaPreviewChoice = .always
     @State private var mediaPreviewsLoaded = false
     @State private var mediaPreviewsFailed = false
@@ -59,6 +60,12 @@ public struct SettingsView: View {
                 Text("Privacy")
             } footer: {
                 Text("When on, other people in a room can't see that you read their messages. Your own devices still stay in sync. Applies to receipts sent from now on.")
+            }
+            Section("Appearance") {
+                Picker("Theme", selection: $appearance) {
+                    ForEach(Appearance.allCases) { Text($0.title).tag($0.rawValue) }
+                }
+                .accessibilityIdentifier("appearance")
             }
             if loadMediaPreviews != nil, saveMediaPreviews != nil {
                 Section {

@@ -7,6 +7,7 @@ public struct AppPreferences: Sendable {
     private let box: Box
 
     public static let privateReceiptsKey = "halo.privateReadReceipts"
+    public static let appearanceKey = "halo.appearance"
 
     public init(defaults: UserDefaults = .standard) { box = Box(defaults: defaults) }
 
@@ -15,4 +16,17 @@ public struct AppPreferences: Sendable {
         get { box.defaults.bool(forKey: Self.privateReceiptsKey) }
         nonmutating set { box.defaults.set(newValue, forKey: Self.privateReceiptsKey) }
     }
+
+    /// The colour scheme the user chose; `.system` follows the device. Unknown stored values read as `.system`.
+    public var appearance: Appearance {
+        get { Appearance(rawValue: box.defaults.string(forKey: Self.appearanceKey) ?? "") ?? .system }
+        nonmutating set { box.defaults.set(newValue.rawValue, forKey: Self.appearanceKey) }
+    }
+}
+
+/// Settings → Appearance (docs/features/SETTINGS.md §2).
+public enum Appearance: String, CaseIterable, Sendable, Identifiable {
+    case system, light, dark
+    public var id: String { rawValue }
+    public var title: String { rawValue.capitalized }
 }

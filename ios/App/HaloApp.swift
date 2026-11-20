@@ -27,6 +27,15 @@ private struct RootView: View {
     let root: AppRoot
     @Environment(\.scenePhase) private var scenePhase
     @State private var path: [RoomID] = []
+    @AppStorage(AppPreferences.appearanceKey) private var appearance = Appearance.system.rawValue
+
+    private var colorScheme: ColorScheme? {
+        switch Appearance(rawValue: appearance) ?? .system {
+        case .system: nil
+        case .light: .light
+        case .dark: .dark
+        }
+    }
 
     var body: some View {
         Group {
@@ -74,6 +83,7 @@ private struct RootView: View {
             await root.recovery.start()  // before the banner exists: a hidden banner view runs no task
             await root.auth.start()
         }
+        .preferredColorScheme(colorScheme)
         // Ask for notification permission once signed in; the token then arrives in `PushDelegate`.
         .task(id: root.auth.screen) {
             guard root.push != nil, case .signedIn = root.auth.screen else { return }
