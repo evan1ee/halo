@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(ImageIO)
+import ImageIO
+#endif
 import HaloApplication
 import HaloDomain
 import HaloFoundation
@@ -133,6 +136,26 @@ public final class StickerPanelViewModel {
         guard let media, let image = sticker.image else { return nil }
         if let full = try? await media.content(image) { return full }
         return try? await media.thumbnail(image, width: 256, height: 256)
+    }
+
+    /// Largest file the grid plays by itself.
+    static let autoplayLimit = 1_000_000
+
+    /// The full file of a sticker that is animated and small enough to autoplay in the grid; `nil` otherwise.
+    public func animatedContent(for sticker: Sticker) async -> Data? {
+        guard let media, let image = sticker.image, (sticker.info?.size ?? 0) <= Self.autoplayLimit else { return nil }
+        guard let full = try? await media.content(image), full.count <= Self.autoplayLimit, Self.isAnimated(full) else { return nil }
+        return full
+    }
+
+    /// `true` for a GIF, APNG or WebP with more than one frame.
+    nonisolated static func isAnimated(_ data: Data) -> Bool {
+        #if canImport(ImageIO)
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return false }
+        return CGImageSourceGetCount(source) > 1
+        #else
+        return false
+        #endif
     }
 
     /// `true` when the panel can create packs.

@@ -23,7 +23,7 @@ Summary only; details per feature: [docs/development/IMPLEMENTATION_NOTES.md](do
 Full list: docs/DECISION_LOG.md (D1–D75), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-Settings → Storage (sizes of the Matrix store and Halo database: `StorageSize`, `AppRoot.storageSizes()`; shown in the simulator, 4.1 MB / 475 KB; no clear-cache yet: `Client.clearCaches` needs a sync service and forces a resync, decide before wiring). Earlier: Appearance theme, Diagnostics report. Committed straight to `main` (D75).
+Sticker grid autoplay (`StickerCell` loads the full file of a visible multi-frame sticker ≤ 1 MB when motion is allowed, drops it on scroll-off; `StickerPanelViewModel.animatedContent`/`isAnimated`; FeatureStickers tests pass, grid renders in the simulator; no animation seen: the dev packs are static PNGs, add an animated GIF fixture). Earlier: Settings Storage (sizes only; clear cache not wired), Appearance, Diagnostics. Committed straight to `main` (D75).
 
 ## 5. Outstanding issues
 Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).

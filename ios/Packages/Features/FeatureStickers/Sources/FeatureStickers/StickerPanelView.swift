@@ -87,12 +87,14 @@ private struct StickerCell: View {
     let sticker: Sticker
     let model: StickerPanelViewModel
     @State private var data: Data?
+    /// The full file of an animated sticker while its cell is on screen (FR-9); `nil` otherwise, so memory is freed on scroll.
+    @State private var animated: Data?
 
     var body: some View {
         Button { Task { await model.tap(sticker) } } label: {
             Group {
                 #if canImport(UIKit)
-                if let data, let image = UIImage(data: data) { Image(uiImage: image).resizable().scaledToFit() } else { placeholder }
+                if let animated { AnimatedStickerView(data: animated) } else if let data, let image = UIImage(data: data) { Image(uiImage: image).resizable().scaledToFit() } else { placeholder }
                 #else
                 placeholder
                 #endif
@@ -108,6 +110,14 @@ private struct StickerCell: View {
             Button("Send", systemImage: "paperplane") { Task { await model.tap(sticker) } }
         }, preview: { preview })
         .task { data = await model.thumbnail(for: sticker) }
+        #if canImport(UIKit)
+        .task(id: sticker.id) {
+            // Autoplay only the visible cells, only when motion is allowed, and only small files (FR-9).
+            guard StickerImage.motionAllowed, let full = await model.animatedContent(for: sticker) else { return }
+            animated = full
+        }
+        .onDisappear { animated = nil }
+        #endif
     }
 
     /// The long-press preview (FR-5): larger, animated when motion is allowed (FR-9); the full file loads while the thumbnail shows.
