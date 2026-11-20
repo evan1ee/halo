@@ -40,7 +40,12 @@ public actor SessionCoordinator {
     private var broadcaster = SnapshotBroadcaster<State>()
     private var updatesTask: Task<Void, Never>?
 
-    public init(port: any SessionPort, keychain: any KeychainPort, deviceDisplayName: String = "Halo (iPhone)") {
+    /// How long looking up a homeserver may take. Without a limit a host that never answers (for example `localhost:8008` over
+    /// HTTPS against a plain-HTTP server) leaves the sign-in screen spinning forever.
+    private let discoveryTimeout: Duration
+
+    public init(port: any SessionPort, keychain: any KeychainPort, deviceDisplayName: String = "Halo (iPhone)", discoveryTimeout: Duration = .seconds(20)) {
+        self.discoveryTimeout = discoveryTimeout
         self.port = port
         self.keychain = keychain
         self.deviceDisplayName = deviceDisplayName
@@ -83,7 +88,7 @@ public actor SessionCoordinator {
         }
         state = .discovering
         do {
-            let details = try await port.loginDetails(server: server)
+            let details = try await withTimeout { () async throws(HaloError) -> ServerDetails in try await self.port.loginDetails(server: server) }
             if !details.supportsNativeSlidingSync {
                 state = .signedOut(failure: .unsupported("NO_SLIDING_SYNC"))
             } else if !details.supportsPassword && !details.supportsOIDC {
@@ -93,6 +98,27 @@ public actor SessionCoordinator {
             }
         } catch {
             state = .signedOut(failure: error)
+        }
+    }
+
+    /// Runs `operation`, giving up with a retryable network error after `discoveryTimeout`.
+    private func withTimeout(_ operation: @escaping @Sendable () async throws(HaloError) -> ServerDetails) async throws(HaloError) -> ServerDetails {
+        let timeout = discoveryTimeout
+        do {
+            return try await withThrowingTaskGroup(of: ServerDetails.self) { group in
+                group.addTask { try await operation() }
+                group.addTask {
+                    try await Task.sleep(for: timeout)
+                    throw HaloError.network(retryable: true)
+                }
+                defer { group.cancelAll() }
+                guard let first = try await group.next() else { throw HaloError.internal(code: "DISCOVERY") }
+                return first
+            }
+        } catch let error as HaloError {
+            throw error
+        } catch {
+            throw HaloError.internal(code: "DISCOVERY")
         }
     }
 

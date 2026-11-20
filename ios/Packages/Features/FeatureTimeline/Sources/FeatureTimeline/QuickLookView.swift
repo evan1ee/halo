@@ -6,15 +6,16 @@ import SwiftUI
 struct QuickLookView: UIViewControllerRepresentable {
     let url: URL
 
-    func makeUIViewController(context: Context) -> QLPreviewController {
+    /// In a navigation controller, because Quick Look shows its title and its share button only there.
+    func makeUIViewController(context: Context) -> UINavigationController {
         let controller = QLPreviewController()
         controller.dataSource = context.coordinator
-        return controller
+        return UINavigationController(rootViewController: controller)
     }
 
-    func updateUIViewController(_ controller: QLPreviewController, context: Context) {
+    func updateUIViewController(_ navigation: UINavigationController, context: Context) {
         context.coordinator.url = url
-        controller.reloadData()
+        (navigation.viewControllers.first as? QLPreviewController)?.reloadData()
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(url: url) }

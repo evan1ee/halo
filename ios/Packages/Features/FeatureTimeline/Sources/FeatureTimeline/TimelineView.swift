@@ -11,6 +11,8 @@ public struct TimelineView: View {
     private let stickerPanel: (@MainActor () -> AnyView)?
     @State private var showsStickers = false
     @State private var headerVisible = false
+    /// History is only loaded after the opening scroll: rows prepended before it would push the landing row out of place.
+    @State private var landed = false
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -47,7 +49,7 @@ public struct TimelineView: View {
                         // screen is full or the start marker arrives; opening a room never loads it all.
                         .onAppear { headerVisible = true }
                         .onDisappear { headerVisible = false }
-                        .task(id: rows.count) { if headerVisible, paginationError == nil { await model.loadEarlier() } }
+                        .task(id: PaginationTrigger(rows: rows.count, ready: headerVisible && landed)) { if headerVisible, landed, paginationError == nil { await model.loadEarlier() } }
                     }
                     ForEach(rows) { row in
                         RowView(row: row, model: model)
@@ -71,6 +73,8 @@ public struct TimelineView: View {
                     try? await Task.sleep(for: .milliseconds(150))  // let the list lay the rows out first
                     proxy.scrollTo(landing, anchor: model.landingIsUnread ? .top : .bottom)
                     model.landingShown()
+                    try? await Task.sleep(for: .milliseconds(250))  // let the scroll settle before history may load
+                    landed = true
                 }
                 .onChange(of: rows.last?.id) { _, last in
                     if let last { withAnimation { proxy.scrollTo(last, anchor: .bottom) } }
@@ -332,4 +336,10 @@ private struct FileTileView: View {
         .accessibilityLabel(file.name)
         .accessibilityHint("Opens the file")
     }
+}
+
+/// `.task(id:)` re-runs when either value changes: more rows (keep paginating until the screen is full) or becoming ready.
+private struct PaginationTrigger: Hashable {
+    let rows: Int
+    let ready: Bool
 }

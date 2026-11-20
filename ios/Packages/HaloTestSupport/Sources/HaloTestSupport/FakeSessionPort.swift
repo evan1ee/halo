@@ -21,6 +21,7 @@ public final class FakeSessionPort: SessionPort {
         var softLoggedOutTokens: Set<Data> = []
         var issuedTokens = 0
         var nextError: [String: HaloError] = [:]
+        var loginDetailsDelay: Duration?
         var continuations: [UUID: AsyncStream<SessionEvent>.Continuation] = [:]
         var calls: [String] = []
     }
@@ -51,8 +52,12 @@ public final class FakeSessionPort: SessionPort {
 
     // MARK: SessionPort
 
+    /// `loginDetails` takes this long before it answers (a host that is slow or never answers).
+    public func delayLoginDetails(by delay: Duration) { state.withLock { $0.loginDetailsDelay = delay } }
+
     public func loginDetails(server: String) async throws(HaloError) -> ServerDetails {
         try begin("loginDetails")
+        if let delay = state.withLock({ $0.loginDetailsDelay }) { try? await Task.sleep(for: delay) }
         guard let details = state.withLock({ $0.servers[server] }) else { throw .notFound }
         return details
     }
