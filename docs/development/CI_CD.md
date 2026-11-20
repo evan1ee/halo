@@ -15,7 +15,7 @@ Decision: D36 (Linux CI for everything that can run on Linux; Apple builds on th
 | `pushkin.yml` | PR touching `infra/sygnal/` or the pinned Sygnal version | ubuntu + Python | pushkin unit tests over Synapse notification fixtures: count-only → background push; **no payload contains `aps.badge`**; no counts in event payloads (ADR-0015) | M1 |
 | `licenses.yml` | PR touching `Package.resolved`, `ios/SDKVERSION.md` or `core/` | ubuntu (+ Rust) | check out `sdk_commit` from `ios/SDKVERSION.md`, `scripts/rust-license-inventory.py --check` (inventory diff + allowlist) | **M0 (in place)** |
 
-macOS runners aren't used by default (cost on private repos). Optional manual `ios-build.yml` (workflow_dispatch) on `macos-latest` for release candidates **[OPEN Q-CI-MAC]**.
+macOS runners aren't used by default (cost on private repos). Optional manual `ios-build.yml` (workflow_dispatch) on `macos-latest` for release candidates **[DEFERRED Q-CI-MAC, D71: no macOS job for now; `scripts/prepush.sh` is the only Mac gate]**.
 
 ## 2. Local validation (`scripts/prepush.sh`, in place since M0)
 Handoff structure → docs validation → boundaries → package tests (local `swift`, or the `swift:6.2-noble` Docker image) → gitleaks → SwiftLint (once

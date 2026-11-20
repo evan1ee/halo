@@ -54,6 +54,6 @@
 | Q-MAS-ACCOUNT | Device/session management for OIDC accounts: native list or MAS account page | Native via SDK / web (`account_url`) | Web page in the MVP | M5 |
 | Q-E2EE-STRATEGY | Room key recipient strategy (share keys with unverified devices?) | SDK default / identity-based / error-on-unverified | SDK default in the MVP; revisit with verification UX | M2 |
 | Q-CRASH | Crash reporting before public release | Apple only / self-hosted Sentry-compatible / none | Apple + MetricKit; revisit | M10 |
-| Q-CI-MAC | Use macOS CI runners for release candidates | Never / manual dispatch / always | Manual dispatch only | M5 |
+| Q-CI-MAC | Use macOS CI runners for release candidates | Never / manual dispatch / always | **Deferred (D71)**: no macOS CI job for now; `scripts/prepush.sh` is the only Mac gate. Not blocking | M5 |
 | Q-BOT-OWNER | Allow ticking tasks owned by others (the bot ignores them) | Enable only for own tasks (needs reliable ownership) / enable all + timeout message | Enable all + clear timeout message in M6; refine when ownership is detectable | M6 |
 | Q-ACT-REFRESH | Offer a visible "refresh from bot" command in the Activity tab | Yes (visible message) / no | No in M7; reconsider after use | M7 |
