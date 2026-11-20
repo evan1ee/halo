@@ -24,6 +24,8 @@ Plus: badge counting, display formatting (99+), reason codes for the auditor.
 
 ## 3. Integration scenarios (Synapse in Docker; scenario driver)
 
+**Status:** S01–S22 exist as model-based tests in `HaloApplicationTests/ReadStateScenarioTests.swift`. They drive the real policy and coordinators against an in-process model of Synapse and of A1's sync, so they pin Halo's behaviour but do not validate the model against a real homeserver. The Docker scenario driver (`tools/scenario-driver`, `infra/test`) is not built; when it is, each scenario should run there too and its inputs be compared with the model's. S09 has one known issue: opening a room does not yet clear `m.marked_unread`.
+
 Actors: **A** = the Halo user on device A1 (under test); **A2** = the same user's second device; **B**, **C** = other users.
 
 | ID | Scenario | Expected at the end |
