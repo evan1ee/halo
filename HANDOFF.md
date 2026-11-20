@@ -1,13 +1,13 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-20 · Branch: `feat/m3-read-intent-bookkeeping` · PRs #1–#8 merged
+Last updated: 2026-11-20 · Branch: `feat/m3-d6-visibility-check` · PRs #1–#9 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
 - **Milestone:** M0 done; M1 largely done; M2 done except media sending and the offline-send test; **M3 (read-state engine) in progress**. Dev Mac: Xcode 27.2, Swift 6.4.2, iPhone 16.
 - **Checks:** `scripts/prepush.sh` passes (SwiftLint not configured, skipped); `scripts/prepush.sh` now also builds `Halo-Debug` for the simulator. All 11 contract tests (`infra/dev`) pass, none skipped (`scripts/contract-test.sh` after `infra/dev/create-fixtures.py`).
-- **CI:** PRs #1–#8 merged. CI runs only the Linux-portable packages (Foundation, Domain, TestSupport, Application): adapter, persistence, platform, features and the app are tested only by `prepush.sh` on a Mac. `licenses` runs only on SDK/inventory changes.
+- **CI:** PRs #1–#9 merged. CI runs only the Linux-portable packages (Foundation, Domain, TestSupport, Application): adapter, persistence, platform, features and the app are tested only by `prepush.sh` on a Mac. `licenses` runs only on SDK/inventory changes.
 
 ## 2. Completed work (what exists now)
 - Layers: HaloFoundation, HaloDomain (ports, pure `ReadStatePolicy`), HaloApplication (coordinators), HaloPersistence (GRDB: `read_intent`, file protection set), HaloMatrixAdapter (only MatrixRustSDK importer), HaloPlatform, HaloTestSupport (fakes), Features/{Auth,RoomList,Timeline}. Composition root `ios/App/AppRoot.swift`; project generated from `ios/project.yml` (XcodeGen, scheme `Halo-Debug`).
@@ -31,7 +31,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 Full list: docs/DECISION_LOG.md (D1–D70), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-`ReadIntentPort` (+`recordFailure`, `ReadIntent.attempts/lastError`), `ReadIntentStore`, `FakeReadIntents`, `ReadReceiptCoordinator` (log, failure bookkeeping), `AppRoot`, tests, `READ_RECEIPTS.md`, `DECISION_LOG.md` (D72), `ROADMAP.md`, `HANDOFF.md`.
+`docs/ROADMAP.md`, `HANDOFF.md` (documentation only).
 
 ## 5. Outstanding issues
 - Stickers: V-ST-1 resolved (option B), V-ST-2 partly (token refresh on 401 not exercised). Verified against `infra/dev` by contract test `stickers` (env `HALO_DEV_STICKER_ROOM`: a room with `m.room.image_pack` `cats` {wave, dance} enabled in `m.image_pack.rooms`; throwaway account `stickertester` created locally). Not built: long-press preview/animation (FR-5, FR-9), editing/deleting packs, hiding pack rooms from the room list, legacy `im.ponies.*` packs (V-ST-3), privacy notice, "unavailable pack" UI. Real sticker images were not loaded (the fixture mxc URLs have no media).
@@ -42,7 +42,7 @@ Full list: docs/DECISION_LOG.md (D1–D70), docs/adr/. Most relevant now: D70 au
 - Opening a room now clears `m.marked_unread` (`ReadReceiptCoordinator.roomOpened`, called by `TimelineViewModel`; the adapter skips the write when the flag is already clear). Unverified on a device/server.
 - S01–S22 validate Halo against a model of Synapse. Verified: count rules (see above) and the server half of 9 scenarios (`tools/scenario-driver/run_scenarios.py`; run it after changing the dev Synapse). Unverified: sliding sync (V-RS-7: Synapse serves 0 counts there), limited timelines, own-receipt delivery to a second device (V-RS-1), the SDK's own counts.
 - Unverified on a device: file protection class on `halo.sqlite` (simulator reports none), V-RS-1 (do own-receipt changes trigger room-list updates?), cost of `loadOrFetchEvent` lookups, kill-and-relaunch resend, NSE access to the database, `deletePusher` (no contract test), paging cost for large accounts, the swipe UI and the unread indicators, the `latestEvent` mapping (no unit test).
-- D6: the ≥ 50 % rule relies on `onScrollVisibilityChange` inside a `List`; builds, but not verified on a device that it fires for List rows (fall back to a ScrollView/LazyVStack if not).
+- D6 verified in the simulator (iOS 26.0, `infra/dev`): `onScrollVisibilityChange` fires for `List` rows; the receipt followed the newest visible message ("D6 line 4" on opening, "D6 line 15" after scrolling). Not an automated UI test. Observed: a room with 40 unread messages opens at its oldest events ("This is the start of the conversation"), not at the first unread or the bottom; TIMELINE.md §1 specifies landing at the first unread message (or the bottom): queued in ROADMAP M2 leftovers. The room list shows no unread indicator for it (V-RS-7: sliding sync counts are 0).
 - `read_intent`: `receipt_type` always `read`; failed sends count in `attempts`/`last_error` and are logged; confirmation rules (a)/(b) not built (D72), sent intents expire after 7 days.
 - Timeline/Media contract tests need a fixture room (`HALO_DEV_TIMELINE_ROOM`: first, second, notice, waves, redacted message, blue.png). Run contracts with `TEST_RUNNER_HALO_DEV_*`; the server value must be `http://localhost:8008`. Parallel contract tests on one account hang (suite is serialized).
 - Open validation: V-CI-2, V-SQL-1, V-APPLE-1, V-NSE-*, V-PUSH-1/3/5, V-RS-1/5, V-RS-7 (Synapse sliding sync serves 0 counts).
@@ -57,7 +57,7 @@ Full list: docs/DECISION_LOG.md (D1–D70), docs/adr/. Most relevant now: D70 au
 
 ## 6. Next steps
 The queue is docs/ROADMAP.md §"Remaining work", worked by the loop in docs/development/AUTONOMOUS_LOOP.md. Its head:
-1. M3: D6 check (`onScrollVisibilityChange` in a `List`), then the scenario driver, remaining part (real server output into the Swift model, sliding sync, encrypted rooms), then the auditor.
+1. M3: unit test for the `latestEvent` mapping and contract test for `deletePusher`, then the scenario driver, remaining part (real server output into the Swift model, sliding sync, encrypted rooms), then the auditor.
 
 ## 7. Next Session Prompt
 ```text

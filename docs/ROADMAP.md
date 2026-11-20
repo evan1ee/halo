@@ -49,7 +49,7 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 - [ ] Scenario driver, remaining part: server half of S01/02/04/05/09/10/14/15/22 is done (`tools/scenario-driver/run_scenarios.py`); still to do: feed the real server output into the Swift model, sliding sync, encrypted rooms  ([testing/UNREAD_REGRESSION_TESTS.md](testing/UNREAD_REGRESSION_TESTS.md)).
 - [ ] Read-state auditor (UNREAD_STATE; needed for AC-U8 in M5).
 - [x] Intent confirmation rules (a)–(c) for `read_intent` (a and b deliberately not built: D72), `attempts`/`last_error`, `HaloLog` in `ReadReceiptCoordinator`.
-- [ ] D6 check: does `onScrollVisibilityChange` fire for `List` rows (simulator UI test); fall back to `LazyVStack` if not.
+- [x] D6 check: `onScrollVisibilityChange` fires for `List` rows (checked in the iOS 26.0 simulator against `infra/dev`, 2026-11-20); no fallback needed. Not an automated UI test.
 - [ ] Unit test for the `latestEvent` mapping; contract test for `deletePusher`.
 - [ ] G-UNREAD and G-FFI evaluation written up with the scenario results (👤 founder confirms the gate outcome).
 - [ ] 📱 V-RS-1, file-protection class on `halo.sqlite`, NSE access to the database.
@@ -62,6 +62,7 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 - [ ] V-ST-2: token refresh on 401 for the pack GET.
 
 **M2 / M1 leftovers**
+- [ ] Timeline opens at the first unread message, or the bottom when all is read (TIMELINE.md §1); today a room opens at its oldest events (seen in the D6 check).
 - [ ] Offline send test (MESSAGING); kill-and-relaunch resend.
 - [ ] Video, audio and file display and sending (MEDIA_ATTACHMENTS).
 - [ ] QR and emoji device verification (ENCRYPTION_AND_DEVICES).
