@@ -45,7 +45,7 @@ final class AppRoot {
         let roomCoordinator = RoomListCoordinator(port: MatrixRoomListPort(session: session), loadsAllPages: true)
         let suite = "group.\(HaloShared.namespace())"
         records = NotificationRecordStore(suiteName: suite)
-        let receipts = ReadReceiptCoordinator(port: MatrixReadMarkerPort(session: session))
+        let receipts = ReadReceiptCoordinator(port: MatrixReadMarkerPort(session: session), log: log)
         self.receipts = receipts
         drafts = DraftCoordinator()
         let stickers = StickerLibrary(packs: MatrixStickerPackPort(session: session), prefs: MatrixStickerPrefsPort(session: session))

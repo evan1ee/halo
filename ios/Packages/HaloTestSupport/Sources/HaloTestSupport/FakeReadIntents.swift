@@ -23,6 +23,14 @@ public final class FakeReadIntents: ReadIntentPort {
         }
     }
 
+    public func recordFailure(room: RoomID, event: EventID, code: String) async throws(HaloError) {
+        store.withLock { rooms in
+            guard let i = rooms[room], i.event == event, !i.isSent else { return }
+            rooms[room] = ReadIntent(
+                room: room, event: event, timestamp: i.timestamp, isSent: false, createdAt: i.createdAt, attempts: i.attempts + 1, lastError: code)
+        }
+    }
+
     public func removeSent(createdBefore date: Date) async throws(HaloError) {
         store.withLock { rooms in rooms = rooms.filter { !($0.value.isSent && $0.value.createdAt < date) } }
     }

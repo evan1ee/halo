@@ -111,6 +111,34 @@ struct ReadReceiptCoordinatorTests {
         #expect(port.receipts.count == 1)
     }
 
+    private final class CapturingSink: LogSink {
+        let lines = Mutex<[String]>([])
+        func emit(level: LogLevel, category: LogCategory, event: String, code: String?, id: String?) {
+            lines.withLock { $0.append("\(category.rawValue) \(event) \(code ?? "-") \(id ?? "-")") }
+        }
+    }
+
+    @Test("a failed send is counted in the store with its code and logged without the room's name")
+    func failuresAreRecordedAndLogged() async {
+        let store = FakeReadIntents()
+        let sink = CapturingSink()
+        let port = FakeReadMarkerPort()
+        let clock = Clock()
+        let c = ReadReceiptCoordinator(
+            port: port, store: store, wallClock: { Date(timeIntervalSince1970: 1_000_000) }, now: { clock.value.withLock { $0 } },
+            sleep: { clock.sleep($0) }, log: HaloLog(category: .ui, sink: sink, minimum: .debug, salt: 1))
+        port.failNextReceipts(with: [.forbidden])
+        await c.reportSeen(room: room, event: event(1), timestamp: at(10))
+        #expect(await eventually { store.intents.first?.attempts == 1 })
+        #expect(store.intents.first?.lastError == HaloError.forbidden.code)
+        let lines = sink.lines.withLock { $0 }
+        #expect(lines.contains { $0.hasPrefix("readstate receipt send failed \(HaloError.forbidden.code) !") })
+        #expect(!lines.contains { $0.contains(room.rawValue) })
+        // The retry succeeds: the intent is sent, and a newer event starts with a clean count.
+        await c.flush()
+        #expect(await eventually { store.intents.first?.isSent == true })
+    }
+
     @Test("intents are stored, marked sent after the receipt, and an unsent stored one is sent after a relaunch")
     func persistence() async throws {
         let store = FakeReadIntents()

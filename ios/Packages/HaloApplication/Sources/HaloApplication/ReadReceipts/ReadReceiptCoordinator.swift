@@ -20,10 +20,11 @@ public actor ReadReceiptCoordinator {
         var sent: Bool
     }
 
-    /// The last storage failure, if any. Intents stay in memory and are still sent; there is no `HaloLog` yet to record it.
+    /// The last storage failure, if any (also logged). Intents stay in memory and are still sent.
     public private(set) var lastStorageError: HaloError?
 
     private let port: any ReadMarkerPort
+    private let log: HaloLog?
     private let now: @Sendable () -> ContinuousClock.Instant
     private let sleep: Sleep
     private var store: (any ReadIntentPort)?
@@ -44,8 +45,10 @@ public actor ReadReceiptCoordinator {
         port: any ReadMarkerPort, store: (any ReadIntentPort)? = nil, privateReceipts: Bool = false,
         wallClock: @escaping @Sendable () -> Date = { Date() },
         now: @escaping @Sendable () -> ContinuousClock.Instant = { .now },
-        sleep: @escaping Sleep = { try await Task.sleep(for: $0) }
+        sleep: @escaping Sleep = { try await Task.sleep(for: $0) },
+        log: HaloLog? = nil
     ) {
+        self.log = log?.with(category: .readstate)
         self.port = port
         self.store = store
         self.wallClock = wallClock
@@ -78,7 +81,7 @@ public actor ReadReceiptCoordinator {
         do {
             try await store.removeSent(createdBefore: wallClock().addingTimeInterval(-Self.sentRetention))
             stored = try await store.all()
-        } catch { if generation == started { lastStorageError = error }; return }
+        } catch { if generation == started { storageFailed(error) }; return }
         guard generation == started else { return }
         for intent in stored {
             if let current = intents[intent.room], current.timestamp >= intent.timestamp { continue }
@@ -173,7 +176,19 @@ public actor ReadReceiptCoordinator {
         }
     }
 
-    private func storageFailed(_ error: HaloError) { lastStorageError = error }
+    private func storageFailed(_ error: HaloError) {
+        lastStorageError = error
+        log?.warning("read intent storage failed", error: error)
+    }
+
+    /// Counts the failed send in the store (`attempts`, `last_error`); best effort.
+    private func record(failure error: HaloError, room: RoomID, event: EventID) {
+        guard let store else { return }
+        let code = error.code
+        Task { [weak self] in
+            do throws(HaloError) { try await store.recordFailure(room: room, event: event, code: code) } catch { await self?.storageFailed(error) }
+        }
+    }
 
     private func dueIn(_ room: RoomID) -> Duration {
         guard let last = lastSend[room] else { return .zero }
@@ -205,6 +220,8 @@ public actor ReadReceiptCoordinator {
             }
             if let newer = intents[room], !newer.sent { schedule(room, after: dueIn(room)) }
         } catch {
+            log?.warning("receipt send failed", error: error, id: room)
+            record(failure: error, room: room, event: intent.event)
             guard error.isRetryable else { return }
             let attempt = failures[room, default: 0]
             failures[room] = attempt + 1
