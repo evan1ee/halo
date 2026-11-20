@@ -31,7 +31,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 Full list: docs/DECISION_LOG.md (D1–D70), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-Docs only: `docs/development/AUTONOMOUS_LOOP.md` (new), `docs/ROADMAP.md` (§"Remaining work" = the loop's queue), `AGENTS.md` (§0 step 8, §16), `docs/DECISION_LOG.md` (D70), `docs/development/CI_CD.md`, `HANDOFF.md`. The code of PR #5 is in `git log origin/main..HEAD`.
+`scripts/contract-test.sh` and `infra/dev/contract.env.example` (new); docs: `docs/development/AUTONOMOUS_LOOP.md` (new), `docs/ROADMAP.md` (§"Remaining work" = the loop's queue), `AGENTS.md` (§0 step 8, §16), `docs/DECISION_LOG.md` (D70), `docs/development/CI_CD.md`, `HANDOFF.md`. The code of PR #5 is in `git log origin/main..HEAD`.
 
 ## 5. Outstanding issues
 - Stickers: V-ST-1 resolved (option B), V-ST-2 partly (token refresh on 401 not exercised). Verified against `infra/dev` by contract test `stickers` (env `HALO_DEV_STICKER_ROOM`: a room with `m.room.image_pack` `cats` {wave, dance} enabled in `m.image_pack.rooms`; throwaway account `stickertester` created locally). Not built: long-press preview/animation (FR-5, FR-9), editing/deleting packs, hiding pack rooms from the room list, legacy `im.ponies.*` packs (V-ST-3), privacy notice, "unavailable pack" UI. Real sticker images were not loaded (the fixture mxc URLs have no media).
@@ -48,7 +48,7 @@ Docs only: `docs/development/AUTONOMOUS_LOOP.md` (new), `docs/ROADMAP.md` (§"Re
 - Timeline/Media contract tests need a fixture room (`HALO_DEV_TIMELINE_ROOM`: first, second, notice, waves, redacted message, blue.png). Run contracts with `TEST_RUNNER_HALO_DEV_*`; the server value must be `http://localhost:8008`. Parallel contract tests on one account hang (suite is serialized).
 - Open validation: V-CI-2, V-SQL-1, V-APPLE-1, V-NSE-*, V-PUSH-1/3/5, V-RS-1/5, V-RS-7 (Synapse sliding sync serves 0 counts).
 - Docker CLI hangs on the `osxkeychain` helper; use a throwaway `DOCKER_CONFIG`.
-- Contract-test fixtures (`HALO_DEV_STICKER_ROOM`, `HALO_DEV_TIMELINE_ROOM`) and test passwords exist only on the dev Mac, outside the repository. A session without them creates a throwaway account (`docker exec halo-dev-synapse-1 register_new_matrix_user …`) and the fixture rooms through the client API; scripting that in `infra/dev` is worth doing early.
+- Contract tests: `scripts/contract-test.sh [test …]`, settings in `~/.config/halo-dev/contract.env` (outside the repo; template `infra/dev/contract.env.example`). On the dev Mac it holds `stickertester` and the sticker room: the full suite gives 11 tests, 7 passing and 4 skipped (Timeline, Media, ReadMarker need `HALO_DEV_TIMELINE_ROOM`; Encryption needs `HALO_DEV_E2EE_USER`). Those fixtures are not created for this account yet.
 
 **Needs the founder** (the loop records these and moves on; AUTONOMOUS_LOOP §5)
 - 📱 Device checks: G-NSE AC-NSE-1…6, V-RS-1, file protection on `halo.sqlite`, NSE database access, background push delivery.
