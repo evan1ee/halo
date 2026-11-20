@@ -12,7 +12,8 @@ import Testing
 // model of the parts of Synapse and of device A1's sync that the scenarios need (server counts after the user's newest
 // receipt on any device, limited timelines, push rules per mode, `m.marked_unread`). They are NOT run against a real
 // homeserver: the Docker scenario driver of TEST_STRATEGY §3 does not exist yet, and the model encodes our reading of
-// server behaviour. Where a scenario depends on that reading it says so.
+// server behaviour; the count rules are re-checked against Synapse by tools/server-rules/check_server_rules.py. Where a
+// scenario depends on a reading that is not checked there, it says so.
 
 private enum Who { case a, b, c }
 private enum Kind { case message, edit, redacted }
@@ -66,8 +67,6 @@ private struct World {
         let id = try! EventID("$\(tick)")
         let ev = Ev(id: id, ts: Date(timeIntervalSince1970: Double(10_000 + tick * 10 + skew)), sender: who, mention: mention, kind: kind)
         rooms[room]?.events.append(ev)
-        // Sending is an implicit receipt for the sender's own user.
-        if who == .a, let count = rooms[room]?.events.count { rooms[room]?.receipt = count - 1 }
         return id
     }
 
@@ -498,18 +497,24 @@ struct ReadStateScenarioTests {
         #expect(waits.filter { $0 >= .seconds(1) }.prefix(3) == [.seconds(1), .seconds(2), .seconds(4)])
     }
 
-    @Test("S13: A1 sends a message in a room with unread messages: attention cleared (E1b), even if the server counts lag")
+    @Test("S13: A1 sends a message in a room with unread messages: attention cleared (E1b) although the server still counts; the receipt follows (FR-6)")
     func s13() async throws {
         var rig = Rig()
         let r = rig.addRoom()
         for _ in 0..<2 { rig.send(r) }
         rig.sync()
         #expect(await rig.attention() == [r])
-        rig.send(r, .a)
-        rig.sync(serverStale: true)  // counts still say 2 unread
-        let stale = await rig.state(r)
-        #expect(!stale.attention && stale.reasons.contains(.ownLatest))
+        let mine = rig.send(r, .a)
         rig.sync()
+        // [VERIFIED against Synapse 1.165] sending does not reset the server's counts; E1b is what clears the badge.
+        #expect(rig.world.input(r).counts.server.notification == 2)
+        let state = await rig.state(r)
+        #expect(!state.attention && state.reasons.contains(.ownLatest))
+        // The timeline then reports the own message as seen, which sends a receipt and zeroes the server counts.
+        await rig.view(r, mine)
+        await rig.settle()
+        rig.sync()
+        #expect(rig.world.input(r).counts.server == .zero)
         #expect(await rig.attention().isEmpty)
     }
 

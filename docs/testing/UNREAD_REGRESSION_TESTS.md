@@ -24,7 +24,7 @@ Plus: badge counting, display formatting (99+), reason codes for the auditor.
 
 ## 3. Integration scenarios (Synapse in Docker; scenario driver)
 
-**Status:** S01–S22 exist as model-based tests in `HaloApplicationTests/ReadStateScenarioTests.swift`. They drive the real policy and coordinators against an in-process model of Synapse and of A1's sync, so they pin Halo's behaviour but do not validate the model against a real homeserver. The Docker scenario driver (`tools/scenario-driver`, `infra/test`) is not built; when it is, each scenario should run there too and its inputs be compared with the model's.
+**Status:** S01–S22 exist as model-based tests in `HaloApplicationTests/ReadStateScenarioTests.swift`. They drive the real policy and coordinators against an in-process model of Synapse and of A1's sync, so they pin Halo's behaviour. The server rules the model assumes are checked against Synapse 1.165 by `tools/server-rules/check_server_rules.py` [VERIFIED 2026-11-20: counts per message/mention/edit/redaction/thread/receipt, mute and mentions-only rules, encrypted rooms; **a user's own message does not reset the counts** — the model was wrong about that and was corrected]. Not yet checked there: multi-device sliding sync, limited timelines, the SDK's own counts. The Docker scenario driver (`tools/scenario-driver`, `infra/test`) is not built; when it is, each scenario should run there too and its inputs be compared with the model's.
 
 Actors: **A** = the Halo user on device A1 (under test); **A2** = the same user's second device; **B**, **C** = other users.
 
