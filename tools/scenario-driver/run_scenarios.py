@@ -171,7 +171,61 @@ def s22():
     check("S22", "the timeline is limited, the mention is in the gap", A1.rooms[r]["limited"], True)
 
 
-ALL = {k.upper(): v for k, v in globals().items() if k.startswith("s") and k[1:].isdigit() and callable(v)}
+def mentions_only(r, dev):
+    req("PUT", f"/pushrules/global/room/{q(r)}", dev.tok, {"actions": []})
+
+
+def enc_room():
+    r = room()
+    req("PUT", f"/rooms/{q(r)}/state/m.room.encryption", A1.tok, {"algorithm": "m.megolm.v1.aes-sha2"})
+    return r
+
+
+def enc_send(dev, r, mentions_a=False):
+    # Opaque ciphertext: the server cannot read the content, so it cannot see m.mentions either.
+    c = {"algorithm": "m.megolm.v1.aes-sha2", "ciphertext": secrets.token_hex(16), "device_id": "x", "sender_key": "x", "session_id": "x"}
+    return req("PUT", f"/rooms/{q(r)}/send/m.room.encrypted/{uuid.uuid4().hex}", dev.tok, c)["event_id"]
+
+
+def s06():
+    r = enc_room(); A1.sync(); enc_send(Bx, r)
+    check("S06", "encrypted room, all-messages: the server counts the opaque event", A1.counts(r), (1, 0))
+
+
+def s07():
+    r = enc_room(); mentions_only(r, A1); A1.sync()
+    for _ in range(3): enc_send(Bx, r)
+    check("S07", "encrypted mentions-only, 3 messages: the server counts nothing (client falls back to SDK counts)", A1.counts(r), (0, 0))
+
+
+def s07b():
+    r = room(); mentions_only(r, A1); A1.sync()
+    evs = [Bx.send(r, f"m{i}") for i in range(3)]
+    check("S07b", "unencrypted mentions-only, 3 plain messages: server counts 0", A1.counts(r), (0, 0))
+    A1.read(r, evs[-1]); check("S07b", "after viewing and a receipt: still 0", A1.counts(r), (0, 0))
+
+
+def s08():
+    r = room(); A1.sync(); e = Bx.send(r, "oops")
+    check("S08", "one unread message", A1.counts(r), (1, 0))
+    req("PUT", f"/rooms/{q(r)}/redact/{q(e)}/{uuid.uuid4().hex}", Bx.tok, {})
+    check("S08", "the only unread message is redacted: server count drops to 0", A1.counts(r), (0, 0))
+
+
+def s13():
+    r = room(); [Bx.send(r, f"m{i}") for i in range(3)]
+    check("S13", "3 unread", A1.counts(r), (3, 0))
+    A1.send(r, "my reply")
+    check("S13", "own message does not reset the server counts (the client clears via E1b)", A1.counts(r), (3, 0))
+
+
+def s21():
+    r = enc_room(); mentions_only(r, A1); A1.sync()
+    enc_send(Bx, r)
+    check("S21", "encrypted mentions-only, a (hidden) mention: the server counts 0 (SERVER_BLIND)", A1.counts(r), (0, 0))
+
+
+ALL = {k.upper(): v for k, v in globals().items() if k.startswith("s") and k[1:3].isdigit() and callable(v)}
 want = [a.upper() for a in sys.argv[1:]] or sorted(ALL)
 for sid in want:
     ALL[sid]()
