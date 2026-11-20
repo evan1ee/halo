@@ -170,6 +170,9 @@ final class MatrixTimelineSession: TimelineSession {
     func retrySend(localID: String) async throws(HaloError) {
         // Purely local: the SDK reports an unknown echo as a generic error, which is `.notFound` here.
         do { guard try await timeline.retrySend(itemId: .transactionId(transactionId: localID), target: .event) else { throw HaloError.notFound } } catch { throw HaloError.notFound }
+        // `retrySend` only unparks an unrecoverable failure; a recoverable one (offline) disabled the room's send queue and goes
+        // out once it is enabled again. Enabled after the unpark, so the echo is still there to be found.
+        room.enableSendQueue(enable: true)
     }
 
     func abortSend(localID: String) async throws(HaloError) {
