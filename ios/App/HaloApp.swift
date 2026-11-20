@@ -1,5 +1,6 @@
 import FeatureAuth
 import FeatureRoomList
+import FeatureSettings
 import FeatureStickers
 import FeatureTimeline
 import HaloApplication
@@ -35,7 +36,20 @@ private struct RootView: View {
                     VStack(spacing: 0) {
                         RecoveryBanner(model: root.recovery)
                         RoomListView(model: root.roomList) { path.append($0) }
-                        Button("Sign out") { Task { await root.auth.signOut() } }.padding()
+                    }
+                    .navigationTitle("Halo")
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            // Destination-based: the stack's path is typed to `RoomID`, so a value link of another type can't push.
+                            NavigationLink {
+                                SettingsView(
+                                    version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?",
+                                    build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?",
+                                    onSignOut: { Task { await root.auth.signOut() } })
+                            } label: { Image(systemName: "gearshape") }
+                                .accessibilityLabel("Settings")
+                                .accessibilityIdentifier("settings")
+                        }
                     }
                     .navigationDestination(for: RoomID.self) { room in
                         TimelineScreen(root: root, room: room)

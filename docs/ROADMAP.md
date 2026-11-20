@@ -77,7 +77,8 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 
 **M5 MVP hardening** (exit: daily-driver switch, AC-U8)
 - [ ] MAS in `infra/dev` and OIDC login (V-AUTH-1, Q-MAS-ACCOUNT).
-- [ ] Settings (SETTINGS), acknowledgements screen, generic bot-message rendering.
+- [x] Settings v1 and acknowledgements (SETTINGS): `FeatureSettings` package, gear button in the room list → Account (sign out, with confirmation), About (version/build), Acknowledgements (the SDK build's Rust licence inventory, bundled as `acknowledgements.csv`, searchable; AC-SET-1 is a test comparing the bundled copy with `docs/security/inventory`). Seen in the simulator. Not listed: Halo's own Swift package dependencies (GRDB, the SDK Swift package) and the licence texts.
+- [ ] Settings sections still open: Security, Notifications, Privacy (private receipts, AC-SET-2), Appearance, Stickers, Bots, Storage, Diagnostics; generic bot-message rendering.
 - [ ] Room management and user profiles left for the MVP (ROOM_MANAGEMENT, USER_PROFILES).
 - [ ] Performance pass (large accounts, room-list paging, `Room.members()` cost).
 - [ ] 👤 Push gateway (Sygnal + pushkin) for Beta/Release, APNs keys, TestFlight build.

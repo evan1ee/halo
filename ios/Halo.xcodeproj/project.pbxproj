@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		123BF7EF1A3DD146A8963956 /* FeatureSettings in Frameworks */ = {isa = PBXBuildFile; productRef = 7D43312B40716CAB6D1A8628 /* FeatureSettings */; };
 		388D787EC818F68BE6FBAA1F /* HaloMatrixAdapter in Frameworks */ = {isa = PBXBuildFile; productRef = 5F3A636705396CB5897C994D /* HaloMatrixAdapter */; };
 		40FD26108B7EEDBD9376FE62 /* NSEMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42F80F910CDB8774DE53E357 /* NSEMetrics.swift */; };
 		5C97DDEAA552818CE3D396AA /* HaloApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26BC78D89D8CCE4267C675AB /* HaloApp.swift */; };
@@ -67,6 +68,7 @@
 		76ED106E261A2A8948DB12F6 /* HaloNotificationService.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = HaloNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		7A3D76BB951E620E5C384DDA /* FeatureAuth */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FeatureAuth; path = Packages/Features/FeatureAuth; sourceTree = SOURCE_ROOT; };
 		7C81E2492135182A56A25D91 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		8D5F19FEA7E121DDBD3C6914 /* FeatureSettings */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FeatureSettings; path = Packages/Features/FeatureSettings; sourceTree = SOURCE_ROOT; };
 		97AB108BB6E92BAD05A9F942 /* AppRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRoot.swift; sourceTree = "<group>"; };
 		9EC8385BD07B8D6D9DF96F10 /* HaloDomain */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HaloDomain; path = Packages/HaloDomain; sourceTree = SOURCE_ROOT; };
 		A1E51DFB05F32237EA1C4BBE /* HaloFoundation */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HaloFoundation; path = Packages/HaloFoundation; sourceTree = SOURCE_ROOT; };
@@ -94,6 +96,7 @@
 				FE8C81196B7DFA19AE6F5DC4 /* FeatureRoomList in Frameworks */,
 				BE3EF4909E03BC002C1F56F2 /* FeatureTimeline in Frameworks */,
 				E8553A487B6F3ABD3324C076 /* FeatureStickers in Frameworks */,
+				123BF7EF1A3DD146A8963956 /* FeatureSettings in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -137,6 +140,7 @@
 			children = (
 				7A3D76BB951E620E5C384DDA /* FeatureAuth */,
 				1A18178C457536A080B74F82 /* FeatureRoomList */,
+				8D5F19FEA7E121DDBD3C6914 /* FeatureSettings */,
 				71941F9772E859615A1B26AD /* FeatureStickers */,
 				CB99A77D2FED748851BA2449 /* FeatureTimeline */,
 				7062871F2640DF75FF141840 /* HaloApplication */,
@@ -231,6 +235,7 @@
 				0C836EFC11F76DCA8283F9D9 /* FeatureRoomList */,
 				CA58B4AA249ADB3B7D52F822 /* FeatureTimeline */,
 				AAFD571766A64EDC98FF89D7 /* FeatureStickers */,
+				7D43312B40716CAB6D1A8628 /* FeatureSettings */,
 			);
 			productName = Halo;
 			productReference = DA3E1B8904AC903EF6240A91 /* Halo.app */;
@@ -259,6 +264,7 @@
 			packageReferences = (
 				EF892FDF84537B2D18508DAC /* XCLocalSwiftPackageReference "Packages/Features/FeatureAuth" */,
 				4C58795DF6B4439CD9F9A18C /* XCLocalSwiftPackageReference "Packages/Features/FeatureRoomList" */,
+				D78EF2A39BD2C88913E7E3E6 /* XCLocalSwiftPackageReference "Packages/Features/FeatureSettings" */,
 				C3E1C326F16CF9891B2BCEA6 /* XCLocalSwiftPackageReference "Packages/Features/FeatureStickers" */,
 				7A9092141DC8F4B757DA43F0 /* XCLocalSwiftPackageReference "Packages/Features/FeatureTimeline" */,
 				6209975F329C42611C4F748B /* XCLocalSwiftPackageReference "Packages/HaloApplication" */,
@@ -660,6 +666,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/HaloMatrixAdapter;
 		};
+		D78EF2A39BD2C88913E7E3E6 /* XCLocalSwiftPackageReference "Packages/Features/FeatureSettings" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/Features/FeatureSettings;
+		};
 		EF892FDF84537B2D18508DAC /* XCLocalSwiftPackageReference "Packages/Features/FeatureAuth" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/Features/FeatureAuth;
@@ -694,6 +704,10 @@
 		7791BFB85A0966B448BF45C0 /* HaloMatrixAdapter */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = HaloMatrixAdapter;
+		};
+		7D43312B40716CAB6D1A8628 /* FeatureSettings */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FeatureSettings;
 		};
 		83AACECE849C1196328AE949 /* FeatureAuth */ = {
 			isa = XCSwiftPackageProductDependency;
