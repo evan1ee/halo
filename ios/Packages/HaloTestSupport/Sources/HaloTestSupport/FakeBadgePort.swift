@@ -12,4 +12,8 @@ public final class FakeBadgePort: BadgePort {
     public var badge: Int { updates.withLock { $0.last?.count ?? 0 } }
 
     public func update(attentionRooms: Set<RoomID>) async { updates.withLock { $0.append(attentionRooms) } }
+    public func lastAttention() async -> Set<RoomID> { updates.withLock { $0.last ?? [] } }
+    public func reset() async { updates.withLock { $0.append([]) } }
+    /// Seeds what an earlier launch (or the extension) stored.
+    public func preload(_ rooms: Set<RoomID>) { updates.withLock { $0 = [rooms] } }
 }

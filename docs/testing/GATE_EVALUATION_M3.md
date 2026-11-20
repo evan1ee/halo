@@ -53,9 +53,11 @@ framework**, with two conditions: keep the sticker state reader behind its port 
 and finish V-ST-2 (token refresh) before the first TestFlight build. The fail branch (Halo-owned UniFFI bindings, 6–10 weeks) is not
 justified by anything measured.
 
-## 3. What the founder decides
+## 3. Update after the V-RS-7 decision (D73, 2026-11-20)
+The founder closed V-RS-7: classic sync is the unread evidence. Verified in the pinned SDK (`ClassicSyncEvidenceTests`, against `infra/dev`): over `syncV2` the SDK serves the server counts, highlight count, its own counts, the own receipt (also from another device) and the latest event per room. So the missing input of §1 exists; what is missing is the adapter that uses it (ROADMAP P0 "Classic sync in the adapter") and the S01–S22 re-run on it. G-UNREAD therefore stays open for those two items and the 📱 checks. Classic sync does not help the NSE, which cannot run a sync: its inputs stay the records and the cached attention set, now protected against being overwritten by a partial or empty evaluation.
+
+## 4. What the founder decides
 1. G-FFI: confirm **pass** (stay on upstream), with the two conditions above? [recommended]
 2. G-UNREAD: keep **open** until the V-RS-7 path is decided and the 📱 checks are done? [recommended] Or close now with the gaps
    accepted?
-3. V-RS-7 itself: which source of unread evidence is acceptable on the production path (classic sync for counts, push records only,
-   or an upstream/Synapse change)? This is a product decision; the agent has not taken it.
+3. ~~V-RS-7~~ decided: classic sync (D73).

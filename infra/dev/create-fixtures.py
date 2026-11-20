@@ -9,7 +9,7 @@ Needs infra/dev running (docker compose -f infra/dev/docker-compose.yml up -d) a
 Fixtures: the contract account; a timeline room (first, second, a notice, waves, a redacted message, blue.png 64x48); a second
 throwaway account for the Encryption contract. The sticker room (m.room.image_pack "cats") is created too.
 """
-import json, os, secrets, struct, subprocess, sys, tempfile, time, urllib.request, urllib.error, zlib
+import json, os, secrets, struct, subprocess, sys, tempfile, time, urllib.parse, urllib.request, urllib.error, zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ENV_PATH = os.environ.get("HALO_CONTRACT_ENV", os.path.expanduser("~/.config/halo-dev/contract.env"))
@@ -130,6 +130,16 @@ def main():
         packs.setdefault("rooms", {}).setdefault(room, {})["cats"] = {}
         call("PUT", f"/_matrix/client/v3/user/{me}/account_data/m.image_pack.rooms", packs, token)
         values[P + "STICKER_ROOM"] = room
+
+    # A second account that shares a room with the contract account, for tests that need messages from someone else.
+    if not values.get(P + "PEER_USER") or not values.get(P + "UNREAD_ROOM"):
+        peer, peer_pw = values.get(P + "PEER_USER") or "contractpeer", values.get(P + "PEER_PASSWORD") or secrets.token_urlsafe(18)
+        ensure_user(peer, peer_pw)
+        peer_token = login(peer, peer_pw)
+        me = call("GET", "/_matrix/client/v3/account/whoami", token=token)["user_id"]
+        room = call("POST", "/_matrix/client/v3/createRoom", {"name": "Unread fixture", "preset": "private_chat", "invite": [me]}, peer_token)["room_id"]
+        call("POST", f"/_matrix/client/v3/join/{urllib.parse.quote(room)}", {}, token)
+        values.update({P + "PEER_USER": peer, P + "PEER_PASSWORD": peer_pw, P + "UNREAD_ROOM": room})
 
     # The Encryption contract sets recovery up, which an account can do once: --new-e2ee makes it a fresh account.
     if not values.get(P + "E2EE_USER") or "--new-e2ee" in sys.argv:

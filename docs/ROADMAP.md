@@ -46,7 +46,10 @@ founder" and don't block the queue). Tick an item in the pull request that finis
       stable and a hosted runner is confirmed to have the needed Xcode (Q-CI-MAC).
 
 **M3 Read-state engine** (exit: AC-U1–U7 automated green; gates G-UNREAD, G-FFI)
-- [ ] (waits on the V-RS-7 decision, HANDOFF §5) Scenario driver, remaining part: server half of S01/02/04/05/09/10/14/15/22 is done (`tools/scenario-driver/run_scenarios.py`); still to do: feed the real server output into the Swift model, sliding sync, encrypted rooms  ([testing/UNREAD_REGRESSION_TESTS.md](testing/UNREAD_REGRESSION_TESTS.md)).
+- [x] V-RS-7 decided (D73): classic sync is the unread evidence; SDK evidence verified (`ClassicSyncEvidenceTests`); badge never loses a valid stored set to a partial or empty evaluation (P0, `BadgeCoordinator` carry-over).
+- [ ] **P0** Classic sync in the adapter: `SyncPort` over `Client.syncV2` (sliding sync off), `RoomListPort` over `client.rooms()` + room-info updates with the sync listener's changed rooms, room ordering by latest event; mark server counts untrusted when a source can't count; contract tests (Sync, RoomList, Timeline) green on it; measure first-sync cost (no `SyncSettingsV2` filter).
+- [ ] **P0** Resume S01–S22 on classic sync: the rest of the scenario driver (real server output into the Swift model, encrypted rooms), then re-evaluate G-UNREAD (GATE_EVALUATION_M3.md §1).
+- [ ] Scenario driver, remaining part (see the P0 items above): server half of S01/02/04/05/09/10/14/15/22 is done (`tools/scenario-driver/run_scenarios.py`); still to do: feed the real server output into the Swift model, sliding sync, encrypted rooms  ([testing/UNREAD_REGRESSION_TESTS.md](testing/UNREAD_REGRESSION_TESTS.md)).
 - [x] Read-state auditor core (`ReadStateAuditor`, `audit_event` store capped at 5,000, wired into `BadgeCoordinator`, debug builds). Still open: re-run every 10 minutes in the foreground, TestFlight enablement, diagnostics export and a Settings counter of unexplained events (AC-U8; SETTINGS / M5).
 - [x] Intent confirmation rules (a)–(c) for `read_intent` (a and b deliberately not built: D72), `attempts`/`last_error`, `HaloLog` in `ReadReceiptCoordinator`.
 - [x] D6 check: `onScrollVisibilityChange` fires for `List` rows (checked in the iOS 26.0 simulator against `infra/dev`, 2026-11-20); no fallback needed. Not an automated UI test.
