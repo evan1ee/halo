@@ -1,21 +1,36 @@
 #if canImport(SwiftUI)
 import SwiftUI
 
-/// Settings v1 (docs/features/SETTINGS.md): account, about and the acknowledgements. The other sections arrive with their features.
+/// The account's media preview setting as the Settings screen offers it (MEDIA_ATTACHMENTS FR-7).
+public enum MediaPreviewChoice: String, CaseIterable, Sendable, Identifiable {
+    case always = "Always", privateRoomsOnly = "In private rooms only", never = "Never"
+    public var id: String { rawValue }
+}
+
+/// Settings v1 (docs/features/SETTINGS.md): account, privacy, about and the acknowledgements. The other sections arrive with their features.
 public struct SettingsView: View {
     private let version: String
     private let build: String
     private let onSignOut: () -> Void
     private let preferences: AppPreferences
     private let onPrivateReceiptsChange: (Bool) -> Void
+    private let loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)?
+    private let saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)?
+    @State private var mediaPreviews: MediaPreviewChoice = .always
+    @State private var mediaPreviewsLoaded = false
+    @State private var mediaPreviewsFailed = false
     @State private var confirmingSignOut = false
     @State private var privateReceipts: Bool
 
     /// `onPrivateReceiptsChange` applies a changed receipt privacy to the running app (the preference itself is stored here).
     public init(
         version: String, build: String, preferences: AppPreferences = AppPreferences(),
-        onPrivateReceiptsChange: @escaping (Bool) -> Void = { _ in }, onSignOut: @escaping () -> Void
+        onPrivateReceiptsChange: @escaping (Bool) -> Void = { _ in },
+        loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)? = nil,
+        saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)? = nil, onSignOut: @escaping () -> Void
     ) {
+        self.loadMediaPreviews = loadMediaPreviews
+        self.saveMediaPreviews = saveMediaPreviews
         self.version = version
         self.build = build
         self.preferences = preferences
@@ -41,6 +56,35 @@ public struct SettingsView: View {
                 Text("Privacy")
             } footer: {
                 Text("When on, other people in a room can't see that you read their messages. Your own devices still stay in sync. Applies to receipts sent from now on.")
+            }
+            if loadMediaPreviews != nil, saveMediaPreviews != nil {
+                Section {
+                    Picker("Show photos", selection: $mediaPreviews) {
+                        ForEach(MediaPreviewChoice.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .accessibilityIdentifier("media-previews")
+                    .disabled(!mediaPreviewsLoaded)
+                    .onChange(of: mediaPreviews) { old, new in
+                        guard mediaPreviewsLoaded, old != new, let saveMediaPreviews else { return }
+                        Task {
+                            if await saveMediaPreviews(new) { mediaPreviewsFailed = false } else {
+                                mediaPreviewsFailed = true
+                                mediaPreviewsLoaded = false  // the revert below must not save again
+                                mediaPreviews = old
+                                mediaPreviewsLoaded = true
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Media")
+                } footer: {
+                    Text(mediaPreviewsFailed ? "That couldn't be saved. Check your connection and try again." : "Photos that aren't shown wait for a tap. Applies to rooms you open from now on, on all your devices.")
+                }
+                .task {
+                    guard let loadMediaPreviews, !mediaPreviewsLoaded else { return }
+                    mediaPreviews = await loadMediaPreviews()
+                    mediaPreviewsLoaded = true
+                }
             }
             Section("About") {
                 LabeledContent("Version", value: "\(version) (\(build))")

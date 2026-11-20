@@ -17,4 +17,15 @@ public protocol MediaPort: Sendable {
 public protocol MediaPreviewPolicyPort: Sendable {
     /// `true` when photos in `room` may be loaded and shown without a tap. An unreadable or unset policy means yes (the SDK default).
     func previewsAllowed(in room: RoomID) async -> Bool
+
+    /// The stored setting, for the Settings screen; an unset or unreadable one is `.always`.
+    func setting() async -> MediaPreviewSetting
+
+    /// Stores the setting in the account data (`m.media_preview_config`), so every device follows it.
+    func setSetting(_ setting: MediaPreviewSetting) async throws(HaloError)
+}
+
+/// The three values of the account's media preview setting.
+public enum MediaPreviewSetting: Sendable, Equatable, CaseIterable {
+    case always, privateRoomsOnly, never
 }

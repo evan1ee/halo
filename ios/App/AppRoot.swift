@@ -134,6 +134,25 @@ final class AppRoot {
         return (appID, gateway)
     }
 
+    /// The account's media preview setting for the Settings screen.
+    func mediaPreviewChoice() async -> MediaPreviewChoice {
+        switch await previewPolicy.setting() {
+        case .always: .always
+        case .privateRoomsOnly: .privateRoomsOnly
+        case .never: .never
+        }
+    }
+
+    /// Stores the choice; `false` when it couldn't be saved.
+    func setMediaPreviewChoice(_ choice: MediaPreviewChoice) async -> Bool {
+        let setting: MediaPreviewSetting = switch choice {
+        case .always: .always
+        case .privateRoomsOnly: .privateRoomsOnly
+        case .never: .never
+        }
+        do { try await previewPolicy.setSetting(setting); return true } catch { return false }
+    }
+
     /// A view model for the timeline of `room`; each screen gets its own coordinator and session.
     func makeTimeline(room: RoomID) -> TimelineViewModel {
         TimelineViewModel(
