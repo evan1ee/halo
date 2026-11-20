@@ -1,4 +1,5 @@
 import Foundation
+import HaloApplication
 import HaloDomain
 import HaloFoundation
 import Observation
@@ -29,9 +30,17 @@ public final class RoomDetailsViewModel: Identifiable {
     private let room: RoomID
 
     private let images: (any ImagePreparing)?
+    private let media: MediaLoader?
 
-    public init(port: any RoomPort, room: RoomID, images: (any ImagePreparing)? = nil) {
+    /// An avatar's image bytes (a small thumbnail); `nil` without a loader or when the download failed, so the initial stays.
+    public func avatarData(_ ref: MediaRef) async -> Data? {
+        guard let media else { return nil }
+        return try? await media.thumbnail(ref, width: 96, height: 96)
+    }
+
+    public init(port: any RoomPort, room: RoomID, images: (any ImagePreparing)? = nil, media: MediaLoader? = nil) {
         self.images = images
+        self.media = media
         self.port = port
         self.room = room
     }

@@ -14,11 +14,14 @@ public struct RoomDetails: Sendable, Equatable {
     public let canEditDetails: Bool
     /// The user may invite people.
     public let canInvite: Bool
+    /// The room's avatar (for a direct chat the other person's); `nil` when it has none.
+    public let avatar: MediaRef?
 
     public init(
         id: RoomID, name: String?, topic: String?, isDirect: Bool, isEncrypted: Bool, joinedMemberCount: Int, notificationMode: RoomNotificationChoice,
-        canEditDetails: Bool = false, canInvite: Bool = false
+        canEditDetails: Bool = false, canInvite: Bool = false, avatar: MediaRef? = nil
     ) {
+        self.avatar = avatar
         self.canEditDetails = canEditDetails
         self.canInvite = canInvite
         self.id = id
@@ -34,12 +37,12 @@ public struct RoomDetails: Sendable, Equatable {
 extension RoomDetails {
     /// A copy with another notification mode.
     public func with(notificationMode: RoomNotificationChoice) -> RoomDetails {
-        RoomDetails(id: id, name: name, topic: topic, isDirect: isDirect, isEncrypted: isEncrypted, joinedMemberCount: joinedMemberCount, notificationMode: notificationMode, canEditDetails: canEditDetails, canInvite: canInvite)
+        RoomDetails(id: id, name: name, topic: topic, isDirect: isDirect, isEncrypted: isEncrypted, joinedMemberCount: joinedMemberCount, notificationMode: notificationMode, canEditDetails: canEditDetails, canInvite: canInvite, avatar: avatar)
     }
 
     /// A copy with another name and topic.
     public func with(name: String?, topic: String?) -> RoomDetails {
-        RoomDetails(id: id, name: name, topic: topic, isDirect: isDirect, isEncrypted: isEncrypted, joinedMemberCount: joinedMemberCount, notificationMode: notificationMode, canEditDetails: canEditDetails, canInvite: canInvite)
+        RoomDetails(id: id, name: name, topic: topic, isDirect: isDirect, isEncrypted: isEncrypted, joinedMemberCount: joinedMemberCount, notificationMode: notificationMode, canEditDetails: canEditDetails, canInvite: canInvite, avatar: avatar)
     }
 }
 
@@ -58,8 +61,11 @@ public struct RoomMemberInfo: Sendable, Equatable, Identifiable {
     public let isInvited: Bool
     /// `true` for the signed-in user.
     public let isMe: Bool
+    /// The member's avatar; `nil` when none.
+    public let avatar: MediaRef?
 
-    public init(userID: String, displayName: String?, role: RoomMemberRole, isInvited: Bool = false, isMe: Bool = false) {
+    public init(userID: String, displayName: String?, role: RoomMemberRole, isInvited: Bool = false, isMe: Bool = false, avatar: MediaRef? = nil) {
+        self.avatar = avatar
         self.isMe = isMe
         self.userID = userID
         self.displayName = displayName

@@ -1,4 +1,5 @@
 import Foundation
+import HaloApplication
 import HaloDomain
 import HaloFoundation
 import HaloTestSupport
@@ -148,5 +149,17 @@ extension RoomDetailsViewModelTests {
         port.fail(with: .forbidden)
         #expect(await model.changePhoto(Data([3])) == false)
         #expect(model.actionError?.contains("permission") == true)
+    }
+
+    @Test("avatar bytes come from the media loader; without one, or on failure, there are none")
+    func avatarData() async throws {
+        let (port, _, id) = try fixture()
+        let ref = MediaRef(token: "a")
+        let media = FakeMediaPort()
+        media.add(ref, data: Data([7]))
+        let withMedia = RoomDetailsViewModel(port: port, room: id, media: MediaLoader(port: media))
+        #expect(await withMedia.avatarData(ref) == Data([7]))
+        #expect(await withMedia.avatarData(MediaRef(token: "none")) == nil)
+        #expect(await RoomDetailsViewModel(port: port, room: id).avatarData(ref) == nil)
     }
 }

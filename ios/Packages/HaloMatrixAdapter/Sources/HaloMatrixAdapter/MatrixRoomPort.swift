@@ -26,7 +26,8 @@ public final class MatrixRoomPort: RoomPort {
         }
         return RoomDetails(
             id: id, name: room.displayName(), topic: room.topic(), isDirect: direct, isEncrypted: encrypted,
-            joinedMemberCount: Int(room.joinedMembersCount()), notificationMode: Self.choice(mode), canEditDetails: canEdit, canInvite: canInvite)
+            joinedMemberCount: Int(room.joinedMembersCount()), notificationMode: Self.choice(mode), canEditDetails: canEdit, canInvite: canInvite,
+            avatar: MatrixRoomListPort.avatar(room.avatarUrl()))
     }
 
     public func members(_ id: RoomID, limit: Int) async throws(HaloError) -> [RoomMemberInfo] {
@@ -37,7 +38,7 @@ public final class MatrixRoomPort: RoomPort {
             let iterator = try await room.members()
             while let chunk = iterator.nextChunk(chunkSize: 100) {
                 for member in chunk where member.membership == .join || member.membership == .invite {
-                    result.append(RoomMemberInfo(userID: member.userId, displayName: member.displayName, role: Self.role(member.suggestedRoleForPowerLevel), isInvited: member.membership == .invite, isMe: member.userId == own))
+                    result.append(RoomMemberInfo(userID: member.userId, displayName: member.displayName, role: Self.role(member.suggestedRoleForPowerLevel), isInvited: member.membership == .invite, isMe: member.userId == own, avatar: MatrixRoomListPort.avatar(member.avatarUrl)))
                 }
             }
         } catch { throw ErrorMapper.map(error) }

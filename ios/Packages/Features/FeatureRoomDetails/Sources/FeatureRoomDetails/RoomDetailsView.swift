@@ -1,3 +1,4 @@
+import HaloDesignSystem
 import HaloDomain
 import PhotosUI
 import SwiftUI
@@ -52,7 +53,10 @@ public struct RoomDetailsView: View {
     private func list(_ details: RoomDetails, _ members: [RoomMemberInfo]) -> some View {
         List {
             Section {
-                Text(details.name ?? "Unnamed room").font(.headline)
+                HStack(spacing: 12) {
+                    AvatarLoader(name: details.name ?? "?", ref: details.avatar, size: 64) { await model.avatarData($0) }
+                    Text(details.name ?? "Unnamed room").font(.headline)
+                }
                 if let topic = details.topic, !topic.isEmpty { Text(topic).foregroundStyle(.secondary) }
                 Label(details.isEncrypted ? "Encrypted" : "Not encrypted", systemImage: details.isEncrypted ? "lock.fill" : "lock.open")
                 Label("\(model.joinedMemberCount) members", systemImage: "person.2")
@@ -82,6 +86,7 @@ public struct RoomDetailsView: View {
             Section("Members") {
                 ForEach(members) { member in
                     Button { if let profile { shownProfile = profile(member) } } label: { HStack {
+                        AvatarLoader(name: member.title, ref: member.avatar, size: 32) { await model.avatarData($0) }
                         Text(member.title)
                         if member.isInvited { Text("Invited").font(.caption).foregroundStyle(.secondary) }
                         Spacer()
@@ -121,5 +126,23 @@ public struct RoomDetailsView: View {
         } message: {
             Text(model.leavingStrandsRoom ? "You are the only administrator. Nobody will be able to manage the room after you leave." : "You will stop receiving its messages.")
         }
+    }
+}
+
+/// Loads the avatar bytes for `ref`, then shows `AvatarCircle`.
+private struct AvatarLoader: View {
+    let name: String
+    let ref: MediaRef?
+    let size: CGFloat
+    let load: @MainActor (MediaRef) async -> Data?
+    @State private var data: Data?
+
+    var body: some View {
+        AvatarCircle(name: name, imageData: data, size: size)
+            .task(id: ref) {
+                data = nil
+                guard let ref else { return }
+                data = await load(ref)
+            }
     }
 }

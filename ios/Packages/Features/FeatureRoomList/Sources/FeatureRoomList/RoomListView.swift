@@ -1,4 +1,5 @@
 #if canImport(SwiftUI)
+import HaloDesignSystem
 import HaloDomain
 import HaloFoundation
 import SwiftUI
@@ -111,32 +112,20 @@ public struct RoomListView: View {
     }
 }
 
-/// A round avatar: the image when there is one and it loads, otherwise the first letter of the name.
+/// Loads the avatar bytes for a row, then shows `AvatarCircle`.
 struct AvatarView: View {
     let name: String
     let ref: MediaRef?
     let load: @Sendable (MediaRef) async -> Data?
-    @State private var image: Image?
+    @State private var data: Data?
 
     var body: some View {
-        ZStack {
-            Circle().fill(.quaternary)
-            if let image {
-                image.resizable().scaledToFill()
-            } else {
-                Text(String(name.first(where: \.isLetter) ?? name.first ?? "?").uppercased()).font(.headline).foregroundStyle(.secondary)
+        AvatarCircle(name: name, imageData: data)
+            .task(id: ref) {
+                data = nil
+                guard let ref else { return }
+                data = await load(ref)
             }
-        }
-        .frame(width: 44, height: 44)
-        .clipShape(Circle())
-        .accessibilityHidden(true)
-        .task(id: ref) {
-            image = nil
-            guard let ref, let data = await load(ref) else { return }
-            #if canImport(UIKit)
-            if let ui = UIImage(data: data) { image = Image(uiImage: ui) }
-            #endif
-        }
     }
 }
 #endif

@@ -7,12 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0C1CAE82816D985693B4C8BF /* FeatureRoomDetails in Frameworks */ = {isa = PBXBuildFile; productRef = E83C9C5FD8F85125B173BA61 /* FeatureRoomDetails */; };
-		123BF7EF1A3DD146A8963956 /* FeatureSettings in Frameworks */ = {isa = PBXBuildFile; productRef = 7D43312B40716CAB6D1A8628 /* FeatureSettings */; };
+		0C1CAE82816D985693B4C8BF /* FeatureSettings in Frameworks */ = {isa = PBXBuildFile; productRef = 7D43312B40716CAB6D1A8628 /* FeatureSettings */; };
+		123BF7EF1A3DD146A8963956 /* FeatureStickers in Frameworks */ = {isa = PBXBuildFile; productRef = AAFD571766A64EDC98FF89D7 /* FeatureStickers */; };
 		388D787EC818F68BE6FBAA1F /* HaloMatrixAdapter in Frameworks */ = {isa = PBXBuildFile; productRef = 5F3A636705396CB5897C994D /* HaloMatrixAdapter */; };
 		40FD26108B7EEDBD9376FE62 /* NSEMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42F80F910CDB8774DE53E357 /* NSEMetrics.swift */; };
 		5C97DDEAA552818CE3D396AA /* HaloApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26BC78D89D8CCE4267C675AB /* HaloApp.swift */; };
 		6540BF7F2E6040D0A2FCECA5 /* HaloFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = B84FBDA7CBAD6737BE7C8ACE /* HaloFoundation */; };
+		75CAA59DD21250B3641AE203 /* FeatureRoomDetails in Frameworks */ = {isa = PBXBuildFile; productRef = E83C9C5FD8F85125B173BA61 /* FeatureRoomDetails */; };
 		83E00A7D41257DC48962814A /* HaloDomain in Frameworks */ = {isa = PBXBuildFile; productRef = EB52A262E7FF6BAE43AD1A07 /* HaloDomain */; };
 		98EDACC453719619C92B23D6 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E813B4DC62204A281544127 /* NotificationService.swift */; };
 		A5A986CA81A802F03C89A37E /* HaloPersistence in Frameworks */ = {isa = PBXBuildFile; productRef = 4ECF4EEE4703FC700E76A8B3 /* HaloPersistence */; };
@@ -20,13 +21,13 @@
 		AB83EBCD52BA8ADAB584DA76 /* AppRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97AB108BB6E92BAD05A9F942 /* AppRoot.swift */; };
 		ADE867EEA4BBA88CD8ECE5E5 /* HaloPlatform in Frameworks */ = {isa = PBXBuildFile; productRef = 4A0237C8C5FB6AAC71024475 /* HaloPlatform */; };
 		B382DF9623A19AC4ED3D2FB5 /* HaloNotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 76ED106E261A2A8948DB12F6 /* HaloNotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		BE3EF4909E03BC002C1F56F2 /* FeatureTimeline in Frameworks */ = {isa = PBXBuildFile; productRef = CA58B4AA249ADB3B7D52F822 /* FeatureTimeline */; };
+		BE3EF4909E03BC002C1F56F2 /* FeatureRoomList in Frameworks */ = {isa = PBXBuildFile; productRef = 0C836EFC11F76DCA8283F9D9 /* FeatureRoomList */; };
 		CD91777DE3051ABFC38DAEA0 /* HaloFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 91F7222F53B770512405FD51 /* HaloFoundation */; };
 		D716ED9E9EF4E2A6AC3B868A /* HaloPlatform in Frameworks */ = {isa = PBXBuildFile; productRef = 33AB4CCCA1822F8334164899 /* HaloPlatform */; };
-		DF5EF2DF43E9B0888704F724 /* FeatureAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 83AACECE849C1196328AE949 /* FeatureAuth */; };
-		E8553A487B6F3ABD3324C076 /* FeatureStickers in Frameworks */ = {isa = PBXBuildFile; productRef = AAFD571766A64EDC98FF89D7 /* FeatureStickers */; };
+		DF5EF2DF43E9B0888704F724 /* HaloDesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 1CC814B922718CEDA15B621C /* HaloDesignSystem */; };
+		E8553A487B6F3ABD3324C076 /* FeatureTimeline in Frameworks */ = {isa = PBXBuildFile; productRef = CA58B4AA249ADB3B7D52F822 /* FeatureTimeline */; };
 		F7C8C003E20ADCE9617D81BC /* HaloApplication in Frameworks */ = {isa = PBXBuildFile; productRef = 043F0A8364EBBFB616A15D66 /* HaloApplication */; };
-		FE8C81196B7DFA19AE6F5DC4 /* FeatureRoomList in Frameworks */ = {isa = PBXBuildFile; productRef = 0C836EFC11F76DCA8283F9D9 /* FeatureRoomList */; };
+		FE8C81196B7DFA19AE6F5DC4 /* FeatureAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 83AACECE849C1196328AE949 /* FeatureAuth */; };
 		FF6902D347D4750821BE378E /* HaloDomain in Frameworks */ = {isa = PBXBuildFile; productRef = F7C79F8E833241726AAD080C /* HaloDomain */; };
 /* End PBXBuildFile section */
 
@@ -58,6 +59,7 @@
 		051D3819C868159F0F93E6B8 /* FeatureRoomDetails */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FeatureRoomDetails; path = Packages/Features/FeatureRoomDetails; sourceTree = SOURCE_ROOT; };
 		1A18178C457536A080B74F82 /* FeatureRoomList */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FeatureRoomList; path = Packages/Features/FeatureRoomList; sourceTree = SOURCE_ROOT; };
 		26BC78D89D8CCE4267C675AB /* HaloApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloApp.swift; sourceTree = "<group>"; };
+		26F227D5CE9A6E4652F76421 /* HaloDesignSystem */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HaloDesignSystem; path = Packages/HaloDesignSystem; sourceTree = SOURCE_ROOT; };
 		364A4573FF5AC59B3F1FC07A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		3E813B4DC62204A281544127 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		42E309E4074E74D663AD652D /* HaloNotificationService.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HaloNotificationService.entitlements; sourceTree = "<group>"; };
@@ -94,12 +96,13 @@
 				6540BF7F2E6040D0A2FCECA5 /* HaloFoundation in Frameworks */,
 				ADE867EEA4BBA88CD8ECE5E5 /* HaloPlatform in Frameworks */,
 				A5A986CA81A802F03C89A37E /* HaloPersistence in Frameworks */,
-				DF5EF2DF43E9B0888704F724 /* FeatureAuth in Frameworks */,
-				FE8C81196B7DFA19AE6F5DC4 /* FeatureRoomList in Frameworks */,
-				BE3EF4909E03BC002C1F56F2 /* FeatureTimeline in Frameworks */,
-				E8553A487B6F3ABD3324C076 /* FeatureStickers in Frameworks */,
-				123BF7EF1A3DD146A8963956 /* FeatureSettings in Frameworks */,
-				0C1CAE82816D985693B4C8BF /* FeatureRoomDetails in Frameworks */,
+				DF5EF2DF43E9B0888704F724 /* HaloDesignSystem in Frameworks */,
+				FE8C81196B7DFA19AE6F5DC4 /* FeatureAuth in Frameworks */,
+				BE3EF4909E03BC002C1F56F2 /* FeatureRoomList in Frameworks */,
+				E8553A487B6F3ABD3324C076 /* FeatureTimeline in Frameworks */,
+				123BF7EF1A3DD146A8963956 /* FeatureStickers in Frameworks */,
+				0C1CAE82816D985693B4C8BF /* FeatureSettings in Frameworks */,
+				75CAA59DD21250B3641AE203 /* FeatureRoomDetails in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -148,6 +151,7 @@
 				71941F9772E859615A1B26AD /* FeatureStickers */,
 				CB99A77D2FED748851BA2449 /* FeatureTimeline */,
 				7062871F2640DF75FF141840 /* HaloApplication */,
+				26F227D5CE9A6E4652F76421 /* HaloDesignSystem */,
 				9EC8385BD07B8D6D9DF96F10 /* HaloDomain */,
 				A1E51DFB05F32237EA1C4BBE /* HaloFoundation */,
 				44F03E7FED6CB68D3D556B1D /* HaloMatrixAdapter */,
@@ -235,6 +239,7 @@
 				B84FBDA7CBAD6737BE7C8ACE /* HaloFoundation */,
 				4A0237C8C5FB6AAC71024475 /* HaloPlatform */,
 				4ECF4EEE4703FC700E76A8B3 /* HaloPersistence */,
+				1CC814B922718CEDA15B621C /* HaloDesignSystem */,
 				83AACECE849C1196328AE949 /* FeatureAuth */,
 				0C836EFC11F76DCA8283F9D9 /* FeatureRoomList */,
 				CA58B4AA249ADB3B7D52F822 /* FeatureTimeline */,
@@ -274,6 +279,7 @@
 				C3E1C326F16CF9891B2BCEA6 /* XCLocalSwiftPackageReference "Packages/Features/FeatureStickers" */,
 				7A9092141DC8F4B757DA43F0 /* XCLocalSwiftPackageReference "Packages/Features/FeatureTimeline" */,
 				6209975F329C42611C4F748B /* XCLocalSwiftPackageReference "Packages/HaloApplication" */,
+				C61625209208E7226211DFA1 /* XCLocalSwiftPackageReference "Packages/HaloDesignSystem" */,
 				081EBA8E086CCC6E744FA331 /* XCLocalSwiftPackageReference "Packages/HaloDomain" */,
 				9693EAA0CFC281A361789722 /* XCLocalSwiftPackageReference "Packages/HaloFoundation" */,
 				CBAC46886CBE7821E46E2919 /* XCLocalSwiftPackageReference "Packages/HaloMatrixAdapter" */,
@@ -672,6 +678,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/Features/FeatureStickers;
 		};
+		C61625209208E7226211DFA1 /* XCLocalSwiftPackageReference "Packages/HaloDesignSystem" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/HaloDesignSystem;
+		};
 		CBAC46886CBE7821E46E2919 /* XCLocalSwiftPackageReference "Packages/HaloMatrixAdapter" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/HaloMatrixAdapter;
@@ -694,6 +704,10 @@
 		0C836EFC11F76DCA8283F9D9 /* FeatureRoomList */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = FeatureRoomList;
+		};
+		1CC814B922718CEDA15B621C /* HaloDesignSystem */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = HaloDesignSystem;
 		};
 		33AB4CCCA1822F8334164899 /* HaloPlatform */ = {
 			isa = XCSwiftPackageProductDependency;
