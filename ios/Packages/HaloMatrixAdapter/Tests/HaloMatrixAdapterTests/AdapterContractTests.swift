@@ -383,4 +383,42 @@ struct AdapterContractTests {
         try await first.logout()
         try await second.logout()
     }
+
+    /// The pushers the account has on the server, read with a plain HTTP login of its own (not through the adapter).
+    private func pushkeys() async throws -> [String] {
+        let server = try #require(env["HALO_DEV_SERVER"])
+        var login = URLRequest(url: try #require(URL(string: server + "/_matrix/client/v3/login")))
+        login.httpMethod = "POST"
+        login.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        login.httpBody = try JSONSerialization.data(withJSONObject: [
+            "type": "m.login.password", "identifier": ["type": "m.id.user", "user": env["HALO_DEV_USER"] ?? ""],
+            "password": env["HALO_DEV_PASSWORD"] ?? "", "initial_device_display_name": "pushers",
+        ])
+        let (loginData, _) = try await URLSession.shared.data(for: login)
+        let token = try #require((try JSONSerialization.jsonObject(with: loginData) as? [String: Any])?["access_token"] as? String)
+        var request = URLRequest(url: try #require(URL(string: server + "/_matrix/client/v3/pushers")))
+        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        let (data, _) = try await URLSession.shared.data(for: request)
+        let pushers = (try JSONSerialization.jsonObject(with: data) as? [String: Any])?["pushers"] as? [[String: Any]] ?? []
+        return pushers.compactMap { $0["pushkey"] as? String }
+    }
+
+    @Test("PushPort: register creates the pusher on the server, unregister (deletePusher) removes it and is repeatable")
+    func pusher() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
+            on: details)
+        let push = MatrixPushPort(session: session)
+        let token = Data((0..<16).map { _ in UInt8.random(in: 0...255) })
+        let pushkey = token.map { String(format: "%02x", $0) }.joined()
+        let appID = "one.mbm.halo.contract"
+        try await push.register(deviceToken: token, appID: appID, gatewayURL: try #require(URL(string: "http://localhost:5000/_matrix/push/v1/notify")), deviceName: "contract")
+        #expect(try await pushkeys().contains(pushkey))
+        try await push.unregister(deviceToken: token, appID: appID)
+        #expect(try await !pushkeys().contains(pushkey))
+        try await push.unregister(deviceToken: token, appID: appID)  // already gone: must not fail the sign-out
+        try await session.logout()
+    }
 }

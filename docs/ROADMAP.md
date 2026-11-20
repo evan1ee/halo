@@ -50,7 +50,7 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 - [ ] Read-state auditor (UNREAD_STATE; needed for AC-U8 in M5).
 - [x] Intent confirmation rules (a)–(c) for `read_intent` (a and b deliberately not built: D72), `attempts`/`last_error`, `HaloLog` in `ReadReceiptCoordinator`.
 - [x] D6 check: `onScrollVisibilityChange` fires for `List` rows (checked in the iOS 26.0 simulator against `infra/dev`, 2026-11-20); no fallback needed. Not an automated UI test.
-- [ ] Unit test for the `latestEvent` mapping; contract test for `deletePusher`.
+- [x] Unit test for the `latestEvent` mapping; contract test for `deletePusher`.
 - [ ] G-UNREAD and G-FFI evaluation written up with the scenario results (👤 founder confirms the gate outcome).
 - [ ] 📱 V-RS-1, file-protection class on `halo.sqlite`, NSE access to the database.
 
