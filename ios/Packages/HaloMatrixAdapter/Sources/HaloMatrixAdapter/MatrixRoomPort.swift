@@ -18,9 +18,15 @@ public final class MatrixRoomPort: RoomPort {
         do {
             mode = try await client.getNotificationSettings().getRoomNotificationSettings(roomId: id.rawValue, isEncrypted: encrypted, isOneToOne: direct).mode
         } catch { throw ErrorMapper.map(error) }
+        // Permissions: unknown power levels mean "no" (the server still has the last word).
+        var canEdit = false, canInvite = false
+        if let levels = try? await room.getPowerLevels(), let own = try? await session.ownUserID() {
+            canEdit = (try? levels.canUserSendState(userId: own, stateEvent: .roomName)) == true && (try? levels.canUserSendState(userId: own, stateEvent: .roomTopic)) == true
+            canInvite = (try? levels.canUserInvite(userId: own)) == true
+        }
         return RoomDetails(
             id: id, name: room.displayName(), topic: room.topic(), isDirect: direct, isEncrypted: encrypted,
-            joinedMemberCount: Int(room.joinedMembersCount()), notificationMode: Self.choice(mode))
+            joinedMemberCount: Int(room.joinedMembersCount()), notificationMode: Self.choice(mode), canEditDetails: canEdit, canInvite: canInvite)
     }
 
     public func members(_ id: RoomID, limit: Int) async throws(HaloError) -> [RoomMemberInfo] {
@@ -45,6 +51,19 @@ public final class MatrixRoomPort: RoomPort {
         let client = try await session.signedInClient()
         let sdkMode: RoomNotificationMode = switch mode { case .allMessages: .allMessages; case .mentionsAndKeywords: .mentionsAndKeywordsOnly; case .mute: .mute }
         do { try await client.getNotificationSettings().setRoomNotificationMode(roomId: id.rawValue, mode: sdkMode) } catch { throw ErrorMapper.map(error) }
+    }
+
+    public func setDetails(name: String, topic: String, in id: RoomID) async throws(HaloError) {
+        let room = try await session.room(id)
+        do {
+            try await room.setName(name: name)
+            try await room.setTopic(topic: topic)
+        } catch { throw ErrorMapper.map(error) }
+    }
+
+    public func invite(_ users: [UserID], to id: RoomID) async throws(HaloError) {
+        let room = try await session.room(id)
+        do { for user in users { try await room.inviteUserById(userId: user.rawValue) } } catch { throw ErrorMapper.map(error) }
     }
 
     public func acceptInvite(_ id: RoomID) async throws(HaloError) {

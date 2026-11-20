@@ -10,6 +10,8 @@ public final class FakeRoomPort: RoomPort {
         var error: HaloError?
         var modes: [RoomNotificationChoice] = []
         var left: [RoomID] = []
+        var edits: [(name: String, topic: String)] = []
+        var invites: [[UserID]] = []
         var accepted: [RoomID] = []
         var declined: [RoomID] = []
     }
@@ -39,9 +41,24 @@ public final class FakeRoomPort: RoomPort {
         if let error = state.withLock({ $0.error }) { throw error }
         state.withLock {
             $0.modes.append(mode)
-            let d = $0.details
-            $0.details = RoomDetails(id: d.id, name: d.name, topic: d.topic, isDirect: d.isDirect, isEncrypted: d.isEncrypted, joinedMemberCount: d.joinedMemberCount, notificationMode: mode)
+            $0.details = $0.details.with(notificationMode: mode)
         }
+    }
+
+    public var detailEdits: [(name: String, topic: String)] { state.withLock { $0.edits } }
+    public var sentInvites: [[UserID]] { state.withLock { $0.invites } }
+
+    public func setDetails(name: String, topic: String, in room: RoomID) async throws(HaloError) {
+        if let error = state.withLock({ $0.error }) { throw error }
+        state.withLock {
+            $0.edits.append((name, topic))
+            $0.details = $0.details.with(name: name, topic: topic.isEmpty ? nil : topic)
+        }
+    }
+
+    public func invite(_ users: [UserID], to room: RoomID) async throws(HaloError) {
+        if let error = state.withLock({ $0.error }) { throw error }
+        state.withLock { $0.invites.append(users) }
     }
 
     public var acceptedInvites: [RoomID] { state.withLock { $0.accepted } }

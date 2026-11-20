@@ -5,6 +5,11 @@ import SwiftUI
 public struct RoomDetailsView: View {
     @State private var model: RoomDetailsViewModel
     @Environment(\.dismiss) private var dismiss
+    @State private var editing = false
+    @State private var inviting = false
+    @State private var draftName = ""
+    @State private var draftTopic = ""
+    @State private var inviteText = ""
 
     private let onLeft: @MainActor () -> Void
 
@@ -38,6 +43,16 @@ public struct RoomDetailsView: View {
                 Label(details.isEncrypted ? "Encrypted" : "Not encrypted", systemImage: details.isEncrypted ? "lock.fill" : "lock.open")
                 Label("\(model.joinedMemberCount) members", systemImage: "person.2")
             }
+            if details.canEditDetails || details.canInvite {
+                Section {
+                    if details.canEditDetails {
+                        Button("Edit name and topic") { draftName = details.name ?? ""; draftTopic = details.topic ?? ""; editing = true }.accessibilityIdentifier("editRoom")
+                    }
+                    if details.canInvite {
+                        Button("Invite someone") { inviteText = ""; inviting = true }.accessibilityIdentifier("inviteToRoom")
+                    }
+                }
+            }
             Section("Notifications") {
                 Picker("Notify me for", selection: Binding(get: { details.notificationMode }, set: { mode in Task { await model.setNotificationMode(mode) } })) {
                     Text("All messages").tag(RoomNotificationChoice.allMessages)
@@ -64,6 +79,17 @@ public struct RoomDetailsView: View {
             Section {
                 Button("Leave room", role: .destructive) { model.confirmsLeave = true }.accessibilityIdentifier("leaveRoom")
             }
+        }
+        .alert("Edit room", isPresented: $editing) {
+            TextField("Name", text: $draftName)
+            TextField("Topic", text: $draftTopic)
+            Button("Save") { Task { _ = await model.saveDetails(name: draftName, topic: draftTopic) } }
+            Button("Cancel", role: .cancel) {}
+        }
+        .alert("Invite someone", isPresented: $inviting) {
+            TextField("@name:server", text: $inviteText)
+            Button("Invite") { Task { _ = await model.invite(inviteText) } }
+            Button("Cancel", role: .cancel) {}
         }
         .confirmationDialog("Leave this room?", isPresented: $model.confirmsLeave, titleVisibility: .visible) {
             Button("Leave", role: .destructive) { Task { await model.leave() } }

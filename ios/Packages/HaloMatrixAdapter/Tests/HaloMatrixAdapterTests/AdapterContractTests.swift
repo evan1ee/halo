@@ -215,6 +215,28 @@ struct AdapterContractTests {
             }
             #expect(seen == mode)
         }
+        // The creator may edit and invite; edits read back after a sync.
+        for _ in 0..<30 where !(info.canEditDetails && info.canInvite) {  // power levels arrive with the room state
+            try await Task.sleep(for: .seconds(1))
+            info = try await rooms.details(roomID)
+        }
+        #expect(info.canEditDetails && info.canInvite, "creator permissions not read")
+        try await rooms.setDetails(name: "Renamed fixture", topic: "New topic", in: roomID)
+        var edited = try await rooms.details(roomID)
+        for _ in 0..<30 where edited.name != "Renamed fixture" || edited.topic != "New topic" {
+            try await Task.sleep(for: .seconds(1))
+            edited = try await rooms.details(roomID)
+        }
+        #expect(edited.name == "Renamed fixture" && edited.topic == "New topic")
+        if let peerName = env["HALO_DEV_PEER_USER"] {
+            try await rooms.invite([try UserID("@\(peerName):halo.localhost")], to: roomID)
+            var invited = try await rooms.members(roomID, limit: 50)
+            for _ in 0..<30 where !invited.contains(where: \.isInvited) {
+                try await Task.sleep(for: .seconds(1))
+                invited = try await rooms.members(roomID, limit: 50)
+            }
+            #expect(invited.contains { $0.isInvited })
+        }
         try await rooms.leave(roomID)
         if let left = try? await session.room(roomID) { try? await left.forget() }
         try await session.logout()

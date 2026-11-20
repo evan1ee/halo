@@ -10,8 +10,17 @@ public struct RoomDetails: Sendable, Equatable {
     public let isEncrypted: Bool
     public let joinedMemberCount: Int
     public let notificationMode: RoomNotificationChoice
+    /// The user may change the name and topic (power levels).
+    public let canEditDetails: Bool
+    /// The user may invite people.
+    public let canInvite: Bool
 
-    public init(id: RoomID, name: String?, topic: String?, isDirect: Bool, isEncrypted: Bool, joinedMemberCount: Int, notificationMode: RoomNotificationChoice) {
+    public init(
+        id: RoomID, name: String?, topic: String?, isDirect: Bool, isEncrypted: Bool, joinedMemberCount: Int, notificationMode: RoomNotificationChoice,
+        canEditDetails: Bool = false, canInvite: Bool = false
+    ) {
+        self.canEditDetails = canEditDetails
+        self.canInvite = canInvite
         self.id = id
         self.name = name
         self.topic = topic
@@ -19,6 +28,18 @@ public struct RoomDetails: Sendable, Equatable {
         self.isEncrypted = isEncrypted
         self.joinedMemberCount = joinedMemberCount
         self.notificationMode = notificationMode
+    }
+}
+
+extension RoomDetails {
+    /// A copy with another notification mode.
+    public func with(notificationMode: RoomNotificationChoice) -> RoomDetails {
+        RoomDetails(id: id, name: name, topic: topic, isDirect: isDirect, isEncrypted: isEncrypted, joinedMemberCount: joinedMemberCount, notificationMode: notificationMode, canEditDetails: canEditDetails, canInvite: canInvite)
+    }
+
+    /// A copy with another name and topic.
+    public func with(name: String?, topic: String?) -> RoomDetails {
+        RoomDetails(id: id, name: name, topic: topic, isDirect: isDirect, isEncrypted: isEncrypted, joinedMemberCount: joinedMemberCount, notificationMode: notificationMode, canEditDetails: canEditDetails, canInvite: canInvite)
     }
 }
 

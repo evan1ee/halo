@@ -84,3 +84,31 @@ extension RoomDetailsViewModelTests {
         #expect(model.joinedMemberCount == 2)
     }
 }
+
+extension RoomDetailsViewModelTests {
+    @Test("saving a name and topic is stored and shown; an empty name is refused; a failure is shown")
+    func editDetails() async throws {
+        let (port, model, _) = try fixture()
+        await model.load()
+        #expect(await model.saveDetails(name: "  ", topic: "x") == false)
+        #expect(port.detailEdits.isEmpty && model.actionError == "The room needs a name.")
+        #expect(await model.saveDetails(name: " Renamed ", topic: "") == true)
+        #expect(port.detailEdits.first?.name == "Renamed")
+        guard case .loaded(let details, _) = model.content else { Issue.record("not loaded"); return }
+        #expect(details.name == "Renamed" && details.topic == nil)
+        port.fail(with: .forbidden)
+        #expect(await model.saveDetails(name: "Again", topic: "t") == false)
+        #expect(model.actionError == "You don't have permission to do that.")
+    }
+
+    @Test("inviting needs a complete Matrix ID")
+    func inviting() async throws {
+        let (port, model, _) = try fixture()
+        await model.load()
+        #expect(await model.invite("ann") == false)
+        #expect(port.sentInvites.isEmpty && model.actionError != nil)
+        #expect(await model.invite(" @ann:x.org ") == true)
+        #expect(port.sentInvites.first?.map(\.rawValue) == ["@ann:x.org"])
+        #expect(model.actionError == nil)
+    }
+}

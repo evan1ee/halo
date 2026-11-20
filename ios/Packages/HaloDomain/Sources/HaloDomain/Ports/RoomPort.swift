@@ -11,6 +11,12 @@ public protocol RoomPort: Sendable {
     /// Stores the user's own mode for the room as a push rule, so every device follows it (FR-3).
     func setNotificationMode(_ mode: RoomNotificationChoice, in room: RoomID) async throws(HaloError)
 
+    /// Sets the room name and topic; an empty string clears the topic (FR-7). Throws `.forbidden` without the power level.
+    func setDetails(name: String, topic: String, in room: RoomID) async throws(HaloError)
+
+    /// Invites `users` to the room (FR-5). Throws `.forbidden` without the power level.
+    func invite(_ users: [UserID], to room: RoomID) async throws(HaloError)
+
     /// Accepts an invitation: joins the room (FR-6). Throws `.notFound` when the invitation was withdrawn.
     func acceptInvite(_ room: RoomID) async throws(HaloError)
 

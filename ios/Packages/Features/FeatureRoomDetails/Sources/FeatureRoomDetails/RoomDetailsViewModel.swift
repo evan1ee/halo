@@ -44,7 +44,7 @@ public final class RoomDetailsViewModel: Identifiable {
         guard case .loaded(let details, let members) = content, details.notificationMode != mode else { return }
         do throws(HaloError) {
             try await port.setNotificationMode(mode, in: room)
-            content = .loaded(RoomDetails(id: details.id, name: details.name, topic: details.topic, isDirect: details.isDirect, isEncrypted: details.isEncrypted, joinedMemberCount: details.joinedMemberCount, notificationMode: mode), members: members)
+            content = .loaded(details.with(notificationMode: mode), members: members)
             actionError = nil
         } catch { actionError = Self.text(error) }
     }
@@ -66,6 +66,32 @@ public final class RoomDetailsViewModel: Identifiable {
     public var ownRole: RoomMemberRole? {
         guard case .loaded(_, let members) = content else { return nil }
         return members.first { $0.isMe }?.role
+    }
+
+    /// Saves a new name and topic (FR-7). An empty name is refused.
+    public func saveDetails(name: String, topic: String) async -> Bool {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines), topic = topic.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { actionError = "The room needs a name."; return false }
+        guard case .loaded(let details, let members) = content else { return false }
+        do throws(HaloError) {
+            try await port.setDetails(name: name, topic: topic, in: room)
+            content = .loaded(details.with(name: name, topic: topic.isEmpty ? nil : topic), members: members)
+            actionError = nil
+            return true
+        } catch { actionError = Self.text(error); return false }
+    }
+
+    /// Invites one person by Matrix ID (FR-5); the text must be a complete ID.
+    public func invite(_ text: String) async -> Bool {
+        guard let user = try? UserID(text.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            actionError = "Enter a full Matrix ID, like @name:server."
+            return false
+        }
+        do throws(HaloError) {
+            try await port.invite([user], to: room)
+            actionError = nil
+            return true
+        } catch { actionError = Self.text(error); return false }
     }
 
     public func leave() async {
