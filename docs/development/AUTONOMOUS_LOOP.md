@@ -20,7 +20,8 @@ The agent first reads AGENTS.md, HANDOFF.md and this file (AGENTS.md §0).
    - `scripts/prepush.sh`;
    - the app build (`xcodebuild -project ios/Halo.xcodeproj -scheme Halo-Debug -destination 'platform=iOS Simulator,name=iPhone 17' build`),
      which `prepush.sh` doesn't run;
-   - the adapter contract tests the change touches, against `infra/dev` (`TEST_RUNNER_HALO_DEV_*`; see HANDOFF §5);
+   - the adapter contract tests the change touches, against `infra/dev`: `scripts/contract-test.sh <test> …` (no argument: the
+     whole suite; tests whose fixture variable is missing skip themselves, so say which ones skipped);
    - for UI changes, run the app in the simulator and check the screen.
 5. **Review** the branch diff (`/code-review` or an equivalent self-review for correctness, security, performance). Fix every
    high or medium finding before merging; list the rest in HANDOFF §5.
@@ -61,6 +62,11 @@ Recorded in HANDOFF §5 under "Needs the founder", then the loop moves on:
 
 ## 6. Local resources the loop relies on
 - `infra/dev` Synapse at `http://localhost:8008` (`docker compose -f infra/dev/docker-compose.yml up -d`; the Docker CLI needs a
-  throwaway `DOCKER_CONFIG`, HANDOFF §5). Test accounts are throwaway and created locally; their passwords never go into the repository.
+  throwaway `DOCKER_CONFIG`, HANDOFF §5).
+- **Contract-test settings:** `~/.config/halo-dev/contract.env` (mode 600, outside the repository; `HALO_CONTRACT_ENV` overrides
+  the path), in the format of [infra/dev/contract.env.example](../../infra/dev/contract.env.example). `scripts/contract-test.sh`
+  loads it and never prints values. Accounts in it are throwaway local ones; their passwords never go into the repository, a
+  commit, a log or a pull request. If the file is missing, run `infra/dev/create-fixtures.py` (accounts, rooms and the file). Before a full contract run re-run it
+  (the room count grows with `createPack`); before the Encryption contract use `--new-e2ee`.
 - An iOS 26 simulator (`iPhone 17` by default; `HALO_SIM` overrides it in `prepush.sh`).
 - `gh` signed in to the repository.
