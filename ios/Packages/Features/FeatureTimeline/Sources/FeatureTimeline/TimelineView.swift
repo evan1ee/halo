@@ -315,7 +315,19 @@ private struct ThumbnailView: View {
     var body: some View {
         Group {
             #if canImport(UIKit)
-            if let data, let uiImage = UIImage(data: data) {
+            if !isSticker, !model.showsPreview(of: image) {
+                // FR-7: the account's media preview setting asks for a tap first; nothing is downloaded until then.
+                Button { model.revealPreview(of: image) } label: {
+                    VStack(spacing: 6) {
+                        Image(systemName: "photo").font(.title2)
+                        Text("Tap to show photo").font(.footnote)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(.secondary.opacity(0.15))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("show-photo")
+            } else if let data, let uiImage = UIImage(data: data) {
                 Image(uiImage: uiImage).resizable().scaledToFit()
             } else {
                 Rectangle().fill(.secondary.opacity(0.2)).overlay(ProgressView())
@@ -326,7 +338,7 @@ private struct ThumbnailView: View {
         }
         .modifier(ThumbnailSize(isSticker: isSticker, aspectRatio: image.aspectRatio))
         .clipShape(.rect(cornerRadius: isSticker ? 0 : 12))
-        .task { data = await model.thumbnail(for: image) }
+        .task(id: model.showsPreview(of: image)) { if isSticker || model.showsPreview(of: image) { data = await model.thumbnail(for: image) } }
     }
 }
 #endif
