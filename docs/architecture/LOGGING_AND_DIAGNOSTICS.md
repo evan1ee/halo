@@ -21,6 +21,7 @@
   or *unexplained*.
 - Store as `audit_event` rows (room id hashed, counts, reason, app version, sync position) — max 5,000 rows, oldest pruned first.
 - AC-U8 counts *unexplained* events.
+- **Status [VERIFIED 2026-11-20, unit tests]:** `ReadStateAuditor` (HaloDomain, pure) classifies per room; `BadgeCoordinator` runs it after every room-list or position change when an `Audit` is attached (`AppRoot`, `#if DEBUG`, after the account database opens) and writes only findings that are new for a room. Codes: explained `INTENT_UNCONFIRMED`, `SDK_STALE_PENDING_RECEIPT`, `SERVER_BLIND`, `ENC_SERVER_OVERCOUNT`; unexplained `UNEXPLAINED_SERVER_UNREAD_HIDDEN`, `UNEXPLAINED_ATTENTION_WITHOUT_INPUT`, `UNEXPLAINED_MUTED_ATTENTION`. Property test: 10,000 random inputs never give an unexplained finding from the policy's own output. Not built: the 10-minute re-run, the diagnostics export, a counter in Settings.
 
 ## 3. Diagnostics export
 Settings → Diagnostics → "Export": a zip with app/SDK logs, audit events, DB schema version, sync state,

@@ -29,6 +29,7 @@ final class AppRoot {
     private let sessionCoordinator: SessionCoordinator
     private let matrixSession: MatrixSessionPort
     private let media: MediaLoader
+    private let log: HaloLog
 
     init() {
         let namespace = Bundle.main.bundleIdentifier ?? "one.mbm.halo"
@@ -73,6 +74,7 @@ final class AppRoot {
         #if DEBUG
         Self.exportNSEMetrics(namespace: namespace)
         #endif
+        self.log = log
         log.info("app launched")
     }
 
@@ -93,6 +95,12 @@ final class AppRoot {
                     let database = try HaloDatabase(path: directory.appendingPathComponent("halo.sqlite").path)
                     await receipts.restore(from: ReadIntentStore(database: database, account: user))
                     await drafts.attach(DraftStore(database: database, account: user))
+                    #if DEBUG
+                    // The read-state auditor runs in debug (and later TestFlight) builds only (LOGGING_AND_DIAGNOSTICS §2).
+                    let log = log
+                    let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+                    await badge.setAudit(.init(port: AuditEventStore(database: database, account: user), roomHash: { log.id($0) }, appVersion: version))
+                    #endif
                 } catch {
                     // Without a database, receipts and drafts still work from memory; there is nothing to restore.
                 }
@@ -108,6 +116,7 @@ final class AppRoot {
 
     private func resetAccountState() async {
         await receipts.reset()
+        await badge.setAudit(nil)
         await drafts.reset()
         await stickers.reset()
     }

@@ -69,6 +69,15 @@ public struct HaloDatabase: Sendable {
                 )
                 """)
         }
+        migrator.registerMigration("v4-audit-event") { db in
+            try db.execute(sql: """
+                CREATE TABLE audit_event (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT NOT NULL, at INTEGER NOT NULL,
+                  room_hash TEXT NOT NULL, kind TEXT NOT NULL CHECK (kind IN ('explained','unexplained')),
+                  reason TEXT NOT NULL, inputs_json TEXT NOT NULL, app_version TEXT NOT NULL
+                )
+                """)
+        }
         return migrator
     }
 }

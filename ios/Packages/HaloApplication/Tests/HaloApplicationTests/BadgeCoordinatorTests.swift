@@ -179,4 +179,30 @@ struct BadgeCoordinatorTests {
             #expect(direct.count == BadgeCoordinator.attention(inputs: inputs, records: stored).count, "seed 77 case \(n)")
         }
     }
+
+    @Test("the auditor stores a finding once while it lasts, again after it went away, with a hashed room and counts only")
+    func auditor() async throws {
+        let (rooms, _, _, _, badge) = await make()
+        let store = FakeAuditEvents()
+        await badge.setAudit(.init(port: store, roomHash: { _ in "!abc123" }, appVersion: "1.0", now: { Date(timeIntervalSince1970: 100) }))
+        func stale(_ sdk: Int) throws -> RoomSummary {
+            RoomSummary(
+                id: try RoomID("!a:x.org"), name: "a", isDirect: false, isEncrypted: false, membership: .joined,
+                read: RoomReadCounts(mode: .allMessages, server: .zero, sdk: SDKCounts(unreadMessages: sdk, unreadNotifications: sdk, unreadMentions: 0), isMarkedUnread: false))
+        }
+        try rooms.emit(.reset([try stale(2)]))
+        #expect(await eventually { store.events.count == 1 })
+        func settle() async { for _ in 0..<100_000 { await Task.yield() } }
+        await settle()
+        try rooms.emit(.reset([try stale(3)]))  // same finding, still there: not written again
+        await settle()
+        try rooms.emit(.reset([try stale(0)]))  // gone
+        await settle()
+        try rooms.emit(.reset([try stale(1)]))  // back: written again
+        #expect(await eventually { store.events.count == 2 })
+        let event = try #require(store.events.first)
+        #expect(event.finding == AuditFinding(kind: .explained, reason: "SDK_STALE_PENDING_RECEIPT"))
+        #expect(event.roomHash == "!abc123" && event.appVersion == "1.0" && !event.inputsJSON.contains("x.org"))
+        #expect(try await store.unexplainedCount() == 0)
+    }
 }
