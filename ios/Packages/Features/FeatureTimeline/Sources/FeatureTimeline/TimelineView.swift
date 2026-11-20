@@ -14,6 +14,9 @@ public struct TimelineView: View {
     @State private var headerVisible = false
     /// History is only loaded after the opening scroll: rows prepended before it would push the landing row out of place.
     @State private var landed = false
+    /// Whether the unread marker row and the newest row are on screen (the marker is above the viewport when it isn't, and the newest is).
+    @State private var markerVisible = true
+    @State private var bottomVisible = false
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -54,8 +57,13 @@ public struct TimelineView: View {
                     }
                     ForEach(rows) { row in
                         RowView(row: row, model: model)
+                            // The pill's target: whether the first row that was unread at open is on screen.
+                            .onScrollVisibilityChange { if row.id == model.unreadMarkerID { markerVisible = $0 } }
                             // D6: a row counts as seen when at least half of it is on screen; the 0.5 s dwell is in the view model.
-                            .onScrollVisibilityChange(threshold: 0.5) { model.rowVisibility(row, isVisible: $0) }
+                            .onScrollVisibilityChange(threshold: 0.5) {
+                                model.rowVisibility(row, isVisible: $0)
+                                if row.id == rows.last?.id { bottomVisible = $0 }
+                            }
                             .onDisappear { model.rowVisibility(row, isVisible: false) }
                             .listRowSeparator(.hidden, edges: .all)
                     }
@@ -72,13 +80,31 @@ public struct TimelineView: View {
                 .task(id: model.landingRow) {
                     guard let landing = model.landingRow else { return }
                     try? await Task.sleep(for: .milliseconds(150))  // let the list lay the rows out first
-                    proxy.scrollTo(landing, anchor: model.landingIsUnread ? .top : .bottom)
+                    // A lazy list estimates the height of rows it hasn't laid out, so one jump to a row far below the visible
+                    // part lands short (seen in the simulator with 14 unread messages); jumping again after each layout converges.
+                    for _ in 0..<4 {
+                        proxy.scrollTo(landing, anchor: model.landingIsUnread ? .top : .bottom)
+                        try? await Task.sleep(for: .milliseconds(120))
+                    }
                     model.landingShown()
                     try? await Task.sleep(for: .milliseconds(250))  // let the scroll settle before history may load
                     landed = true
                 }
                 .onChange(of: rows.last?.id) { _, last in
                     if let last { withAnimation { proxy.scrollTo(last, anchor: .bottom) } }
+                }
+                // FR-4: the marker is above the viewport once the user is at the bottom and the marker is out of sight.
+                .overlay(alignment: .top) {
+                    if let marker = model.unreadMarkerID, landed, !markerVisible, bottomVisible {
+                        Button { withAnimation { proxy.scrollTo(marker, anchor: .top) } } label: {
+                            Label("Jump to unread", systemImage: "arrow.up")
+                                .font(.footnote.bold()).padding(.horizontal, 12).padding(.vertical, 6)
+                                .background(.regularMaterial, in: Capsule())
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 8)
+                        .accessibilityIdentifier("jump-to-unread")
+                    }
                 }
                 }
             }

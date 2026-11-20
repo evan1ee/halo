@@ -200,6 +200,9 @@ public final class TimelineViewModel {
     public private(set) var landingRow: String?
     /// `true` when `landingRow` is the first unread message (shown at the top); `false` when it is the newest row (shown at the bottom).
     public private(set) var landingIsUnread = false
+    /// The first message that was unread when the room was opened (TIMELINE FR-4): the "Jump to unread" pill leads back to it for as
+    /// long as the room stays open (the SDK's own "New messages" row moves with the fully-read marker). `nil` when nothing was unread or the position is unknown.
+    public private(set) var unreadMarkerID: String?
 
     /// How long an event must stay visible before it counts as seen (READ_RECEIPTS §1, D6).
     public static let seenDwell: Duration = .milliseconds(500)
@@ -276,6 +279,7 @@ public final class TimelineViewModel {
         readThroughAtOpen = await readThrough?()
         landed = false
         landingRow = nil
+        unreadMarkerID = nil
         let statuses = await coordinator.statuses()
         observation = Task { [weak self] in
             for await status in statuses { self?.apply(status) }
@@ -554,6 +558,7 @@ public final class TimelineViewModel {
                 if let unread = Self.firstUnreadItemID(snapshot.items, readThrough: readThroughAtOpen) {
                     landingRow = unread
                     landingIsUnread = true
+                    unreadMarkerID = unread
                 } else {
                     landingRow = rows.last?.id  // all read, or the position is unknown: the bottom
                     landingIsUnread = false

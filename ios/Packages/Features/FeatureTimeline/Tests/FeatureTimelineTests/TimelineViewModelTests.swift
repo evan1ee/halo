@@ -499,6 +499,32 @@ struct TimelineViewModelTests {
         #expect(vm.landingRow == nil)
     }
 
+    @Test("the first unread message stays marked for the whole visit, and nothing is marked when all is read or the position is unknown (FR-4)")
+    func unreadMarker() throws {
+        func make(_ readThrough: Date?) throws -> TimelineViewModel {
+            let vm = TimelineViewModel(
+                coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: try RoomID("!r:x.org")),
+                locale: Locale(identifier: "en_US"), timeZone: TimeZone(identifier: "UTC") ?? .gmt)
+            vm.readThroughAtOpen = readThrough
+            return vm
+        }
+        func snapshot(_ items: [TimelineItem]) -> TimelineCoordinator.Status {
+            .live(TimelineCoordinator.Snapshot(items: items, isPaginating: false, reachedStart: true, paginationError: nil))
+        }
+        let vm = try make(Date(timeIntervalSince1970: 20))
+        #expect(vm.unreadMarkerID == nil)
+        vm.apply(snapshot([timed("a", 10), timed("c", 30), timed("d", 40)]))
+        #expect(vm.unreadMarkerID == "c")
+        vm.landingShown()
+        vm.apply(snapshot([timed("a", 10), timed("c", 30), timed("d", 40), timed("e", 50)]))
+        #expect(vm.unreadMarkerID == "c")  // later messages don't move it
+        for readThrough in [Date(timeIntervalSince1970: 100), nil] {
+            let other = try make(readThrough)
+            other.apply(snapshot([timed("a", 10), timed("c", 30)]))
+            #expect(other.unreadMarkerID == nil)
+        }
+    }
+
     @Test("file, audio and video attachments become tiles with what is known about them; a sender's file name can't leave the temp folder")
     func fileTiles() async throws {
         let vm = try model()
