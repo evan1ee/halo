@@ -12,10 +12,14 @@ public struct RoomDetailsView: View {
     @State private var inviteText = ""
 
     private let onLeft: @MainActor () -> Void
+    private let profile: (@MainActor (RoomMemberInfo) -> UserProfileViewModel?)?
+    @State private var shownProfile: UserProfileViewModel?
 
     /// `onLeft` runs after the user left the room and the sheet closed (the caller closes the room's screen).
-    public init(model: RoomDetailsViewModel, onLeft: @escaping @MainActor () -> Void = {}) {
+    /// `profile` makes the profile sheet of a tapped member; without it members aren't tappable.
+    public init(model: RoomDetailsViewModel, profile: (@MainActor (RoomMemberInfo) -> UserProfileViewModel?)? = nil, onLeft: @escaping @MainActor () -> Void = {}) {
         _model = State(initialValue: model)
+        self.profile = profile
         self.onLeft = onLeft
     }
 
@@ -63,7 +67,7 @@ public struct RoomDetailsView: View {
             }
             Section("Members") {
                 ForEach(members) { member in
-                    HStack {
+                    Button { if let profile { shownProfile = profile(member) } } label: { HStack {
                         Text(member.title)
                         if member.isInvited { Text("Invited").font(.caption).foregroundStyle(.secondary) }
                         Spacer()
@@ -72,7 +76,9 @@ public struct RoomDetailsView: View {
                         case .moderator: Text("Moderator").font(.caption).foregroundStyle(.secondary)
                         case .user: EmptyView()
                         }
-                    }
+                    } }
+                    .foregroundStyle(.primary)
+                    .disabled(profile == nil)
                 }
             }
             if let error = model.actionError { Section { Text(error).foregroundStyle(.red) } }
@@ -80,6 +86,7 @@ public struct RoomDetailsView: View {
                 Button("Leave room", role: .destructive) { model.confirmsLeave = true }.accessibilityIdentifier("leaveRoom")
             }
         }
+        .sheet(item: $shownProfile) { UserProfileView(model: $0) }
         .alert("Edit room", isPresented: $editing) {
             TextField("Name", text: $draftName)
             TextField("Topic", text: $draftTopic)

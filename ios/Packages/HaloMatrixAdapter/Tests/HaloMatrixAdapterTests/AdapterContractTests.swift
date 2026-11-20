@@ -331,6 +331,45 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
+    @Test("Profiles: own display name round-trips (restored), another profile, ignore and unignore (restored)",
+          .enabled(if: env["HALO_DEV_PEER_USER"] != nil))
+    func profiles() async throws {
+        let server = env["HALO_DEV_SERVER"] ?? ""
+        let peerName = env["HALO_DEV_PEER_USER"] ?? ""
+        let peer = try UserID("@\(peerName):halo.localhost")
+        let session = port()
+        let details = try await session.loginDetails(server: server)
+        _ = try await session.loginPassword(PasswordCredentials(username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"), on: details)
+        try await MatrixSyncPort(session: session).start()
+        let profiles = MatrixProfilePort(session: session)
+
+        let original = try await profiles.ownDisplayName()
+        let changed = "Contract \(UUID().uuidString.prefix(6))"
+        try await profiles.setOwnDisplayName(changed)
+        #expect(try await profiles.ownDisplayName() == changed)
+        try await profiles.setOwnDisplayName(original)
+        #expect(try await profiles.ownDisplayName() == original)
+
+        let other = try await profiles.profile(of: peer)
+        #expect(other.userID == peer)
+
+        let before = try await profiles.ignoredUsers()
+        try await profiles.ignore(peer)
+        var ignored = try await profiles.ignoredUsers()
+        for _ in 0..<30 where !ignored.contains(peer) {  // account data arrives with a sync
+            try await Task.sleep(for: .seconds(1))
+            ignored = try await profiles.ignoredUsers()
+        }
+        #expect(ignored.contains(peer))
+        try await profiles.unignore(peer)
+        for _ in 0..<30 where ignored.contains(peer) {
+            try await Task.sleep(for: .seconds(1))
+            ignored = try await profiles.ignoredUsers()
+        }
+        #expect(ignored == before)
+        try await session.logout()
+    }
+
     @Test("An enabled pack whose room the user has left is reported as unavailable, not as a failed load (creates a room and cleans up after itself)")
     func unavailablePack() async throws {
         let session = port()
