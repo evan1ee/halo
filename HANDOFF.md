@@ -1,13 +1,13 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-20 · Branch: `feat/ci-macos` · PRs #1–#6 merged
+Last updated: 2026-11-20 · Branch: `feat/m3-scenario-driver` · PRs #1–#7 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
 - **Milestone:** M0 done; M1 largely done; M2 done except media sending and the offline-send test; **M3 (read-state engine) in progress**. Dev Mac: Xcode 27.2, Swift 6.4.2, iPhone 16.
 - **Checks:** `scripts/prepush.sh` passes (SwiftLint not configured, skipped); `scripts/prepush.sh` now also builds `Halo-Debug` for the simulator. All 11 contract tests (`infra/dev`) pass, none skipped (`scripts/contract-test.sh` after `infra/dev/create-fixtures.py`).
-- **CI:** PRs #1–#5 merged. CI runs only the Linux-portable packages (Foundation, Domain, TestSupport, Application): adapter, persistence, platform, features and the app are tested only by `prepush.sh` on a Mac. `licenses` runs only on SDK/inventory changes.
+- **CI:** PRs #1–#7 merged. CI runs only the Linux-portable packages (Foundation, Domain, TestSupport, Application): adapter, persistence, platform, features and the app are tested only by `prepush.sh` on a Mac. `licenses` runs only on SDK/inventory changes.
 
 ## 2. Completed work (what exists now)
 - Layers: HaloFoundation, HaloDomain (ports, pure `ReadStatePolicy`), HaloApplication (coordinators), HaloPersistence (GRDB: `read_intent`, file protection set), HaloMatrixAdapter (only MatrixRustSDK importer), HaloPlatform, HaloTestSupport (fakes), Features/{Auth,RoomList,Timeline}. Composition root `ios/App/AppRoot.swift`; project generated from `ios/project.yml` (XcodeGen, scheme `Halo-Debug`).
@@ -31,7 +31,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 Full list: docs/DECISION_LOG.md (D1–D70), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-`scripts/prepush.sh` (app build), `docs/ROADMAP.md`, `HANDOFF.md`.
+`tools/scenario-driver/run_scenarios.py` (new), `infra/dev/synapse/homeserver.dev.yaml` (`rc_room_creation` relaxed), docs (UNREAD_REGRESSION_TESTS, ROADMAP, OPEN_QUESTIONS, CI_CD, DECISION_LOG D71), `HANDOFF.md`.
 
 ## 5. Outstanding issues
 - Stickers: V-ST-1 resolved (option B), V-ST-2 partly (token refresh on 401 not exercised). Verified against `infra/dev` by contract test `stickers` (env `HALO_DEV_STICKER_ROOM`: a room with `m.room.image_pack` `cats` {wave, dance} enabled in `m.image_pack.rooms`; throwaway account `stickertester` created locally). Not built: long-press preview/animation (FR-5, FR-9), editing/deleting packs, hiding pack rooms from the room list, legacy `im.ponies.*` packs (V-ST-3), privacy notice, "unavailable pack" UI. Real sticker images were not loaded (the fixture mxc URLs have no media).
@@ -40,24 +40,25 @@ Full list: docs/DECISION_LOG.md (D1–D70), docs/adr/. Most relevant now: D70 au
 - Each `createPack` contract run leaves one more pack enabled on the test account (the `stickers` test tolerates it).
 - `retrySend`/`abortSend` verified only for an unknown echo (contract test `mentionsAndEchoes`: `.notFound`); a real failed echo was not retried against the server.
 - Opening a room now clears `m.marked_unread` (`ReadReceiptCoordinator.roomOpened`, called by `TimelineViewModel`; the adapter skips the write when the flag is already clear). Unverified on a device/server.
-- S01–S22 validate Halo against a model of Synapse. Verified: count rules (see above). Unverified: sliding sync (V-RS-7: Synapse serves 0 counts there), limited timelines, own-receipt delivery to a second device (V-RS-1), the SDK's own counts.
+- S01–S22 validate Halo against a model of Synapse. Verified: count rules (see above) and the server half of 9 scenarios (`tools/scenario-driver/run_scenarios.py`; run it after changing the dev Synapse). Unverified: sliding sync (V-RS-7: Synapse serves 0 counts there), limited timelines, own-receipt delivery to a second device (V-RS-1), the SDK's own counts.
 - Unverified on a device: file protection class on `halo.sqlite` (simulator reports none), V-RS-1 (do own-receipt changes trigger room-list updates?), cost of `loadOrFetchEvent` lookups, kill-and-relaunch resend, NSE access to the database, `deletePusher` (no contract test), paging cost for large accounts, the swipe UI and the unread indicators, the `latestEvent` mapping (no unit test).
 - D6: the ≥ 50 % rule relies on `onScrollVisibilityChange` inside a `List`; builds, but not verified on a device that it fires for List rows (fall back to a ScrollView/LazyVStack if not).
 - `read_intent`: `receipt_type` always `read`; `attempts`/`last_error` unused; no intent confirmation rules (a)–(c) (sent intents just expire).
 - No `HaloLog` in `ReadReceiptCoordinator` (storage errors only kept in `lastStorageError`).
 - Timeline/Media contract tests need a fixture room (`HALO_DEV_TIMELINE_ROOM`: first, second, notice, waves, redacted message, blue.png). Run contracts with `TEST_RUNNER_HALO_DEV_*`; the server value must be `http://localhost:8008`. Parallel contract tests on one account hang (suite is serialized).
 - Open validation: V-CI-2, V-SQL-1, V-APPLE-1, V-NSE-*, V-PUSH-1/3/5, V-RS-1/5, V-RS-7 (Synapse sliding sync serves 0 counts).
-- Docker CLI hangs on the `osxkeychain` helper; use a throwaway `DOCKER_CONFIG`.
+- Docker CLI hangs on the `osxkeychain` helper; use a throwaway `DOCKER_CONFIG`.  Compose is missing under a throwaway config: use `docker exec`/`docker restart`.
 - Contract tests: `infra/dev/create-fixtures.py` creates accounts/rooms and writes `~/.config/halo-dev/contract.env`; re-run it before a full `scripts/contract-test.sh` (room count) and with `--new-e2ee` before the Encryption test (recovery can be set up once per account). Verified: 11 of 11 pass.
 
 **Needs the founder** (the loop records these and moves on; AUTONOMOUS_LOOP §5)
 - 📱 Device checks: G-NSE AC-NSE-1…6, V-RS-1, file protection on `halo.sqlite`, NSE database access, background push delivery.
-- 👤 Q-CI-MAC: a macOS CI job (Mac-only packages + app build) costs runner minutes and needs Xcode 27 on the runner; decide whether to add it, or keep `prepush.sh` as the only Mac gate.
 - 👤 Gate outcomes G-UNREAD / G-FFI at the end of M3 (the agent writes the evaluation); push gateway, APNs keys, TestFlight.
+
+**Deferred (not blocking):** Q-CI-MAC (D71, founder): no macOS CI job for now; `scripts/prepush.sh` stays the only Mac validation gate. Revisit once the build pipeline is stable and a hosted runner is confirmed to have the required Xcode.
 
 ## 6. Next steps
 The queue is docs/ROADMAP.md §"Remaining work", worked by the loop in docs/development/AUTONOMOUS_LOOP.md. Its head:
-1. M3: scenario driver running S01–S22 against Synapse in `infra/test`, then the auditor.
+1. M3: scenario driver, remaining part (real server output into the Swift model, sliding sync, encrypted rooms), then the auditor.
 
 ## 7. Next Session Prompt
 ```text

@@ -42,11 +42,11 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 - [x] `infra/dev` fixture script: create the throwaway accounts and the sticker, timeline and E2EE fixtures and write
       `~/.config/halo-dev/contract.env`, so all contract tests run (four skip today: Timeline, Media, ReadMarker, Encryption).
 - [x] App build in `scripts/prepush.sh` ([development/CI_CD.md](development/CI_CD.md)).
-- [ ] 👤 CI: macOS job for the Mac-only packages and the app build — runner cost and Xcode 27 availability on hosted runners
-      are Q-CI-MAC; in HANDOFF §5.
+- [ ] (deferred, D71, not blocking) CI: macOS job for the Mac-only packages and the app build; revisit when the build pipeline is
+      stable and a hosted runner is confirmed to have the needed Xcode (Q-CI-MAC).
 
 **M3 Read-state engine** (exit: AC-U1–U7 automated green; gates G-UNREAD, G-FFI)
-- [ ] Scenario driver (`tools/scenario-driver`, `infra/test`): run S01–S22 against real Synapse ([testing/UNREAD_REGRESSION_TESTS.md](testing/UNREAD_REGRESSION_TESTS.md)).
+- [ ] Scenario driver, remaining part: server half of S01/02/04/05/09/10/14/15/22 is done (`tools/scenario-driver/run_scenarios.py`); still to do: feed the real server output into the Swift model, sliding sync, encrypted rooms  ([testing/UNREAD_REGRESSION_TESTS.md](testing/UNREAD_REGRESSION_TESTS.md)).
 - [ ] Read-state auditor (UNREAD_STATE; needed for AC-U8 in M5).
 - [ ] Intent confirmation rules (a)–(c) for `read_intent`, `attempts`/`last_error`, `HaloLog` in `ReadReceiptCoordinator`.
 - [ ] D6 check: does `onScrollVisibilityChange` fire for `List` rows (simulator UI test); fall back to `LazyVStack` if not.
