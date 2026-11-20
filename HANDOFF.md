@@ -9,6 +9,8 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 - **Checks:** `scripts/prepush.sh` passes (SwiftLint not configured, skipped); `scripts/prepush.sh` now also builds `Halo-Debug` for the simulator. All 17 contract tests (`infra/dev`) pass, none skipped (`scripts/contract-test.sh` after `infra/dev/create-fixtures.py`).
 - **CI:** PRs #1–#15 merged. CI runs only the Linux-portable packages (Foundation, Domain, TestSupport, Application): adapter, persistence, platform, features and the app are tested only by `prepush.sh` on a Mac. `licenses` runs only on SDK/inventory changes.
 
+- **Loop state (2026-11-20):** what is left that needs no device, signing, gate decision or product decision is small polish: showing avatars in room info, the member list and the timeline (needs a shared avatar view, e.g. a small UI package), a room preview for invitations, the diagnostics count of unrecognised bot templates, the bot reaction menu (FR-4, product detail), V-ST-2 (needs an expiring token the dev Synapse can't give). The loop paused here; restart it to take those.
+
 ## 2. Completed work (what exists now)
 Summary only; details per feature: [docs/development/IMPLEMENTATION_NOTES.md](docs/development/IMPLEMENTATION_NOTES.md).
 - Architecture: HaloFoundation, HaloDomain, HaloApplication, HaloPersistence (GRDB), HaloMatrixAdapter (only MatrixRustSDK importer), HaloPlatform, HaloTestSupport, Features/{Auth,RoomList,Timeline,Stickers,Settings}; composition root `ios/App/AppRoot.swift`; XcodeGen project (`Halo-Debug`).
