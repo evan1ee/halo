@@ -77,6 +77,20 @@ struct SessionCoordinatorTests {
         #expect(await coordinator.state == .signedOut(failure: .notFound))
     }
 
+    @Test("a homeserver that never answers ends discovery with a retryable network error instead of spinning forever")
+    func discoveryTimesOut() async {
+        let (port, keychain) = makeSessionFixture()
+        let coordinator = SessionCoordinator(port: port, keychain: keychain, discoveryTimeout: .milliseconds(100))
+        await coordinator.start()
+        port.delayLoginDetails(by: .seconds(30))
+        await coordinator.discover(server: "halo.localhost")
+        #expect(await coordinator.state == .signedOut(failure: .network(retryable: true)))
+        // The next attempt works once the host answers.
+        port.delayLoginDetails(by: .zero)
+        await coordinator.discover(server: "halo.localhost")
+        if case .choosingMethod = await coordinator.state {} else { Issue.record("expected the method screen") }
+    }
+
     @Test("a second login while authenticating is ignored")
     func doubleTap() async throws {
         let (port, keychain) = makeSessionFixture()
