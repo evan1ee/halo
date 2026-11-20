@@ -88,6 +88,13 @@ public final class StickerPanelViewModel {
         return try? await media.thumbnail(image, width: 256, height: 256)
     }
 
+    /// The full image for the long-press preview (it may be animated); the thumbnail when it can't be loaded.
+    public func previewContent(for sticker: Sticker) async -> Data? {
+        guard let media, let image = sticker.image else { return nil }
+        if let full = try? await media.content(image) { return full }
+        return try? await media.thumbnail(image, width: 256, height: 256)
+    }
+
     /// `true` when the panel can create packs.
     public var canCreatePack: Bool { makeNewPack != nil }
 

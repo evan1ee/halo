@@ -1,7 +1,7 @@
 import HaloDomain
 import SwiftUI
 
-/// The sticker panel: search, favourites, recents, then one section per pack. Tap sends; long-press offers favourite.
+/// The sticker panel: search, favourites, recents, then one section per pack. Tap sends; long-press previews (animated when motion is allowed) and offers send and favourite.
 public struct StickerPanelView: View {
     let model: StickerPanelViewModel
     @State private var newPack: NewPackViewModel?
@@ -86,16 +86,45 @@ private struct StickerCell: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(sticker.body ?? sticker.shortcode)
-        .contextMenu {
+        .contextMenu(menuItems: {
             Button(model.isFavourite(sticker) ? "Remove from favourites" : "Add to favourites", systemImage: model.isFavourite(sticker) ? "star.slash" : "star") {
                 Task { await model.toggleFavourite(sticker) }
             }
             Button("Send", systemImage: "paperplane") { Task { await model.tap(sticker) } }
-        }
+        }, preview: { preview })
         .task { data = await model.thumbnail(for: sticker) }
+    }
+
+    /// The long-press preview (FR-5): larger, animated when motion is allowed (FR-9); the full file loads while the thumbnail shows.
+    private var preview: some View {
+        StickerPreview(sticker: sticker, model: model, thumbnail: data)
     }
 
     private var placeholder: some View {
         RoundedRectangle(cornerRadius: 8).fill(.secondary.opacity(0.15)).overlay { Text(sticker.shortcode).font(.caption2).lineLimit(1).padding(2) }
+    }
+}
+
+private struct StickerPreview: View {
+    let sticker: Sticker
+    let model: StickerPanelViewModel
+    let thumbnail: Data?
+    @State private var full: Data?
+
+    var body: some View {
+        Group {
+            #if canImport(UIKit)
+            if let shown = full ?? thumbnail {
+                AnimatedStickerView(data: shown)
+            } else {
+                RoundedRectangle(cornerRadius: 12).fill(.secondary.opacity(0.15))
+            }
+            #else
+            RoundedRectangle(cornerRadius: 12).fill(.secondary.opacity(0.15))
+            #endif
+        }
+        .frame(width: 240, height: 240)
+        .padding()
+        .task { full = await model.previewContent(for: sticker) }
     }
 }
