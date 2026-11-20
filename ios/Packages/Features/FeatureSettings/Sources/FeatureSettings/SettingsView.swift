@@ -17,6 +17,8 @@ public struct SettingsView: View {
     private let loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)?
     private let saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)?
     private let diagnostics: (@Sendable () async -> String)?
+    private let storageSizes: (@Sendable () async -> [StorageSize])?
+    @State private var storage: [StorageSize] = []
     @AppStorage(AppPreferences.appearanceKey) private var appearance = Appearance.system.rawValue
     @State private var mediaPreviews: MediaPreviewChoice = .always
     @State private var mediaPreviewsLoaded = false
@@ -30,9 +32,11 @@ public struct SettingsView: View {
         onPrivateReceiptsChange: @escaping (Bool) -> Void = { _ in },
         loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)? = nil,
         saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)? = nil,
-        diagnostics: (@Sendable () async -> String)? = nil, onSignOut: @escaping () -> Void
+        diagnostics: (@Sendable () async -> String)? = nil, storageSizes: (@Sendable () async -> [StorageSize])? = nil,
+        onSignOut: @escaping () -> Void
     ) {
         self.diagnostics = diagnostics
+        self.storageSizes = storageSizes
         self.loadMediaPreviews = loadMediaPreviews
         self.saveMediaPreviews = saveMediaPreviews
         self.version = version
@@ -96,6 +100,16 @@ public struct SettingsView: View {
                     mediaPreviewsLoaded = true
                 }
             }
+            if let storageSizes {
+                Section {
+                    ForEach(storage) { LabeledContent($0.name, value: $0.formatted) }
+                } header: {
+                    Text("Storage")
+                } footer: {
+                    Text("What Halo keeps on this device: the synced messages and keys, and its own settings database.")
+                }
+                .task { storage = await storageSizes() }
+            }
             if let diagnostics {
                 Section {
                     NavigationLink("Diagnostics") { DiagnosticsView(report: diagnostics) }
@@ -116,6 +130,15 @@ public struct SettingsView: View {
             Button("Cancel", role: .cancel) {}
         }
     }
+}
+
+/// One line of Settings → Storage.
+public struct StorageSize: Sendable, Identifiable, Equatable {
+    public let name: String
+    public let bytes: Int64
+    public var id: String { name }
+    public init(name: String, bytes: Int64) { self.name = name; self.bytes = bytes }
+    public var formatted: String { ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) }
 }
 
 /// A plain-text status report (versions, device, read-state audit counts) to read or share.

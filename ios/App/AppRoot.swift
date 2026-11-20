@@ -155,6 +155,23 @@ final class AppRoot {
         return lines.joined(separator: "\n")
     }
 
+    /// Settings → Storage: sizes of the Matrix store and of Halo's own database on this device.
+    nonisolated func storageSizes() async -> [StorageSize] {
+        let directory = HaloShared.storeDirectory()
+        func size(of url: URL) -> Int64 {
+            let keys: [URLResourceKey] = [.totalFileAllocatedSizeKey, .isRegularFileKey]
+            guard let files = FileManager.default.enumerator(at: url, includingPropertiesForKeys: keys) else { return 0 }
+            var total: Int64 = 0
+            for case let file as URL in files {
+                let values = try? file.resourceValues(forKeys: Set(keys))
+                if values?.isRegularFile == true { total += Int64(values?.totalFileAllocatedSize ?? 0) }
+            }
+            return total
+        }
+        let own = size(of: directory.appendingPathComponent("halo", isDirectory: true))
+        return [StorageSize(name: "Messages and keys", bytes: max(0, size(of: directory) - own)), StorageSize(name: "Halo database", bytes: own)]
+    }
+
     func mediaPreviewChoice() async -> MediaPreviewChoice {
         switch await previewPolicy.setting() {
         case .always: .always

@@ -58,6 +58,7 @@ private struct RootView: View {
                                     loadMediaPreviews: { await root.mediaPreviewChoice() },
                                     saveMediaPreviews: { await root.setMediaPreviewChoice($0) },
                                     diagnostics: { await root.diagnosticsReport() },
+                                    storageSizes: { await root.storageSizes() },
                                     onSignOut: { Task { await root.auth.signOut() } })
                             } label: { Image(systemName: "gearshape") }
                                 .accessibilityLabel("Settings")
