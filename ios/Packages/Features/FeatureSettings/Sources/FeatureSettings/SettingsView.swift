@@ -6,12 +6,22 @@ public struct SettingsView: View {
     private let version: String
     private let build: String
     private let onSignOut: () -> Void
+    private let preferences: AppPreferences
+    private let onPrivateReceiptsChange: (Bool) -> Void
     @State private var confirmingSignOut = false
+    @State private var privateReceipts: Bool
 
-    public init(version: String, build: String, onSignOut: @escaping () -> Void) {
+    /// `onPrivateReceiptsChange` applies a changed receipt privacy to the running app (the preference itself is stored here).
+    public init(
+        version: String, build: String, preferences: AppPreferences = AppPreferences(),
+        onPrivateReceiptsChange: @escaping (Bool) -> Void = { _ in }, onSignOut: @escaping () -> Void
+    ) {
         self.version = version
         self.build = build
+        self.preferences = preferences
+        self.onPrivateReceiptsChange = onPrivateReceiptsChange
         self.onSignOut = onSignOut
+        _privateReceipts = State(initialValue: preferences.privateReceipts)
     }
 
     public var body: some View {
@@ -19,6 +29,18 @@ public struct SettingsView: View {
             Section("Account") {
                 Button("Sign out", role: .destructive) { confirmingSignOut = true }
                     .accessibilityIdentifier("sign-out")
+            }
+            Section {
+                Toggle("Private read receipts", isOn: $privateReceipts)
+                    .accessibilityIdentifier("private-receipts")
+                    .onChange(of: privateReceipts) { _, value in
+                        preferences.privateReceipts = value
+                        onPrivateReceiptsChange(value)
+                    }
+            } header: {
+                Text("Privacy")
+            } footer: {
+                Text("When on, other people in a room can't see that you read their messages. Your own devices still stay in sync. Applies to receipts sent from now on.")
             }
             Section("About") {
                 LabeledContent("Version", value: "\(version) (\(build))")

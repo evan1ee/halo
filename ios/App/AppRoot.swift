@@ -1,5 +1,6 @@
 import FeatureAuth
 import FeatureRoomList
+import FeatureSettings
 import FeatureStickers
 import FeatureTimeline
 import Foundation
@@ -48,7 +49,7 @@ final class AppRoot {
         self.roomCoordinator = roomCoordinator
         let suite = "group.\(HaloShared.namespace())"
         records = NotificationRecordStore(suiteName: suite)
-        let receipts = ReadReceiptCoordinator(port: MatrixReadMarkerPort(session: session), log: log)
+        let receipts = ReadReceiptCoordinator(port: MatrixReadMarkerPort(session: session), privateReceipts: AppPreferences().privateReceipts, log: log)
         self.receipts = receipts
         drafts = DraftCoordinator()
         let stickers = StickerLibrary(packs: MatrixStickerPackPort(session: session), prefs: MatrixStickerPrefsPort(session: session))

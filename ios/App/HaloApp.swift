@@ -45,6 +45,7 @@ private struct RootView: View {
                                 SettingsView(
                                     version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?",
                                     build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?",
+                                    onPrivateReceiptsChange: { value in Task { await root.receipts.setPrivateReceipts(value) } },
                                     onSignOut: { Task { await root.auth.signOut() } })
                             } label: { Image(systemName: "gearshape") }
                                 .accessibilityLabel("Settings")

@@ -92,6 +92,20 @@ struct ReadReceiptCoordinatorTests {
         #expect(port.receipts.first?.isPrivate == true)
     }
 
+    @Test("AC-SET-2: switching to private receipts applies to later receipts only; switching back restores public ones")
+    func switchingPrivacyAppliesToLaterReceipts() async {
+        let (c, port, _) = make()
+        await c.reportSeen(room: room, event: event(1), timestamp: at(10))
+        #expect(await eventually { port.receipts.count == 1 })
+        await c.setPrivateReceipts(true)
+        await c.reportSeen(room: room, event: event(2), timestamp: at(20))
+        #expect(await eventually { port.receipts.count == 2 })
+        await c.setPrivateReceipts(false)
+        await c.reportSeen(room: room, event: event(3), timestamp: at(30))
+        #expect(await eventually { port.receipts.count == 3 })
+        #expect(port.receipts.map(\.isPrivate) == [false, true, false])
+    }
+
     @Test func retryableFailureBacksOffAndRetries() async {
         let (c, port, clock) = make()
         port.failNextReceipts(with: [.network(retryable: true), .network(retryable: true)])
