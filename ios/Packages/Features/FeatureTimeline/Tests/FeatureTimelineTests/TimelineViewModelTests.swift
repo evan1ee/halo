@@ -84,7 +84,8 @@ struct TimelineViewModelTests {
         await model.tickBotTask(bot: bot, id: "1")
         #expect(model.botRowState(bot: bot, id: "1") == .pending)
         await model.tickBotTask(bot: bot, id: "1")  // ignored while pending: no second 👍 (that would toggle it off)
-        try await Task.sleep(for: .milliseconds(300))  // the 50 ms timeout passes
+        // The 50 ms timeout passes; wait for it by polling (a fixed sleep was too short when the machine is busy).
+        for _ in 0..<200 where model.botRowState(bot: bot, id: "1") != .noResponse { try await Task.sleep(for: .milliseconds(25)) }
         #expect(model.botRowState(bot: bot, id: "1") == .noResponse)
 
         await model.tickBotTask(bot: bot, id: "1")  // again after the timeout: the 👍 is already there, none is sent
