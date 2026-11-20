@@ -156,8 +156,8 @@ public actor MatrixSessionPort: SessionPort {
     }
 
     /// Starts the classic `/sync` loop (`Client.syncOnceV2`, sliding sync off): the unread evidence is the server's counts
-    /// plus the SDK's own, per room. Own loop, not `Client.syncV2`, so errors and backoff are visible: a retryable error
-    /// reports `.offline` and retries; any other ends the loop with `.failed` (`SyncCoordinator` restarts it).
+    /// plus the SDK's own, per room. Own loop, not `Client.syncV2`, so errors and backoff are visible: a retryable error (or the SDK's generic
+    /// sync error, which is what an unreachable server produces) reports `.offline` and retries; any other ends the loop with `.failed` (`SyncCoordinator` restarts it).
     func startSync() async throws(HaloError) {
         guard let client else { throw .unauthorized(soft: false) }
         guard syncTask == nil else { return }
@@ -211,7 +211,9 @@ public actor MatrixSessionPort: SessionPort {
             } catch {
                 if Task.isCancelled { return }
                 let mapped = ErrorMapper.map(error)
-                guard mapped.isRetryable else {
+                // With the server unreachable the SDK's sync fails with a generic error (found by the `offlineSend` contract
+                // test), so that one is retried like a network error; everything else (auth, forbidden, unsupported) ends the loop.
+                guard mapped.isRetryable || mapped == .internal(code: "SDK_GENERIC") else {
                     publish(status: .failed)
                     syncTask = nil
                     return
