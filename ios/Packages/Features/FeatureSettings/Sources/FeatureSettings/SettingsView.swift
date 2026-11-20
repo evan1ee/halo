@@ -17,6 +17,9 @@ public struct SettingsView: View {
     private let loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)?
     private let saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)?
     private let diagnostics: (@Sendable () async -> String)?
+    private let notificationStatus: (@Sendable () async -> String)?
+    private let openSystemSettings: (() -> Void)?
+    @State private var notifications = ""
     private let storageSizes: (@Sendable () async -> [StorageSize])?
     @State private var storage: [StorageSize] = []
     @AppStorage(AppPreferences.appearanceKey) private var appearance = Appearance.system.rawValue
@@ -33,10 +36,12 @@ public struct SettingsView: View {
         loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)? = nil,
         saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)? = nil,
         diagnostics: (@Sendable () async -> String)? = nil, storageSizes: (@Sendable () async -> [StorageSize])? = nil,
-        onSignOut: @escaping () -> Void
+        notificationStatus: (@Sendable () async -> String)? = nil, openSystemSettings: (() -> Void)? = nil, onSignOut: @escaping () -> Void
     ) {
         self.diagnostics = diagnostics
         self.storageSizes = storageSizes
+        self.notificationStatus = notificationStatus
+        self.openSystemSettings = openSystemSettings
         self.loadMediaPreviews = loadMediaPreviews
         self.saveMediaPreviews = saveMediaPreviews
         self.version = version
@@ -99,6 +104,17 @@ public struct SettingsView: View {
                     mediaPreviews = await loadMediaPreviews()
                     mediaPreviewsLoaded = true
                 }
+            }
+            if let notificationStatus {
+                Section {
+                    LabeledContent("Notifications", value: notifications)
+                    if let openSystemSettings { Button("Open iOS Settings", action: openSystemSettings) }
+                } header: {
+                    Text("Notifications")
+                } footer: {
+                    Text("Alerts, sounds and the badge are allowed or turned off in iOS Settings.")
+                }
+                .task { notifications = await notificationStatus() }
             }
             if let storageSizes {
                 Section {

@@ -59,6 +59,10 @@ private struct RootView: View {
                                     saveMediaPreviews: { await root.setMediaPreviewChoice($0) },
                                     diagnostics: { await root.diagnosticsReport() },
                                     storageSizes: { await root.storageSizes() },
+                                    notificationStatus: { await root.notificationStatus() },
+                                    openSystemSettings: {
+                                        if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                                    },
                                     onSignOut: { Task { await root.auth.signOut() } })
                             } label: { Image(systemName: "gearshape") }
                                 .accessibilityLabel("Settings")

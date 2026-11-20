@@ -15,7 +15,7 @@ Summary only; details per feature: [docs/development/IMPLEMENTATION_NOTES.md](do
 - Read state (M3): policy-driven badge, outbound receipts, unread indicators, jump-to-unread, classic-sync adapter, auditor, scenarios S01–S22 as model tests.
 - Messaging (M2): send/retry/abort, drafts, mentions, photo send with caption, offline resend; media previews (hide/reveal, video thumbnails).
 - Stickers (M4): packs, panel, recents, create pack, remove unavailable packs.
-- Settings (M5): Account, Privacy (private receipts), Media (show photos), Appearance (theme), Storage (sizes), Diagnostics (report), About, Acknowledgements.
+- Settings (M5): Account, Privacy (private receipts), Media (show photos), Appearance (theme), Notifications (status), Storage (sizes), Diagnostics (report), About, Acknowledgements.
 
 ## 3. Key decisions
 **D73 (founder): V-RS-7 closed.** Classic Matrix sync is the authoritative unread evidence on the production path; push records supplement it; server zero never marks read by itself; a partial or empty evaluation never overwrites the stored attention set; badge from reconciled state; no SDK/Synapse change unless proven necessary; unread correctness and badge persistence are **P0**. Verified: the SDK exposes per-room evidence over `syncV2` (`ClassicSyncEvidenceTests`); classic sync does not solve the NSE's background state (records + cached set stay its inputs). **Implemented by D74:** the adapter runs classic sync (own `syncOnceV2` loop, 8 s long poll), room list from `client.rooms()` plus the rooms each response changed; verified live in the simulator (unread `@1` and bold within seconds).
@@ -23,7 +23,7 @@ Summary only; details per feature: [docs/development/IMPLEMENTATION_NOTES.md](do
 Full list: docs/DECISION_LOG.md (D1–D75), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-Sticker grid autoplay (`StickerCell` loads the full file of a visible multi-frame sticker ≤ 1 MB when motion is allowed, drops it on scroll-off; `StickerPanelViewModel.animatedContent`/`isAnimated`; FeatureStickers tests pass, grid renders in the simulator; no animation seen: the dev packs are static PNGs, add an animated GIF fixture). Earlier: Settings Storage (sizes only; clear cache not wired), Appearance, Diagnostics. Committed straight to `main` (D75).
+Settings → Notifications (iOS permission state via `AppRoot.notificationStatus()`, button opens iOS Settings; seen in the simulator: "On"; no per-category toggles). Earlier: sticker grid autoplay (no animation seen: add an animated GIF fixture), Storage sizes, Appearance, Diagnostics. Committed straight to `main` (D75).
 
 ## 5. Outstanding issues
 Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).

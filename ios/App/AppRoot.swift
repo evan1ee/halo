@@ -10,6 +10,7 @@ import HaloFoundation
 import HaloMatrixAdapter
 import HaloPersistence
 import HaloPlatform
+import UserNotifications
 
 /// Builds the object graph once at launch: platform and adapter implementations behind the ports,
 /// the coordinators over them, and the view models over the coordinators.
@@ -170,6 +171,16 @@ final class AppRoot {
         }
         let own = size(of: directory.appendingPathComponent("halo", isDirectory: true))
         return [StorageSize(name: "Messages and keys", bytes: max(0, size(of: directory) - own)), StorageSize(name: "Halo database", bytes: own)]
+    }
+
+    /// Settings → Notifications: what iOS currently allows.
+    nonisolated func notificationStatus() async -> String {
+        switch await UNUserNotificationCenter.current().notificationSettings().authorizationStatus {
+        case .authorized, .provisional, .ephemeral: "On"
+        case .denied: "Off in iOS Settings"
+        case .notDetermined: "Not asked yet"
+        @unknown default: "Unknown"
+        }
     }
 
     func mediaPreviewChoice() async -> MediaPreviewChoice {
