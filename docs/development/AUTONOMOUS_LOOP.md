@@ -68,8 +68,8 @@ Recorded in HANDOFF §5 under "Needs the founder", then the loop moves on:
   loads it and never prints values. Accounts in it are throwaway local ones; their passwords never go into the repository, a
   commit, a log or a pull request. If the file is missing, run `infra/dev/create-fixtures.py` (accounts, rooms and the file). Before a full contract run re-run it
   (the room count grows with `createPack`); before the Encryption contract use `--new-e2ee`.
-- **Offline-send contract:** `scripts/contract-offline-test.sh` runs `offlineSend` and pauses/resumes the dev Synapse
-  (`docker pause`) when the test asks through files in `HALO_DEV_OFFLINE_DIR`; it always resumes Synapse and checks it is
+- **Offline-send contract:** `scripts/contract-offline-test.sh` runs `offlineSend` and stops/starts the dev Synapse
+  (`docker stop`/`start`) when the test asks through files in `HALO_DEV_OFFLINE_DIR`; it always starts Synapse again and checks it is
   reachable when it exits. A normal `scripts/contract-test.sh` run skips that test. Run it after changing sending or the sync loop.
 - An iOS 26 simulator (`iPhone 17` by default; `HALO_SIM` overrides it in `prepush.sh`).
 - `gh` signed in to the repository.
