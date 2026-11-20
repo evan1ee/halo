@@ -23,7 +23,7 @@ Summary only; details per feature: [docs/development/IMPLEMENTATION_NOTES.md](do
 Full list: docs/DECISION_LOG.md (D1–D75), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-Settings → Security → "Set up recovery key" (`EncryptionPort.resetRecovery`, `EncryptionCoordinator.enableRecovery/replaceRecovery`, `RecoveryViewModel.setUpRecovery/replaceRecovery`, key shown once in a sheet with share; error alert; "Replace backup" confirmation when the server already has a key backup (`RECOVERY_BACKUP_EXISTS`, found live on the dev account). Unit test for setup; seen in the simulator. After setup the status read "On, this device needs the key" (SDK state `incomplete`) instead of "On": not yet explained, see OUTSTANDING_ISSUES. Earlier: Notifications status, Security status, grid autoplay, Storage, Appearance, Diagnostics. Committed straight to `main` (D75).
+Recovery setup status investigated: after setup the device stays `incomplete` and shows the verify banner (consistent; see OUTSTANDING_ISSUES: consider `recover` with the new key right after setup). Earlier this session: Settings Security (status + recovery setup with confirmed backup replace), Notifications, Storage, Appearance, Diagnostics, sticker grid autoplay. Committed straight to `main` (D75).
 
 ## 5. Outstanding issues
 Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
