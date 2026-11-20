@@ -142,6 +142,46 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
+    @Test("Legacy im.ponies packs are read as read-only legacy packs (V-ST-3; creates a room and cleans up after itself)")
+    func legacyPacks() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
+            on: details)
+        try await MatrixSyncPort(session: session).start()
+        let client = try await session.signedInClient()
+        let roomID = try await client.createRoom(request: CreateRoomParameters(name: "Legacy pack fixture", isEncrypted: false, visibility: .private, preset: .privateChat))
+        let ref = PackRef(room: try RoomID(roomID), stateKey: "oldcats")
+        var room: Room?
+        for _ in 0..<30 {
+            if let known = try? await session.room(ref.room) { room = known; break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        let local = try #require(room)
+        let pack = #"{"pack":{"display_name":"Old cats","usage":["sticker"]},"images":{"wave":{"url":"mxc://halo.localhost/legacywave0000000000"}}}"#
+        _ = try await local.sendStateEventRaw(eventType: "im.ponies.room_emotes", stateKey: ref.stateKey, content: pack, requestConfigOverride: nil)
+        try await client.setAccountData(eventType: "im.ponies.emote_rooms", content: #"{"rooms":{"\#(roomID)":{"oldcats":{}}}}"#)
+
+        let packs = MatrixStickerPackPort(session: session)
+        var found: StickerPack?
+        for _ in 0..<30 {
+            found = try await packs.packs(currentRoom: nil).packs.first { $0.ref == ref }
+            if found != nil { break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        let legacy = try #require(found, "legacy pack not read")
+        #expect(legacy.source == .legacy && legacy.displayName == "Old cats" && legacy.stickers.map(\.shortcode) == ["wave"])
+        // As the current room's pack (whole-state path) it is found too, still once.
+        let asRoom = try await packs.packs(currentRoom: ref.room)
+        #expect(asRoom.packs.filter { $0.ref == ref }.count == 1)
+        // Leave no room or listing behind (the other contracts expect the account's fixed room count); before the logout.
+        try? await client.setAccountData(eventType: "im.ponies.emote_rooms", content: "{}")
+        try? await local.leave()
+        try? await local.forget()
+        try await session.logout()
+    }
+
     @Test("Mentions, members and unknown local echoes (uses HALO_DEV_STICKER_ROOM as a scratch room)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
     func mentionsAndEchoes() async throws {
         let session = port()

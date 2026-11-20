@@ -194,4 +194,29 @@ struct PackCreationTests {
         #expect(PackRegistry.packRooms(in: nil).isEmpty && PackRegistry.packRooms(in: ["rooms": "nope"]).isEmpty)
         #expect(PackRegistry.packRooms(in: ["rooms": [room.rawValue, "not a room id"]]) == [room])
     }
+
+    @Test("the listing of enabled packs (current or legacy im.ponies.emote_rooms, same shape) reads in a stable order and skips malformed entries")
+    func listedPacks() throws {
+        let content: [String: Any] = ["rooms": [
+            "!b:x.org": ["z": [String: Any](), "a": [String: Any]()],
+            "!a:x.org": ["": [String: Any]()],
+            "not a room id": ["x": [String: Any]()],
+            "!c:x.org": "garbage",
+        ]]
+        let refs = PackRegistry.listedPacks(in: content)
+        #expect(refs == [
+            PackRef(room: try RoomID("!a:x.org"), stateKey: ""),
+            PackRef(room: try RoomID("!b:x.org"), stateKey: "a"),
+            PackRef(room: try RoomID("!b:x.org"), stateKey: "z"),
+        ])
+        #expect(PackRegistry.listedPacks(in: nil).isEmpty && PackRegistry.listedPacks(in: ["rooms": 5]).isEmpty)
+    }
+
+    @Test("a legacy im.ponies.room_emotes pack parses like a current one and keeps its source")
+    func legacyParsing() throws {
+        let content: [String: Any] = ["images": ["wave": ["url": "mxc://x.org/w"]], "pack": ["display_name": "Old", "usage": ["sticker"]]]
+        let pack = try #require(ImagePackParser.parse(content, ref: PackRef(room: try RoomID("!r:x.org"), stateKey: "old"), source: .legacy))
+        #expect(pack.source == .legacy && pack.displayName == "Old" && pack.offersStickers && pack.stickers.map(\.shortcode) == ["wave"])
+    }
+
 }

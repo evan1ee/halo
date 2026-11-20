@@ -96,21 +96,20 @@ public final class MatrixStickerPackPort: StickerPackPort {
         }
 
         // 1. The packs the user enabled: `{ rooms: { roomId: { stateKey: {} } } }`.
-        do {
-            if let json = try await client.accountData(eventType: "m.image_pack.rooms"),
-               let object = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
-               let rooms = object["rooms"] as? [String: Any] {
-                for roomKey in rooms.keys.sorted() {
-                    guard let roomID = try? RoomID(roomKey) else { continue }
-                    for key in ((rooms[roomKey] as? [String: Any])?.keys.sorted() ?? []) {
-                        do {
-                            let ref = PackRef(room: roomID, stateKey: key)
-                            if let content = try await stateContent(client, room: roomID, key: key) { add(ImagePackParser.parse(content, ref: ref, source: .userEnabled)) }
-                        } catch { failed += 1 }
-                    }
-                }
-            }
-        } catch { failed += 1 }
+        // 3. (read last, listed here with step 1 because both come from account data) the legacy `im.ponies.emote_rooms`
+        //    listing, whose packs are `im.ponies.room_emotes` state: read-only, and only added when not already found.
+        func listed(_ accountDataType: String) async -> [PackRef] {
+            do {
+                guard let json = try await client.accountData(eventType: accountDataType),
+                      let object = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else { return [] }
+                return PackRegistry.listedPacks(in: object)
+            } catch { failed += 1; return [] }
+        }
+        for ref in await listed("m.image_pack.rooms") {
+            do {
+                if let content = try await stateContent(client, room: ref.room, key: ref.stateKey) { add(ImagePackParser.parse(content, ref: ref, source: .userEnabled)) }
+            } catch { failed += 1 }
+        }
 
         // 2. The packs of the current room, cached for a while: listing them means downloading the room's state.
         if let currentRoom {
@@ -118,8 +117,18 @@ public final class MatrixStickerPackPort: StickerPackPort {
                 for pack in try await packsOfRoom(client, currentRoom) { add(pack) }
             } catch { failed += 1 }
         }
+        // 3. Legacy packs (V-ST-3), after the others so that a pack found in the current format wins.
+        for ref in await listed("im.ponies.emote_rooms") where !seen.contains(ref) {
+            do {
+                if let content = try await stateContent(client, room: ref.room, key: ref.stateKey, type: Self.legacyType) { add(ImagePackParser.parse(content, ref: ref, source: .legacy)) }
+            } catch {
+                // Old listings often name rooms the user has since left (403): that is an unavailable pack, not a failed source.
+            }
+        }
         return StickerPackLoad(packs: packs, failedSources: failed)
     }
+
+    private static let legacyType = "im.ponies.room_emotes"
 
     /// The current room's packs. A small room's whole state is read (every state key); a large room's state can be
     /// many megabytes, so there only the pack with the empty state key is read. Results are kept for
@@ -131,8 +140,11 @@ public final class MatrixStickerPackPort: StickerPackPort {
         let members = (try? await session.room(room))?.joinedMembersCount()
         var packs: [StickerPack] = []
         if members.map(StickerRoomState.readsWholeState) ?? true {
-            for (key, content) in try await allPacks(client, room: room) {
-                if let pack = ImagePackParser.parse(content, ref: PackRef(room: room, stateKey: key), source: .room) { packs.append(pack) }
+            for (key, content, legacy) in try await allPacks(client, room: room) {
+                let ref = PackRef(room: room, stateKey: key)
+                // A pack in the current format wins over a legacy pack with the same key.
+                if legacy, packs.contains(where: { $0.ref == ref }) { continue }
+                if let pack = ImagePackParser.parse(content, ref: ref, source: legacy ? .legacy : .room) { packs.append(pack) }
             }
         } else if let content = try await stateContent(client, room: room, key: "") {
             if let pack = ImagePackParser.parse(content, ref: PackRef(room: room, stateKey: ""), source: .room) { packs.append(pack) }
@@ -143,19 +155,22 @@ public final class MatrixStickerPackPort: StickerPackPort {
 
     // MARK: HTTP
 
-    private func stateContent(_ client: Client, room: RoomID, key: String) async throws -> [String: Any]? {
-        let path = "rooms/\(Self.escape(room.rawValue))/state/m.room.image_pack/\(Self.escape(key))"
+    private func stateContent(_ client: Client, room: RoomID, key: String, type: String = "m.room.image_pack") async throws -> [String: Any]? {
+        let path = "rooms/\(Self.escape(room.rawValue))/state/\(type)/\(Self.escape(key))"
         guard let data = try await get(client, path) else { return nil }
         return try JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
 
-    private func allPacks(_ client: Client, room: RoomID) async throws -> [(String, [String: Any])] {
+    /// `(state key, content, isLegacy)` of the room's pack events; current-format packs come first.
+    private func allPacks(_ client: Client, room: RoomID) async throws -> [(String, [String: Any], Bool)] {
         guard let data = try await get(client, "rooms/\(Self.escape(room.rawValue))/state"),
               let events = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
-        return events.compactMap { event in
-            guard event["type"] as? String == "m.room.image_pack", let key = event["state_key"] as? String, let content = event["content"] as? [String: Any] else { return nil }
-            return (key, content)
+        let found: [(String, [String: Any], Bool)] = events.compactMap { event in
+            guard let type = event["type"] as? String, type == "m.room.image_pack" || type == Self.legacyType,
+                  let key = event["state_key"] as? String, let content = event["content"] as? [String: Any] else { return nil }
+            return (key, content, type == Self.legacyType)
         }
+        return found.filter { !$0.2 } + found.filter { $0.2 }
     }
 
     /// The response body, `nil` for 404 (no such state), an error for anything else that isn't 200.
