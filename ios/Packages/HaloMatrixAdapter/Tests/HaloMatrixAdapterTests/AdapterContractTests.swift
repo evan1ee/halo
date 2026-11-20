@@ -373,8 +373,19 @@ struct AdapterContractTests {
         await #expect(throws: HaloError.invalidInput("DUPLICATE_SHORTCODE")) {
             _ = try await creation.createPack(name: "x", images: [images[0], images[0]]) { _, _ in }
         }
-        // Leave the pack room again: later tests expect the account to be in HALO_DEV_ROOMS rooms.
-        try await (try await session.room(ref.room)).leave()
+        // Leave no trace: unlist the pack (otherwise every run adds one enabled pack to the account), then leave and
+        // forget the pack room; later tests expect the account to be in HALO_DEV_ROOMS rooms.
+        let client = try await session.signedInClient()
+        for type in ["m.image_pack.rooms", "one.mbm.halo.sticker_rooms"] {
+            guard let json = try await client.accountData(eventType: type),
+                  var object = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else { continue }
+            if var rooms = object["rooms"] as? [String: Any] { rooms[ref.room.rawValue] = nil; object["rooms"] = rooms }  // enabled packs
+            else if let rooms = object["rooms"] as? [String] { object["rooms"] = rooms.filter { $0 != ref.room.rawValue } }  // hidden rooms
+            try await client.setAccountData(eventType: type, content: String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self))
+        }
+        let local = try await session.room(ref.room)
+        try await local.leave()
+        try? await local.forget()
         try await session.logout()
     }
 
