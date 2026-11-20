@@ -265,6 +265,50 @@ struct AdapterContractTests {
         await peer.logout()
     }
 
+    @Test("New chats: directory search, a direct chat that is reused, a private room with an invitation (creates rooms and cleans up)",
+          .enabled(if: env["HALO_DEV_PEER_USER"] != nil))
+    func newChats() async throws {
+        let server = env["HALO_DEV_SERVER"] ?? ""
+        let peerName = env["HALO_DEV_PEER_USER"] ?? ""
+        let peer = try UserID("@\(peerName):halo.localhost")
+        let session = port()
+        let details = try await session.loginDetails(server: server)
+        _ = try await session.loginPassword(PasswordCredentials(username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"), on: details)
+        try await MatrixSyncPort(session: session).start()
+        let chats = MatrixChatCreationPort(session: session)
+
+        // The directory only lists users who share a room with the searcher (Synapse default); the peer does.
+        let found = try await chats.searchUsers(peerName, limit: 10)
+        #expect(found.contains { $0.id == peer }, "directory search didn't find the peer")
+        #expect(try await chats.searchUsers("   ", limit: 10).isEmpty)
+
+        let dm = try await chats.startDirectChat(with: peer)
+        for _ in 0..<30 {
+            if let known = try? await session.room(dm), await known.isDirect() { break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        var again = try await chats.startDirectChat(with: peer)
+        for _ in 0..<30 where again != dm {  // m.direct arrives with a sync
+            try await Task.sleep(for: .seconds(1))
+            again = try await chats.startDirectChat(with: peer)
+        }
+        #expect(again == dm, "a second direct chat was created")
+
+        let room = try await chats.createRoom(name: "New room fixture", invite: [peer])
+        let rooms = MatrixRoomPort(session: session)
+        var info: RoomDetails?
+        for _ in 0..<30 where info?.name != "New room fixture" {
+            try await Task.sleep(for: .seconds(1))
+            info = try? await rooms.details(room)
+        }
+        #expect(info?.isEncrypted == true && info?.name == "New room fixture")
+        for id in [dm, room] {
+            try? await rooms.leave(id)
+            if let left = try? await session.room(id) { try? await left.forget() }
+        }
+        try await session.logout()
+    }
+
     @Test("An enabled pack whose room the user has left is reported as unavailable, not as a failed load (creates a room and cleans up after itself)")
     func unavailablePack() async throws {
         let session = port()

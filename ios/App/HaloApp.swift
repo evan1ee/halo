@@ -28,6 +28,7 @@ private struct RootView: View {
     let root: AppRoot
     @Environment(\.scenePhase) private var scenePhase
     @State private var path: [RoomID] = []
+    @State private var newChat: NewChatViewModel?
     @AppStorage(AppPreferences.appearanceKey) private var appearance = Appearance.system.rawValue
 
     private var colorScheme: ColorScheme? {
@@ -49,6 +50,16 @@ private struct RootView: View {
                     }
                     .navigationTitle("Halo")
                     .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button {
+                                newChat = root.makeNewChat { room in
+                                    newChat = nil
+                                    path.append(room)
+                                }
+                            } label: { Image(systemName: "square.and.pencil") }
+                                .accessibilityLabel("New chat")
+                                .accessibilityIdentifier("newChat")
+                        }
                         ToolbarItem(placement: .topBarTrailing) {
                             // Destination-based: the stack's path is typed to `RoomID`, so a value link of another type can't push.
                             NavigationLink {
@@ -83,6 +94,7 @@ private struct RootView: View {
                                 .accessibilityIdentifier("settings")
                         }
                     }
+                    .sheet(item: $newChat) { NewChatView(model: $0) }
                     .navigationDestination(for: RoomID.self) { room in
                         TimelineScreen(root: root, room: room)
                     }
