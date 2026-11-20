@@ -45,7 +45,7 @@ The queue is docs/ROADMAP.md §"Remaining work", worked by the loop in docs/deve
 Context for the loop (Halo, repository evan1ee/halo):
 1. Read AGENTS.md, HANDOFF.md, then docs/development/AUTONOMOUS_LOOP.md. Trust HANDOFF for project state.
    Run scripts/install-hooks.sh once per clone.
-2. The work queue is docs/ROADMAP.md §"Remaining work"; HANDOFF §6 is its head. Small items: commit to main; PR only for milestones and big features (D75).
+2. The work queue is docs/ROADMAP.md §"Remaining work"; HANDOFF §6 is its head. Small items: commit to main; PR only for milestones and big features (D75). Wait ~2 min between loop iterations.
 3. Verify every SDK API in the pinned source (ios/SDKVERSION.md); never invent names.
 4. Verify each item: scripts/prepush.sh, the Halo-Debug app build, touched contract tests against infra/dev,
    a simulator check for UI. Report real output; say what you couldn't run.

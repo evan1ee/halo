@@ -25,7 +25,7 @@ The agent first reads AGENTS.md, HANDOFF.md and this file (AGENTS.md §0).
    - for UI changes, run the app in the simulator and check the screen.
 5. **Review** the branch diff (`/code-review` or an equivalent self-review for correctness, security, performance). Fix every
    high or medium finding before merging; list the rest in HANDOFF §5.
-6. **Hand off and merge** (§3), tick the item in ROADMAP, then start the next iteration at once. Do not ask whether to continue.
+6. **Hand off and merge** (§3), tick the item in ROADMAP, then start the next iteration at once. Do not ask whether to continue. Between iterations wait only about 2 minutes (founder, 2026-11-20): schedule the next wakeup 120 s out.
 
 ## 3. Branches, pull requests and merging (D70)
 - **When a pull request, and when just a commit (D75, founder).** A pull request only for a milestone or a big feature (a new
