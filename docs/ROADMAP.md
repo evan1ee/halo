@@ -48,7 +48,7 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 **M3 Read-state engine** (exit: AC-U1–U7 automated green; gates G-UNREAD, G-FFI)
 - [ ] Scenario driver, remaining part: server half of S01/02/04/05/09/10/14/15/22 is done (`tools/scenario-driver/run_scenarios.py`); still to do: feed the real server output into the Swift model, sliding sync, encrypted rooms  ([testing/UNREAD_REGRESSION_TESTS.md](testing/UNREAD_REGRESSION_TESTS.md)).
 - [ ] Read-state auditor (UNREAD_STATE; needed for AC-U8 in M5).
-- [ ] Intent confirmation rules (a)–(c) for `read_intent`, `attempts`/`last_error`, `HaloLog` in `ReadReceiptCoordinator`.
+- [x] Intent confirmation rules (a)–(c) for `read_intent` (a and b deliberately not built: D72), `attempts`/`last_error`, `HaloLog` in `ReadReceiptCoordinator`.
 - [ ] D6 check: does `onScrollVisibilityChange` fire for `List` rows (simulator UI test); fall back to `LazyVStack` if not.
 - [ ] Unit test for the `latestEvent` mapping; contract test for `deletePusher`.
 - [ ] G-UNREAD and G-FFI evaluation written up with the scenario results (👤 founder confirms the gate outcome).

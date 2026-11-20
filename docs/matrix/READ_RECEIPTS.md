@@ -12,7 +12,7 @@
 | Receipt type | `.read` unless the privacy setting is "private receipts" → `.readPrivate` (D7) |
 | Debounce | At most one send per room per 2 s; always the newest intent |
 | Retry | Exponential backoff (1 s → 5 min), on reconnect, on foreground and on background flush |
-| Confirmation | After the server acknowledged the send (state `sent`), the intent is deleted when **(a)** `ownReceipt.eventId == intent.eventId`, or **(b)** a snapshot shows server counts = 0 and `latestEvent.ts ≤ intent.eventTs`, or **(c)** a newer intent replaces it. A `sent` intent older than 7 days is deleted (expiry). Unsent intents never expire |
+| Confirmation | After the server acknowledged the send (state `sent`), the intent is deleted when **(a)** `ownReceipt.eventId == intent.eventId`, or **(b)** a snapshot shows server counts = 0 and `latestEvent.ts ≤ intent.eventTs`, or **(c)** a newer intent replaces it. A `sent` intent older than 7 days is deleted (expiry). Unsent intents never expire. **[DECISION D72: (a) and (b) are not implemented. Deleting a sent intent early would drop the local read position that quiet-unread rooms depend on (S07b), and the room list carries the own receipt as a time, not an event ID. Sent intents stay until expiry; (c) holds because the store only moves forward.]** Each failed send increments `attempts` and keeps `last_error` (the `HaloError` code); both reset when a newer event replaces the intent |
 
 Why not `Timeline.mark_as_read(receiptType)` **[VERIFIED F-FFI-8]**? It picks "the latest visible event" from the
 SDK's point of view, not what the user actually looked at; Halo needs D6 semantics. It can be used for an explicit

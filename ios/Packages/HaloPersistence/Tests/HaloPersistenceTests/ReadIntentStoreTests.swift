@@ -29,6 +29,25 @@ struct ReadIntentStoreTests {
         #expect(intent.event == e(3) && intent.isSent == false && intent.timestamp == t(30))
     }
 
+    @Test("failed sends are counted with the last error; a newer event or a sent intent resets or ignores them")
+    func failureBookkeeping() async throws {
+        let store = try store()
+        try await store.save(ReadIntent(room: room, event: e(1), timestamp: t(10), createdAt: t(100)))
+        try await store.recordFailure(room: room, event: e(1), code: "NETWORK")
+        try await store.recordFailure(room: room, event: e(1), code: "FORBIDDEN")
+        try await store.recordFailure(room: room, event: e(9), code: "OTHER")  // another event: ignored
+        var intent = try #require(try await store.all().first)
+        #expect(intent.attempts == 2 && intent.lastError == "FORBIDDEN")
+        try await store.save(ReadIntent(room: room, event: e(1), timestamp: t(10), createdAt: t(100)))  // same event again: kept
+        #expect(try await store.all().first?.attempts == 2)
+        try await store.save(ReadIntent(room: room, event: e(2), timestamp: t(20), createdAt: t(101)))
+        intent = try #require(try await store.all().first)
+        #expect(intent.attempts == 0 && intent.lastError == nil)
+        try await store.save(ReadIntent(room: room, event: e(2), timestamp: t(20), isSent: true, createdAt: t(101)))
+        try await store.recordFailure(room: room, event: e(2), code: "LATE")
+        #expect(try await store.all().first?.attempts == 0)
+    }
+
     /// P8 (UNREAD_REGRESSION_TESTS §2): concurrent upserts, in a seeded random order, never leave a room behind its newest intent.
     @Test("P8: concurrent upserts end at the newest intent")
     func concurrentUpserts() async throws {

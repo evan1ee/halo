@@ -19,12 +19,13 @@ public struct ReadIntentStore: ReadIntentPort {
         do {
             let account = account
             return try await database.pool.read { db in
-                try Row.fetchAll(db, sql: "SELECT room_id, event_id, event_ts, created_at, state FROM read_intent WHERE account = ?", arguments: [account])
+                try Row.fetchAll(db, sql: "SELECT room_id, event_id, event_ts, created_at, state, attempts, last_error FROM read_intent WHERE account = ?", arguments: [account])
                     .compactMap { row in
                         guard let room = try? RoomID(row["room_id"]), let event = try? EventID(row["event_id"]) else { return nil }
                         return ReadIntent(
                             room: room, event: event, timestamp: Self.date(row["event_ts"]),
-                            isSent: (row["state"] as String) == "sent", createdAt: Self.date(row["created_at"]))
+                            isSent: (row["state"] as String) == "sent", createdAt: Self.date(row["created_at"]),
+                            attempts: row["attempts"], lastError: row["last_error"])
                     }
             }
         } catch { throw .storage(.corrupted) }
@@ -39,6 +40,8 @@ public struct ReadIntentStore: ReadIntentPort {
                         INSERT INTO read_intent (account, room_id, event_id, event_ts, created_at, state, receipt_type)
                         VALUES (?, ?, ?, ?, ?, ?, 'read')
                         ON CONFLICT (account, room_id) DO UPDATE SET
+                          attempts = CASE WHEN read_intent.event_id = excluded.event_id THEN read_intent.attempts ELSE 0 END,
+                          last_error = CASE WHEN read_intent.event_id = excluded.event_id THEN read_intent.last_error ELSE NULL END,
                           event_id = excluded.event_id, event_ts = excluded.event_ts, created_at = excluded.created_at,
                           state = CASE WHEN read_intent.event_id = excluded.event_id AND read_intent.state = 'sent' THEN 'sent' ELSE excluded.state END
                         WHERE excluded.event_ts >= read_intent.event_ts
@@ -47,6 +50,20 @@ public struct ReadIntentStore: ReadIntentPort {
                         account, intent.room.rawValue, intent.event.rawValue, Self.millis(intent.timestamp), Self.millis(intent.createdAt),
                         intent.isSent ? "sent" : "pending",
                     ])
+            }
+        } catch { throw .storage(.corrupted) }
+    }
+
+    public func recordFailure(room: RoomID, event: EventID, code: String) async throws(HaloError) {
+        do {
+            let account = account
+            try await database.pool.write { db in
+                try db.execute(
+                    sql: """
+                        UPDATE read_intent SET attempts = attempts + 1, last_error = ?
+                        WHERE account = ? AND room_id = ? AND event_id = ? AND state = 'pending'
+                        """,
+                    arguments: [code, account, room.rawValue, event.rawValue])
             }
         } catch { throw .storage(.corrupted) }
     }
