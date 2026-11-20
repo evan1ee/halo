@@ -103,10 +103,32 @@ public final class TimelineViewModel {
     private let media: MediaLoader?
     private var observation: Task<Void, Never>?
     private let dateFormatter: DateFormatter
+    private let receipts: ReadReceiptCoordinator?
+    private let room: RoomID?
+    private let dwell: Duration
+    private let sleep: @Sendable (Duration) async throws -> Void
+    private var eventTimes: [EventID: Date] = [:]
+    private var visible: Set<EventID> = []
+    private var isActive = true
+    private var dwellTask: Task<Void, Never>?
+    private var pendingCandidate: EventID?
 
-    public init(coordinator: TimelineCoordinator, media: MediaLoader? = nil, locale: Locale = .current, timeZone: TimeZone = .current) {
+    /// How long an event must stay visible before it counts as seen (READ_RECEIPTS §1, D6).
+    public static let seenDwell: Duration = .milliseconds(500)
+
+    /// - Parameters:
+    ///   - receipts: when given together with `room`, the newest visible confirmed event is reported as read.
+    public init(
+        coordinator: TimelineCoordinator, media: MediaLoader? = nil, receipts: ReadReceiptCoordinator? = nil, room: RoomID? = nil,
+        dwell: Duration = TimelineViewModel.seenDwell, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        locale: Locale = .current, timeZone: TimeZone = .current
+    ) {
         self.coordinator = coordinator
         self.media = media
+        self.receipts = receipts
+        self.room = room
+        self.dwell = dwell
+        self.sleep = sleep
         let formatter = DateFormatter()
         formatter.locale = locale
         formatter.timeZone = timeZone
@@ -115,7 +137,36 @@ public final class TimelineViewModel {
         dateFormatter = formatter
     }
 
-    isolated deinit { observation?.cancel() }
+    isolated deinit { observation?.cancel(); dwellTask?.cancel() }
+
+    // MARK: Read receipts
+
+    /// The view reports a confirmed row entering or leaving the visible part of the list.
+    public func rowVisibility(_ row: TimelineRow, isVisible: Bool) {
+        guard let id = row.eventID else { return }
+        if isVisible { visible.insert(id) } else { visible.remove(id) }
+        reevaluateSeen()
+    }
+
+    /// `false` while the app isn't active or the room isn't the top-most screen; nothing is reported then.
+    public func setActive(_ active: Bool) {
+        isActive = active
+        reevaluateSeen()
+    }
+
+    private func reevaluateSeen() {
+        guard receipts != nil, room != nil else { return }
+        let candidate = isActive ? visible.filter { eventTimes[$0] != nil }.max { eventTimes[$0]! < eventTimes[$1]! } : nil
+        guard candidate != pendingCandidate else { return }
+        pendingCandidate = candidate
+        dwellTask?.cancel()
+        dwellTask = nil
+        guard let candidate, let time = eventTimes[candidate], let receipts, let room else { return }
+        dwellTask = Task { [dwell, sleep] in
+            do { try await sleep(dwell) } catch { return }
+            await receipts.reportSeen(room: room, event: candidate, timestamp: time)
+        }
+    }
 
     /// Opens the timeline and follows it. Call when the screen appears.
     public func start() async {
@@ -225,6 +276,12 @@ public final class TimelineViewModel {
         case .idle, .opening:
             content = .opening
         case .live(let snapshot):
+            var times: [EventID: Date] = [:]
+            for item in snapshot.items {
+                if case .event(let event) = item.content, let id = event.eventID { times[id] = event.timestamp }
+            }
+            eventTimes = times
+            visible.formIntersection(times.keys)
             typingText = Self.typingText(snapshot.typing, items: snapshot.items)
             content = .live(
                 rows: Self.collapsingStateRuns(snapshot.items.map(row), items: snapshot.items),

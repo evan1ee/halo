@@ -36,6 +36,7 @@ public actor SessionCoordinator {
     private let port: any SessionPort
     private let keychain: any KeychainPort
     private let deviceDisplayName: String
+    private var beforeSignOut: (@Sendable () async -> Void)?
     private var broadcaster = SnapshotBroadcaster<State>()
     private var updatesTask: Task<Void, Never>?
 
@@ -48,6 +49,9 @@ public actor SessionCoordinator {
     deinit {
         updatesTask?.cancel()
     }
+
+    /// Work to do while the session is still valid, right before signing out (removing the pusher). It must not throw.
+    public func setBeforeSignOut(_ hook: @escaping @Sendable () async -> Void) { beforeSignOut = hook }
 
     /// The current state, then its changes. Latest value wins: a subscriber that reads slowly may
     /// skip intermediate states, never the newest one (CONCURRENCY §3).
@@ -132,6 +136,7 @@ public actor SessionCoordinator {
         state = .signingOut
         stopObservingUpdates()
         var failure: HaloError?
+        await beforeSignOut?()
         do { try await port.logout() } catch { failure = error }
         do { try await keychain.delete(.session) } catch { failure = failure ?? error }
         state = .signedOut(failure: failure)

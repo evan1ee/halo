@@ -92,4 +92,66 @@ struct BadgeCoordinatorTests {
         await TimelineCoordinator(port: timelines, room: room, records: records).open()
         #expect(records.all().map(\.eventID.rawValue) == ["$2"])
     }
+
+    @Test("reading a room here clears its attention at once, before the server confirms; a newer event brings it back")
+    func localIntentClears() async throws {
+        let rooms = FakeRoomListPort()
+        let coordinator = RoomListCoordinator(port: rooms)
+        let markers = FakeReadMarkerPort()
+        let receipts = ReadReceiptCoordinator(port: markers)
+        let port = FakeBadgePort()
+        let badge = BadgeCoordinator(rooms: coordinator, records: FakeNotificationRecords(), port: port, receipts: receipts)
+        await badge.begin()
+        await coordinator.start()
+        func unread(latest: Double) throws -> RoomSummary {
+            RoomSummary(
+                id: try RoomID("!a:x.org"), name: "a", isDirect: false, isEncrypted: false, membership: .joined,
+                read: RoomReadCounts(mode: .allMessages, server: ServerCounts(notification: 3, highlight: 0), sdk: .zero, isMarkedUnread: false),
+                latestEvent: LatestEventRef(timestamp: Date(timeIntervalSince1970: latest), senderIsSelf: false))
+        }
+        try rooms.emit(.reset([try unread(latest: 100)]))
+        #expect(await eventually { port.badge == 1 })
+
+        await receipts.reportSeen(room: try RoomID("!a:x.org"), event: try EventID("$e"), timestamp: Date(timeIntervalSince1970: 100))
+        #expect(await eventually { port.badge == 0 })
+
+        try rooms.emit(.set(index: 0, try unread(latest: 200)))
+        #expect(await eventually { port.badge == 1 })
+    }
+
+    @Test("a receipt your other device sent clears the room here, until a newer event arrives")
+    func readElsewhereClears() async throws {
+        let rooms = FakeRoomListPort()
+        let coordinator = RoomListCoordinator(port: rooms)
+        let port = FakeBadgePort()
+        let badge = BadgeCoordinator(rooms: coordinator, records: FakeNotificationRecords(), port: port)
+        await badge.begin()
+        await coordinator.start()
+        func room(latest: Double, readThrough: Double?) throws -> RoomSummary {
+            RoomSummary(
+                id: try RoomID("!a:x.org"), name: "a", isDirect: false, isEncrypted: false, membership: .joined,
+                read: RoomReadCounts(mode: .allMessages, server: ServerCounts(notification: 3, highlight: 0), sdk: .zero, isMarkedUnread: false),
+                latestEvent: LatestEventRef(timestamp: Date(timeIntervalSince1970: latest), senderIsSelf: false),
+                ownReadThrough: readThrough.map { Date(timeIntervalSince1970: $0) })
+        }
+        try rooms.emit(.reset([try room(latest: 100, readThrough: nil)]))
+        #expect(await eventually { port.badge == 1 })
+        try rooms.emit(.set(index: 0, try room(latest: 100, readThrough: 100)))
+        #expect(await eventually { port.badge == 0 })
+        try rooms.emit(.set(index: 0, try room(latest: 200, readThrough: 100)))
+        #expect(await eventually { port.badge == 1 })
+    }
+
+    @Test("a pushed event the user already read doesn't count, a newer one does")
+    func recordsAreReadThrough() throws {
+        let id = try RoomID("!a:x.org")
+        let input = RoomReadInputs(roomID: id, membership: .joined, isEncrypted: true, counts: .none)
+        func record(_ t: Double) throws -> NotificationRecord {
+            NotificationRecord(roomID: id, eventID: try EventID("$e\(Int(t))"), timestamp: Date(timeIntervalSince1970: t), isMention: false)
+        }
+        let read = [id: Date(timeIntervalSince1970: 100)]
+        #expect(BadgeCoordinator.attention(inputs: [input], records: [try record(100)], positions: read).isEmpty)
+        #expect(BadgeCoordinator.attention(inputs: [input], records: [try record(100), try record(150)], positions: read) == [id])
+        #expect(BadgeCoordinator.attention(inputs: [input], records: [try record(100)]) == [id])
+    }
 }

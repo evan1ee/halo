@@ -8,6 +8,8 @@ import UIKit
 public struct TimelineView: View {
     private let model: TimelineViewModel
 
+    @Environment(\.scenePhase) private var scenePhase
+
     public init(model: TimelineViewModel) { self.model = model }
 
     public var body: some View {
@@ -35,7 +37,11 @@ public struct TimelineView: View {
                         // Re-runs whenever rows change, so loading continues until the start marker arrives.
                         .task(id: rows.count) { if paginationError == nil { await model.loadEarlier() } }
                     }
-                    ForEach(rows) { row in RowView(row: row, model: model).listRowSeparator(.hidden) }
+                    ForEach(rows) { row in
+                        RowView(row: row, model: model).listRowSeparator(.hidden)
+                            .onAppear { model.rowVisibility(row, isVisible: true) }
+                            .onDisappear { model.rowVisibility(row, isVisible: false) }
+                    }
                 }
                 .listStyle(.plain)
                 .defaultScrollAnchor(.bottom)
@@ -53,7 +59,8 @@ public struct TimelineView: View {
             ReactionPicker(model: model).presentationDetents([.medium])
         }
         .task { await model.start() }
-        .onDisappear { Task { await model.stop() } }
+        .onChange(of: scenePhase, initial: true) { _, phase in model.setActive(phase == .active) }
+        .onDisappear { model.setActive(false); Task { await model.stop() } }
     }
 }
 

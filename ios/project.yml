@@ -18,6 +18,7 @@ packages:
   HaloDomain: {path: Packages/HaloDomain}
   HaloFoundation: {path: Packages/HaloFoundation}
   HaloPlatform: {path: Packages/HaloPlatform}
+  HaloPersistence: {path: Packages/HaloPersistence}
   FeatureAuth: {path: Packages/Features/FeatureAuth}
   FeatureRoomList: {path: Packages/Features/FeatureRoomList}
   FeatureTimeline: {path: Packages/Features/FeatureTimeline}
@@ -32,6 +33,7 @@ targets:
       - package: HaloDomain
       - package: HaloFoundation
       - package: HaloPlatform
+      - package: HaloPersistence
       - package: FeatureAuth
       - package: FeatureRoomList
       - package: FeatureTimeline

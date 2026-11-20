@@ -22,6 +22,9 @@ public actor RoomListCoordinator {
     }
 
     private let port: any RoomListPort
+    private let loadsAllPages: Bool
+    /// The room count at the last automatic page request; a page that adds no rooms yields no diff, which ends the loop.
+    private var requestedAt = 0
     private var broadcaster = SnapshotBroadcaster<Status>()
     private var readBroadcaster = SnapshotBroadcaster<[RoomReadInputs]>()
     private var readInputsCache: [RoomReadInputs] = []
@@ -30,8 +33,11 @@ public actor RoomListCoordinator {
     private var consecutiveFailures = 0
     private var diffsInSubscription = 0
 
-    public init(port: any RoomListPort) {
+    /// - Parameter loadsAllPages: keep requesting pages while each one adds rooms, so the badge sees every room
+    ///   (UNREAD_STATE: the badge counts all rooms, not the first page).
+    public init(port: any RoomListPort, loadsAllPages: Bool = false) {
         self.port = port
+        self.loadsAllPages = loadsAllPages
     }
 
     deinit {
@@ -49,6 +55,7 @@ public actor RoomListCoordinator {
 
     public func start(filter: RoomListFilter = .all) {
         consecutiveFailures = 0
+        requestedAt = 0
         subscribe(filter: filter)
     }
 
@@ -80,7 +87,7 @@ public actor RoomListCoordinator {
     }
 
     private func publishReadInputs() {
-        let inputs = rooms.map { RoomReadInputs(roomID: $0.id, membership: $0.membership, isEncrypted: $0.isEncrypted, counts: $0.read) }
+        let inputs = rooms.map { RoomReadInputs(roomID: $0.id, membership: $0.membership, isEncrypted: $0.isEncrypted, counts: $0.read, latestEvent: $0.latestEvent, localIntent: $0.ownReadThrough) }
         guard inputs != readInputsCache else { return }
         readInputsCache = inputs
         readBroadcaster.publish(inputs)
@@ -97,6 +104,10 @@ public actor RoomListCoordinator {
             if diffsInSubscription > 1 { consecutiveFailures = 0 }
             status = .loaded(roomCount: rooms.count)
             publishReadInputs()
+            if loadsAllPages, rooms.count > requestedAt {
+                requestedAt = rooms.count
+                Task { [port] in try? await port.loadMore() }
+            }
             return true
         } catch {
             consecutiveFailures += 1

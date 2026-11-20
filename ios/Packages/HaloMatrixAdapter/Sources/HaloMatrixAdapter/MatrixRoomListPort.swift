@@ -108,14 +108,41 @@ public final class MatrixRoomListPort: RoomListPort {
         // row, which would shift every later index.
         let isDirect = await room.isDirect()
         let isEncrypted = await room.isEncrypted()
+        let read = await readCounts(of: room, settings: settings, isEncrypted: isEncrypted, isOneToOne: isDirect)
         return try RoomSummary(
             id: RoomID(room.id()),
             name: room.displayName(),
             isDirect: isDirect,
             isEncrypted: isEncrypted,
             membership: membership(room.membership()),
-            read: await readCounts(of: room, settings: settings, isEncrypted: isEncrypted, isOneToOne: isDirect)
+            read: read,
+            latestEvent: latestEvent(await room.latestEvent()),
+            ownReadThrough: await ownReadThrough(of: room, counts: read)
         )
+    }
+
+    /// Event id → time for resolved receipt targets; an event's time never changes.
+    private static let eventTimes = Mutex<[String: Date]>([:])
+
+    /// The time of the event the user's newest own receipt points at (read from another device). Only rooms that
+    /// look unread are resolved, so quiet rooms cost nothing; a failed lookup leaves the room as unread, the safe error.
+    static func ownReadThrough(of room: Room, counts: RoomReadCounts) async -> Date? {
+        let looksUnread = counts.server.notification > 0 || counts.server.highlight > 0 || counts.sdk.unreadMessages > 0
+            || counts.sdk.unreadNotifications > 0 || counts.isMarkedUnread
+        guard looksUnread else { return nil }
+        let me = room.ownUserId()
+        var newest: (eventId: String, receipt: UInt64)?
+        for type in [ReceiptType.read, .readPrivate] {
+            guard let found = try? await room.loadUserReceipt(receiptType: type, thread: .unthreaded, userId: me) else { continue }
+            let at = found.receipt.timestamp ?? 0
+            if newest == nil || at >= newest!.receipt { newest = (found.eventId, at) }
+        }
+        guard let eventId = newest?.eventId else { return nil }
+        if let known = eventTimes.withLock({ $0[eventId] }) { return known }
+        guard let event = try? await room.loadOrFetchEvent(eventId: eventId) else { return nil }
+        let time = Date(timeIntervalSince1970: Double(event.timestamp()) / 1000)
+        eventTimes.withLock { $0[eventId] = time }
+        return time
     }
 
     /// The room's unread counts and effective notification mode. A mode that can't be read counts as "all messages":
@@ -132,6 +159,17 @@ public final class MatrixRoomListPort: RoomListPort {
             server: ServerCounts(notification: Int(info.notificationCount), highlight: Int(info.highlightCount)),
             sdk: SDKCounts(unreadMessages: Int(info.numUnreadMessages), unreadNotifications: Int(info.numUnreadNotifications), unreadMentions: Int(info.numUnreadMentions)),
             isMarkedUnread: info.isMarkedUnread)
+    }
+
+    /// The newest event for the read-state policy. Invites and rooms without events have none; a local echo is the
+    /// user's own event (its time is when it was queued).
+    static func latestEvent(_ value: LatestEventValue) -> LatestEventRef? {
+        func date(_ ms: Timestamp) -> Date { Date(timeIntervalSince1970: Double(ms) / 1000) }
+        switch value {
+        case .none, .remoteInvite: return nil
+        case .remote(let timestamp, _, let isOwn, _, _): return LatestEventRef(timestamp: date(timestamp), senderIsSelf: isOwn)
+        case .local(let timestamp, _, _, _, _): return LatestEventRef(timestamp: date(timestamp), senderIsSelf: true)
+        }
     }
 
     static func mode(_ mode: RoomNotificationMode) -> NotificationMode {

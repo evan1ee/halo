@@ -1,3 +1,4 @@
+import Foundation
 import HaloFoundation
 
 /// A room as the room list shows it (docs/features/ROOM_LIST.md §7). M0 subset; avatar, latest event,
@@ -11,8 +12,17 @@ public struct RoomSummary: Sendable, Equatable, Identifiable {
     public let membership: Membership
     /// Unread inputs for the read-state policy (`ReadStatePolicy`); `.none` until known.
     public let read: RoomReadCounts
+    /// The newest event the SDK knows in the room (time and whether the user sent it); `nil` when unknown.
+    public let latestEvent: LatestEventRef?
+    /// The time of the event the user's own newest read receipt (any device) points at; `nil` when unknown or not resolved.
+    public let ownReadThrough: Date?
 
-    public init(id: RoomID, name: String?, isDirect: Bool, isEncrypted: Bool, membership: Membership, read: RoomReadCounts = .none) {
+    public init(
+        id: RoomID, name: String?, isDirect: Bool, isEncrypted: Bool, membership: Membership, read: RoomReadCounts = .none,
+        latestEvent: LatestEventRef? = nil, ownReadThrough: Date? = nil
+    ) {
+        self.latestEvent = latestEvent
+        self.ownReadThrough = ownReadThrough
         self.read = read
         self.id = id
         self.name = name

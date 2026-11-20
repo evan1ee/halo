@@ -6,6 +6,23 @@ import Testing
 
 @Suite("RoomListCoordinator", .timeLimit(.minutes(1)))
 struct RoomListCoordinatorTests {
+    @Test("with loadsAllPages, each page that adds rooms asks for the next, and an empty page ends the loop")
+    func loadsAllPages() async throws {
+        let port = FakeRoomListPort(rooms: [room(1), room(2)])
+        let coordinator = RoomListCoordinator(port: port, loadsAllPages: true)
+        let statuses = await coordinator.statuses()
+        await coordinator.start()
+        #expect(await first(statuses) { $0 == .loaded(roomCount: 2) } != nil)
+        for _ in 0..<200_000 where port.loadMoreCalls < 1 { await Task.yield() }
+        #expect(port.loadMoreCalls == 1)
+        try port.emit(.append([room(3)]))
+        #expect(await first(statuses) { $0 == .loaded(roomCount: 3) } != nil)
+        for _ in 0..<200_000 where port.loadMoreCalls < 2 { await Task.yield() }
+        #expect(port.loadMoreCalls == 2)  // no diff came back from page 2, so no page 3 is requested
+        for _ in 0..<1000 { await Task.yield() }
+        #expect(port.loadMoreCalls == 2)
+    }
+
     @Test("publishes the room count as diffs arrive (M0 exit signal)")
     func roomCount() async throws {
         let port = FakeRoomListPort(rooms: [room(1), room(2)])

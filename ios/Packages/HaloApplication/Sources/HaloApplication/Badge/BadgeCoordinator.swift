@@ -15,10 +15,13 @@ public actor BadgeCoordinator {
     private let rooms: RoomListCoordinator
     private let records: any NotificationRecordPort
     private let port: any BadgePort
+    private let receipts: ReadReceiptCoordinator?
+    private var positions: [RoomID: Date] = [:]
     private var inputs: [RoomReadInputs] = []
     private var tasks: [Task<Void, Never>] = []
 
-    public init(rooms: RoomListCoordinator, records: any NotificationRecordPort, port: any BadgePort) {
+    public init(rooms: RoomListCoordinator, records: any NotificationRecordPort, port: any BadgePort, receipts: ReadReceiptCoordinator? = nil) {
+        self.receipts = receipts
         self.rooms = rooms
         self.records = records
         self.port = port
@@ -31,7 +34,12 @@ public actor BadgeCoordinator {
         guard tasks.isEmpty else { return }
         let roomInputs = await rooms.readInputs()
         let changes = records.changes()
-        tasks = [
+        var follow: [Task<Void, Never>] = []
+        if let receipts {
+            let positions = await receipts.positions()
+            follow.append(Task { [weak self] in for await positions in positions { await self?.positionsChanged(positions) } })
+        }
+        tasks = follow + [
             Task { [weak self] in for await inputs in roomInputs { await self?.roomsChanged(inputs) } },
             Task { [weak self] in for await _ in changes { await self?.recompute() } },
         ]
@@ -42,19 +50,28 @@ public actor BadgeCoordinator {
 
     /// The attention set for `inputs` and `records`: every room whose state needs attention, plus rooms that have
     /// records but aren't in the loaded list (their only evidence is the push).
-    public static func attention(inputs: [RoomReadInputs], records: [NotificationRecord]) -> Set<RoomID> {
+    public static func attention(inputs: [RoomReadInputs], records: [NotificationRecord], positions: [RoomID: Date] = [:]) -> Set<RoomID> {
         let byRoom = Dictionary(grouping: records, by: \.roomID)
         var result: Set<RoomID> = []
         for input in inputs {
-            let notified = (byRoom[input.roomID] ?? []).map { NotifiedRef(timestamp: $0.timestamp, isMention: $0.isMention) }
+            // A pushed event the user has read (here, or on another device) is no longer unread.
+            let readThrough = [positions[input.roomID], input.localIntent].compactMap { $0 }.max()
+            let notified = (byRoom[input.roomID] ?? [])
+                .filter { record in readThrough.map { record.timestamp > $0 } ?? true }
+                .map { NotifiedRef(timestamp: $0.timestamp, isMention: $0.isMention) }
             let state = ReadStatePolicy.evaluate(RoomReadInputs(
                 roomID: input.roomID, membership: input.membership, isEncrypted: input.isEncrypted, counts: input.counts,
-                latestEvent: input.latestEvent, localIntent: input.localIntent, unconfirmedNotified: notified))
+                latestEvent: input.latestEvent, localIntent: readThrough, unconfirmedNotified: notified))
             if state.attention { result.insert(input.roomID) }
         }
         let known = Set(inputs.map(\.roomID))
         for room in byRoom.keys where !known.contains(room) { result.insert(room) }
         return result
+    }
+
+    private func positionsChanged(_ positions: [RoomID: Date]) async {
+        self.positions = positions
+        await recompute()
     }
 
     private func roomsChanged(_ inputs: [RoomReadInputs]) async {
@@ -63,7 +80,7 @@ public actor BadgeCoordinator {
     }
 
     private func recompute() async {
-        let attention = Self.attention(inputs: inputs, records: records.all())
+        let attention = Self.attention(inputs: inputs, records: records.all(), positions: positions)
         guard attention != attentionRooms || !hasWritten else { return }
         hasWritten = true
         attentionRooms = attention

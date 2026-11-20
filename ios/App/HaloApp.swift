@@ -49,6 +49,7 @@ private struct RootView: View {
             PushDelegate.coordinator = root.push
             await root.push?.begin()
             await root.badge.begin()
+            Task { await root.followReadIntents() }
             await root.sync.begin()
             await root.recovery.start()  // before the banner exists: a hidden banner view runs no task
             await root.auth.start()
@@ -61,7 +62,10 @@ private struct RootView: View {
             }
         }
         // Sync runs only in the foreground (SYNC_ENGINE §2 rule 1).
-        .task(id: scenePhase) { await root.sync.setForeground(scenePhase == .active) }
+        .task(id: scenePhase) {
+            await root.sync.setForeground(scenePhase == .active)
+            if scenePhase != .active { await root.receipts.flush() }
+        }
     }
 }
 

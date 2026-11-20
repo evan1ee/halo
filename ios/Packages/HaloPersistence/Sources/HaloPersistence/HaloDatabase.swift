@@ -17,6 +17,19 @@ public struct HaloDatabase: Sendable {
         } catch {
             throw .storage(.migrationFailed)
         }
+        try Self.protect(path: path)
+    }
+
+    /// Sets `completeUntilFirstUserAuthentication` on the database and its WAL/shared-memory files, and on the
+    /// directory so files SQLite creates later inherit it (PERSISTENCE §3: the NSE must read it while locked).
+    static func protect(path: String) throws(HaloError) {
+        let manager = FileManager.default
+        let directory = (path as NSString).deletingLastPathComponent
+        do {
+            for item in [directory, path, path + "-wal", path + "-shm"] where manager.fileExists(atPath: item) {
+                try manager.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: item)
+            }
+        } catch { throw .storage(.corrupted) }
     }
 
     /// The SQLite library GRDB runs on, e.g. `3.51.0`. Used by diagnostics and the V-SQL-1 check.
@@ -35,6 +48,18 @@ public struct HaloDatabase: Sendable {
                 table.column("key", .text).primaryKey()
                 table.column("value", .text).notNull()
             }
+        }
+        migrator.registerMigration("v2-read-intent") { db in
+            try db.execute(sql: """
+                CREATE TABLE read_intent (
+                  account TEXT NOT NULL, room_id TEXT NOT NULL,
+                  event_id TEXT NOT NULL, event_ts INTEGER NOT NULL,
+                  created_at INTEGER NOT NULL, state TEXT NOT NULL CHECK (state IN ('pending','sent')),
+                  attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT,
+                  receipt_type TEXT NOT NULL CHECK (receipt_type IN ('read','read_private')),
+                  PRIMARY KEY (account, room_id)
+                )
+                """)
         }
         return migrator
     }

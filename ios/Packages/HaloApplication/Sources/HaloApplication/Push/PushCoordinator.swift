@@ -45,6 +45,14 @@ public actor PushCoordinator {
         await registerIfPossible()
     }
 
+    /// Removes the pusher from the homeserver. Call before the session ends (it needs the session). Best effort: a failure
+    /// must not block signing out, and the homeserver drops a pusher whose gateway rejects the token anyway.
+    public func unregister() async {
+        guard let token else { return }
+        try? await port.unregister(deviceToken: token, appID: appID)
+        registered = nil
+    }
+
     /// Tries again after a failure.
     public func retry() async { await registerIfPossible() }
 
