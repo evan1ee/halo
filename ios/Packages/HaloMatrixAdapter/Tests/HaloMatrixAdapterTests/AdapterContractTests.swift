@@ -182,6 +182,49 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
+    @Test("An enabled pack whose room the user has left is reported as unavailable, not as a failed load (creates a room and cleans up after itself)")
+    func unavailablePack() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
+            on: details)
+        try await MatrixSyncPort(session: session).start()
+        let client = try await session.signedInClient()
+        let roomID = try await client.createRoom(request: CreateRoomParameters(name: "Unavailable pack fixture", isEncrypted: false, visibility: .private, preset: .privateChat))
+        let ref = PackRef(room: try RoomID(roomID), stateKey: "gone")
+        var room: Room?
+        for _ in 0..<30 {
+            if let known = try? await session.room(ref.room) { room = known; break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        let local = try #require(room)
+        let pack = #"{"pack":{"display_name":"Gone","usage":["sticker"]},"images":{"wave":{"url":"mxc://halo.localhost/gone0000000000000000"}}}"#
+        _ = try await local.sendStateEventRaw(eventType: "m.room.image_pack", stateKey: ref.stateKey, content: pack, requestConfigOverride: nil)
+        let before = try await client.accountData(eventType: "m.image_pack.rooms")
+        try await client.setAccountData(eventType: "m.image_pack.rooms", content: #"{"version":1,"rooms":{"\#(roomID)":{"gone":{}}}}"#)
+
+        let packs = MatrixStickerPackPort(session: session)
+        var readable = try await packs.packs(currentRoom: nil)
+        for _ in 0..<30 where !readable.packs.contains(where: { $0.ref == ref }) {  // account data reaches the SDK store with a sync
+            try await Task.sleep(for: .seconds(1))
+            readable = try await packs.packs(currentRoom: nil)
+        }
+        #expect(readable.packs.contains { $0.ref == ref })
+        // Leave and forget: the room is no longer readable (403/404) and the pack is reported, not counted as a failure.
+        try await local.leave()
+        try? await local.forget()
+        var load = try await packs.packs(currentRoom: nil)
+        for _ in 0..<15 where !load.unavailable.contains(ref) {
+            try await Task.sleep(for: .seconds(1))
+            load = try await packs.packs(currentRoom: nil)
+        }
+        #expect(load.unavailable.contains(ref) && !load.packs.contains { $0.ref == ref } && load.failedSources == 0)
+        // Restore the account data (an empty listing if there was none), so no pack stays enabled.
+        try? await client.setAccountData(eventType: "m.image_pack.rooms", content: before ?? "{}")
+        try await session.logout()
+    }
+
     @Test("Mentions, members and unknown local echoes (uses HALO_DEV_STICKER_ROOM as a scratch room)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
     func mentionsAndEchoes() async throws {
         let session = port()
