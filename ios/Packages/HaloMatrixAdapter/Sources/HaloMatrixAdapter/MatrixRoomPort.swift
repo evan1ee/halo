@@ -60,6 +60,16 @@ public final class MatrixRoomPort: RoomPort {
         } catch { throw ErrorMapper.map(error) }
     }
 
+    public func setAvatar(mimeType: String, data: Data, in id: RoomID) async throws(HaloError) {
+        let room = try await session.room(id)
+        do { try await room.uploadAvatar(mimeType: mimeType, data: data, mediaInfo: nil) } catch { throw ErrorMapper.map(error) }
+    }
+
+    public func removeAvatar(in id: RoomID) async throws(HaloError) {
+        let room = try await session.room(id)
+        do { try await room.removeAvatar() } catch { throw ErrorMapper.map(error) }
+    }
+
     public func invite(_ users: [UserID], to id: RoomID) async throws(HaloError) {
         let room = try await session.room(id)
         do { for user in users { try await room.inviteUserById(userId: user.rawValue) } } catch { throw ErrorMapper.map(error) }

@@ -28,7 +28,10 @@ public final class RoomDetailsViewModel: Identifiable {
     private let port: any RoomPort
     private let room: RoomID
 
-    public init(port: any RoomPort, room: RoomID) {
+    private let images: (any ImagePreparing)?
+
+    public init(port: any RoomPort, room: RoomID, images: (any ImagePreparing)? = nil) {
+        self.images = images
         self.port = port
         self.room = room
     }
@@ -46,6 +49,36 @@ public final class RoomDetailsViewModel: Identifiable {
     public var hasMoreMembers: Bool {
         guard case .loaded(_, let members) = content else { return false }
         return members.count >= requestedMembers
+    }
+
+    /// Sets a picked photo as the room's avatar: shrunk and stripped of metadata first. Returns `true` on success.
+    @discardableResult
+    public func changePhoto(_ data: Data) async -> Bool {
+        guard let images else { return false }
+        do throws(HaloError) {
+            let image = try images.prepare(data: data, filename: "avatar")
+            try await port.setAvatar(mimeType: image.mimeType, data: image.data, in: room)
+            actionError = nil
+            return true
+        } catch {
+            actionError = Self.photoText(error)
+            return false
+        }
+    }
+
+    public func removePhoto() async {
+        do throws(HaloError) {
+            try await port.removeAvatar(in: room)
+            actionError = nil
+        } catch { actionError = Self.photoText(error) }
+    }
+
+    private static func photoText(_ error: HaloError) -> String {
+        switch error {
+        case .forbidden: "You don't have permission to change this room's photo."
+        case .invalidInput: "That photo couldn't be used. Try another one."
+        default: text(error)
+        }
     }
 
     /// Asks for one more page of members (administrators and moderators stay first).

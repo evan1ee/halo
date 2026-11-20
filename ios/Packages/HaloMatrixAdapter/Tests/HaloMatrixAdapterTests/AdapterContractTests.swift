@@ -222,6 +222,9 @@ struct AdapterContractTests {
         }
         #expect(info.canEditDetails && info.canInvite, "creator permissions not read")
         try await rooms.setDetails(name: "Renamed fixture", topic: "New topic", in: roomID)
+        let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")!
+        try await rooms.setAvatar(mimeType: "image/png", data: png, in: roomID)
+        try await rooms.removeAvatar(in: roomID)
         var edited = try await rooms.details(roomID)
         for _ in 0..<30 where edited.name != "Renamed fixture" || edited.topic != "New topic" {
             try await Task.sleep(for: .seconds(1))

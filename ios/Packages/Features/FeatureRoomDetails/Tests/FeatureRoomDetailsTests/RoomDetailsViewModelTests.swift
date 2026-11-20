@@ -1,3 +1,4 @@
+import Foundation
 import HaloDomain
 import HaloFoundation
 import HaloTestSupport
@@ -125,5 +126,27 @@ extension RoomDetailsViewModelTests {
         guard case .loaded(_, let all) = model.content else { Issue.record("not loaded"); return }
         #expect(all.count == 450)
         #expect(!model.hasMoreMembers)
+    }
+
+    private struct PassThrough: ImagePreparing {
+        func prepare(data: Data, filename: String) throws(HaloError) -> OutgoingImage {
+            guard !data.isEmpty else { throw .invalidInput("EMPTY_IMAGE") }
+            return OutgoingImage(data: data, filename: filename, mimeType: "image/png", width: 1, height: 1)
+        }
+    }
+
+    @Test("changing the room photo uploads the prepared image; removing calls the port; failures are explained")
+    func roomPhoto() async throws {
+        let (port, _, id) = try fixture()
+        let model = RoomDetailsViewModel(port: port, room: id, images: PassThrough())
+        #expect(await model.changePhoto(Data([1, 2])))
+        #expect(port.avatarUploads == [Data([1, 2])])
+        #expect(await model.changePhoto(Data()) == false)
+        #expect(model.actionError?.contains("couldn't be used") == true)
+        await model.removePhoto()
+        #expect(port.avatarRemovals == 1 && model.actionError == nil)
+        port.fail(with: .forbidden)
+        #expect(await model.changePhoto(Data([3])) == false)
+        #expect(model.actionError?.contains("permission") == true)
     }
 }

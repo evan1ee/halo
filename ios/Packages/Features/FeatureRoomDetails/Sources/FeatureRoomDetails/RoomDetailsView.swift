@@ -1,4 +1,5 @@
 import HaloDomain
+import PhotosUI
 import SwiftUI
 
 /// The room info sheet. Content and actions come from `RoomDetailsViewModel`; no logic here.
@@ -10,6 +11,7 @@ public struct RoomDetailsView: View {
     @State private var draftName = ""
     @State private var draftTopic = ""
     @State private var inviteText = ""
+    @State private var picked: PhotosPickerItem?
 
     private let onLeft: @MainActor () -> Void
     private let profile: (@MainActor (RoomMemberInfo) -> UserProfileViewModel?)?
@@ -36,6 +38,14 @@ public struct RoomDetailsView: View {
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
         .task { await model.load() }
+        .onChange(of: picked) { _, item in
+            guard let item else { return }
+            picked = nil
+            Task {
+                guard let data = try? await item.loadTransferable(type: Data.self) else { return }
+                await model.changePhoto(data)
+            }
+        }
         .onChange(of: model.hasLeft) { _, left in if left { dismiss(); onLeft() } }
     }
 
@@ -51,6 +61,10 @@ public struct RoomDetailsView: View {
                 Section {
                     if details.canEditDetails {
                         Button("Edit name and topic") { draftName = details.name ?? ""; draftTopic = details.topic ?? ""; editing = true }.accessibilityIdentifier("editRoom")
+                    }
+                    if details.canEditDetails {
+                        PhotosPicker(selection: $picked, matching: .images) { Text("Change photo") }.accessibilityIdentifier("changeRoomPhoto")
+                        Button("Remove photo", role: .destructive) { Task { await model.removePhoto() } }.accessibilityIdentifier("removeRoomPhoto")
                     }
                     if details.canInvite {
                         Button("Invite someone") { inviteText = ""; inviting = true }.accessibilityIdentifier("inviteToRoom")

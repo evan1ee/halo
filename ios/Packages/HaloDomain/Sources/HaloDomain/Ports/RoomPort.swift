@@ -1,3 +1,4 @@
+import Foundation
 import HaloFoundation
 
 /// Room details and management (docs/features/ROOM_MANAGEMENT.md §8). Implemented by `HaloMatrixAdapter`; faked in `HaloTestSupport`.
@@ -13,6 +14,12 @@ public protocol RoomPort: Sendable {
 
     /// Sets the room name and topic; an empty string clears the topic (FR-7). Throws `.forbidden` without the power level.
     func setDetails(name: String, topic: String, in room: RoomID) async throws(HaloError)
+
+    /// Uploads `data` (an image already shrunk) as the room's avatar (FR-7). Throws `.forbidden` without the power level.
+    func setAvatar(mimeType: String, data: Data, in room: RoomID) async throws(HaloError)
+
+    /// Removes the room's avatar.
+    func removeAvatar(in room: RoomID) async throws(HaloError)
 
     /// Invites `users` to the room (FR-5). Throws `.forbidden` without the power level.
     func invite(_ users: [UserID], to room: RoomID) async throws(HaloError)

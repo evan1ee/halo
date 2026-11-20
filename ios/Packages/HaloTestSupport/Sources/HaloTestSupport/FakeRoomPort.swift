@@ -1,3 +1,4 @@
+import Foundation
 import HaloDomain
 import HaloFoundation
 import Synchronization
@@ -7,6 +8,8 @@ public final class FakeRoomPort: RoomPort {
     private struct State {
         var details: RoomDetails
         var members: [RoomMemberInfo]
+        var avatars: [Data] = []
+        var avatarRemovals = 0
         var error: HaloError?
         var modes: [RoomNotificationChoice] = []
         var left: [RoomID] = []
@@ -48,6 +51,19 @@ public final class FakeRoomPort: RoomPort {
 
     public var detailEdits: [(name: String, topic: String)] { state.withLock { $0.edits } }
     public var sentInvites: [[UserID]] { state.withLock { $0.invites } }
+
+    public var avatarUploads: [Data] { state.withLock { $0.avatars } }
+    public var avatarRemovals: Int { state.withLock { $0.avatarRemovals } }
+
+    public func setAvatar(mimeType: String, data: Data, in room: RoomID) async throws(HaloError) {
+        if let error = state.withLock({ $0.error }) { throw error }
+        state.withLock { $0.avatars.append(data) }
+    }
+
+    public func removeAvatar(in room: RoomID) async throws(HaloError) {
+        if let error = state.withLock({ $0.error }) { throw error }
+        state.withLock { $0.avatarRemovals += 1 }
+    }
 
     public func setDetails(name: String, topic: String, in room: RoomID) async throws(HaloError) {
         if let error = state.withLock({ $0.error }) { throw error }
