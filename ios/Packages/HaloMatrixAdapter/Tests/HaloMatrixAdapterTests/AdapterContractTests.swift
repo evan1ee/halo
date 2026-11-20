@@ -183,6 +183,43 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
+    @Test("Room details, members, notification mode and leaving (ROOM_MANAGEMENT; creates a room and cleans up after itself)")
+    func roomManagement() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
+            on: details)
+        try await MatrixSyncPort(session: session).start()
+        let client = try await session.signedInClient()
+        let roomID = try RoomID(try await client.createRoom(request: CreateRoomParameters(name: "Room mgmt fixture", topic: "A topic", isEncrypted: false, visibility: .private, preset: .privateChat)))
+        for _ in 0..<30 {
+            if (try? await session.room(roomID)) != nil { break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        let rooms = MatrixRoomPort(session: session)
+        var info = try await rooms.details(roomID)
+        for _ in 0..<30 where info.topic == nil {  // the room's state arrives with a sync
+            try await Task.sleep(for: .seconds(1))
+            info = try await rooms.details(roomID)
+        }
+        #expect(info.name == "Room mgmt fixture" && info.topic == "A topic" && info.isEncrypted == false)
+        let members = try await rooms.members(roomID, limit: 50)
+        #expect(members.count == 1 && members[0].role == .administrator)
+        for mode in RoomNotificationChoice.allCases {
+            try await rooms.setNotificationMode(mode, in: roomID)
+            var seen = try await rooms.details(roomID).notificationMode
+            for _ in 0..<30 where seen != mode {  // the push rule reaches the SDK with a sync
+                try await Task.sleep(for: .seconds(1))
+                seen = try await rooms.details(roomID).notificationMode
+            }
+            #expect(seen == mode)
+        }
+        try await rooms.leave(roomID)
+        if let left = try? await session.room(roomID) { try? await left.forget() }
+        try await session.logout()
+    }
+
     @Test("An enabled pack whose room the user has left is reported as unavailable, not as a failed load (creates a room and cleans up after itself)")
     func unavailablePack() async throws {
         let session = port()

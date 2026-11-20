@@ -1,5 +1,6 @@
 import FeatureAuth
 import FeatureRoomList
+import FeatureRoomDetails
 import FeatureSettings
 import FeatureStickers
 import FeatureTimeline
@@ -32,6 +33,7 @@ final class AppRoot {
     private let matrixSession: MatrixSessionPort
     private let media: MediaLoader
     private let previewPolicy: any MediaPreviewPolicyPort
+    private let roomPort: MatrixRoomPort
     private let roomCoordinator: RoomListCoordinator
     private let log: HaloLog
     private var auditPort: (any AuditEventPort)?
@@ -62,6 +64,7 @@ final class AppRoot {
         timelinePort = MatrixTimelinePort(session: session)
         media = MediaLoader(port: MatrixMediaPort(session: session))
         previewPolicy = MatrixMediaPreviewPolicyPort(session: session)
+        roomPort = MatrixRoomPort(session: session)
         recovery = RecoveryViewModel(coordinator: EncryptionCoordinator(port: MatrixEncryptionPort(session: session), session: sessionCoordinator))
         sync = SyncCoordinator(port: MatrixSyncPort(session: session), session: sessionCoordinator)
         let push = Self.pushConfiguration().map {
@@ -200,6 +203,9 @@ final class AppRoot {
         }
         do { try await previewPolicy.setSetting(setting); return true } catch { return false }
     }
+
+    /// The room info sheet for `room` (ROOM_MANAGEMENT).
+    func makeRoomDetails(room: RoomID) -> RoomDetailsViewModel { RoomDetailsViewModel(port: roomPort, room: room) }
 
     /// A view model for the timeline of `room`; each screen gets its own coordinator and session.
     func makeTimeline(room: RoomID) -> TimelineViewModel {

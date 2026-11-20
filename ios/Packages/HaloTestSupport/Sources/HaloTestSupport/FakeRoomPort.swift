@@ -1,0 +1,49 @@
+import HaloDomain
+import HaloFoundation
+import Synchronization
+
+/// In-memory `RoomPort`: one room's details, a member list, and records of what was changed.
+public final class FakeRoomPort: RoomPort {
+    private struct State {
+        var details: RoomDetails
+        var members: [RoomMemberInfo]
+        var error: HaloError?
+        var modes: [RoomNotificationChoice] = []
+        var left: [RoomID] = []
+    }
+    private let state: Mutex<State>
+
+    public init(details: RoomDetails, members: [RoomMemberInfo] = []) { state = Mutex(State(details: details, members: members)) }
+
+    /// Makes every following call throw (nil: stop failing).
+    public func fail(with error: HaloError?) { state.withLock { $0.error = error } }
+    public var modeChanges: [RoomNotificationChoice] { state.withLock { $0.modes } }
+    public var leftRooms: [RoomID] { state.withLock { $0.left } }
+
+    public func details(_ room: RoomID) async throws(HaloError) -> RoomDetails {
+        let (details, error) = state.withLock { ($0.details, $0.error) }
+        if let error { throw error }
+        guard details.id == room else { throw .notFound }
+        return details
+    }
+
+    public func members(_ room: RoomID, limit: Int) async throws(HaloError) -> [RoomMemberInfo] {
+        let (members, error) = state.withLock { ($0.members, $0.error) }
+        if let error { throw error }
+        return Array(members.prefix(limit))
+    }
+
+    public func setNotificationMode(_ mode: RoomNotificationChoice, in room: RoomID) async throws(HaloError) {
+        if let error = state.withLock({ $0.error }) { throw error }
+        state.withLock {
+            $0.modes.append(mode)
+            let d = $0.details
+            $0.details = RoomDetails(id: d.id, name: d.name, topic: d.topic, isDirect: d.isDirect, isEncrypted: d.isEncrypted, joinedMemberCount: d.joinedMemberCount, notificationMode: mode)
+        }
+    }
+
+    public func leave(_ room: RoomID) async throws(HaloError) {
+        if let error = state.withLock({ $0.error }) { throw error }
+        state.withLock { $0.left.append(room) }
+    }
+}

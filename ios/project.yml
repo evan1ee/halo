@@ -24,6 +24,7 @@ packages:
   FeatureTimeline: {path: Packages/Features/FeatureTimeline}
   FeatureStickers: {path: Packages/Features/FeatureStickers}
   FeatureSettings: {path: Packages/Features/FeatureSettings}
+  FeatureRoomDetails: {path: Packages/Features/FeatureRoomDetails}
 targets:
   Halo:
     type: application
@@ -41,6 +42,7 @@ targets:
       - package: FeatureTimeline
       - package: FeatureStickers
       - package: FeatureSettings
+      - package: FeatureRoomDetails
       - target: HaloNotificationService
         embed: true
     settings:

@@ -1,4 +1,5 @@
 import FeatureAuth
+import FeatureRoomDetails
 import FeatureRoomList
 import FeatureSettings
 import FeatureStickers
@@ -121,8 +122,14 @@ private struct RootView: View {
 private struct TimelineScreen: View {
     @State private var model: TimelineViewModel
     @State private var stickers: StickerPanelViewModel
+    @State private var details: RoomDetailsViewModel?
+    @Environment(\.dismiss) private var dismiss
+    private let root: AppRoot
+    private let room: RoomID
 
     init(root: AppRoot, room: RoomID) {
+        self.root = root
+        self.room = room
         let timeline = root.makeTimeline(room: room)
         _model = State(initialValue: timeline)
         _stickers = State(initialValue: root.makeStickerPanel(room: room, timeline: timeline))
@@ -130,6 +137,14 @@ private struct TimelineScreen: View {
 
     var body: some View {
         TimelineView(model: model, stickerPanel: { AnyView(StickerPanelView(model: stickers)) }).navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { details = root.makeRoomDetails(room: room) } label: { Image(systemName: "info.circle") }
+                        .accessibilityLabel("Room info")
+                        .accessibilityIdentifier("roomInfo")
+                }
+            }
+            .sheet(item: $details) { RoomDetailsView(model: $0, onLeft: { dismiss() }) }
     }
 }
 

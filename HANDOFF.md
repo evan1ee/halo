@@ -1,6 +1,6 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-20 · Branch: `main` · PRs #1–#44 merged
+Last updated: 2026-11-20 · Branch: `feat/m5-room-info` · PRs #1–#44 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
@@ -15,6 +15,7 @@ Summary only; details per feature: [docs/development/IMPLEMENTATION_NOTES.md](do
 - Read state (M3): policy-driven badge, outbound receipts, unread indicators, jump-to-unread, classic-sync adapter, auditor, scenarios S01–S22 as model tests.
 - Messaging (M2): send/retry/abort, drafts, mentions, photo send with caption, offline resend; media previews (hide/reveal, video thumbnails).
 - Stickers (M4): packs, panel, recents, create pack, remove unavailable packs.
+- Room info (M5): info button in the timeline → sheet with details, members, notification mode, leave (PR 45).
 - Settings (M5): Account, Privacy (private receipts), Media (show photos), Appearance (theme), Security (status), Notifications (status), Storage (sizes), Diagnostics (report), About, Acknowledgements.
 
 ## 3. Key decisions
@@ -23,7 +24,7 @@ Summary only; details per feature: [docs/development/IMPLEMENTATION_NOTES.md](do
 Full list: docs/DECISION_LOG.md (D1–D75), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-Bot interaction (BOT_MESSAGES FR-3): `HaloDomain/Bots/BotTaskTracker` (pure; tasks found from `Added Task` messages, done from a newer list or `Marked task as done`), `TimelineViewModel.botRowState/tickBotTask` (👍 once on the creating message, Waiting for bot…, "No response from bot" after 2 min, "Not available" without a creating message), tickable rows in `BotCardView`; tests (tracker, view-model flow); `FakeTimelinePort` keeps `formattedBody` on reaction changes. Seen in the simulator with scripted bot messages. Not built: FR-4 menu, persisted index, the bot's ✅ reaction as confirmation. Earlier: bot cards (PR 43), Settings sections, View source.
+Room info sheet (ROOM_MANAGEMENT FR-1…FR-4): `HaloDomain` (`RoomPort`, `RoomDetails`, `RoomMemberInfo`), `HaloMatrixAdapter/MatrixRoomPort`, `HaloTestSupport/FakeRoomPort`, new package `Features/FeatureRoomDetails` (view model, view, tests), app wiring (`project.yml`, `AppRoot.makeRoomDetails`, info button in `TimelineScreen`), contract `roomManagement`, `scripts/prepush.sh` (tests the new package), ROADMAP, IMPLEMENTATION_NOTES, OUTSTANDING_ISSUES. Checked: `prepush.sh` passed, `Halo-Debug` build, `roomManagement` contract passed against `infra/dev`, sheet seen in the simulator. Not done: member paging, avatars, edit room, create DM/room, invites, user profiles.
 
 ## 5. Outstanding issues
 Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
@@ -36,7 +37,8 @@ Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISS
 
 ## 6. Next steps
 The queue is docs/ROADMAP.md §"Remaining work", worked by the loop in docs/development/AUTONOMOUS_LOOP.md. Its head:
-1. **P0** the remaining client-side scenarios on the real stack (S03, S11, S12, S16–S20: restarts, outbox, NSE; most need a device), then re-evaluate G-UNREAD with the founder; measure the first-sync cost on a large account; M4 items after.
+1. **M5** rest of ROOM_MANAGEMENT (create DM/room, invites FR-5/6, edit room FR-7) and USER_PROFILES; then the P0 item below.
+2. **P0** the remaining client-side scenarios on the real stack (S03, S11, S12, S16–S20: restarts, outbox, NSE; most need a device), then re-evaluate G-UNREAD with the founder; measure the first-sync cost on a large account; M4 items after.
 
 ## 7. Next Session Prompt
 ```text
