@@ -7,10 +7,17 @@ import UIKit
 
 public struct TimelineView: View {
     private let model: TimelineViewModel
+    private let stickerPanel: (@MainActor () -> AnyView)?
+    @State private var showsStickers = false
 
     @Environment(\.scenePhase) private var scenePhase
 
-    public init(model: TimelineViewModel) { self.model = model }
+    /// - Parameter stickerPanel: the sticker panel for this room, made by the composition root (a feature never imports
+    ///   another feature). Without it the composer has no sticker button.
+    public init(model: TimelineViewModel, stickerPanel: (@MainActor () -> AnyView)? = nil) {
+        self.model = model
+        self.stickerPanel = stickerPanel
+    }
 
     public var body: some View {
         Group {
@@ -55,7 +62,8 @@ public struct TimelineView: View {
                 }
             }
         }
-        .safeAreaInset(edge: .bottom) { Composer(model: model) }
+        .safeAreaInset(edge: .bottom) { Composer(model: model, onStickers: stickerPanel == nil ? nil : { showsStickers = true }) }
+        .sheet(isPresented: $showsStickers) { stickerPanel?().presentationDetents([.medium, .large]) }
         .sheet(isPresented: Binding(get: { model.reactionTarget != nil }, set: { if !$0 { model.cancelReactionPicker() } })) {
             ReactionPicker(model: model).presentationDetents([.medium])
         }
@@ -67,6 +75,7 @@ public struct TimelineView: View {
 
 private struct Composer: View {
     @Bindable var model: TimelineViewModel
+    let onStickers: (() -> Void)?
 
     var body: some View {
         VStack(spacing: 4) {
@@ -99,6 +108,11 @@ private struct Composer: View {
                 .accessibilityIdentifier("mention-suggestion")
             }
             HStack(alignment: .bottom) {
+                if let onStickers {
+                    Button(action: onStickers) { Image(systemName: "face.smiling").font(.title2) }
+                        .accessibilityLabel("Stickers")
+                        .accessibilityIdentifier("sticker-button")
+                }
                 TextField("Message", text: $model.draft, axis: .vertical)
                     .lineLimit(1...5)
                     .textFieldStyle(.roundedBorder)
@@ -150,11 +164,11 @@ private struct RowView: View {
                     .padding(.leading, 6)
                     .overlay(alignment: .leading) { Rectangle().fill(.secondary).frame(width: 2) }
                 }
-                if let image = row.image { ThumbnailView(image: image, model: model) }
-                Text(row.styled ?? AttributedString(row.text))
+                if let image = row.image { ThumbnailView(image: image, model: model, isSticker: row.isSticker).accessibilityLabel(row.isSticker ? row.text : "Image") }
+                if !row.isSticker { Text(row.styled ?? AttributedString(row.text))
                     .padding(8)
                     .background(row.style == .ownMessage ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.15), in: .rect(cornerRadius: 12))
-                    .opacity(row.status == nil ? 1 : 0.6)
+                    .opacity(row.status == nil ? 1 : 0.6) }
                 if let status = row.status { Text(status).font(.caption2).foregroundStyle(.secondary) }
                 if !row.reactions.isEmpty {
                     HStack {
@@ -191,6 +205,7 @@ private struct RowView: View {
 private struct ThumbnailView: View {
     let image: TimelineRow.Image
     let model: TimelineViewModel
+    var isSticker = false
     @State private var data: Data?
 
     var body: some View {
@@ -206,8 +221,8 @@ private struct ThumbnailView: View {
             #endif
         }
         .aspectRatio(image.aspectRatio ?? 4 / 3, contentMode: .fit)
-        .frame(maxWidth: 240)
-        .clipShape(.rect(cornerRadius: 12))
+        .frame(maxWidth: isSticker ? 160 : 240)
+        .clipShape(.rect(cornerRadius: isSticker ? 0 : 12))
         .task { data = await model.thumbnail(for: image) }
     }
 }

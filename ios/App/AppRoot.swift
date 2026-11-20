@@ -1,5 +1,6 @@
 import FeatureAuth
 import FeatureRoomList
+import FeatureStickers
 import FeatureTimeline
 import Foundation
 import HaloApplication
@@ -24,6 +25,7 @@ final class AppRoot {
     private let timelinePort: MatrixTimelinePort
     let receipts: ReadReceiptCoordinator
     let drafts: DraftCoordinator
+    let stickers: StickerLibrary
     private let sessionCoordinator: SessionCoordinator
     private let media: MediaLoader
 
@@ -44,6 +46,7 @@ final class AppRoot {
         let receipts = ReadReceiptCoordinator(port: MatrixReadMarkerPort(session: session))
         self.receipts = receipts
         drafts = DraftCoordinator()
+        stickers = StickerLibrary(packs: MatrixStickerPackPort(session: session), prefs: MatrixStickerPrefsPort(session: session))
         badge = BadgeCoordinator(rooms: roomCoordinator, records: records, port: SystemBadge(suiteName: suite), receipts: receipts)
 
         timelinePort = MatrixTimelinePort(session: session)
@@ -88,6 +91,11 @@ final class AppRoot {
     /// A view model for the timeline of `room`; each screen gets its own coordinator and session.
     func makeTimeline(room: RoomID) -> TimelineViewModel {
         TimelineViewModel(coordinator: TimelineCoordinator(port: timelinePort, room: room, records: records), media: media, receipts: receipts, room: room, drafts: drafts)
+    }
+
+    /// The sticker panel for the timeline of `room`; sending goes through that timeline's view model.
+    func makeStickerPanel(room: RoomID, timeline: TimelineViewModel) -> StickerPanelViewModel {
+        StickerPanelViewModel(library: stickers, media: media, room: room, send: { sticker throws(HaloError) in try await timeline.sendSticker(sticker) })
     }
 
     #if DEBUG

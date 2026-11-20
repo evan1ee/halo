@@ -1,0 +1,144 @@
+import Foundation
+import HaloDomain
+import HaloFoundation
+
+/// The sticker panel's data (STICKERS FR-1…FR-6): packs, favourites, recents and search. Prefs are read and merged with
+/// what another device wrote (last use wins, favourites union), and recents are written at most once per
+/// `writeInterval`; a write that is due later is sent by a trailing task.
+public actor StickerLibrary {
+    public typealias Sleep = @Sendable (Duration) async throws -> Void
+
+    public enum Phase: Sendable, Equatable { case unloaded, loading, ready, partial, failed }
+
+    /// What the panel shows.
+    public struct Snapshot: Sendable, Equatable {
+        public var phase: Phase = .unloaded
+        /// Packs that offer stickers, in source order.
+        public var packs: [StickerPack] = []
+        public var favourites: [Sticker] = []
+        public var recents: [Sticker] = []
+        /// Favourites whose pack or image is gone; shown greyed out and removable.
+        public var unavailableFavourites: [StickerRef] = []
+
+        public init(
+            phase: Phase = .unloaded, packs: [StickerPack] = [], favourites: [Sticker] = [], recents: [Sticker] = [],
+            unavailableFavourites: [StickerRef] = []
+        ) {
+            self.phase = phase
+            self.packs = packs
+            self.favourites = favourites
+            self.recents = recents
+            self.unavailableFavourites = unavailableFavourites
+        }
+    }
+
+    public static let writeInterval: Duration = .seconds(10)
+
+    private let packSource: any StickerPackPort
+    private let prefsStore: any StickerPrefsPort
+    private let now: @Sendable () -> Date
+    private let clock: @Sendable () -> ContinuousClock.Instant
+    private let sleep: Sleep
+    private var prefs = StickerPrefs()
+    private var allPacks: [StickerPack] = []
+    private var phase = Phase.unloaded
+    private var lastWrite: ContinuousClock.Instant?
+    private var trailing: Task<Void, Never>?
+    private var dirty = false
+    private var broadcaster = SnapshotBroadcaster<Snapshot>()
+
+    public init(
+        packs: any StickerPackPort, prefs: any StickerPrefsPort, now: @escaping @Sendable () -> Date = { Date() },
+        clock: @escaping @Sendable () -> ContinuousClock.Instant = { .now }, sleep: @escaping Sleep = { try await Task.sleep(for: $0) }
+    ) {
+        self.packSource = packs
+        self.prefsStore = prefs
+        self.now = now
+        self.clock = clock
+        self.sleep = sleep
+    }
+
+    deinit { trailing?.cancel() }
+
+    public func snapshots() -> AsyncStream<Snapshot> { broadcaster.subscribe(current: snapshot()) }
+
+    /// Loads packs and prefs for the panel opened in `currentRoom`. Safe to call again to refresh.
+    public func load(currentRoom: RoomID?) async {
+        phase = .loading
+        publish()
+        if let remote = try? await prefsStore.load() { prefs = prefs.merged(with: remote) }
+        do {
+            let result = try await packSource.packs(currentRoom: currentRoom)
+            allPacks = result.packs.filter(\.offersStickers)
+            phase = result.failedSources > 0 ? .partial : .ready
+        } catch {
+            phase = allPacks.isEmpty ? .failed : .partial
+        }
+        publish()
+    }
+
+    /// Search over the visible packs (FR-4).
+    public func search(_ query: String) -> [Sticker] { StickerSearch.search(query, in: allPacks, prefs: prefs) }
+
+    public func isFavourite(_ sticker: Sticker) -> Bool { prefs.isFavourite(sticker.ref) }
+
+    /// Adds or removes a favourite and writes at once (a rare action).
+    public func toggleFavourite(_ ref: StickerRef) async {
+        prefs.toggleFavourite(ref)
+        publish()
+        await write()
+    }
+
+    /// Notes that `sticker` was sent. The write is debounced to one per `writeInterval` (FR-6).
+    public func recordSent(_ sticker: Sticker) async {
+        prefs.recordUse(sticker.ref, at: now())
+        publish()
+        dirty = true
+        let wait: Duration = lastWrite.map { max(.zero, Self.writeInterval - $0.duration(to: clock())) } ?? .zero
+        if wait == .zero { await write(); return }
+        guard trailing == nil else { return }
+        trailing = Task { [weak self, sleep] in
+            do { try await sleep(wait) } catch { return }
+            await self?.writeTrailing()
+        }
+    }
+
+    /// Sends a pending recents write now (the panel closed, the app is going to the background).
+    public func flush() async {
+        trailing?.cancel()
+        trailing = nil
+        if dirty { await write() }
+    }
+
+    // MARK: -
+
+    private func writeTrailing() async {
+        trailing = nil
+        if dirty { await write() }
+    }
+
+    /// Writes the prefs with the latest remote recents merged in, so another device's uses are not lost. Favourites are
+    /// not merged here: a union could never carry a removal. (Known limit: a device with a stale list can bring a removed
+    /// favourite back when it next loads and writes.)
+    private func write() async {
+        lastWrite = clock()
+        dirty = false
+        do {
+            if let remote = try await prefsStore.load() { prefs = prefs.merged(with: StickerPrefs(recents: remote.recents)) }
+            try await prefsStore.save(prefs)
+        } catch {
+            dirty = true  // kept for the next write
+        }
+    }
+
+    private func snapshot() -> Snapshot {
+        var index: [StickerRef: Sticker] = [:]
+        for pack in allPacks { for sticker in pack.stickers { index[sticker.ref] = sticker } }
+        let favourites = prefs.favourites.compactMap { index[$0] }
+        return Snapshot(
+            phase: phase, packs: allPacks, favourites: favourites, recents: prefs.recents.compactMap { index[$0.sticker] },
+            unavailableFavourites: phase == .ready ? prefs.favourites.filter { index[$0] == nil } : [])
+    }
+
+    private func publish() { broadcaster.publish(snapshot()) }
+}

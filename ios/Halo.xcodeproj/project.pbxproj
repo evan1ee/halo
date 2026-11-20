@@ -22,6 +22,7 @@
 		CD91777DE3051ABFC38DAEA0 /* HaloFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 91F7222F53B770512405FD51 /* HaloFoundation */; };
 		D716ED9E9EF4E2A6AC3B868A /* HaloPlatform in Frameworks */ = {isa = PBXBuildFile; productRef = 33AB4CCCA1822F8334164899 /* HaloPlatform */; };
 		DF5EF2DF43E9B0888704F724 /* FeatureAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 83AACECE849C1196328AE949 /* FeatureAuth */; };
+		E8553A487B6F3ABD3324C076 /* FeatureStickers in Frameworks */ = {isa = PBXBuildFile; productRef = AAFD571766A64EDC98FF89D7 /* FeatureStickers */; };
 		F7C8C003E20ADCE9617D81BC /* HaloApplication in Frameworks */ = {isa = PBXBuildFile; productRef = 043F0A8364EBBFB616A15D66 /* HaloApplication */; };
 		FE8C81196B7DFA19AE6F5DC4 /* FeatureRoomList in Frameworks */ = {isa = PBXBuildFile; productRef = 0C836EFC11F76DCA8283F9D9 /* FeatureRoomList */; };
 		FF6902D347D4750821BE378E /* HaloDomain in Frameworks */ = {isa = PBXBuildFile; productRef = F7C79F8E833241726AAD080C /* HaloDomain */; };
@@ -62,6 +63,7 @@
 		60075C67A871701F70F07285 /* Info-Debug.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "Info-Debug.plist"; sourceTree = "<group>"; };
 		6F93CB45B41FD65E85481DAC /* Halo.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Halo.entitlements; sourceTree = "<group>"; };
 		7062871F2640DF75FF141840 /* HaloApplication */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HaloApplication; path = Packages/HaloApplication; sourceTree = SOURCE_ROOT; };
+		71941F9772E859615A1B26AD /* FeatureStickers */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FeatureStickers; path = Packages/Features/FeatureStickers; sourceTree = SOURCE_ROOT; };
 		76ED106E261A2A8948DB12F6 /* HaloNotificationService.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = HaloNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		7A3D76BB951E620E5C384DDA /* FeatureAuth */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FeatureAuth; path = Packages/Features/FeatureAuth; sourceTree = SOURCE_ROOT; };
 		7C81E2492135182A56A25D91 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -91,6 +93,7 @@
 				DF5EF2DF43E9B0888704F724 /* FeatureAuth in Frameworks */,
 				FE8C81196B7DFA19AE6F5DC4 /* FeatureRoomList in Frameworks */,
 				BE3EF4909E03BC002C1F56F2 /* FeatureTimeline in Frameworks */,
+				E8553A487B6F3ABD3324C076 /* FeatureStickers in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -134,6 +137,7 @@
 			children = (
 				7A3D76BB951E620E5C384DDA /* FeatureAuth */,
 				1A18178C457536A080B74F82 /* FeatureRoomList */,
+				71941F9772E859615A1B26AD /* FeatureStickers */,
 				CB99A77D2FED748851BA2449 /* FeatureTimeline */,
 				7062871F2640DF75FF141840 /* HaloApplication */,
 				9EC8385BD07B8D6D9DF96F10 /* HaloDomain */,
@@ -226,6 +230,7 @@
 				83AACECE849C1196328AE949 /* FeatureAuth */,
 				0C836EFC11F76DCA8283F9D9 /* FeatureRoomList */,
 				CA58B4AA249ADB3B7D52F822 /* FeatureTimeline */,
+				AAFD571766A64EDC98FF89D7 /* FeatureStickers */,
 			);
 			productName = Halo;
 			productReference = DA3E1B8904AC903EF6240A91 /* Halo.app */;
@@ -254,6 +259,7 @@
 			packageReferences = (
 				EF892FDF84537B2D18508DAC /* XCLocalSwiftPackageReference "Packages/Features/FeatureAuth" */,
 				4C58795DF6B4439CD9F9A18C /* XCLocalSwiftPackageReference "Packages/Features/FeatureRoomList" */,
+				C3E1C326F16CF9891B2BCEA6 /* XCLocalSwiftPackageReference "Packages/Features/FeatureStickers" */,
 				7A9092141DC8F4B757DA43F0 /* XCLocalSwiftPackageReference "Packages/Features/FeatureTimeline" */,
 				6209975F329C42611C4F748B /* XCLocalSwiftPackageReference "Packages/HaloApplication" */,
 				081EBA8E086CCC6E744FA331 /* XCLocalSwiftPackageReference "Packages/HaloDomain" */,
@@ -646,6 +652,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/HaloFoundation;
 		};
+		C3E1C326F16CF9891B2BCEA6 /* XCLocalSwiftPackageReference "Packages/Features/FeatureStickers" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/Features/FeatureStickers;
+		};
 		CBAC46886CBE7821E46E2919 /* XCLocalSwiftPackageReference "Packages/HaloMatrixAdapter" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/HaloMatrixAdapter;
@@ -692,6 +702,10 @@
 		91F7222F53B770512405FD51 /* HaloFoundation */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = HaloFoundation;
+		};
+		AAFD571766A64EDC98FF89D7 /* FeatureStickers */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FeatureStickers;
 		};
 		B84FBDA7CBAD6737BE7C8ACE /* HaloFoundation */ = {
 			isa = XCSwiftPackageProductDependency;

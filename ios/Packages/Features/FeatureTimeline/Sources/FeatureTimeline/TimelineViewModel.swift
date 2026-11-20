@@ -25,6 +25,8 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     public let styled: AttributedString?
     /// The local ID of an own message whose sending failed; the user can retry or delete it.
     public let failedLocalID: String?
+    /// A sticker: its image is shown without a bubble or caption (`text` is the accessibility label).
+    public let isSticker: Bool
 
     public struct Reply: Equatable, Sendable {
         public let sender: String?
@@ -48,9 +50,10 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     init(
         id: String, style: Style, sender: String?, text: String, image: Image? = nil, status: String? = nil,
         eventID: EventID? = nil, isOwn: Bool = false, reactions: [Chip] = [], reply: Reply? = nil, styled: AttributedString? = nil,
-        failedLocalID: String? = nil
+        failedLocalID: String? = nil, isSticker: Bool = false
     ) {
         self.failedLocalID = failedLocalID
+        self.isSticker = isSticker
         self.styled = styled
         self.reply = reply
         self.eventID = eventID
@@ -295,6 +298,11 @@ public final class TimelineViewModel {
         }
     }
 
+    /// Sends a sticker from the sticker panel. Throws so the panel can say it failed.
+    public func sendSticker(_ sticker: Sticker) async throws(HaloError) {
+        try await coordinator.sendSticker(sticker)
+    }
+
     /// Reacts to a confirmed message, or removes the user's reaction.
     public func toggleReaction(on row: TimelineRow, key: String) async {
         guard let id = row.eventID else { return }
@@ -471,8 +479,11 @@ public final class TimelineViewModel {
                         eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions))
                 }
                 return TimelineRow(id: id, style: style, sender: name, text: "[\(Self.label(attachment.kind))] \(attachment.body)")
-            case .sticker(let body, _):
-                return TimelineRow(id: id, style: .message, sender: name, text: "[Sticker] \(body)")
+            case .sticker(let body, let source):
+                guard let source else { return TimelineRow(id: id, style: .message, sender: name, text: "[Sticker] \(body)") }
+                return TimelineRow(
+                    id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: body, image: .init(ref: source, aspectRatio: 1),
+                    eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions), isSticker: true)
             case .redacted:
                 return TimelineRow(id: id, style: .placeholder, sender: name, text: "Message deleted")
             case .undecryptable(let reason):

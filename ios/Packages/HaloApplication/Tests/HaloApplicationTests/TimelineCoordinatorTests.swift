@@ -184,4 +184,20 @@ struct TimelineCoordinatorTests {
         await #expect(throws: HaloError.notFound) { try await coordinator.abortSend(localID: "txn2") }
         await #expect(throws: HaloError.notFound) { try await coordinator.retrySend(localID: "txn1") }  // sent meanwhile
     }
+
+    @Test("a sticker goes through the open timeline; it refuses when closed and passes errors on")
+    func stickers() async throws {
+        let port = FakeTimelinePort()
+        let room = try RoomID("!r:x.org")
+        port.addRoom(room)
+        let coordinator = TimelineCoordinator(port: port, room: room)
+        let sticker = Sticker(pack: PackRef(room: room, stateKey: "p"), shortcode: "wave", body: nil, url: "mxc://x.org/w", info: nil)
+        await #expect(throws: HaloError.cancelled) { try await coordinator.sendSticker(sticker) }
+        await coordinator.open()
+        _ = await wait(coordinator) { if case .live = $0 { true } else { false } }
+        try await coordinator.sendSticker(sticker)
+        #expect(port.sentStickers(in: room) == [sticker])
+        port.failNextSticker(with: .network(retryable: true), in: room)
+        await #expect(throws: HaloError.network(retryable: true)) { try await coordinator.sendSticker(sticker) }
+    }
 }

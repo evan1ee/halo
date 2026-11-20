@@ -409,4 +409,18 @@ struct TimelineViewModelTests {
         #expect(port.sentMentions(in: room) == [[]])
         await model.stop()
     }
+
+    @Test("an incoming sticker is an image row without a bubble; one without an image stays a labelled placeholder")
+    func stickerRows() throws {
+        let room = try RoomID("!r:x.org")
+        let model = TimelineViewModel(coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: room), locale: Locale(identifier: "en_US"), timeZone: .gmt)
+        func row(_ source: MediaRef?) -> TimelineRow {
+            model.row(TimelineItem(id: TimelineItemID("s"), content: .event(TimelineEvent(
+                eventID: nil, sender: nil, senderName: "Bob", timestamp: Date(timeIntervalSince1970: 1), isOwn: false, kind: .sticker(body: "wave", source: source)))))
+        }
+        let withImage = row(MediaRef(token: "t"))
+        #expect(withImage.isSticker && withImage.image?.ref == MediaRef(token: "t") && withImage.text == "wave")
+        let without = row(nil)
+        #expect(!without.isSticker && without.text == "[Sticker] wave")
+    }
 }

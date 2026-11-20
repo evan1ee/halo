@@ -140,6 +140,12 @@ public actor TimelineCoordinator {
         try? await session.setTyping(isTyping)
     }
 
+    /// Sends a sticker into the open timeline (no local echo: it shows when the server confirms).
+    public func sendSticker(_ sticker: Sticker) async throws(HaloError) {
+        guard let session, case .live = status else { throw .cancelled }
+        try await session.sendSticker(sticker)
+    }
+
     /// The people who can be mentioned in the open room.
     public func members() async throws(HaloError) -> [RoomMember] {
         guard let session, case .live = status else { throw .cancelled }

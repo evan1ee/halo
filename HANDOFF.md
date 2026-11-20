@@ -21,6 +21,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 - Messaging: a confirmed own message becomes the read position (FR-6, `TimelineViewModel.reportOwnMessage`); failed local echoes can be retried or deleted from the long-press menu (FR-3: `TimelineEvent.localID`, `TimelineSession.retrySend/abortSend`, adapter over `Timeline.retrySend/abortSend`).
 - Drafts (FR-5): `DraftPort` → `DraftStore` (table `draft`, migration `v3-draft`) behind `DraftCoordinator` (in-memory first, store attached after sign-in); `TimelineViewModel` restores and saves the composer text per room and keeps it across an edit.
 - Mentions (FR-1, AC-M2): typing `@` offers joined members (`TimelineSession.members`), picking one inserts `@Name `; `MentionFormatter` (pure, HaloDomain) turns remaining `@Name` into `matrix.to` links in the formatted body and the adapter sets `m.mentions` via `withMentions`. A restored draft keeps the text but not the picked mentions.
+- Stickers v1 (M4, in progress): `HaloDomain/Stickers` (`ImagePackParser`, `ShortcodeRules`, `StickerPrefs` incl. account-data form and merge, `StickerSearch`), ports `StickerPackPort`/`StickerPrefsPort`, `StickerLibrary` (debounced recents, merge with remote), `TimelineSession.sendSticker` (`send_raw` `m.sticker`, no local echo), adapter `MatrixStickerPorts` (packs via `Room.stateEvents(.roomImagePack)` = V-ST-1 option A), package `FeatureStickers` (panel VM and view) opened from a composer button, incoming stickers shown as images.
 - Room list swipe: leading "Read" (`markRoomRead`), trailing "Unread" (`setMarkedUnread`).
 
 ## 3. Key decisions
@@ -30,6 +31,7 @@ Full list: docs/DECISION_LOG.md (D1–D67), docs/adr/. Most relevant now: D5/D9 
 Everything in `git log origin/main..HEAD`. Key paths: `ios/Packages/HaloApplication/Sources/HaloApplication/{ReadReceipts,Badge,RoomList}`, `HaloMatrixAdapter/.../{MatrixReadMarkerPort,MatrixRoomListPort}.swift`, `HaloPersistence/.../{HaloDatabase,ReadIntentStore}.swift`, `Features/{FeatureTimeline,FeatureRoomList}`, `ios/App/{AppRoot,HaloApp}.swift`.
 
 ## 5. Outstanding issues
+- Stickers: V-ST-1 unresolved (option A may return no `m.room.image_pack` state; then the panel stays empty: try against `infra/dev`, else option B); legacy `im.ponies.*` packs not read (V-ST-3); not built yet: long-press preview/animation (FR-5, FR-9), personal pack creation (FR-7), privacy notice, "unavailable pack" UI, `m.image_pack.rooms` management. Sending, prefs and packs are untested against a server.
 - Mentions are unverified against a server/Element Web (pill rendering, `m.mentions`, `Room.members()` cost in large rooms); no adapter contract test.
 - `retrySend`/`abortSend` are unverified against a real server (no contract test in `AdapterContractTests`; only the fake and coordinator tests).
 - Opening a room now clears `m.marked_unread` (`ReadReceiptCoordinator.roomOpened`, called by `TimelineViewModel`; the adapter skips the write when the flag is already clear). Unverified on a device/server.
@@ -45,7 +47,7 @@ Everything in `git log origin/main..HEAD`. Key paths: `ios/Packages/HaloApplicat
 ## 6. Next steps
 1. M3: device check of the ≥ 50 % visibility; the Docker scenario driver to run S01–S22 against Synapse; the auditor.
 2. Device checks from section 5; G-NSE hardening (peak memory, encrypted room, timeout injection AC-NSE-3/4, 100 pushes, Release build).
-3. M2 left: offline send test, media sending. M1 left: video/audio/file, QR/emoji verification. A push gateway for Beta/Release.
+3. M4 left: resolve V-ST-1 on `infra/dev`, preview/animation, pack creation (FR-7), legacy packs. M2 left: offline send test, media sending. M1 left: video/audio/file, QR/emoji verification. A push gateway for Beta/Release.
 4. Push the branch, open a PR, check CI (after refreshing this file).
 
 ## 7. Next Session Prompt

@@ -110,6 +110,23 @@ final class MatrixTimelineSession: TimelineSession {
         do { try await timeline.redactEvent(eventOrTransactionId: .eventId(eventId: event.rawValue), reason: nil) } catch { throw ErrorMapper.map(error) }
     }
 
+    func sendSticker(_ sticker: Sticker) async throws(HaloError) {
+        var content: [String: Any] = ["body": sticker.eventBody, "url": sticker.url]
+        var info: [String: Any] = [:]
+        if let i = sticker.info {
+            if let w = i.width { info["w"] = w }
+            if let h = i.height { info["h"] = h }
+            if let m = i.mimeType { info["mimetype"] = m }
+            if let size = i.size { info["size"] = size }
+        }
+        if !info.isEmpty { content["info"] = info }
+        do {
+            let data = try JSONSerialization.data(withJSONObject: content, options: [.sortedKeys])
+            // Not through the send queue: `send_raw` sends at once and fails when offline.
+            _ = try await room.sendRaw(eventType: "m.sticker", content: String(decoding: data, as: UTF8.self), requestConfigOverride: nil)
+        } catch { throw ErrorMapper.map(error) }
+    }
+
     func retrySend(localID: String) async throws(HaloError) {
         do { guard try await timeline.retrySend(itemId: .transactionId(transactionId: localID), target: .event) else { throw HaloError.notFound } } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
     }

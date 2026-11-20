@@ -46,6 +46,9 @@ public protocol TimelineSession: Sendable {
     /// Deletes (redacts) the user's own message.
     func delete(event: EventID) async throws(HaloError)
 
+    /// Sends `sticker` as an `m.sticker` event. It is sent at once and has no local echo: it appears when the server confirms it, and a network failure throws (offline sending is not supported for stickers).
+    func sendSticker(_ sticker: Sticker) async throws(HaloError)
+
     /// Sends a failed local echo again (`TimelineEvent.localID`). Throws `.notFound` if the echo is gone (it was sent or deleted meanwhile).
     func retrySend(localID: String) async throws(HaloError)
 

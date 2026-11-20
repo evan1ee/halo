@@ -18,6 +18,8 @@ public final class FakeTimelinePort: TimelinePort {
         var typingCalls: [Bool] = []
         var retried: [String] = []
         var members: [RoomMember] = []
+        var stickers: [Sticker] = []
+        var stickerFailure: HaloError?
         var sentMentions: [[UserID]] = []
     }
 
@@ -53,6 +55,10 @@ public final class FakeTimelinePort: TimelinePort {
 
     /// The `retrySend` local IDs received, in order.
     public func retried(in id: RoomID) -> [String] { rooms.withLock { $0[id]?.retried ?? [] } }
+    /// The stickers sent, in order.
+    public func sentStickers(in id: RoomID) -> [Sticker] { rooms.withLock { $0[id]?.stickers ?? [] } }
+    /// The next `sendSticker` throws `error`.
+    public func failNextSticker(with error: HaloError, in id: RoomID) { rooms.withLock { $0[id]?.stickerFailure = error } }
     /// The people the room offers for mentions.
     public func setMembers(_ members: [RoomMember], in id: RoomID) { rooms.withLock { $0[id]?.members = members } }
     /// The users mentioned (and still in the text) in each sent message, in order.
@@ -124,6 +130,15 @@ public final class FakeTimelinePort: TimelinePort {
 
         func setTyping(_ isTyping: Bool) async throws(HaloError) {
             port.rooms.withLock { $0[room]?.typingCalls.append(isTyping) }
+        }
+
+        func sendSticker(_ sticker: Sticker) async throws(HaloError) {
+            if let failure = port.rooms.withLock({ rooms -> HaloError? in
+                guard let f = rooms[room]?.stickerFailure else { return nil }
+                rooms[room]?.stickerFailure = nil
+                return f
+            }) { throw failure }
+            port.rooms.withLock { $0[room]?.stickers.append(sticker) }
         }
 
         func members() async throws(HaloError) -> [RoomMember] { port.rooms.withLock { $0[room]?.members ?? [] } }
