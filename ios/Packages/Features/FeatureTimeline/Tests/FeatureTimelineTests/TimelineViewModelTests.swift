@@ -360,4 +360,53 @@ struct TimelineViewModelTests {
         for _ in 0..<2000 { await Task.yield() }
         #expect(store.stored[room] == "not sent yet")  // the edit text never replaced the draft
     }
+
+    @Test("typing @ offers matching members; picking one inserts the name and the send carries the mention")
+    func mentions() async throws {
+        let room = try RoomID("!r:x.org")
+        let alice = RoomMember(user: try UserID("@alice:x.org"), displayName: "Alice")
+        let bob = RoomMember(user: try UserID("@bob:x.org"), displayName: nil)
+        let port = FakeTimelinePort()
+        port.addRoom(room)
+        port.setMembers([alice, bob], in: room)
+        let model = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room), locale: Locale(identifier: "en_US"), timeZone: .gmt)
+        await model.start()
+        for _ in 0..<200_000 { if case .live = model.content { break }; await Task.yield() }
+
+        model.draft = "hello a@b"  // not at a word start
+        #expect(model.mentionQuery == nil)
+        model.draft = "hello @al"
+        #expect(model.mentionQuery == "al")
+        for _ in 0..<200_000 where model.members.isEmpty { await Task.yield() }
+        #expect(model.mentionSuggestions == [alice])
+        model.draft = "hello @"
+        #expect(model.mentionSuggestions == [alice, bob])
+
+        model.draft = "hello @al"
+        model.pickMention(alice)
+        #expect(model.draft == "hello @Alice ")
+        #expect(model.mentionQuery == nil)
+        model.draft += "welcome"
+        await model.send()
+        #expect(port.sentMentions(in: room) == [[alice.user]])
+        #expect(model.draft.isEmpty)
+        await model.stop()
+    }
+
+    @Test("a picked mention whose text was deleted before sending isn't sent")
+    func deletedMention() async throws {
+        let room = try RoomID("!r:x.org")
+        let alice = RoomMember(user: try UserID("@alice:x.org"), displayName: "Alice")
+        let port = FakeTimelinePort()
+        port.addRoom(room)
+        let model = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room), locale: Locale(identifier: "en_US"), timeZone: .gmt)
+        await model.start()
+        for _ in 0..<200_000 { if case .live = model.content { break }; await Task.yield() }
+        model.draft = "@"
+        model.pickMention(alice)
+        model.draft = "never mind"
+        await model.send()
+        #expect(port.sentMentions(in: room) == [[]])
+        await model.stop()
+    }
 }

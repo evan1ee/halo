@@ -86,6 +86,18 @@ private struct Composer: View {
                     Button("Cancel") { model.cancelReply() }.font(.caption)
                 }
             }
+            ForEach(model.mentionSuggestions) { member in
+                Button { model.pickMention(member) } label: {
+                    HStack {
+                        Text(member.mentionName)
+                        Spacer()
+                        Text(member.user.rawValue).font(.caption).foregroundStyle(.secondary)
+                    }
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("mention-suggestion")
+            }
             HStack(alignment: .bottom) {
                 TextField("Message", text: $model.draft, axis: .vertical)
                     .lineLimit(1...5)

@@ -47,12 +47,33 @@ final class MatrixTimelineSession: TimelineSession {
         do { return try await timeline.paginateBackwards(numEvents: count) } catch { throw ErrorMapper.map(error) }
     }
 
-    func send(text: String) async throws(HaloError) {
+    func send(text: String, mentions: [Mention]) async throws(HaloError) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw .invalidInput("EMPTY_MESSAGE") }
         do {
             // Markdown is converted to the message content (formatted body) by the SDK. The returned handle (to abort
             // a queued send) isn't needed yet; failed sends are retried by the send queue.
-            _ = try await timeline.send(msg: messageEventContentFromMarkdown(md: text))
+            _ = try await timeline.send(msg: Self.content(text, mentions))
+        } catch { throw ErrorMapper.map(error) }
+    }
+
+    /// The message content: mentions as `matrix.to` links in the formatted body plus `m.mentions`.
+    private static func content(_ text: String, _ mentions: [Mention]) -> RoomMessageEventContentWithoutRelation {
+        let formatted = MentionFormatter.apply(text, mentions: mentions)
+        let content = messageEventContentFromMarkdown(md: formatted.markdown)
+        return formatted.users.isEmpty ? content : content.withMentions(mentions: Mentions(userIds: formatted.users.map(\.rawValue), room: false))
+    }
+
+    func members() async throws(HaloError) -> [HaloDomain.RoomMember] {
+        do {
+            let iterator = try await room.members()
+            var result: [HaloDomain.RoomMember] = []
+            while let chunk = iterator.nextChunk(chunkSize: 200) {
+                for member in chunk where member.membership == .join {
+                    guard let user = try? UserID(member.userId), member.userId != ownUserID else { continue }
+                    result.append(HaloDomain.RoomMember(user: user, displayName: member.displayName))
+                }
+            }
+            return result
         } catch { throw ErrorMapper.map(error) }
     }
 
@@ -67,9 +88,9 @@ final class MatrixTimelineSession: TimelineSession {
         do { try await room.typingNotice(isTyping: isTyping) } catch { throw ErrorMapper.map(error) }
     }
 
-    func reply(to event: EventID, text: String) async throws(HaloError) {
+    func reply(to event: EventID, text: String, mentions: [Mention]) async throws(HaloError) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw .invalidInput("EMPTY_MESSAGE") }
-        do { _ = try await timeline.sendReply(msg: messageEventContentFromMarkdown(md: text), eventId: event.rawValue) } catch { throw ErrorMapper.map(error) }
+        do { _ = try await timeline.sendReply(msg: Self.content(text, mentions), eventId: event.rawValue) } catch { throw ErrorMapper.map(error) }
     }
 
     func toggleReaction(on event: EventID, key: String) async throws(HaloError) {

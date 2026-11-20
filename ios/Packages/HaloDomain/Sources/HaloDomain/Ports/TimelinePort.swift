@@ -16,9 +16,13 @@ public protocol TimelineSession: Sendable {
     /// Loads up to `count` older events. Returns `true` when the start of the room has been reached.
     func paginateBackwards(count: UInt16) async throws(HaloError) -> Bool
 
-    /// Sends a plain-text or Markdown message. It appears in `items()` at once as `.sending` (local echo) and turns
+    /// The people who can be mentioned: joined members of the room. Throws on failure.
+    func members() async throws(HaloError) -> [RoomMember]
+
+    /// Sends a plain-text or Markdown message. `mentions` are users named as `@name` in `text`; those still in the text become
+    /// links in the formatted body and go into `m.mentions` (see `MentionFormatter`). It appears in `items()` at once as `.sending` (local echo) and turns
     /// `.sent` when the server confirms. Throws `.invalidInput("EMPTY_MESSAGE")` for blank text.
-    func send(text: String) async throws(HaloError)
+    func send(text: String, mentions: [Mention]) async throws(HaloError)
 
     /// Who else is typing in the room, as the current set and then every change (latest value wins). Never contains
     /// the signed-in user.
@@ -29,7 +33,7 @@ public protocol TimelineSession: Sendable {
 
     /// Sends `text` as a reply to the confirmed event `event`. Same local-echo and error rules as `send(text:)`;
     /// an unknown event throws `.notFound`.
-    func reply(to event: EventID, text: String) async throws(HaloError)
+    func reply(to event: EventID, text: String, mentions: [Mention]) async throws(HaloError)
 
     /// Adds the signed-in user's reaction `key` to a confirmed event, or removes it if already there. Events that
     /// are still sending have no event ID yet and can't be reacted to.
@@ -49,4 +53,9 @@ public protocol TimelineSession: Sendable {
     func abortSend(localID: String) async throws(HaloError)
 
     func close() async
+}
+
+extension TimelineSession {
+    public func send(text: String) async throws(HaloError) { try await send(text: text, mentions: []) }
+    public func reply(to event: EventID, text: String) async throws(HaloError) { try await reply(to: event, text: text, mentions: []) }
 }

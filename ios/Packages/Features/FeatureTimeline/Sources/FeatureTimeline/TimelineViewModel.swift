@@ -80,10 +80,52 @@ public final class TimelineViewModel {
         didSet {
             guard draft != oldValue, editing == nil, !isRestoringDraft else { return }
             saveDraft()
+            if mentionQuery != nil { loadMembersIfNeeded() }
             let isTyping = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             Task { [coordinator] in await coordinator.setTyping(isTyping) }
         }
     }
+    /// People that can be mentioned in this room; loaded the first time the user types `@`.
+    public private(set) var members: [RoomMember] = []
+    private var membersRequested = false
+    /// Users picked from the suggestions for the message being written.
+    private var pendingMentions: [Mention] = []
+
+    /// The text after a trailing `@` that starts a word in the draft, or `nil` when the user isn't typing a mention.
+    public var mentionQuery: String? {
+        guard editing == nil, let at = draft.lastIndex(of: "@") else { return nil }
+        if at != draft.startIndex, !draft[draft.index(before: at)].isWhitespace { return nil }
+        let query = draft[draft.index(after: at)...]
+        guard !query.contains(where: \.isWhitespace), query.count <= 30 else { return nil }
+        return String(query)
+    }
+
+    /// Up to five members matching `mentionQuery`.
+    public var mentionSuggestions: [RoomMember] {
+        guard let query = mentionQuery else { return [] }
+        let needle = query.lowercased()
+        let matches = needle.isEmpty ? members : members.filter { member in
+            member.mentionName.lowercased().contains(needle) || member.user.rawValue.lowercased().dropFirst().hasPrefix(needle)
+        }
+        return Array(matches.prefix(5))
+    }
+
+    /// Replaces the `@query` being typed with the member's name and remembers the mention for the send.
+    public func pickMention(_ member: RoomMember) {
+        guard mentionQuery != nil, let at = draft.lastIndex(of: "@") else { return }
+        draft = String(draft[..<at]) + "@\(member.mentionName) "
+        pendingMentions.removeAll { $0.user == member.user }
+        pendingMentions.append(Mention(user: member.user, name: member.mentionName))
+    }
+
+    private func loadMembersIfNeeded() {
+        guard !membersRequested else { return }
+        membersRequested = true
+        Task {
+            if let loaded = try? await coordinator.members() { members = loaded } else { membersRequested = false }
+        }
+    }
+
     /// "Alice is typing…", or `nil` when nobody else is.
     public private(set) var typingText: String?
     public private(set) var isSending = false
@@ -241,11 +283,12 @@ public final class TimelineViewModel {
                 stashedDraft = ""
                 return
             } else if let id = replyingTo?.eventID {
-                try await coordinator.reply(to: id, text: text)
+                try await coordinator.reply(to: id, text: text, mentions: pendingMentions)
                 replyingTo = nil
             } else {
-                try await coordinator.send(text)
+                try await coordinator.send(text, mentions: pendingMentions)
             }
+            pendingMentions = []
             draft = ""
         } catch {
             sendError = error == .network(retryable: true) ? "Can't reach the server. Your message was kept." : "The message couldn't be sent."
