@@ -127,6 +127,19 @@ final class MatrixTimelineSession: TimelineSession {
         } catch { throw ErrorMapper.map(error) }
     }
 
+    func sendImage(_ image: OutgoingImage) async throws(HaloError) {
+        try image.validate()
+        let info = ImageInfo(
+            height: image.height.map(UInt64.init), width: image.width.map(UInt64.init), mimetype: image.mimeType, size: UInt64(image.data.count),
+            thumbnailInfo: nil, thumbnailSource: nil, blurhash: nil, isAnimated: image.mimeType == "image/gif")
+        let params = UploadParameters(
+            source: .data(bytes: image.data, filename: image.filename), caption: image.caption, formattedCaption: nil, mentions: nil, inReplyTo: nil)
+        do {
+            let handle = try timeline.sendAttachment(params: params, attachment: .image(imageInfo: info, thumbnailSource: nil))
+            try await handle.join()
+        } catch { throw ErrorMapper.map(error) }
+    }
+
     func retrySend(localID: String) async throws(HaloError) {
         // Purely local: the SDK reports an unknown echo as a generic error, which is `.notFound` here.
         do { guard try await timeline.retrySend(itemId: .transactionId(transactionId: localID), target: .event) else { throw HaloError.notFound } } catch { throw HaloError.notFound }

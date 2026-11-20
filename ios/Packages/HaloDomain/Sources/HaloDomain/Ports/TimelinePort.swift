@@ -49,6 +49,10 @@ public protocol TimelineSession: Sendable {
     /// Sends `sticker` as an `m.sticker` event. It is sent at once and has no local echo: it appears when the server confirms it, and a network failure throws (offline sending is not supported for stickers).
     func sendSticker(_ sticker: Sticker) async throws(HaloError)
 
+    /// Uploads and sends `image` as an `m.image`. It appears as a local echo while uploading. Returns when the server has the
+    /// message or throws. `.invalidInput` for an invalid image (see `OutgoingImage.validate`).
+    func sendImage(_ image: OutgoingImage) async throws(HaloError)
+
     /// Sends a failed local echo again (`TimelineEvent.localID`). Throws `.notFound` if the echo is gone (it was sent or deleted meanwhile).
     func retrySend(localID: String) async throws(HaloError)
 

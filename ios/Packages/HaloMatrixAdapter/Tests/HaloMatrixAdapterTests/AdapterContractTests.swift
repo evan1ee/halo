@@ -184,6 +184,49 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
+    @Test("Sending an image (uses HALO_DEV_STICKER_ROOM as a scratch room)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
+    func sendImage() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(
+                username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
+            on: details)
+        try await MatrixSyncPort(session: session).start()
+        let room = try RoomID(env["HALO_DEV_STICKER_ROOM"] ?? "")
+        var timeline: (any TimelineSession)?
+        for _ in 0..<60 {
+            if let opened = try? await MatrixTimelinePort(session: session).open(room: room) { timeline = opened; break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        let opened = try #require(timeline)
+        let stream = opened.items()
+        // A 1×1 PNG.
+        let png = try #require(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="))
+        let name = "contract-\(UUID().uuidString.prefix(6)).png"
+        try await opened.sendImage(OutgoingImage(data: png, filename: name, mimeType: "image/png", width: 1, height: 1))
+        let found: MediaAttachment? = try await within(seconds: 60) {
+            var items: [HaloDomain.TimelineItem] = []
+            for await diff in stream {
+                try ListReducer.apply(diff, to: &items)
+                for item in items {
+                    if case .event(let event) = item.content, event.isOwn, event.eventID != nil, case .media(let attachment) = event.kind, attachment.body == name { return attachment }
+                }
+            }
+            return nil
+        }
+        let attachment = try #require(found)
+        #expect(attachment.kind == .image && attachment.source != nil && attachment.width == 1 && attachment.height == 1)
+        // The bytes come back through the media port.
+        let data = try await MatrixMediaPort(session: session).thumbnail(try #require(attachment.source), width: 64, height: 64)
+        #expect(!data.isEmpty)
+        await #expect(throws: HaloError.invalidInput("NOT_AN_IMAGE")) {
+            try await opened.sendImage(OutgoingImage(data: Data("x".utf8), filename: "x.txt", mimeType: "text/plain", width: nil, height: nil))
+        }
+        await opened.close()
+        try await session.logout()
+    }
+
     @Test("SyncPortContract")
     func sync() async throws {
         let session = port()

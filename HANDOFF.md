@@ -22,6 +22,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 - Drafts (FR-5): `DraftPort` → `DraftStore` (table `draft`, migration `v3-draft`) behind `DraftCoordinator` (in-memory first, store attached after sign-in); `TimelineViewModel` restores and saves the composer text per room and keeps it across an edit.
 - Mentions (FR-1, AC-M2): typing `@` offers joined members (`TimelineSession.members`), picking one inserts `@Name `; `MentionFormatter` (pure, HaloDomain) turns remaining `@Name` into `matrix.to` links in the formatted body and the adapter sets `m.mentions` via `withMentions`. A restored draft keeps the text but not the picked mentions.
 - Stickers v1 (M4, in progress): `HaloDomain/Stickers` (`ImagePackParser`, `ShortcodeRules`, `StickerPrefs` incl. account-data form and merge, `StickerSearch`), ports `StickerPackPort`/`StickerPrefsPort`, `StickerLibrary` (debounced recents, merge with remote), `TimelineSession.sendSticker` (`send_raw` `m.sticker`, no local echo), adapter `MatrixStickerPorts` (packs read with an authenticated GET of the room state: V-ST-1 option B, option A was verified empty), package `FeatureStickers` (panel VM and view) opened from a composer button, incoming stickers shown as images.
+- Image sending (M2): `PhotosPicker` in the composer → `TimelineViewModel.sendImage` → `ImagePreparing` (`HaloPlatform.ImagePreparer`: ImageIO, orientation applied, max 2048 px, re-encoded as JPEG/PNG so EXIF/GPS is dropped, animated GIF kept) → `TimelineSession.sendImage` (`Timeline.sendAttachment` with in-memory data). Verified on `infra/dev` by contract test `sendImage` (upload, event in timeline, bytes back through the media port). No caption, no video/audio/file sending.
 - Room list swipe: leading "Read" (`markRoomRead`), trailing "Unread" (`setMarkedUnread`).
 
 ## 3. Key decisions
@@ -47,7 +48,7 @@ Everything in `git log origin/main..HEAD`. Key paths: `ios/Packages/HaloApplicat
 ## 6. Next steps
 1. M3: device check of the ≥ 50 % visibility; the Docker scenario driver to run S01–S22 against Synapse; the auditor.
 2. Device checks from section 5; G-NSE hardening (peak memory, encrypted room, timeout injection AC-NSE-3/4, 100 pushes, Release build).
-3. M4 left: preview/animation, pack creation (FR-7), legacy packs. M2 left: offline send test, media sending. M1 left: video/audio/file, QR/emoji verification. A push gateway for Beta/Release.
+3. M4 left: preview/animation, pack creation (FR-7), legacy packs. M2 left: offline send test. M1 left: video/audio/file, QR/emoji verification. A push gateway for Beta/Release.
 4. Push the branch, open a PR, check CI (after refreshing this file).
 
 ## 7. Next Session Prompt

@@ -423,4 +423,34 @@ struct TimelineViewModelTests {
         let without = row(nil)
         #expect(!without.isSticker && without.text == "[Sticker] wave")
     }
+
+    @Test("a picked photo is prepared and sent; failures say what went wrong; without a preparer there is no photo button")
+    func photos() async throws {
+        let room = try RoomID("!r:x.org")
+        let port = FakeTimelinePort()
+        port.addRoom(room)
+        let model = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room), images: StubPreparer(), locale: Locale(identifier: "en_US"), timeZone: .gmt)
+        #expect(model.canSendImages)
+        await model.start()
+        for _ in 0..<200_000 { if case .live = model.content { break }; await Task.yield() }
+
+        await model.sendImage(data: Data("png".utf8), filename: "a.png")
+        #expect(port.sentImages(in: room).map(\.filename) == ["a.png"] && model.sendError == nil && !model.isSendingImage)
+        await model.sendImage(data: Data("text".utf8), filename: "a.txt")
+        #expect(model.sendError == "That file isn't a picture." && port.sentImages(in: room).count == 1)
+        port.failNextImage(with: .network(retryable: true), in: room)
+        await model.sendImage(data: Data("png".utf8), filename: "b.png")
+        #expect(model.sendError == "Can't reach the server. The picture wasn't sent.")
+        await model.stop()
+
+        let plain = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room), locale: Locale(identifier: "en_US"), timeZone: .gmt)
+        #expect(!plain.canSendImages)
+    }
+}
+
+private struct StubPreparer: ImagePreparing {
+    func prepare(data: Data, filename: String) throws(HaloError) -> OutgoingImage {
+        guard data == Data("png".utf8) else { throw .invalidInput("NOT_AN_IMAGE") }
+        return OutgoingImage(data: data, filename: filename, mimeType: "image/png", width: 2, height: 1)
+    }
 }

@@ -155,6 +155,7 @@ public final class TimelineViewModel {
     private let dateFormatter: DateFormatter
     private let receipts: ReadReceiptCoordinator?
     private let drafts: DraftCoordinator?
+    private let imagePreparer: (any ImagePreparing)?
     private let room: RoomID?
     private let dwell: Duration
     private let sleep: @Sendable (Duration) async throws -> Void
@@ -174,10 +175,11 @@ public final class TimelineViewModel {
 
     /// - Parameters:
     ///   - drafts: when given together with `room`, the unsent text is kept per room (MESSAGING FR-5).
+    ///   - images: prepares picked photos for sending; without it the composer offers no photo button.
     ///   - receipts: when given together with `room`, the newest visible confirmed event is reported as read.
     public init(
         coordinator: TimelineCoordinator, media: MediaLoader? = nil, receipts: ReadReceiptCoordinator? = nil, room: RoomID? = nil,
-        drafts: DraftCoordinator? = nil, dwell: Duration = TimelineViewModel.seenDwell, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        drafts: DraftCoordinator? = nil, images: (any ImagePreparing)? = nil, dwell: Duration = TimelineViewModel.seenDwell, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
         locale: Locale = .current, timeZone: TimeZone = .current
     ) {
         self.coordinator = coordinator
@@ -185,6 +187,7 @@ public final class TimelineViewModel {
         self.receipts = receipts
         self.room = room
         self.drafts = drafts
+        self.imagePreparer = images
         self.dwell = dwell
         self.sleep = sleep
         let formatter = DateFormatter()
@@ -296,6 +299,35 @@ public final class TimelineViewModel {
         } catch {
             sendError = error == .network(retryable: true) ? "Can't reach the server. Your message was kept." : "The message couldn't be sent."
         }
+    }
+
+    /// `true` when the composer can attach photos.
+    public var canSendImages: Bool { imagePreparer != nil }
+    /// A photo is being prepared or uploaded.
+    public private(set) var isSendingImage = false
+
+    /// Sends a picked photo: shrinks it, strips its metadata, uploads it. The message shows as a local echo while uploading.
+    public func sendImage(data: Data, filename: String) async {
+        guard let imagePreparer, !isSendingImage else { return }
+        isSendingImage = true
+        sendError = nil
+        defer { isSendingImage = false }
+        do {
+            let image = try await Self.prepare(imagePreparer, data, filename)
+            try await coordinator.sendImage(image)
+        } catch {
+            switch error {
+            case .invalidInput("NOT_AN_IMAGE"): sendError = "That file isn't a picture."
+            case .invalidInput("IMAGE_TOO_LARGE"): sendError = "That picture is too large to send."
+            case .network(retryable: true): sendError = "Can't reach the server. The picture wasn't sent."
+            default: sendError = "The picture couldn't be sent."
+            }
+        }
+    }
+
+    /// Decoding and re-encoding a photo is real work; it runs off the main actor.
+    @concurrent private static func prepare(_ preparer: any ImagePreparing, _ data: Data, _ filename: String) async throws(HaloError) -> OutgoingImage {
+        try preparer.prepare(data: data, filename: filename)
     }
 
     /// Sends a sticker from the sticker panel. Throws so the panel can say it failed.

@@ -4,6 +4,7 @@ import SwiftUI
 #if canImport(UIKit)
 import UIKit
 #endif
+import PhotosUI
 
 public struct TimelineView: View {
     private let model: TimelineViewModel
@@ -76,11 +77,13 @@ public struct TimelineView: View {
 private struct Composer: View {
     @Bindable var model: TimelineViewModel
     let onStickers: (() -> Void)?
+    @State private var picked: PhotosPickerItem?
 
     var body: some View {
         VStack(spacing: 4) {
             if let typing = model.typingText { Text(typing).font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading) }
             if let error = model.sendError { Text(error).font(.caption).foregroundStyle(.red) }
+            if model.isSendingImage { ProgressView("Sending photo…").font(.caption) }
             if model.editing != nil {
                 HStack {
                     Label("Editing message", systemImage: "pencil").font(.caption)
@@ -108,6 +111,12 @@ private struct Composer: View {
                 .accessibilityIdentifier("mention-suggestion")
             }
             HStack(alignment: .bottom) {
+                if model.canSendImages {
+                    PhotosPicker(selection: $picked, matching: .images) { Image(systemName: "photo").font(.title2) }
+                        .disabled(model.isSendingImage)
+                        .accessibilityLabel("Send a photo")
+                        .accessibilityIdentifier("photo-button")
+                }
                 if let onStickers {
                     Button(action: onStickers) { Image(systemName: "face.smiling").font(.title2) }
                         .accessibilityLabel("Stickers")
@@ -124,6 +133,14 @@ private struct Composer: View {
         }
         .padding(8)
         .background(.bar)
+        .onChange(of: picked) { _, item in
+            guard let item else { return }
+            picked = nil
+            Task {
+                guard let data = try? await item.loadTransferable(type: Data.self) else { return }
+                await model.sendImage(data: data, filename: item.itemIdentifier ?? "photo")
+            }
+        }
     }
 }
 

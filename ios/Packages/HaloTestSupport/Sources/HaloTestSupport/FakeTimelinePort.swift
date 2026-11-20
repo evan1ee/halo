@@ -19,6 +19,8 @@ public final class FakeTimelinePort: TimelinePort {
         var retried: [String] = []
         var members: [RoomMember] = []
         var stickers: [Sticker] = []
+        var images: [OutgoingImage] = []
+        var imageFailure: HaloError?
         var stickerFailure: HaloError?
         var sentMentions: [[UserID]] = []
     }
@@ -55,6 +57,10 @@ public final class FakeTimelinePort: TimelinePort {
 
     /// The `retrySend` local IDs received, in order.
     public func retried(in id: RoomID) -> [String] { rooms.withLock { $0[id]?.retried ?? [] } }
+    /// The images sent, in order.
+    public func sentImages(in id: RoomID) -> [OutgoingImage] { rooms.withLock { $0[id]?.images ?? [] } }
+    /// The next `sendImage` throws `error`.
+    public func failNextImage(with error: HaloError, in id: RoomID) { rooms.withLock { $0[id]?.imageFailure = error } }
     /// The stickers sent, in order.
     public func sentStickers(in id: RoomID) -> [Sticker] { rooms.withLock { $0[id]?.stickers ?? [] } }
     /// The next `sendSticker` throws `error`.
@@ -139,6 +145,16 @@ public final class FakeTimelinePort: TimelinePort {
                 return f
             }) { throw failure }
             port.rooms.withLock { $0[room]?.stickers.append(sticker) }
+        }
+
+        func sendImage(_ image: OutgoingImage) async throws(HaloError) {
+            try image.validate()
+            if let failure = port.rooms.withLock({ rooms -> HaloError? in
+                guard let f = rooms[room]?.imageFailure else { return nil }
+                rooms[room]?.imageFailure = nil
+                return f
+            }) { throw failure }
+            port.rooms.withLock { $0[room]?.images.append(image) }
         }
 
         func members() async throws(HaloError) -> [RoomMember] { port.rooms.withLock { $0[room]?.members ?? [] } }

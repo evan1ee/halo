@@ -146,6 +146,12 @@ public actor TimelineCoordinator {
         try await session.sendSticker(sticker)
     }
 
+    /// Uploads and sends an image into the open timeline; returns when it is sent.
+    public func sendImage(_ image: OutgoingImage) async throws(HaloError) {
+        guard let session, case .live = status else { throw .cancelled }
+        try await session.sendImage(image)
+    }
+
     /// The people who can be mentioned in the open room.
     public func members() async throws(HaloError) -> [RoomMember] {
         guard let session, case .live = status else { throw .cancelled }

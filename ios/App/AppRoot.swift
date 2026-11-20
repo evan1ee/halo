@@ -90,7 +90,7 @@ final class AppRoot {
 
     /// A view model for the timeline of `room`; each screen gets its own coordinator and session.
     func makeTimeline(room: RoomID) -> TimelineViewModel {
-        TimelineViewModel(coordinator: TimelineCoordinator(port: timelinePort, room: room, records: records), media: media, receipts: receipts, room: room, drafts: drafts)
+        TimelineViewModel(coordinator: TimelineCoordinator(port: timelinePort, room: room, records: records), media: media, receipts: receipts, room: room, drafts: drafts, images: ImagePreparer())
     }
 
     /// The sticker panel for the timeline of `room`; sending goes through that timeline's view model.
