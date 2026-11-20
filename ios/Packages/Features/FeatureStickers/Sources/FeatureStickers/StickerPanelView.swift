@@ -4,6 +4,7 @@ import SwiftUI
 /// The sticker panel: search, favourites, recents, then one section per pack. Tap sends; long-press offers favourite.
 public struct StickerPanelView: View {
     let model: StickerPanelViewModel
+    @State private var newPack: NewPackViewModel?
 
     public init(model: StickerPanelViewModel) { self.model = model }
 
@@ -12,10 +13,17 @@ public struct StickerPanelView: View {
     public var body: some View {
         @Bindable var model = model
         VStack(spacing: 0) {
-            TextField("Search stickers", text: $model.query)
-                .textFieldStyle(.roundedBorder)
-                .padding(8)
-                .accessibilityIdentifier("sticker-search")
+            HStack {
+                TextField("Search stickers", text: $model.query)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("sticker-search")
+                if model.canCreatePack {
+                    Button { newPack = model.beginNewPack() } label: { Image(systemName: "plus.circle").font(.title2) }
+                        .accessibilityLabel("New sticker pack")
+                        .accessibilityIdentifier("new-pack")
+                }
+            }
+            .padding(8)
             if let error = model.sendError { Text(error).font(.caption).foregroundStyle(.red) }
             if model.isIncomplete { Text("Some packs couldn't be loaded.").font(.caption).foregroundStyle(.secondary) }
             if let message = model.emptyMessage {
@@ -37,6 +45,9 @@ public struct StickerPanelView: View {
                 }
             }
         }
+        #if canImport(UIKit)
+        .sheet(item: $newPack) { NewPackView(model: $0) }
+        #endif
         .task { await model.start() }
         .onDisappear { Task { await model.stop() } }
     }

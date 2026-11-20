@@ -83,4 +83,51 @@ struct StickerPanelViewModelTests {
         #expect(model.isFavourite(sticker("dog")) && model.snapshot.favourites.map(\.shortcode) == ["dog"])
         await model.stop()
     }
+
+    private struct Preparer: ImagePreparing {
+        func prepare(data: Data, filename: String) throws(HaloError) -> OutgoingImage {
+            OutgoingImage(data: data, filename: filename, mimeType: "image/png", width: 512, height: 512)
+        }
+    }
+
+    @Test("a new pack: shortcodes come from file names, problems are shown, create needs a name and valid unique shortcodes, and the panel reloads after")
+    func newPack() async {
+        let port = FakeStickerPackCreation()
+        var reloaded = 0
+        let model = NewPackViewModel(creator: StickerPackCreator(port: port, preparer: Preparer())) { reloaded += 1 }
+        #expect(!model.canCreate)
+        model.add(data: Data([1]), filename: "Happy Cat.png")
+        model.add(data: Data([2]), filename: "Happy Cat.png")
+        #expect(model.items.map(\.shortcode) == ["Happy_Cat", "Happy_Cat-2"])
+        #expect(!model.canCreate)  // no name
+        model.name = "Cats"
+        #expect(model.canCreate)
+        model.setShortcode("Happy_Cat", for: model.items[1])
+        #expect(model.problem(with: model.items[1]) == "Another sticker has this name." && !model.canCreate)
+        model.setShortcode("bad name", for: model.items[1])
+        #expect(model.problem(with: model.items[1]) == "Use letters, digits, - and _ (up to 100)." && !model.canCreate)
+        model.remove(model.items[1])
+        #expect(model.canCreate)
+
+        port.fail(with: .network(retryable: true))
+        await model.create()
+        #expect(model.phase == .failed("Can't reach the server. Nothing was created; try again.") && reloaded == 0)
+        model.dismissError()
+        #expect(model.phase == .editing && model.items.count == 1 && model.name == "Cats")  // nothing was lost
+
+        port.fail(with: nil)
+        await model.create()
+        #expect(model.phase == .done && reloaded == 1)
+        #expect(port.created.map(\.name) == ["Cats"] && port.created[0].images.map(\.shortcode) == ["Happy_Cat"])
+    }
+
+    @Test("the panel offers pack creation only when it was given the means")
+    func panelCreation() async {
+        let library = StickerLibrary(packs: FakeStickerPacks(), prefs: FakeStickerPrefs())
+        let without = StickerPanelViewModel(library: library, room: nil, send: { _ in })
+        #expect(!without.canCreatePack && without.beginNewPack() == nil)
+        let creator = StickerPackCreator(port: FakeStickerPackCreation(), preparer: Preparer())
+        let with = StickerPanelViewModel(library: library, room: nil, newPack: { done in NewPackViewModel(creator: creator, onCreated: done) }, send: { _ in })
+        #expect(with.canCreatePack && with.beginNewPack() != nil)
+    }
 }

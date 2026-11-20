@@ -3,6 +3,7 @@ import HaloDomain
 import HaloFoundation
 import HaloTestSupport
 import MatrixRustSDK
+import Synchronization
 import Testing
 @testable import HaloMatrixAdapter
 
@@ -224,6 +225,47 @@ struct AdapterContractTests {
             try await opened.sendImage(OutgoingImage(data: Data("x".utf8), filename: "x.txt", mimeType: "text/plain", width: nil, height: nil))
         }
         await opened.close()
+        try await session.logout()
+    }
+
+    @Test("Creating a sticker pack (creates a room on the dev server)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
+    func createPack() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(
+                username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
+            on: details)
+        try await MatrixSyncPort(session: session).start()
+        let png = try #require(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="))
+        let name = "Contract \(UUID().uuidString.prefix(5))"
+        let images = [
+            NewStickerImage(data: png, mimeType: "image/png", width: 1, height: 1, shortcode: "one"),
+            NewStickerImage(data: png, mimeType: "image/png", width: 1, height: 1, shortcode: "two", body: "Second"),
+        ]
+        let creation = MatrixStickerPackCreationPort(session: session)
+        let ticks = Mutex<[Int]>([])
+        let ref = try await within(seconds: 90) { try await creation.createPack(name: name, images: images) { done, _ in ticks.withLock { $0.append(done) } } }
+        #expect(ticks.withLock { $0 } == [1, 2])
+
+        // Read it back like the panel does.
+        let reader = MatrixStickerPackPort(session: session)
+        var pack: StickerPack?
+        for _ in 0..<30 {
+            pack = try await reader.packs(currentRoom: nil).packs.first { $0.ref == ref }
+            if pack != nil { break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        let found = try #require(pack, "the created pack is not listed in m.image_pack.rooms")
+        #expect(found.displayName == name && found.stickers.map(\.shortcode) == ["one", "two"] && found.offersStickers)
+        #expect(found.stickers[1].body == "Second" && found.stickers.allSatisfy { $0.url.hasPrefix("mxc://") })
+        // The images were uploaded: their bytes come back.
+        let data = try await MatrixMediaPort(session: session).thumbnail(try #require(found.stickers[0].image), width: 32, height: 32)
+        #expect(!data.isEmpty)
+        // Invalid input is refused before anything is uploaded.
+        await #expect(throws: HaloError.invalidInput("DUPLICATE_SHORTCODE")) {
+            _ = try await creation.createPack(name: "x", images: [images[0], images[0]]) { _, _ in }
+        }
         try await session.logout()
     }
 

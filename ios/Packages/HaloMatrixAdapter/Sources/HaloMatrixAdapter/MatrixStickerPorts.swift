@@ -136,3 +136,51 @@ public final class MatrixStickerPackPort: StickerPackPort {
         component.addingPercentEncoding(withAllowedCharacters: CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")) ?? component
     }
 }
+
+/// `StickerPackCreationPort`: uploads the images, creates an unencrypted private room, writes the pack state, and lists the
+/// room in the user's account data (STICKERS FR-7, D48). Packs and their media are not encrypted (spec).
+public final class MatrixStickerPackCreationPort: StickerPackCreationPort {
+    private let session: MatrixSessionPort
+
+    public init(session: MatrixSessionPort) { self.session = session }
+
+    public func createPack(name: String, images: [NewStickerImage], progress: @escaping @Sendable (Int, Int) -> Void) async throws(HaloError) -> PackRef {
+        try ImagePackBuilder.validate(name: name, shortcodes: images.map(\.shortcode))
+        for image in images where !image.mimeType.hasPrefix("image/") { throw .invalidInput("NOT_AN_IMAGE") }
+        let client = try await session.signedInClient()
+        do {
+            var uploaded: [(image: NewStickerImage, url: String)] = []
+            for image in images {
+                let url = try await client.uploadMedia(mimeType: image.mimeType, data: image.data, progressWatcher: nil)
+                uploaded.append((image, url))
+                progress(uploaded.count, images.count)
+            }
+            let roomID = try await client.createRoom(request: CreateRoomParameters(
+                name: ImagePackBuilder.roomName(for: name), isEncrypted: false, visibility: .private, preset: .privateChat))
+            let ref = PackRef(room: try RoomID(roomID), stateKey: ImagePackBuilder.stateKey)
+
+            // The room must be known locally before a state event can be sent into it.
+            var room: Room?
+            for _ in 0..<30 {
+                if let known = try? await session.room(ref.room) { room = known; break }
+                try await Task.sleep(for: .seconds(1))
+            }
+            guard let room else { throw HaloError.notFound }
+            let content = ImagePackBuilder.content(name: name, uploaded: uploaded)
+            _ = try await room.sendStateEventRaw(
+                eventType: "m.room.image_pack", stateKey: ref.stateKey,
+                content: String(decoding: try JSONSerialization.data(withJSONObject: content, options: [.sortedKeys]), as: UTF8.self), requestConfigOverride: nil)
+
+            try await update(client, "m.image_pack.rooms") { PackRegistry.enabling(ref, in: $0) }
+            try await update(client, "one.mbm.halo.sticker_rooms") { PackRegistry.recordingPackRoom(ref.room, in: $0) }
+            return ref
+        } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
+    }
+
+    /// Read-modify-write of account data; `nil` from `change` leaves it alone.
+    private func update(_ client: Client, _ type: String, _ change: ([String: Any]?) -> [String: Any]?) async throws {
+        let current = try await client.accountData(eventType: type).flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+        guard let updated = change(current) else { return }
+        try await client.setAccountData(eventType: type, content: String(decoding: try JSONSerialization.data(withJSONObject: updated, options: [.sortedKeys]), as: UTF8.self))
+    }
+}

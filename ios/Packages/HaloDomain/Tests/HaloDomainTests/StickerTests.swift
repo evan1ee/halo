@@ -137,3 +137,53 @@ struct StickerTests {
         #expect(StickerSearch.search("dance", in: [p], prefs: StickerPrefs()).map(\.shortcode) == ["x1"])
     }
 }
+
+@Suite("Pack creation")
+struct PackCreationTests {
+    private let room = try! RoomID("!pack:x.org")
+    private func image(_ code: String) -> NewStickerImage { NewStickerImage(data: Data([1, 2, 3]), mimeType: "image/png", width: 512, height: 256, shortcode: code) }
+
+    @Test("validation names the problem")
+    func validation() {
+        #expect(throws: HaloError.invalidInput("EMPTY_PACK_NAME")) { try ImagePackBuilder.validate(name: "  ", shortcodes: ["a"]) }
+        #expect(throws: HaloError.invalidInput("NO_IMAGES")) { try ImagePackBuilder.validate(name: "Cats", shortcodes: []) }
+        #expect(throws: HaloError.invalidInput("BAD_SHORTCODE")) { try ImagePackBuilder.validate(name: "Cats", shortcodes: ["a b"]) }
+        #expect(throws: HaloError.invalidInput("DUPLICATE_SHORTCODE")) { try ImagePackBuilder.validate(name: "Cats", shortcodes: ["a", "a"]) }
+        #expect(throws: HaloError.invalidInput("TOO_MANY_IMAGES")) { try ImagePackBuilder.validate(name: "Cats", shortcodes: (0...120).map { "s\($0)" }) }
+        #expect(throws: Never.self) { try ImagePackBuilder.validate(name: "Cats", shortcodes: (0..<120).map { "s\($0)" }) }
+    }
+
+    @Test("the built content parses back to the same pack (round trip through ImagePackParser)")
+    func roundTrip() throws {
+        let content = ImagePackBuilder.content(name: " Cats ", uploaded: [(image("wave"), "mxc://x.org/1"), (image("dance"), "mxc://x.org/2")])
+        let ref = PackRef(room: room, stateKey: ImagePackBuilder.stateKey)
+        let pack = try #require(ImagePackParser.parse(content, ref: ref, source: .userEnabled))
+        #expect(pack.displayName == "Cats" && pack.usage == [.sticker] && pack.offersStickers)
+        #expect(pack.stickers.map(\.shortcode) == ["dance", "wave"])
+        let wave = try #require(pack.stickers.last)
+        #expect(wave.url == "mxc://x.org/1" && wave.info == StickerInfo(width: 512, height: 256, mimeType: "image/png", size: 3) && wave.hasValidShortcode)
+        #expect(ImagePackBuilder.roomName(for: "Cats") == "Sticker pack: Cats")
+    }
+
+    @Test("enabling a pack keeps other packs and unknown properties, and is idempotent")
+    func enabling() {
+        let ref = PackRef(room: room, stateKey: "pack")
+        let existing: [String: Any] = ["rooms": ["!other:x.org": ["p": ["note": 1]]], "extra": "keep"]
+        let once = PackRegistry.enabling(ref, in: existing)
+        #expect(once["extra"] as? String == "keep")
+        let rooms = once["rooms"] as? [String: Any]
+        #expect(((rooms?["!other:x.org"] as? [String: Any])?["p"] as? [String: Any])?["note"] as? Int == 1)
+        #expect((rooms?[room.rawValue] as? [String: Any])?["pack"] != nil)
+        #expect(NSDictionary(dictionary: PackRegistry.enabling(ref, in: once)).isEqual(to: once))
+        #expect((PackRegistry.enabling(ref, in: nil)["rooms"] as? [String: Any])?.count == 1)
+    }
+
+    @Test("the pack-room list gets each room once, keeps unknown keys, and refuses a newer version")
+    func packRooms() throws {
+        let one = try #require(PackRegistry.recordingPackRoom(room, in: nil))
+        #expect(one["rooms"] as? [String] == [room.rawValue] && one["version"] as? Int == 1)
+        let again = try #require(PackRegistry.recordingPackRoom(room, in: one.merging(["x": true]) { $1 }))
+        #expect(again["rooms"] as? [String] == [room.rawValue] && again["x"] as? Bool == true)
+        #expect(PackRegistry.recordingPackRoom(room, in: ["version": 2]) == nil)
+    }
+}

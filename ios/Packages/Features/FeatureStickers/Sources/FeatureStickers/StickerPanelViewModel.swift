@@ -30,9 +30,14 @@ public final class StickerPanelViewModel {
     private let send: @MainActor (Sticker) async throws(HaloError) -> Void
     private var observation: Task<Void, Never>?
     private var searchGeneration = 0
+    private let makeNewPack: (@MainActor (@escaping @MainActor () async -> Void) -> NewPackViewModel)?
 
     /// - Parameter send: sends the sticker into the room the panel belongs to.
-    public init(library: StickerLibrary, media: MediaLoader? = nil, room: RoomID?, send: @escaping @MainActor (Sticker) async throws(HaloError) -> Void) {
+    public init(library: StickerLibrary, media: MediaLoader? = nil, room: RoomID?,
+        newPack: (@MainActor (@escaping @MainActor () async -> Void) -> NewPackViewModel)? = nil,
+        send: @escaping @MainActor (Sticker) async throws(HaloError) -> Void
+    ) {
+        self.makeNewPack = newPack
         self.library = library
         self.media = media
         self.room = room
@@ -81,6 +86,14 @@ public final class StickerPanelViewModel {
     public func thumbnail(for sticker: Sticker) async -> Data? {
         guard let media, let image = sticker.image else { return nil }
         return try? await media.thumbnail(image, width: 256, height: 256)
+    }
+
+    /// `true` when the panel can create packs.
+    public var canCreatePack: Bool { makeNewPack != nil }
+
+    /// The creation screen's model; the panel reloads when a pack was created.
+    public func beginNewPack() -> NewPackViewModel? {
+        makeNewPack?({ [library, room] in await library.load(currentRoom: room) })
     }
 
     /// Why the panel has nothing to show, or `nil` when it has something.

@@ -56,3 +56,30 @@ public final class FakeStickerPrefs: StickerPrefsPort {
         state.withLock { $0.prefs = prefs; $0.saves.append(prefs) }
     }
 }
+
+/// In-memory `StickerPackCreationPort`; records what it was asked to create.
+public final class FakeStickerPackCreation: StickerPackCreationPort {
+    public struct Created: Sendable, Equatable {
+        public let name: String
+        public let images: [NewStickerImage]
+    }
+    private struct State {
+        var created: [Created] = []
+        var error: HaloError?
+    }
+    private let state = Mutex(State())
+
+    public init() {}
+
+    public var created: [Created] { state.withLock { $0.created } }
+    public func fail(with error: HaloError?) { state.withLock { $0.error = error } }
+
+    public func createPack(name: String, images: [NewStickerImage], progress: @escaping @Sendable (Int, Int) -> Void) async throws(HaloError) -> PackRef {
+        try ImagePackBuilder.validate(name: name, shortcodes: images.map(\.shortcode))
+        if let error = state.withLock({ $0.error }) { throw error }
+        for index in images.indices { progress(index + 1, images.count) }
+        state.withLock { $0.created.append(Created(name: name, images: images)) }
+        guard let room = try? RoomID("!pack\(state.withLock { $0.created.count }):x.org") else { throw .internal(code: "FAKE_ROOM_ID") }
+        return PackRef(room: room, stateKey: ImagePackBuilder.stateKey)
+    }
+}

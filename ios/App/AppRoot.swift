@@ -27,6 +27,7 @@ final class AppRoot {
     let drafts: DraftCoordinator
     let stickers: StickerLibrary
     private let sessionCoordinator: SessionCoordinator
+    private let matrixSession: MatrixSessionPort
     private let media: MediaLoader
 
     init() {
@@ -38,6 +39,7 @@ final class AppRoot {
         // Shared with the notification extension: the Keychain access group and the App Group container.
         let keychain = HaloShared.keychain()
         let session = MatrixSessionPort(baseDirectory: HaloShared.storeDirectory())
+        matrixSession = session
         let sessionCoordinator = SessionCoordinator(port: session, keychain: keychain)
         self.sessionCoordinator = sessionCoordinator
         let roomCoordinator = RoomListCoordinator(port: MatrixRoomListPort(session: session), loadsAllPages: true)
@@ -95,7 +97,9 @@ final class AppRoot {
 
     /// The sticker panel for the timeline of `room`; sending goes through that timeline's view model.
     func makeStickerPanel(room: RoomID, timeline: TimelineViewModel) -> StickerPanelViewModel {
-        StickerPanelViewModel(library: stickers, media: media, room: room, send: { sticker throws(HaloError) in try await timeline.sendSticker(sticker) })
+        let creator = StickerPackCreator(port: MatrixStickerPackCreationPort(session: matrixSession), preparer: ImagePreparer(maximumDimension: 512))
+        return StickerPanelViewModel(
+            library: stickers, media: media, room: room, newPack: { done in NewPackViewModel(creator: creator, onCreated: done) }, send: { sticker throws(HaloError) in try await timeline.sendSticker(sticker) })
     }
 
     #if DEBUG
