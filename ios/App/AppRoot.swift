@@ -133,7 +133,10 @@ final class AppRoot {
 
     /// A view model for the timeline of `room`; each screen gets its own coordinator and session.
     func makeTimeline(room: RoomID) -> TimelineViewModel {
-        TimelineViewModel(coordinator: TimelineCoordinator(port: timelinePort, room: room, records: records), media: media, receipts: receipts, room: room, drafts: drafts, images: ImagePreparer())
+        TimelineViewModel(
+            coordinator: TimelineCoordinator(port: timelinePort, room: room, records: records), media: media, receipts: receipts, room: room, drafts: drafts, images: ImagePreparer(),
+            // Where to land on opening: the user's own read position (a receipt from any device) at that moment.
+            readThrough: { [roomCoordinator] in await roomCoordinator.rooms.first { $0.id == room }?.ownReadThrough })
     }
 
     /// The sticker panel for the timeline of `room`; sending goes through that timeline's view model.

@@ -10,6 +10,7 @@ public struct TimelineView: View {
     private let model: TimelineViewModel
     private let stickerPanel: (@MainActor () -> AnyView)?
     @State private var showsStickers = false
+    @State private var headerVisible = false
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -42,8 +43,11 @@ public struct TimelineView: View {
                             Spacer()
                         }
                         .listRowSeparator(.hidden)
-                        // Re-runs whenever rows change, so loading continues until the start marker arrives.
-                        .task(id: rows.count) { if paginationError == nil { await model.loadEarlier() } }
+                        // History loads only while this row is on screen (the user is at the top), and continues until the
+                        // screen is full or the start marker arrives; opening a room never loads it all.
+                        .onAppear { headerVisible = true }
+                        .onDisappear { headerVisible = false }
+                        .task(id: rows.count) { if headerVisible, paginationError == nil { await model.loadEarlier() } }
                     }
                     ForEach(rows) { row in
                         RowView(row: row, model: model)
@@ -60,6 +64,14 @@ public struct TimelineView: View {
                 .accessibilityIdentifier("timeline")
                 // A newer last row (own echo or incoming message) scrolls into view. Earlier history prepended at the
                 // top doesn't change the last row, so reading old messages isn't disturbed.
+                // Opening a room: the first unread message goes to the top of the screen, else the newest row to the bottom.
+                // `.task(id:)` also runs for a value that was already set when this list first appeared (onChange wouldn't).
+                .task(id: model.landingRow) {
+                    guard let landing = model.landingRow else { return }
+                    try? await Task.sleep(for: .milliseconds(150))  // let the list lay the rows out first
+                    proxy.scrollTo(landing, anchor: model.landingIsUnread ? .top : .bottom)
+                    model.landingShown()
+                }
                 .onChange(of: rows.last?.id) { _, last in
                     if let last { withAnimation { proxy.scrollTo(last, anchor: .bottom) } }
                 }

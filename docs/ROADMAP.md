@@ -67,7 +67,7 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 - [ ] V-ST-2: token refresh on 401 for the pack GET.
 
 **M2 / M1 leftovers**
-- [ ] Timeline opens at the first unread message, or the bottom when all is read (TIMELINE.md §1); today a room opens at its oldest events (seen in the D6 check).
+- [x] Timeline opens at the first unread message (top of screen), or at the newest row when all is read or the read position is unknown (TIMELINE.md §1): `TimelineViewModel.landingRow`/`firstUnreadItemID`, read position = `RoomSummary.ownReadThrough` at open; history now loads only while the "load earlier" row is on screen (opening no longer paginates the whole room). Unit-tested; bottom landing checked in the simulator; the first-unread landing was not seen live (no unread room at hand). Not built: "Jump to unread" pill and read-marker line (FR-4), landing when the first unread is older than the loaded page.
 - [ ] Offline send test (MESSAGING); kill-and-relaunch resend.
 - [ ] Video, audio and file display and sending (MEDIA_ATTACHMENTS).
 - [ ] QR and emoji device verification (ENCRYPTION_AND_DEVICES).

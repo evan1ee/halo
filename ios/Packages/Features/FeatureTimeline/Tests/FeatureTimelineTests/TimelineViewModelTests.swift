@@ -446,6 +446,58 @@ struct TimelineViewModelTests {
         let plain = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room), locale: Locale(identifier: "en_US"), timeZone: .gmt)
         #expect(!plain.canSendImages)
     }
+
+    private func timed(_ id: String, _ seconds: Double, own: Bool = false, kind: TimelineEventKind = .text("m", isEdited: false)) -> TimelineItem {
+        TimelineItem(
+            id: TimelineItemID(id),
+            content: .event(TimelineEvent(
+                eventID: nil, sender: try? UserID("@alice:x.org"), senderName: "Alice", timestamp: Date(timeIntervalSince1970: seconds),
+                isOwn: own, kind: kind)))
+    }
+
+    @Test("landing: the first message from someone else after the read position; none when everything is read or the position is unknown")
+    func firstUnread() {
+        let items = [timed("a", 10), timed("b", 20, own: true), timed("c", 30), timed("d", 40)]
+        let read = Date(timeIntervalSince1970: 20)
+        #expect(TimelineViewModel.firstUnreadItemID(items, readThrough: read) == "c")
+        #expect(TimelineViewModel.firstUnreadItemID(items, readThrough: Date(timeIntervalSince1970: 40)) == nil)
+        #expect(TimelineViewModel.firstUnreadItemID(items, readThrough: nil) == nil)
+        // Own messages and state events never count as the unread landing point.
+        #expect(TimelineViewModel.firstUnreadItemID([timed("x", 50, own: true)], readThrough: read) == nil)
+        #expect(TimelineViewModel.firstUnreadItemID([timed("y", 50, kind: .redacted)], readThrough: read) == nil)
+        // Everything loaded is unread: land on the oldest message loaded.
+        #expect(TimelineViewModel.firstUnreadItemID(items, readThrough: Date(timeIntervalSince1970: 0)) == "a")
+    }
+
+    @Test("with everything read, or no known position, the timeline lands on the newest row at the bottom")
+    func landsAtBottom() {
+        for readThrough in [Date(timeIntervalSince1970: 100), nil] {
+            let vm = TimelineViewModel(
+                coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: try! RoomID("!r:x.org")),
+                locale: Locale(identifier: "en_US"), timeZone: TimeZone(identifier: "UTC") ?? .gmt)
+            vm.readThroughAtOpen = readThrough
+            vm.apply(.live(TimelineCoordinator.Snapshot(items: [timed("a", 10), timed("c", 30)], isPaginating: false, reachedStart: true, paginationError: nil)))
+            #expect(vm.landingRow == "c" && !vm.landingIsUnread)
+        }
+    }
+
+    @Test("the timeline lands once, on the first unread message, and not again on later updates")
+    func landsOnce() throws {
+        let vm = TimelineViewModel(
+            coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: try RoomID("!r:x.org")),
+            locale: Locale(identifier: "en_US"), timeZone: TimeZone(identifier: "UTC") ?? .gmt)
+        vm.readThroughAtOpen = Date(timeIntervalSince1970: 20)
+        func snapshot(_ items: [TimelineItem]) -> TimelineCoordinator.Status {
+            .live(TimelineCoordinator.Snapshot(items: items, isPaginating: false, reachedStart: true, paginationError: nil))
+        }
+        vm.apply(snapshot([]))
+        #expect(vm.landingRow == nil)  // nothing loaded yet: wait for the first items
+        vm.apply(snapshot([timed("a", 10), timed("c", 30)]))
+        #expect(vm.landingRow == "c" && vm.landingIsUnread)
+        vm.landingShown()
+        vm.apply(snapshot([timed("a", 10), timed("c", 30), timed("d", 40)]))
+        #expect(vm.landingRow == nil)
+    }
 }
 
 private struct StubPreparer: ImagePreparing {
@@ -465,4 +517,5 @@ private struct StubPreparer: ImagePreparing {
         #expect(!row("Waving", sticker: true).showsText)
         #expect(row("photo.jpg", image: nil).showsText)  // plain text that merely looks like a file name stays
     }
+
 }

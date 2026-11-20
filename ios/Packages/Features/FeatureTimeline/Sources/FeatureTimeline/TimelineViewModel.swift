@@ -180,6 +180,14 @@ public final class TimelineViewModel {
     private var reportedOwn: EventID?
     private var dwellTask: Task<Void, Never>?
     private var pendingCandidate: EventID?
+    private let readThrough: (@Sendable () async -> Date?)?
+    /// The time up to which the user had read the room when it was opened (nil: unknown, then the timeline opens at the bottom).
+    var readThroughAtOpen: Date?
+    private var landed = false
+    /// The row to bring to the top of the screen once, right after the timeline first shows items (the first unread message).
+    public private(set) var landingRow: String?
+    /// `true` when `landingRow` is the first unread message (shown at the top); `false` when it is the newest row (shown at the bottom).
+    public private(set) var landingIsUnread = false
 
     /// How long an event must stay visible before it counts as seen (READ_RECEIPTS §1, D6).
     public static let seenDwell: Duration = .milliseconds(500)
@@ -190,7 +198,7 @@ public final class TimelineViewModel {
     ///   - receipts: when given together with `room`, the newest visible confirmed event is reported as read.
     public init(
         coordinator: TimelineCoordinator, media: MediaLoader? = nil, receipts: ReadReceiptCoordinator? = nil, room: RoomID? = nil,
-        drafts: DraftCoordinator? = nil, images: (any ImagePreparing)? = nil, dwell: Duration = TimelineViewModel.seenDwell, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        drafts: DraftCoordinator? = nil, images: (any ImagePreparing)? = nil, readThrough: (@Sendable () async -> Date?)? = nil, dwell: Duration = TimelineViewModel.seenDwell, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
         locale: Locale = .current, timeZone: TimeZone = .current
     ) {
         self.coordinator = coordinator
@@ -199,6 +207,7 @@ public final class TimelineViewModel {
         self.room = room
         self.drafts = drafts
         self.imagePreparer = images
+        self.readThrough = readThrough
         self.dwell = dwell
         self.sleep = sleep
         let formatter = DateFormatter()
@@ -252,6 +261,9 @@ public final class TimelineViewModel {
     public func start() async {
         guard observation == nil else { return }
         await restoreDraft()
+        readThroughAtOpen = await readThrough?()
+        landed = false
+        landingRow = nil
         let statuses = await coordinator.statuses()
         observation = Task { [weak self] in
             for await status in statuses { self?.apply(status) }
@@ -281,6 +293,23 @@ public final class TimelineViewModel {
         observation = nil
         clearedMarkedUnread = false
         await coordinator.close()
+    }
+
+    /// The view has scrolled to the landing row.
+    public func landingShown() { landingRow = nil }
+
+    /// The first message from someone else newer than `readThrough` (TIMELINE FR "land at the first unread message"); `nil` when
+    /// the read position is unknown or nothing is unread, in which case the timeline stays at the bottom.
+    nonisolated static func firstUnreadItemID(_ items: [TimelineItem], readThrough: Date?) -> String? {
+        guard let readThrough else { return nil }
+        for item in items {
+            guard case .event(let event) = item.content, !event.isOwn, event.timestamp > readThrough else { continue }
+            switch event.kind {
+            case .text, .notice, .emote, .media, .sticker: return item.id.rawValue
+            default: continue
+            }
+        }
+        return nil
     }
 
     public func loadEarlier() async { await coordinator.paginateBackwards() }
@@ -431,11 +460,28 @@ public final class TimelineViewModel {
                 if case .event(let event) = item.content, let id = event.eventID { times[id] = event.timestamp }
             }
             eventTimes = times
+            let rows = Self.collapsingStateRuns(snapshot.items.map(row), items: snapshot.items)
+            // Wait until there is something to land on: a message, or the whole (message-less) history. The first snapshots of a
+            // freshly opened room hold only the start marker and state events.
+            let hasMessage = snapshot.items.contains { item in
+                if case .event(let event) = item.content { switch event.kind { case .text, .notice, .emote, .media, .sticker: return true; default: return false } }
+                return false
+            }
+            if !landed, !rows.isEmpty, hasMessage || (snapshot.reachedStart && !snapshot.isPaginating) {
+                landed = true
+                if let unread = Self.firstUnreadItemID(snapshot.items, readThrough: readThroughAtOpen) {
+                    landingRow = unread
+                    landingIsUnread = true
+                } else {
+                    landingRow = rows.last?.id  // all read, or the position is unknown: the bottom
+                    landingIsUnread = false
+                }
+            }
             visible.formIntersection(times.keys)
             reportOwnMessage(snapshot.items)
             typingText = Self.typingText(snapshot.typing, items: snapshot.items)
             content = .live(
-                rows: Self.collapsingStateRuns(snapshot.items.map(row), items: snapshot.items),
+                rows: rows,
                 isPaginating: snapshot.isPaginating,
                 canLoadEarlier: !snapshot.reachedStart,
                 paginationError: snapshot.paginationError.map { _ in "Couldn't load earlier messages." })
