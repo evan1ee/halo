@@ -48,6 +48,12 @@ public struct StickerPanelView: View {
         #if canImport(UIKit)
         .sheet(item: $newPack) { NewPackView(model: $0) }
         #endif
+        .alert("Stickers aren't encrypted", isPresented: Binding(get: { model.pendingNotice != nil }, set: { if !$0 { model.cancelNotice() } })) {
+            Button("Send anyway") { Task { await model.confirmNotice() } }
+            Button("Cancel", role: .cancel) { model.cancelNotice() }
+        } message: {
+            Text("This room is end-to-end encrypted, but sticker images are stored on the server without encryption. Anyone with access to the server can see them.")
+        }
         .task { await model.start() }
         .onDisappear { Task { await model.stop() } }
     }
