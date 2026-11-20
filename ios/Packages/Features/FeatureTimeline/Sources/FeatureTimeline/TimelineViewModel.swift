@@ -172,7 +172,9 @@ public final class TimelineViewModel {
     /// The message the next send replies to, or `nil`.
     public private(set) var replyingTo: TimelineRow?
 
-    public var canSend: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending }
+    public var canSend: Bool {
+        (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || pendingPhoto != nil) && !isSending && !isSendingImage
+    }
 
     private let coordinator: TimelineCoordinator
     private let media: MediaLoader?
@@ -387,6 +389,7 @@ public final class TimelineViewModel {
     /// Sends the draft (MESSAGING FR-2). The message shows up in the timeline as a local echo.
     public func send() async {
         guard canSend else { return }
+        if let photo = pendingPhoto { await sendPendingPhoto(photo); return }
         let text = draft
         isSending = true
         sendError = nil
@@ -415,6 +418,39 @@ public final class TimelineViewModel {
     public var canSendImages: Bool { imagePreparer != nil }
     /// A photo is being prepared or uploaded.
     public private(set) var isSendingImage = false
+
+    /// A photo that was picked and prepared but not sent yet; the composer text becomes its caption when it is sent (FR-2).
+    public private(set) var pendingPhoto: OutgoingImage?
+
+    /// Prepares a picked photo and holds it in the composer, so a caption can be typed before sending.
+    public func attachPhoto(data: Data, filename: String) async {
+        guard let imagePreparer, !isSendingImage else { return }
+        isSendingImage = true
+        sendError = nil
+        defer { isSendingImage = false }
+        do { pendingPhoto = try await Self.prepare(imagePreparer, data, filename) } catch {
+            sendError = error == .invalidInput("NOT_AN_IMAGE") ? "That file isn't a picture." : error == .invalidInput("IMAGE_TOO_LARGE") ? "That picture is too large to send." : "That picture couldn't be read."
+        }
+    }
+
+    /// Drops the held photo; the typed text stays.
+    public func removePendingPhoto() { pendingPhoto = nil }
+
+    /// Sends the held photo with the composer text as its caption. A failure keeps both, so nothing typed is lost.
+    private func sendPendingPhoto(_ photo: OutgoingImage) async {
+        isSendingImage = true
+        sendError = nil
+        defer { isSendingImage = false }
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let captioned = OutgoingImage(data: photo.data, filename: photo.filename, mimeType: photo.mimeType, width: photo.width, height: photo.height, caption: text.isEmpty ? nil : text)
+        do {
+            try await coordinator.sendImage(captioned)
+            pendingPhoto = nil
+            draft = ""
+        } catch {
+            sendError = error == .network(retryable: true) ? "Can't reach the server. The picture wasn't sent." : "The picture couldn't be sent."
+        }
+    }
 
     /// Sends a picked photo: shrinks it, strips its metadata, uploads it. The message shows as a local echo while uploading.
     public func sendImage(data: Data, filename: String) async {

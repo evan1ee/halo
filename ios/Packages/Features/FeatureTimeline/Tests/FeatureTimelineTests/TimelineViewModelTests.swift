@@ -447,6 +447,39 @@ struct TimelineViewModelTests {
         #expect(!plain.canSendImages)
     }
 
+    @Test("a picked photo waits in the composer; the typed text becomes its caption; removing or a failure keeps the right things")
+    func photoCaption() async throws {
+        let room = try RoomID("!r:x.org")
+        let port = FakeTimelinePort()
+        port.addRoom(room)
+        let model = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room), images: StubPreparer(), locale: Locale(identifier: "en_US"), timeZone: .gmt)
+        await model.start()
+        for _ in 0..<200_000 { if case .live = model.content { break }; await Task.yield() }
+
+        #expect(!model.canSend)
+        await model.attachPhoto(data: Data("png".utf8), filename: "a.png")
+        #expect(model.pendingPhoto?.filename == "a.png" && model.canSend)  // a photo alone can be sent
+        #expect(port.sentImages(in: room).isEmpty)  // nothing is sent by picking
+        model.removePendingPhoto()
+        #expect(model.pendingPhoto == nil && !model.canSend)
+
+        await model.attachPhoto(data: Data("png".utf8), filename: "b.png")
+        model.draft = "  Sunset at the pier  "
+        port.failNextImage(with: .network(retryable: true), in: room)
+        await model.send()
+        #expect(model.sendError == "Can't reach the server. The picture wasn't sent.")
+        #expect(model.pendingPhoto != nil && model.draft == "  Sunset at the pier  ")  // nothing typed or picked is lost
+        await model.send()
+        #expect(port.sentImages(in: room).map(\.caption) == ["Sunset at the pier"] && model.pendingPhoto == nil && model.draft.isEmpty)
+
+        await model.attachPhoto(data: Data("png".utf8), filename: "c.png")
+        await model.send()  // no text: no caption
+        #expect(port.sentImages(in: room).last?.caption == nil)
+        await model.attachPhoto(data: Data("text".utf8), filename: "a.txt")
+        #expect(model.sendError == "That file isn't a picture." && model.pendingPhoto == nil)
+        await model.stop()
+    }
+
     private func timed(_ id: String, _ seconds: Double, own: Bool = false, kind: TimelineEventKind = .text("m", isEdited: false)) -> TimelineItem {
         TimelineItem(
             id: TimelineItemID(id),

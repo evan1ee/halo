@@ -382,6 +382,21 @@ struct AdapterContractTests {
         // The bytes come back through the media port.
         let data = try await MatrixMediaPort(session: session).thumbnail(try #require(attachment.source), width: 64, height: 64)
         #expect(!data.isEmpty)
+        // A caption becomes the message body (a client then shows it under the picture instead of the file name).
+        let caption = "caption \(UUID().uuidString.prefix(6))"
+        let captionStream = opened.items()  // a new subscription starts from a full snapshot; the first one's diffs were consumed above
+        try await opened.sendImage(OutgoingImage(data: png, filename: "captioned-\(name)", mimeType: "image/png", width: 1, height: 1, caption: caption))
+        let captioned: MediaAttachment? = try await within(seconds: 60) {
+            var items: [HaloDomain.TimelineItem] = []
+            for await diff in captionStream {
+                try ListReducer.apply(diff, to: &items)
+                for item in items {
+                    if case .event(let event) = item.content, event.isOwn, event.eventID != nil, case .media(let attachment) = event.kind, attachment.body == caption { return attachment }
+                }
+            }
+            return nil
+        }
+        #expect(captioned?.kind == .image)
         await #expect(throws: HaloError.invalidInput("NOT_AN_IMAGE")) {
             try await opened.sendImage(OutgoingImage(data: Data("x".utf8), filename: "x.txt", mimeType: "text/plain", width: nil, height: nil))
         }
