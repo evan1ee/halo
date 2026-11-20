@@ -48,6 +48,7 @@ private struct RootView: View {
                                     onPrivateReceiptsChange: { value in Task { await root.receipts.setPrivateReceipts(value) } },
                                     loadMediaPreviews: { await root.mediaPreviewChoice() },
                                     saveMediaPreviews: { await root.setMediaPreviewChoice($0) },
+                                    diagnostics: { await root.diagnosticsReport() },
                                     onSignOut: { Task { await root.auth.signOut() } })
                             } label: { Image(systemName: "gearshape") }
                                 .accessibilityLabel("Settings")

@@ -33,6 +33,7 @@ final class AppRoot {
     private let previewPolicy: any MediaPreviewPolicyPort
     private let roomCoordinator: RoomListCoordinator
     private let log: HaloLog
+    private var auditPort: (any AuditEventPort)?
 
     init() {
         let namespace = Bundle.main.bundleIdentifier ?? "one.mbm.halo"
@@ -104,6 +105,7 @@ final class AppRoot {
                     // The read-state auditor runs in debug (and later TestFlight) builds only (LOGGING_AND_DIAGNOSTICS §2).
                     let log = log
                     let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+                    auditPort = AuditEventStore(database: database, account: user)
                     await badge.setAudit(.init(port: AuditEventStore(database: database, account: user), roomHash: { log.id($0) }, appVersion: version))
                     #endif
                 } catch {
@@ -122,6 +124,7 @@ final class AppRoot {
     private func resetAccountState() async {
         await receipts.reset()
         await badge.setAudit(nil)
+        auditPort = nil
         await badge.reset()
         await drafts.reset()
         await stickers.reset()
@@ -135,6 +138,23 @@ final class AppRoot {
     }
 
     /// The account's media preview setting for the Settings screen.
+    /// The Settings → Diagnostics report: versions, device and read-state audit counts. No messages, names or account IDs.
+    func diagnosticsReport() async -> String {
+        let info = Bundle.main.infoDictionary
+        var lines = [
+            "Halo \(info?["CFBundleShortVersionString"] as? String ?? "?") (\(info?["CFBundleVersion"] as? String ?? "?"))",
+            "iOS \(ProcessInfo.processInfo.operatingSystemVersionString)",
+        ]
+        if let auditPort {
+            let events = (try? await auditPort.all().count).map(String.init) ?? "unavailable"
+            let unexplained = (try? await auditPort.unexplainedCount()).map(String.init) ?? "unavailable"
+            lines.append("Read-state audit: \(events) events, \(unexplained) unexplained")
+        } else {
+            lines.append("Read-state audit: off in this build")
+        }
+        return lines.joined(separator: "\n")
+    }
+
     func mediaPreviewChoice() async -> MediaPreviewChoice {
         switch await previewPolicy.setting() {
         case .always: .always
