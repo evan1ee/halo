@@ -140,7 +140,8 @@ public final class MatrixRoomListPort: RoomListPort {
             membership: membership(room.membership()),
             read: read,
             latestEvent: latestEvent(await room.latestEvent()),
-            ownReadThrough: await ownReadThrough(of: room, counts: read)
+            ownReadThrough: await ownReadThrough(of: room, counts: read),
+            isFavourite: (try? await room.roomInfo())?.isFavourite ?? false
         )
     }
 

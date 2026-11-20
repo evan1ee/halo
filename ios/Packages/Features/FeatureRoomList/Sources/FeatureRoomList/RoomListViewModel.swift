@@ -19,8 +19,18 @@ public final class RoomListViewModel {
         public let hasUnread: Bool
         /// An invitation not yet answered: the row offers Accept and Decline instead of opening the room.
         public let isInvite: Bool
+        public let isFavourite: Bool
+        public let isMuted: Bool
+        /// The time of the newest event; `nil` for a room without one.
+        public let lastActivity: Date?
 
-        public init(id: RoomID, name: String, display: DisplayCount = .none, hasUnread: Bool = false, isInvite: Bool = false) {
+        public init(
+            id: RoomID, name: String, display: DisplayCount = .none, hasUnread: Bool = false, isInvite: Bool = false,
+            isFavourite: Bool = false, isMuted: Bool = false, lastActivity: Date? = nil
+        ) {
+            self.isFavourite = isFavourite
+            self.isMuted = isMuted
+            self.lastActivity = lastActivity
             self.isInvite = isInvite
             self.id = id
             self.name = name
@@ -38,10 +48,15 @@ public final class RoomListViewModel {
 
     public private(set) var content: Content = .idle
 
+    /// The list filter (ROOM_LIST FR-2). Applied here to the rooms the coordinator holds; with classic sync every room is present.
+    public var filter: RoomListFilter = .all {
+        didSet { if filter != oldValue { Task { await listChanged(lastStatus) } } }
+    }
+
     private let session: SessionCoordinator
     private let rooms: RoomListCoordinator
     private let receipts: ReadReceiptCoordinator?
-    private let invites: (any RoomPort)?
+    private let actions: (any RoomPort)?
     private var tasks: [Task<Void, Never>] = []
     private var positions: [RoomID: Date] = [:]
     private var lastStatus: RoomListCoordinator.Status = .idle
@@ -49,8 +64,8 @@ public final class RoomListViewModel {
     /// Set when a swipe action fails; the view shows it and the next successful action clears it.
     public private(set) var actionError: String?
 
-    public init(session: SessionCoordinator, rooms: RoomListCoordinator, receipts: ReadReceiptCoordinator? = nil, invites: (any RoomPort)? = nil) {
-        self.invites = invites
+    public init(session: SessionCoordinator, rooms: RoomListCoordinator, receipts: ReadReceiptCoordinator? = nil, actions: (any RoomPort)? = nil) {
+        self.actions = actions
         self.session = session
         self.rooms = rooms
         self.receipts = receipts
@@ -71,14 +86,26 @@ public final class RoomListViewModel {
 
     /// Accepts an invitation (ROOM_MANAGEMENT FR-6); the room then arrives as joined with the next sync.
     public func acceptInvite(_ room: RoomID) async {
-        guard let invites else { return }
-        await perform { () async throws(HaloError) in try await invites.acceptInvite(room) }
+        guard let actions else { return }
+        await perform { () async throws(HaloError) in try await actions.acceptInvite(room) }
     }
 
     /// Declines an invitation.
     public func declineInvite(_ room: RoomID) async {
-        guard let invites else { return }
-        await perform { () async throws(HaloError) in try await invites.declineInvite(room) }
+        guard let actions else { return }
+        await perform { () async throws(HaloError) in try await actions.declineInvite(room) }
+    }
+
+    /// Swipe: add or remove a favourite (ROOM_LIST FR-6).
+    public func toggleFavourite(_ row: Row) async {
+        guard let actions else { return }
+        await perform { () async throws(HaloError) in try await actions.setFavourite(!row.isFavourite, in: row.id) }
+    }
+
+    /// Swipe: mute, or back to all messages when already muted (ROOM_LIST FR-6).
+    public func toggleMute(_ row: Row) async {
+        guard let actions else { return }
+        await perform { () async throws(HaloError) in try await actions.setNotificationMode(row.isMuted ? .allMessages : .mute, in: row.id) }
     }
 
     private func perform(_ action: () async throws(HaloError) -> Void) async {
@@ -94,6 +121,7 @@ public final class RoomListViewModel {
         let listStatuses = await rooms.statuses()
         // A change of unread counts keeps the room count, so the status alone would not refresh the rows.
         let readInputs = await rooms.readInputs()
+        let summaries = await rooms.summaryChanges()
         var follow: [Task<Void, Never>] = []
         if let receipts {
             let positions = await receipts.positions()
@@ -103,6 +131,10 @@ public final class RoomListViewModel {
         }
         follow.append(Task { [weak self] in
             for await _ in readInputs { await self?.readInputsChanged() }
+        })
+        // Renames, favourites and new latest events don't change the read inputs.
+        follow.append(Task { [weak self] in
+            for await _ in summaries { await self?.readInputsChanged() }
         })
         tasks = follow + [
             Task { [weak self] in
@@ -127,6 +159,18 @@ public final class RoomListViewModel {
         await listChanged(lastStatus)
     }
 
+    /// Whether a room belongs to the chosen filter (ROOM_LIST FR-2); an invitation shows under All and Invites only.
+    static func includes(_ filter: RoomListFilter, room: RoomSummary, row: Row) -> Bool {
+        switch filter {
+        case .all: true
+        case .unread: !row.isInvite && (row.hasUnread || row.display != .none)
+        case .people: room.membership == .joined && room.isDirect
+        case .rooms: room.membership == .joined && !room.isDirect
+        case .favourites: room.membership == .joined && room.isFavourite
+        case .invites: row.isInvite
+        }
+    }
+
     func listChanged(_ status: RoomListCoordinator.Status) async {
         lastStatus = status
         switch status {
@@ -138,9 +182,12 @@ public final class RoomListViewModel {
                     roomID: room.id, membership: room.membership, isEncrypted: room.isEncrypted, counts: room.read,
                     latestEvent: room.latestEvent,
                     localIntent: [positions[room.id], room.ownReadThrough].compactMap { $0 }.max()))
-                return Row(id: room.id, name: room.name ?? "Unnamed room", display: state.display, hasUnread: state.hasUnread, isInvite: room.membership == .invited)
+                return Row(
+                    id: room.id, name: room.name ?? "Unnamed room", display: state.display, hasUnread: state.hasUnread, isInvite: room.membership == .invited,
+                    isFavourite: room.isFavourite, isMuted: room.read.mode == .mute, lastActivity: room.latestEvent?.timestamp)
             }
-            content = .loaded(count: count, rows: rows)
+            let matching = zip(await rooms.rooms, rows).filter { Self.includes(filter, room: $0.0, row: $0.1) }.map(\.1)
+            content = .loaded(count: filter == .all ? count : matching.count, rows: matching)
         case .failed: content = .failed("The room list couldn't be loaded. Pull to try again.")
         }
     }

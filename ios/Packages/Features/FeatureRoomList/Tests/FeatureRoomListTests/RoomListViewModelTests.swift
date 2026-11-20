@@ -57,9 +57,9 @@ struct RoomListViewModelTests {
         for await status in await coordinator.statuses() {
             if case .loaded = status { await model.listChanged(status); break }
         }
-        #expect(model.content == .loaded(count: 1, rows: [.init(id: id, name: "A", display: .count(2), hasUnread: true)]))
+        #expect(model.content == .loaded(count: 1, rows: [.init(id: id, name: "A", display: .count(2), hasUnread: true, lastActivity: Date(timeIntervalSince1970: 100))]))
         await model.positionsChanged([id: Date(timeIntervalSince1970: 100)])
-        #expect(model.content == .loaded(count: 1, rows: [.init(id: id, name: "A")]))
+        #expect(model.content == .loaded(count: 1, rows: [.init(id: id, name: "A", lastActivity: Date(timeIntervalSince1970: 100))]))
     }
 
     @Test("a change of unread counts with the same number of rooms refreshes the rows (sync updates arrive as .set)")
@@ -79,8 +79,8 @@ struct RoomListViewModelTests {
         await coordinator.start()
         for _ in 0..<200_000 { if case .loaded = model.content { break }; await Task.yield() }
         try port.emit(.set(index: 0, room(3)))
-        for _ in 0..<200_000 { if model.content == .loaded(count: 1, rows: [.init(id: id, name: "A", display: .count(3), hasUnread: true)]) { break }; await Task.yield() }
-        #expect(model.content == .loaded(count: 1, rows: [.init(id: id, name: "A", display: .count(3), hasUnread: true)]))
+        for _ in 0..<200_000 { if model.content == .loaded(count: 1, rows: [.init(id: id, name: "A", display: .count(3), hasUnread: true, lastActivity: Date(timeIntervalSince1970: 100))]) { break }; await Task.yield() }
+        #expect(model.content == .loaded(count: 1, rows: [.init(id: id, name: "A", display: .count(3), hasUnread: true, lastActivity: Date(timeIntervalSince1970: 100))]))
     }
 }
 
@@ -94,7 +94,7 @@ struct RoomListInviteTests {
         let coordinator = RoomListCoordinator(port: FakeRoomListPort(rooms: [invited]))
         let port = FakeRoomPort(details: RoomDetails(id: id, name: nil, topic: nil, isDirect: false, isEncrypted: false, joinedMemberCount: 0, notificationMode: .allMessages))
         let model = RoomListViewModel(
-            session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()), rooms: coordinator, invites: port)
+            session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()), rooms: coordinator, actions: port)
         await coordinator.start()
         for await status in await coordinator.statuses() {
             if case .loaded = status { await model.listChanged(status); break }
@@ -107,5 +107,65 @@ struct RoomListInviteTests {
         port.fail(with: .notFound)
         await model.acceptInvite(id)
         #expect(model.actionError != nil)
+    }
+}
+
+@MainActor
+@Suite("RoomListViewModel filters and swipes")
+struct RoomListFilterTests {
+    private func summary(_ id: String, name: String, direct: Bool = false, membership: Membership = .joined, favourite: Bool = false, muted: Bool = false) throws -> RoomSummary {
+        let counts = RoomReadCounts(mode: muted ? .mute : .allMessages, server: .zero, sdk: .zero, isMarkedUnread: false)
+        return RoomSummary(id: try RoomID(id), name: name, isDirect: direct, isEncrypted: false, membership: membership, read: counts, isFavourite: favourite)
+    }
+
+    private func loaded(_ rooms: [RoomSummary], actions: FakeRoomPort? = nil) async throws -> RoomListViewModel {
+        let coordinator = RoomListCoordinator(port: FakeRoomListPort(rooms: rooms))
+        let model = RoomListViewModel(session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()), rooms: coordinator, actions: actions)
+        await coordinator.start()
+        for await status in await coordinator.statuses() {
+            if case .loaded = status { await model.listChanged(status); break }
+        }
+        return model
+    }
+
+    private func names(_ model: RoomListViewModel) -> [String] {
+        guard case .loaded(_, let rows) = model.content else { return [] }
+        return rows.map(\.name)
+    }
+
+    @Test("each filter keeps its rooms: people, rooms, favourites, invites")
+    func filters() async throws {
+        let model = try await loaded([
+            try summary("!a:x.org", name: "Ann", direct: true), try summary("!b:x.org", name: "Book club", favourite: true),
+            try summary("!c:x.org", name: "Invite", membership: .invited), try summary("!d:x.org", name: "Dev", favourite: true, muted: true),
+        ])
+        #expect(names(model).count == 4)
+        model.filter = .people
+        await model.listChanged(.loaded(roomCount: 4))
+        #expect(names(model) == ["Ann"])
+        model.filter = .rooms
+        await model.listChanged(.loaded(roomCount: 4))
+        #expect(names(model) == ["Book club", "Dev"])
+        model.filter = .favourites
+        await model.listChanged(.loaded(roomCount: 4))
+        #expect(names(model) == ["Book club", "Dev"])
+        model.filter = .invites
+        await model.listChanged(.loaded(roomCount: 4))
+        #expect(names(model) == ["Invite"])
+        guard case .loaded(let count, _) = model.content else { Issue.record("not loaded"); return }
+        #expect(count == 1)
+    }
+
+    @Test("favourite and mute swipes go to the port; a muted room is unmuted by the second swipe")
+    func swipes() async throws {
+        let id = try RoomID("!d:x.org")
+        let port = FakeRoomPort(details: RoomDetails(id: id, name: nil, topic: nil, isDirect: false, isEncrypted: false, joinedMemberCount: 0, notificationMode: .allMessages))
+        let model = try await loaded([try summary("!d:x.org", name: "Dev", favourite: true, muted: true)], actions: port)
+        guard case .loaded(_, let rows) = model.content, let row = rows.first else { Issue.record("no row"); return }
+        #expect(row.isFavourite && row.isMuted)
+        await model.toggleFavourite(row)
+        await model.toggleMute(row)
+        #expect(port.favouriteChanges.map(\.on) == [false])
+        #expect(port.modeChanges == [.allMessages])
     }
 }

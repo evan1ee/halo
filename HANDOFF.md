@@ -1,6 +1,6 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-20 · Branch: `main` · PRs #1–#47 merged
+Last updated: 2026-11-20 · Branch: `feat/m5-room-list-v2` · PRs #1–#47 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
@@ -24,7 +24,7 @@ Summary only; details per feature: [docs/development/IMPLEMENTATION_NOTES.md](do
 Full list: docs/DECISION_LOG.md (D1–D75), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-User profiles (USER_PROFILES FR-1 name, FR-2, FR-3, FR-4): `HaloDomain/ProfilePort`, `MatrixProfilePort`, `FakeProfilePort`, `FeatureRoomDetails` (`UserProfileViewModel/View`, tappable members), `FeatureSettings` (`ProfileSettings`, `ProfileSettingsView`, `Account → Profile`), app wiring (`AppRoot.makeUserProfile/profileSettings`, `TimelineScreen`), contract `profiles`, tests, ROADMAP. Checked: package tests, `profiles` contract, `Halo-Debug` build, `prepush.sh`; both screens seen in the simulator. Earlier this session: edit/invite in the room sheet (main), new chat (PR 46), invitations, room info (PR 45).
+Room list v2 (ROOM_LIST FR-2/3/6): `RoomSummary.isFavourite`, `RoomPort.setFavourite` (+ adapter, fake), `RoomListCoordinator.summaryChanges()`, `RoomListViewModel` (filter, favourite and muted marks, `lastActivity`, `toggleFavourite/toggleMute`; `invites:` renamed `actions:`), `RoomListView` (filter bar, row marks, time, two more swipes), contract `roomManagement` (favourite round trip), tests, ROADMAP. Checked: HaloApplication and FeatureRoomList tests, `roomManagement` contract, `Halo-Debug` build, `prepush.sh`; seen in the simulator. Earlier this session: user profiles (PR 47), edit/invite, new chat (PR 46), invitations, room info (PR 45).
 
 ## 5. Outstanding issues
 Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).

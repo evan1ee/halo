@@ -23,6 +23,9 @@ public protocol RoomPort: Sendable {
     /// Declines an invitation: leaves the invited room (FR-6).
     func declineInvite(_ room: RoomID) async throws(HaloError)
 
+    /// Adds or removes the room from the favourites (`m.favourite` tag; ROOM_LIST FR-6).
+    func setFavourite(_ favourite: Bool, in room: RoomID) async throws(HaloError)
+
     /// Leaves the room (FR-4).
     func leave(_ room: RoomID) async throws(HaloError)
 }

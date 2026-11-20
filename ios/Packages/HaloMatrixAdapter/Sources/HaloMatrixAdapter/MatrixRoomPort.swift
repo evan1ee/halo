@@ -76,6 +76,11 @@ public final class MatrixRoomPort: RoomPort {
         do { try await room.leave() } catch { throw ErrorMapper.map(error) }
     }
 
+    public func setFavourite(_ favourite: Bool, in id: RoomID) async throws(HaloError) {
+        let room = try await session.room(id)
+        do { try await room.setIsFavourite(isFavourite: favourite, tagOrder: nil) } catch { throw ErrorMapper.map(error) }
+    }
+
     public func leave(_ id: RoomID) async throws(HaloError) {
         let room = try await session.room(id)
         do { try await room.leave() } catch { throw ErrorMapper.map(error) }
