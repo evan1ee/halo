@@ -80,6 +80,10 @@ public struct RoomDetailsView: View {
                     .foregroundStyle(.primary)
                     .disabled(profile == nil)
                 }
+                if model.hasMoreMembers {
+                    Button("Show more members") { Task { await model.loadMoreMembers() } }
+                        .accessibilityIdentifier("roomMoreMembers")
+                }
             }
             if let error = model.actionError { Section { Text(error).foregroundStyle(.red) } }
             Section {

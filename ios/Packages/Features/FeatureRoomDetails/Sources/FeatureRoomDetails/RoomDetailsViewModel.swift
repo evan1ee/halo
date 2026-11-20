@@ -12,8 +12,10 @@ public final class RoomDetailsViewModel: Identifiable {
         case failed(String)
     }
 
-    /// How many members the sheet loads (FR-2 paging is not built).
-    public static let memberLimit = 200
+    /// How many members one page adds (FR-2); "Show more" raises the limit by this much.
+    public static let memberPage = 200
+    /// The number of members requested now.
+    public private(set) var requestedMembers = RoomDetailsViewModel.memberPage
 
     public private(set) var content: Content = .loading
     /// Set when changing the mode or leaving fails; cleared by the next successful action.
@@ -35,9 +37,26 @@ public final class RoomDetailsViewModel: Identifiable {
     public func load() async {
         do throws(HaloError) {
             let details = try await port.details(room)
-            let members = try await port.members(room, limit: Self.memberLimit)
+            let members = try await port.members(room, limit: requestedMembers)
             content = .loaded(details, members: members)
         } catch { content = .failed(Self.text(error)) }
+    }
+
+    /// `true` when the last load returned as many members as asked for, so there may be more.
+    public var hasMoreMembers: Bool {
+        guard case .loaded(_, let members) = content else { return false }
+        return members.count >= requestedMembers
+    }
+
+    /// Asks for one more page of members (administrators and moderators stay first).
+    public func loadMoreMembers() async {
+        guard hasMoreMembers, case .loaded(let details, _) = content else { return }
+        do throws(HaloError) {
+            let more = try await port.members(room, limit: requestedMembers + Self.memberPage)
+            requestedMembers += Self.memberPage
+            content = .loaded(details, members: more)
+            actionError = nil
+        } catch { actionError = Self.text(error) }
     }
 
     public func setNotificationMode(_ mode: RoomNotificationChoice) async {

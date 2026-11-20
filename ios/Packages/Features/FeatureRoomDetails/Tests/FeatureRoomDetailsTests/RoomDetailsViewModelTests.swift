@@ -111,4 +111,19 @@ extension RoomDetailsViewModelTests {
         #expect(port.sentInvites.first?.map(\.rawValue) == ["@ann:x.org"])
         #expect(model.actionError == nil)
     }
+
+    @Test("a room with more members than one page offers more, and a second page loads them all")
+    func memberPaging() async throws {
+        let many = (0..<450).map { RoomMemberInfo(userID: "@u\($0):x.org", displayName: "User \($0)", role: .user) }
+        let (_, model, _) = try fixture(members: many, count: 450)
+        await model.load()
+        guard case .loaded(_, let first) = model.content else { Issue.record("not loaded"); return }
+        #expect(first.count == 200)
+        #expect(model.hasMoreMembers)
+        await model.loadMoreMembers()
+        await model.loadMoreMembers()
+        guard case .loaded(_, let all) = model.content else { Issue.record("not loaded"); return }
+        #expect(all.count == 450)
+        #expect(!model.hasMoreMembers)
+    }
 }

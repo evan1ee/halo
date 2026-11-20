@@ -39,7 +39,6 @@ public final class MatrixRoomPort: RoomPort {
                 for member in chunk where member.membership == .join || member.membership == .invite {
                     result.append(RoomMemberInfo(userID: member.userId, displayName: member.displayName, role: Self.role(member.suggestedRoleForPowerLevel), isInvited: member.membership == .invite, isMe: member.userId == own))
                 }
-                if result.count >= limit { break }
             }
         } catch { throw ErrorMapper.map(error) }
         let rank: (HaloDomain.RoomMemberRole) -> Int = { switch $0 { case .administrator: 0; case .moderator: 1; case .user: 2 } }
