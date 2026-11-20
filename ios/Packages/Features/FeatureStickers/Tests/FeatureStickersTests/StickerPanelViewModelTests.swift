@@ -40,6 +40,18 @@ struct StickerPanelViewModelTests {
         #expect(empty.emptyMessage == "No sticker packs yet.")
     }
 
+    @Test("packs the user added that can't be read are announced, with the right count")
+    func unavailable() async throws {
+        let gone = [PackRef(room: try RoomID("!a:x.org"), stateKey: "a"), PackRef(room: try RoomID("!b:x.org"), stateKey: "b")]
+        let library = StickerLibrary(packs: FakeStickerPacks(StickerPackLoad(packs: [], unavailable: gone)), prefs: FakeStickerPrefs())
+        let model = StickerPanelViewModel(library: library, room: nil, send: { _ in })
+        #expect(model.unavailableNotice == nil)
+        await model.start()
+        await settle { model.snapshot.phase == .ready }
+        #expect(model.unavailableNotice == "2 packs you added are unavailable.")
+        await model.stop()
+    }
+
     @Test("a tap sends the sticker once and records it as recent; the recents come back on the next open")
     func tapping() async {
         var sent: [String] = []
