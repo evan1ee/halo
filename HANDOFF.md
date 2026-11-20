@@ -12,7 +12,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 ## 2. Completed work (what exists now)
 - Layers: HaloFoundation, HaloDomain (ports, pure `ReadStatePolicy`), HaloApplication (coordinators), HaloPersistence (GRDB: `read_intent`, file protection set), HaloMatrixAdapter (only MatrixRustSDK importer), HaloPlatform, HaloTestSupport (fakes), Features/{Auth,RoomList,Timeline}. Composition root `ios/App/AppRoot.swift`; project generated from `ios/project.yml` (XcodeGen, scheme `Halo-Debug`).
 - Read state: `BadgeCoordinator` = count of rooms with attention from `ReadStatePolicy`; inputs are server/SDK counts, `latestEvent`, the local read position (`ReadReceiptCoordinator.positions()`), the user's own receipt from other devices (`RoomSummary.ownReadThrough`) and notification records.
-- Outbound receipts: timeline rows report visibility (approximation of D6) → `ReadReceiptCoordinator` (monotonic, 2 s debounce, backoff, persisted and restored, 7-day expiry of sent intents) → `MatrixReadMarkerPort`.
+- Outbound receipts: timeline rows report visibility (`onScrollVisibilityChange(threshold: 0.5)`, plus a 0.5 s dwell in the view model: D6) → `ReadReceiptCoordinator` (monotonic, 2 s debounce, backoff, persisted and restored, 7-day expiry of sent intents) → `MatrixReadMarkerPort`.
 - Room list rows show the policy's unread indicator (count / mentions / dot, bold when unread) and update when the local read position changes.
 - `RoomListCoordinator(loadsAllPages: true)` (app) keeps paging so the badge sees every room.
 - Pushed events (notification records) at or before the read position (here or another device) no longer count; delivered notifications of rooms without attention are removed by `SystemBadge`.
@@ -30,7 +30,7 @@ Everything in `git log origin/main..HEAD`. Key paths: `ios/Packages/HaloApplicat
 - Opening a room now clears `m.marked_unread` (`ReadReceiptCoordinator.roomOpened`, called by `TimelineViewModel`; the adapter skips the write when the flag is already clear). Unverified on a device/server.
 - S01–S22 validate Halo against our model of Synapse, not against Synapse; the model's server rules (counts per mode, edits not notifying, own message as implicit receipt) are unverified.
 - Unverified on a device: file protection class on `halo.sqlite` (simulator reports none), V-RS-1 (do own-receipt changes trigger room-list updates?), cost of `loadOrFetchEvent` lookups, kill-and-relaunch resend, NSE access to the database, `deletePusher` (no contract test), paging cost for large accounts, the swipe UI and the unread indicators, the `latestEvent` mapping (no unit test).
-- D6 (≥ 50 % visible for ≥ 0.5 s) is approximated by row appear/disappear.
+- D6: the ≥ 50 % rule relies on `onScrollVisibilityChange` inside a `List`; builds, but not verified on a device that it fires for List rows (fall back to a ScrollView/LazyVStack if not).
 - `read_intent`: `receipt_type` always `read`; `attempts`/`last_error` unused; no intent confirmation rules (a)–(c) (sent intents just expire).
 - No `HaloLog` in `ReadReceiptCoordinator` (storage errors only kept in `lastStorageError`).
 - Timeline/Media contract tests need a fixture room (`HALO_DEV_TIMELINE_ROOM`: first, second, notice, waves, redacted message, blue.png). Run contracts with `TEST_RUNNER_HALO_DEV_*`; the server value must be `http://localhost:8008`. Parallel contract tests on one account hang (suite is serialized).
@@ -38,7 +38,7 @@ Everything in `git log origin/main..HEAD`. Key paths: `ios/Packages/HaloApplicat
 - Docker CLI hangs on the `osxkeychain` helper; use a throwaway `DOCKER_CONFIG`.
 
 ## 6. Next steps
-1. M3: true ≥ 50 % visibility; the Docker scenario driver to run S01–S22 against Synapse; the auditor.
+1. M3: device check of the ≥ 50 % visibility; the Docker scenario driver to run S01–S22 against Synapse; the auditor.
 2. Device checks from section 5; G-NSE hardening (peak memory, encrypted room, timeout injection AC-NSE-3/4, 100 pushes, Release build).
 3. M2 left: offline send test, media sending, mentions. M1 left: video/audio/file, QR/emoji verification. A push gateway for Beta/Release.
 4. Push the branch, open a PR, check CI (after refreshing this file).

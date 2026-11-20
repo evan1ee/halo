@@ -39,7 +39,8 @@ public struct TimelineView: View {
                     }
                     ForEach(rows) { row in
                         RowView(row: row, model: model).listRowSeparator(.hidden)
-                            .onAppear { model.rowVisibility(row, isVisible: true) }
+                            // D6: a row counts as seen when at least half of it is on screen; the 0.5 s dwell is in the view model.
+                            .onScrollVisibilityChange(threshold: 0.5) { model.rowVisibility(row, isVisible: $0) }
                             .onDisappear { model.rowVisibility(row, isVisible: false) }
                     }
                 }
