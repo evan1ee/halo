@@ -9,7 +9,7 @@ struct BotTaskStoreTests {
     private let room = try! RoomID("!r:x.org")
 
     private func database() throws -> HaloDatabase {
-        try HaloDatabase(path: FileManager.default.temporaryDirectory.appendingPathComponent("halo-\(UUID().uuidString).sqlite").path)
+        try HaloDatabase(path: FileManager.default.temporaryDirectory.appendingPathComponent("halo-\(UUID().uuidString).sqlite").path, observesSuspensionNotifications: false)
     }
 
     private func entry(_ id: String, title: String = "t", status: BotTaskEntry.Status = .open, source: String? = "$s", at: TimeInterval) throws -> BotTaskEntry {

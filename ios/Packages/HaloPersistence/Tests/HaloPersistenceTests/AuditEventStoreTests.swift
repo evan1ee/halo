@@ -7,7 +7,7 @@ import Testing
 @Suite("AuditEventStore")
 struct AuditEventStoreTests {
     private func store(_ account: String = "@a:x.org", database: HaloDatabase? = nil) throws -> (AuditEventStore, HaloDatabase) {
-        let db = try database ?? HaloDatabase(path: FileManager.default.temporaryDirectory.appendingPathComponent("halo-\(UUID().uuidString).sqlite").path)
+        let db = try database ?? HaloDatabase(path: FileManager.default.temporaryDirectory.appendingPathComponent("halo-\(UUID().uuidString).sqlite").path, observesSuspensionNotifications: false)
         return (AuditEventStore(database: db, account: try UserID(account)), db)
     }
     private func event(_ n: Int, kind: AuditKind = .explained) -> AuditEvent {

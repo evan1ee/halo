@@ -4,7 +4,7 @@ import HaloFoundation
 import Testing
 @testable import HaloPersistence
 
-@Suite("HaloDatabase")
+@Suite("HaloDatabase", .serialized)
 struct HaloDatabaseTests {
     private func path() -> String {
         FileManager.default.temporaryDirectory.appendingPathComponent("halo-\(UUID().uuidString).sqlite").path
@@ -32,5 +32,26 @@ struct HaloDatabaseTests {
     @Test("an unusable path is a storage error, not a crash")
     func badPath() {
         #expect(throws: HaloError.storage(.migrationFailed)) { try HaloDatabase(path: "/nonexistent-dir/x.sqlite") }
+    }
+
+    @Test("R-25: suspension stops new SQLite writes until resumed (prevents 0xdead10cc in shared App Group)")
+    func suspendsAndResumes() throws {
+        let db = try HaloDatabase(path: path())
+        #expect(db.pool.configuration.observesSuspensionNotifications == true)
+        defer { HaloDatabase.resumeAll() }
+
+        HaloDatabase.suspendAll()
+        #expect(throws: (any Error).self) {
+            try db.pool.write { conn in
+                try conn.execute(sql: "INSERT OR REPLACE INTO halo_meta (key, value) VALUES ('k', 'suspended')")
+            }
+        }
+
+        HaloDatabase.resumeAll()
+        try db.pool.write { conn in
+            try conn.execute(sql: "INSERT OR REPLACE INTO halo_meta (key, value) VALUES ('k', 'resumed')")
+        }
+        let value = try db.pool.read { try String.fetchOne($0, sql: "SELECT value FROM halo_meta WHERE key = 'k'") }
+        #expect(value == "resumed")
     }
 }

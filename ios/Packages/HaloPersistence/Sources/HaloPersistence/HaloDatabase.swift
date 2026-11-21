@@ -7,18 +7,33 @@ import HaloFoundation
 public struct HaloDatabase: Sendable {
     let pool: DatabasePool
 
-    /// - Parameter path: the database file; its directory must exist.
-    public init(path: String) throws(HaloError) {
+    /// - Parameters:
+    ///   - path: the database file; its directory must exist.
+    ///   - observesSuspensionNotifications: subscribes to GRDB's `Database.suspendNotification` / `resumeNotification`
+    ///     so the pool acquires no SQLite locks while iOS suspends the process (prevents `0xdead10cc`, R-25 / V-SQL-2).
+    public init(path: String, observesSuspensionNotifications: Bool = true) throws(HaloError) {
         do {
             var configuration = Configuration()
             configuration.label = "halo.sqlite"
             configuration.busyMode = .timeout(5)
+            configuration.observesSuspensionNotifications = observesSuspensionNotifications
             pool = try DatabasePool(path: path, configuration: configuration)
             try Self.migrator.migrate(pool)
         } catch {
             throw .storage(.migrationFailed)
         }
         try Self.protect(path: path)
+    }
+
+    /// Suspends all open `HaloDatabase` pools in this process so SQLite acquires no new locks while iOS suspends
+    /// the app in the shared App Group container (R-25 / V-SQL-2, prevents `0xdead10cc`).
+    public static func suspendAll() {
+        NotificationCenter.default.post(name: Database.suspendNotification, object: nil)
+    }
+
+    /// Resumes all open `HaloDatabase` pools in this process when returning to the foreground (R-25).
+    public static func resumeAll() {
+        NotificationCenter.default.post(name: Database.resumeNotification, object: nil)
     }
 
     /// Sets `completeUntilFirstUserAuthentication` on the database and its WAL/shared-memory files, and on the

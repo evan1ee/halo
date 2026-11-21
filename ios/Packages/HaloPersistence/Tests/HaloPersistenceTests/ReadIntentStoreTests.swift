@@ -12,7 +12,7 @@ struct ReadIntentStoreTests {
 
     private func store(_ account: String = "@a:x.org") throws -> ReadIntentStore {
         let path = FileManager.default.temporaryDirectory.appendingPathComponent("halo-\(UUID().uuidString).sqlite").path
-        return ReadIntentStore(database: try HaloDatabase(path: path), account: try UserID(account))
+        return ReadIntentStore(database: try HaloDatabase(path: path, observesSuspensionNotifications: false), account: try UserID(account))
     }
 
     @Test("an intent only moves forward and a sent intent never goes back to pending")
@@ -80,7 +80,7 @@ struct ReadIntentStoreTests {
     @Test("rows are scoped by account")
     func accounts() async throws {
         let path = FileManager.default.temporaryDirectory.appendingPathComponent("halo-\(UUID().uuidString).sqlite").path
-        let db = try HaloDatabase(path: path)
+        let db = try HaloDatabase(path: path, observesSuspensionNotifications: false)
         let a = ReadIntentStore(database: db, account: try UserID("@a:x.org"))
         let b = ReadIntentStore(database: db, account: try UserID("@b:x.org"))
         try await a.save(ReadIntent(room: room, event: e(1), timestamp: t(1), createdAt: t(1)))

@@ -8,7 +8,7 @@ import Testing
 struct NotificationRecordStoreTests {
     private func database() throws -> (HaloDatabase, String) {
         let path = FileManager.default.temporaryDirectory.appendingPathComponent("halo-nr-\(UUID().uuidString).sqlite").path
-        return (try HaloDatabase(path: path), path)
+        return (try HaloDatabase(path: path, observesSuspensionNotifications: false), path)
     }
 
     private func record(
@@ -73,8 +73,8 @@ struct NotificationRecordStoreTests {
         let (_, path) = try database()
         let now = Date(timeIntervalSince1970: 10_000_000)
         let user = try UserID("@alice:x.org")
-        let appDB = try HaloDatabase(path: path)
-        let nseDB = try HaloDatabase(path: path)
+        let appDB = try HaloDatabase(path: path, observesSuspensionNotifications: false)
+        let nseDB = try HaloDatabase(path: path, observesSuspensionNotifications: false)
         let appStore = NotificationRecordStore(database: appDB, account: user, now: { now })
         let nseStore = NotificationRecordStore(database: nseDB, account: user, now: { now })
 

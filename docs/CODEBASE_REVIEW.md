@@ -467,7 +467,7 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 | R-22 | P2 | Lifecycle | Background flush without a background task | **FIXED:** `HaloApp` wraps background `setForeground(false)` + `receipts.flush()` in `BackgroundTaskLease` (`UIApplication.shared.beginBackgroundTask(withName: "halo.receipts.flush")`) |
 | R-23 | P2 | NSE | New `Client` per push | **FIXED:** `SingleFlightCache` caches one restored `MatrixSessionPort` + `HaloDatabase` per `(userID, deviceID)` across the NSE process lifetime, coalescing concurrent pushes; `NotificationProcessorTests.singleFlightClientCache` |
 | R-24 | P2 | Push/docs | ADR-0015 pushkin missing; no gateway in Beta/Release | Build the pushkin or amend ADR-0015; configure a gateway before TestFlight |
-| R-25 | P2 | Persistence | No GRDB suspension handling in the shared container (V-SQL-2) | Suspend/close pools on background; verify on device |
+| R-25 | P2 | Persistence | No GRDB suspension handling in the shared container (V-SQL-2) | **FIXED (📱 device 0xdead10cc check open):** enabled `Configuration.observesSuspensionNotifications = true` in `HaloDatabase`, added `HaloDatabase.suspendAll()` / `resumeAll()` wired to `HaloApp` background/active lifecycle + background-task expiration; `HaloDatabaseTests.suspendsAndResumes` |
 | R-26 | P2 | Testing | Scenarios run against a model; NSE untested; no Mac CI | §11 scenarios; server-rules parity; scenario driver |
 | R-27 | P3 | Hygiene | Unbounded `nse-metrics.jsonl`; global `eventTimes` cache; `retrySend` error flattening; port-level filter hazard | Cap/rotate; scope caches per client; map errors |
 

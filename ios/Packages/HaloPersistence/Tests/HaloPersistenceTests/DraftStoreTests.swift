@@ -9,7 +9,7 @@ struct DraftStoreTests {
     private let room = try! RoomID("!r:x.org")
 
     private func database() throws -> HaloDatabase {
-        try HaloDatabase(path: FileManager.default.temporaryDirectory.appendingPathComponent("halo-\(UUID().uuidString).sqlite").path)
+        try HaloDatabase(path: FileManager.default.temporaryDirectory.appendingPathComponent("halo-\(UUID().uuidString).sqlite").path, observesSuspensionNotifications: false)
     }
 
     @Test("a draft is stored, replaced, and deleted by blank text")

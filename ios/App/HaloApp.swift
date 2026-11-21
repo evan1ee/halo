@@ -9,6 +9,7 @@ import HaloApplication
 import HaloDesignSystem
 import HaloDomain
 import HaloFoundation
+import HaloPersistence
 import SwiftUI
 import UIKit
 import UserNotifications
@@ -180,15 +181,25 @@ private struct RootView: View {
             }
         }
         // Sync and periodic read-state auditing run only in the foreground (SYNC_ENGINE §2 rule 1, LOGGING_AND_DIAGNOSTICS §2).
-        // Wrap the background receipt flush in a UIKit background task so iOS does not suspend mid-request (R-22).
+        // Wrap the background receipt flush in a UIKit background task (R-22) and suspend GRDB pools before iOS suspends
+        // the process so no SQLite lock is held in the shared App Group container (R-25 / 0xdead10cc).
         .task(id: scenePhase) {
-            if scenePhase != .active {
+            switch scenePhase {
+            case .active:
+                HaloDatabase.resumeAll()
+                await root.setForeground(true)
+            case .background:
+                let lease = BackgroundTaskLease(name: "halo.receipts.flush", onEnd: { HaloDatabase.suspendAll() })
+                defer { lease.end() }
+                await root.setForeground(false)
+                await root.receipts.flush()
+            case .inactive:
                 let lease = BackgroundTaskLease(name: "halo.receipts.flush")
                 defer { lease.end() }
                 await root.setForeground(false)
                 await root.receipts.flush()
-            } else {
-                await root.setForeground(true)
+            @unknown default:
+                await root.setForeground(false)
             }
         }
     }
@@ -198,8 +209,10 @@ private struct RootView: View {
 @MainActor
 private final class BackgroundTaskLease {
     private var id: UIBackgroundTaskIdentifier = .invalid
+    private let onEnd: (@MainActor () -> Void)?
 
-    init(name: String) {
+    init(name: String, onEnd: (@MainActor () -> Void)? = nil) {
+        self.onEnd = onEnd
         id = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
             MainActor.assumeIsolated { self?.end() }
         }
@@ -209,6 +222,7 @@ private final class BackgroundTaskLease {
         guard id != .invalid else { return }
         let ending = id
         id = .invalid
+        onEnd?()
         UIApplication.shared.endBackgroundTask(ending)
     }
 }
