@@ -1,4 +1,5 @@
 import HaloDomain
+import HaloDesignSystem
 import SwiftUI
 
 /// The sticker panel: search, favourites, recents, then one section per pack. Tap sends; long-press previews (animated when motion is allowed) and offers send and favourite.

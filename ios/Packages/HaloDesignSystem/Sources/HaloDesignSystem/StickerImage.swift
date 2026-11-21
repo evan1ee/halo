@@ -3,16 +3,22 @@ import ImageIO
 import SwiftUI
 import UIKit
 
-/// Decoding and showing a sticker image (STICKERS FR-5, FR-9). A multi-frame image (GIF, animated WebP/PNG) plays only when
+/// Decoding and showing a sticker image, shared by the sticker panel and the timeline (STICKERS FR-5, FR-9). A multi-frame image (GIF, animated WebP/PNG) plays only when
 /// motion is allowed: Reduce Motion and Low Power Mode both show the first frame.
-enum StickerImage {
+public enum StickerImage {
     /// Frame limit: bounds memory for a long animation (512 px stickers are ~1 MB a frame decoded).
-    static let maxFrames = 60
+    public static let maxFrames = 60
 
-    static var motionAllowed: Bool { !UIAccessibility.isReduceMotionEnabled && !ProcessInfo.processInfo.isLowPowerModeEnabled }
+    public static var motionAllowed: Bool { !UIAccessibility.isReduceMotionEnabled && !ProcessInfo.processInfo.isLowPowerModeEnabled }
+
+    /// `true` for a GIF, APNG or WebP with more than one frame.
+    public static func isAnimated(_ data: Data) -> Bool {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return false }
+        return CGImageSourceGetCount(source) > 1
+    }
 
     /// The image for `data`: animated when `animated` and the data has several frames, else the first frame.
-    static func decode(_ data: Data, animated: Bool) -> UIImage? {
+    public static func decode(_ data: Data, animated: Bool) -> UIImage? {
         guard animated, let source = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(source) > 1 else {
             return UIImage(data: data)
         }
@@ -41,10 +47,12 @@ enum StickerImage {
 }
 
 /// A `UIImageView` that animates a multi-frame `UIImage` by itself.
-struct AnimatedStickerView: UIViewRepresentable {
+public struct AnimatedStickerView: UIViewRepresentable {
     let data: Data
 
-    func makeUIView(context: Context) -> UIImageView {
+    public init(data: Data) { self.data = data }
+
+    public func makeUIView(context: Context) -> UIImageView {
         let view = UIImageView()
         view.contentMode = .scaleAspectFit
         view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -52,7 +60,7 @@ struct AnimatedStickerView: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ view: UIImageView, context: Context) {
+    public func updateUIView(_ view: UIImageView, context: Context) {
         view.image = StickerImage.decode(data, animated: StickerImage.motionAllowed)
     }
 }

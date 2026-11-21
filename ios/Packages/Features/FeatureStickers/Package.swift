@@ -11,10 +11,11 @@ let package = Package(
         .package(path: "../../HaloFoundation"),
         .package(path: "../../HaloDomain"),
         .package(path: "../../HaloApplication"),
+        .package(path: "../../HaloDesignSystem"),
         .package(path: "../../HaloTestSupport"),
     ],
     targets: [
-        .target(name: "FeatureStickers", dependencies: ["HaloApplication", "HaloDomain", "HaloFoundation"]),
+        .target(name: "FeatureStickers", dependencies: ["HaloApplication", "HaloDesignSystem", "HaloDomain", "HaloFoundation"]),
         .testTarget(name: "FeatureStickersTests", dependencies: ["FeatureStickers", "HaloTestSupport"]),
     ]
 )

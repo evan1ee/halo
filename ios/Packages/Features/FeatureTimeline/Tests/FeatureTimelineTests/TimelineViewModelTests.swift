@@ -663,6 +663,20 @@ struct TimelineViewModelTests {
         #expect(rows.first?.time?.hasPrefix("12:00") == true)  // "12:00 AM" with the locale's narrow space
     }
 
+    @Test("a sticker's full file is loaded for playing; a file over the autoplay limit or a missing one is not")
+    func stickerContent() async throws {
+        let port = FakeMediaPort()
+        let small = MediaRef(token: "small"), big = MediaRef(token: "big")
+        port.add(small, data: Data([1, 2, 3]))
+        port.add(big, data: Data(count: TimelineViewModel.stickerAutoplayLimit + 1))
+        let vm = TimelineViewModel(
+            coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: try RoomID("!r:x.org")), media: MediaLoader(port: port),
+            locale: Locale(identifier: "en_US"), timeZone: TimeZone(identifier: "UTC") ?? .gmt)
+        #expect(await vm.stickerContent(for: .init(ref: small, aspectRatio: 1)) == Data([1, 2, 3]))
+        #expect(await vm.stickerContent(for: .init(ref: big, aspectRatio: 1)) == nil)
+        #expect(await vm.stickerContent(for: .init(ref: MediaRef(token: "gone"), aspectRatio: 1)) == nil)
+    }
+
     @Test("someone else's message carries the sender's picture, your own does not, and the bytes load small")
     func senderAvatars() async throws {
         let port = FakeMediaPort()

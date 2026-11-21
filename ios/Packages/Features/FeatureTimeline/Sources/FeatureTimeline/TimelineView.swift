@@ -370,6 +370,8 @@ private struct ThumbnailView: View {
     let model: TimelineViewModel
     var isSticker = false
     @State private var data: Data?
+    /// An animated sticker's full file, played in place of the still thumbnail (STICKERS FR-8).
+    @State private var animated: Data?
     /// The download finished without a usable picture (missing on the server, offline, not an image): no endless spinner.
     @State private var failed = false
     @State private var attempt = 0
@@ -389,6 +391,8 @@ private struct ThumbnailView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("show-photo")
+            } else if let animated {
+                AnimatedStickerView(data: animated).allowsHitTesting(false)
             } else if let data, let uiImage = UIImage(data: data) {
                 Image(uiImage: uiImage).resizable().scaledToFit()
             } else if failed {
@@ -420,6 +424,10 @@ private struct ThumbnailView: View {
             data = loaded
             #if canImport(UIKit)
             failed = loaded.flatMap(UIImage.init(data:)) == nil
+            // A sticker may be a GIF or animated WebP: fetch the whole file and play it, unless motion is reduced.
+            if isSticker, !failed, StickerImage.motionAllowed, let full = await model.stickerContent(for: image), StickerImage.isAnimated(full) {
+                animated = full
+            }
             #endif
         }
     }

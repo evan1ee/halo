@@ -4,7 +4,7 @@ import Testing
 import UIKit
 import UniformTypeIdentifiers
 
-@testable import FeatureStickers
+import HaloDesignSystem
 
 @Suite("StickerImage")
 struct StickerImageTests {

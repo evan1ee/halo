@@ -694,6 +694,16 @@ public final class TimelineViewModel {
         return try? await media.thumbnail(ref, width: 64, height: 64)
     }
 
+    /// Largest sticker file the timeline plays by itself (STICKERS FR-8/FR-9; the same limit as the panel).
+    static let stickerAutoplayLimit = 1_000_000
+
+    /// The full file of a sticker, so an animated one can play; `nil` when it can't be loaded or is too large to autoplay.
+    /// The view decides whether it is animated and whether motion is allowed.
+    public func stickerContent(for image: TimelineRow.Image) async -> Data? {
+        guard let media, let full = try? await media.content(image.ref), full.count <= Self.stickerAutoplayLimit else { return nil }
+        return full
+    }
+
     /// Thumbnail bytes for an image row, or `nil` if it can't be loaded (the row then shows a placeholder).
     public func thumbnail(for image: TimelineRow.Image) async -> Data? {
         guard let media else { return nil }
