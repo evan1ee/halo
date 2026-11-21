@@ -2,17 +2,47 @@ import Foundation
 import HaloDomain
 import HaloFoundation
 import MatrixRustSDK
+import Synchronization
 
 /// `TimelinePort` over the SDK `Timeline` (SDK_INTEGRATION §6). Each session owns its upstream
 /// subscriptions and cancels them when its stream ends or it is closed (AGENTS.md §8).
 public final class MatrixTimelinePort: TimelinePort {
     private let session: MatrixSessionPort
 
+    /// Timelines built (and given their first page) before the user asked for them, newest use last. Each belongs to the
+    /// client that made it; one from an earlier sign-in is dropped, never reused.
+    private struct Warm { var client: ObjectIdentifier?; var timelines: [(room: RoomID, timeline: Timeline)] }
+    private let warmed = Mutex(Warm(client: nil, timelines: []))
+    static let warmLimit = 6
+
     public init(session: MatrixSessionPort) { self.session = session }
+
+    public func warm(_ rooms: [RoomID]) async {
+        guard let client = try? await session.signedInClient() else { return }
+        let owner = ObjectIdentifier(client)
+        warmed.withLock { if $0.client != owner { $0 = Warm(client: owner, timelines: []) } }
+        for id in rooms.prefix(Self.warmLimit) {
+            if warmed.withLock({ state in state.timelines.contains { $0.room == id } }) { continue }
+            guard let room = try? await session.room(id), let timeline = try? await room.timeline() else { continue }
+            _ = try? await timeline.paginateBackwards(numEvents: 20)
+            warmed.withLock { state in
+                guard state.client == owner, !state.timelines.contains(where: { $0.room == id }) else { return }
+                state.timelines.append((id, timeline))
+                if state.timelines.count > Self.warmLimit { state.timelines.removeFirst() }
+            }
+        }
+    }
+
+    private func warmTimeline(for id: RoomID, client: Client) -> Timeline? {
+        warmed.withLock { state in state.client == ObjectIdentifier(client) ? state.timelines.first { $0.room == id }?.timeline : nil }
+    }
 
     public func open(room id: RoomID) async throws(HaloError) -> any TimelineSession {
         let room = try await session.room(id)
         let own = try await session.ownUserID()
+        if let client = try? await session.signedInClient(), let ready = warmTimeline(for: id, client: client) {
+            return MatrixTimelineSession(room: room, timeline: ready, ownUserID: own)
+        }
         do {
             let timeline = try await room.timeline()
             // Classic sync (D73) doesn't pre-fill a timeline the way sliding sync did: it starts empty and fills from the

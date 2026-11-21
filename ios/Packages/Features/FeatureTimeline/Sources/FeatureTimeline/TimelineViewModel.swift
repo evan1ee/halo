@@ -371,7 +371,8 @@ public final class TimelineViewModel {
     /// Opens the timeline and follows it. Call when the screen appears.
     public func start() async {
         guard observation == nil else { return }
-        await restoreDraft()
+        // The saved draft is not needed to show messages: restore it while the timeline opens.
+        let draftRestored = Task { await restoreDraft() }
         readThroughAtOpen = await readThrough?()
         if let previewsAllowed { previewsHidden = await !previewsAllowed() }
         landed = false
@@ -382,6 +383,7 @@ public final class TimelineViewModel {
             for await status in statuses { self?.apply(status) }
         }
         await coordinator.open()
+        await draftRestored.value
         clearMarkedUnreadIfVisible()
     }
 

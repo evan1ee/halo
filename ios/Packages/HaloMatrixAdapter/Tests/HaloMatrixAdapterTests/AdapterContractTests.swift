@@ -143,6 +143,40 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
+    @Test("Opening a room works cold and after warm(); the times are written to /tmp/halo-open-timing.txt")
+    func openTiming() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
+            on: details)
+        try await MatrixSyncPort(session: session).start()
+        let rooms = Int(env["HALO_DEV_ROOMS"] ?? "0") ?? 0
+        try await within(seconds: 60) { try await RoomListPortContract.verify(MatrixRoomListPort(session: session), expectedRoomCount: rooms) }
+        let room = try RoomID(env["HALO_DEV_TIMELINE_ROOM"] ?? "")
+        let timelines = MatrixTimelinePort(session: session)
+        func firstEvent() async throws -> Double {
+            let start = ContinuousClock.now
+            let timeline = try await timelines.open(room: room)
+            _ = try await within(seconds: 60) {
+                var items: [HaloDomain.TimelineItem] = []
+                for await diff in timeline.items() {
+                    try ListReducer.apply(diff, to: &items)
+                    if items.contains(where: { if case .event = $0.content { true } else { false } }) { return true }
+                }
+                return false
+            }
+            let d = ContinuousClock.now - start
+            await timeline.close()
+            return Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18
+        }
+        let cold = try await firstEvent()
+        await timelines.warm([room])
+        let again = try await firstEvent()
+        try? "cold=\(cold) second=\(again)".write(toFile: "/tmp/halo-open-timing.txt", atomically: true, encoding: .utf8)
+        try await session.logout()
+    }
+
     @Test("Legacy im.ponies packs are read as read-only legacy packs (V-ST-3; creates a room and cleans up after itself)")
     func legacyPacks() async throws {
         let session = port()
