@@ -58,10 +58,14 @@ public struct RoomReadCounts: Sendable, Equatable {
 public struct LatestEventRef: Sendable, Equatable {
     public let timestamp: Date
     public let senderIsSelf: Bool
+    /// A message of the user's that the server hasn't confirmed yet (a local echo, sending or failed). The SDK takes an own
+    /// event as a read receipt only once it is on the server, so its counts don't reflect a local echo yet.
+    public let isLocal: Bool
 
-    public init(timestamp: Date, senderIsSelf: Bool) {
+    public init(timestamp: Date, senderIsSelf: Bool, isLocal: Bool = false) {
         self.timestamp = timestamp
         self.senderIsSelf = senderIsSelf
+        self.isLocal = isLocal
     }
 }
 
@@ -82,13 +86,18 @@ public struct RoomReadInputs: Sendable, Equatable {
     public let isEncrypted: Bool
     public let counts: RoomReadCounts
     public let latestEvent: LatestEventRef?
-    /// The event time up to which the user read the room on this device and the server hasn't confirmed yet.
+    /// The event time up to which the user has read the room: the newest of this device's read position and the receipt the
+    /// SDK holds (`receiptReadThrough`).
     public let localIntent: Date?
+    /// The time of the event the user's newest receipt (any device) points at, as the SDK holds it. The SDK's own counts are
+    /// relative to this receipt, so when it is at least `localIntent`, a positive SDK count is unread after the read position
+    /// (R-07). `nil` when unknown.
+    public let receiptReadThrough: Date?
     public let unconfirmedNotified: [NotifiedRef]
 
     public init(
         roomID: RoomID, membership: Membership, isEncrypted: Bool, counts: RoomReadCounts, latestEvent: LatestEventRef? = nil,
-        localIntent: Date? = nil, unconfirmedNotified: [NotifiedRef] = []
+        localIntent: Date? = nil, receiptReadThrough: Date? = nil, unconfirmedNotified: [NotifiedRef] = []
     ) {
         self.roomID = roomID
         self.membership = membership
@@ -96,6 +105,7 @@ public struct RoomReadInputs: Sendable, Equatable {
         self.counts = counts
         self.latestEvent = latestEvent
         self.localIntent = localIntent
+        self.receiptReadThrough = receiptReadThrough
         self.unconfirmedNotified = unconfirmedNotified
     }
 }
@@ -121,9 +131,13 @@ public enum ReasonCode: String, Sendable, Equatable, CaseIterable {
     case serverCounts = "SERVER_COUNTS"
     case sdkCounts = "SDK_COUNTS"
     case encServerOvercount = "ENC_SERVER_OVERCOUNT"
-    case encSDKBlind = "ENC_SDK_BLIND"
+    /// Encrypted room: the server counts events the SDK doesn't (E3c, R-01).
+    case encServerOnly = "ENC_SERVER_ONLY"
     case notifiedUnsynced = "NOTIFIED_UNSYNCED"
     case markedUnread = "MARKED_UNREAD"
+    /// The read position covers the latest event, but the SDK, which has applied that position, still counts unread: an event
+    /// after it that the latest event leaves out (one the SDK can't decrypt). E1/E1b give way (R-07).
+    case sdkUnreadAfterRead = "SDK_UNREAD_AFTER_READ"
 }
 
 public struct RoomReadState: Sendable, Equatable {
@@ -173,8 +187,19 @@ public enum ReadStatePolicy {
             return latest.timestamp <= intent
         }()
         let ownLatest = input.latestEvent?.senderIsSelf == true && input.unconfirmedNotified.isEmpty
+        // R-07: the SDK's latest event leaves out events it can't decrypt, so "covers the latest event" can be true while
+        // newer unread exists. The SDK's counts know better once the SDK has applied the read position: the receipt it holds
+        // is at least the local one (E1), or the own latest event is on the server (E1b: the SDK takes an own event as a receipt).
+        let sdkCountsAfterRead = counts.sdk != .zero && {
+            if intentCovers, let receipt = input.receiptReadThrough, let intent = input.localIntent, intent <= receipt { return true }
+            if ownLatest, input.latestEvent?.isLocal == false { return true }
+            return false
+        }()
 
-        if intentCovers || ownLatest {  // E1, E1b
+        if sdkCountsAfterRead {
+            reasons.insert(.sdkUnreadAfterRead)
+        }
+        if (intentCovers || ownLatest) && !sdkCountsAfterRead {  // E1, E1b
             reasons.insert(intentCovers ? .intentCovers : .ownLatest)
             hasUnread = false
         } else if serverZero {  // E2
@@ -188,7 +213,9 @@ public enum ReadStatePolicy {
             hasUnread = counts.sdk.unreadMessages > 0 || notify > 0
         } else {
             if counts.server == .zero && !serverCanCount { reasons.insert(.serverBlind) }  // E2x
-            if counts.sdk.unreadMessages > 0 {  // E3b
+            // E3b: the SDK's counts, whenever it counts anything. It evaluates the push rules again on the decrypted event, so a
+            // call invite counts as a notification without being a message, and a poll vote counts as nothing (R-01).
+            if counts.sdk != .zero {
                 notify = counts.sdk.unreadNotifications
                 highlight = counts.sdk.unreadMentions
                 reasons.insert(.sdkCounts)
@@ -197,10 +224,12 @@ public enum ReadStatePolicy {
                     reasons.insert(.encServerOvercount)
                 }
                 if reasons.contains(.serverBlind) && counts.sdk.unreadMentions > 0 { confidence = .approximate }
-            } else if counts.server.notification > 0 || counts.server.highlight > 0 {  // E3c (a highlight implies a notification; accepted either way)
-                notify = 1
-                confidence = .approximate
-                reasons.insert(.encSDKBlind)
+            } else if counts.server.notification > 0 || counts.server.highlight > 0 {
+                // E3c (R-01): the server counts every encrypted event, because its push rules can't look into one (a poll
+                // vote, an encrypted reaction); the SDK, which holds the same events over classic sync (D74) and counts one it
+                // can't decrypt, counts nothing. Its zero is the truth: no unread. A message the SDK hasn't got can still
+                // show through a push record (E4).
+                reasons.insert(.encServerOnly)
             }
             hasUnread = counts.sdk.unreadMessages > 0 || notify > 0
         }

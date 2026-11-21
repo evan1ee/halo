@@ -34,7 +34,7 @@ and is superseded as soon as sync delivers the event.
 
 | # | Cause | Addressed by |
 |---|---|---|
-| C1 | Gaps in the local timeline (limited sliding-sync responses) → SDK counts too low or stale | Unencrypted: E3a uses the server counts. Encrypted: E3b marks the count approximate when the server counts more than the SDK; E3c covers rooms the SDK hasn't seen at all; a mention inside a gap of an encrypted room is caught only by E4 (push) — limitation in §9 |
+| C1 | Gaps in the local timeline (limited sliding-sync responses) → SDK counts too low or stale | Unencrypted: E3a uses the server counts. Encrypted: E3b marks the count approximate when the server counts more than the SDK; since D78, E3c treats a server count the SDK doesn't share as no unread (over classic sync the SDK holds the events); a mention inside a gap of an encrypted room is caught only by E4 (push) — limitation in §9 |
 | C2 | A receipt for an event the SDK doesn't know is held in a ring buffer of **10** pending receipts and can be dropped **[VERIFIED F-SDK-1]** → "read but still badged" | Rule E2 (server-zero) |
 | C3 | Own receipts from other devices arrive late or not at all for rooms outside the active subscription | Rule E2 + reconcile triggers |
 | C4 | Encrypted rooms: the server can't evaluate content rules and counts nearly every message | Rules E1/E2/E3 split by encryption |
@@ -110,13 +110,13 @@ This avoids depending on receipt timestamps, which record *when* something was r
 | Rule | Condition | Effect | Reason code |
 |---|---|---|---|
 | **E0 Invite** | `membership == invited` | attention = true, display = .dot | `INVITE` |
-| **E1 Local intent covers latest** | `localIntent` exists and `latestEvent.ts ≤ localIntent.eventTs` | notify = highlight = 0, hasUnread = false | `INTENT_COVERS` |
-| **E1b Own latest** | `latestEvent.senderIsSelf` and no newer `unconfirmedNotified` | same as E1 (sending implies reading; an intent is created at the own event) | `OWN_LATEST` |
+| **E1 Local intent covers latest** | `localIntent` exists and `latestEvent.ts ≤ localIntent.eventTs` — **unless** the SDK has applied that position (`receiptReadThrough ≥ localIntent`: the receipt the SDK holds is at least the read position) and still counts something (any SDK count > 0): the SDK's latest event leaves out events it can't decrypt, so its counts know better **[DECISION D79, VERIFIED F-SDK-3]** | notify = highlight = 0, hasUnread = false; when overridden, evaluation continues with E2/E3 | `INTENT_COVERS` (overridden: `SDK_UNREAD_AFTER_READ`) |
+| **E1b Own latest** | `latestEvent.senderIsSelf` and no newer `unconfirmedNotified` — **unless** the own event is on the server (not a local echo) and the SDK still counts something: the SDK takes an own event as a receipt (implicit receipt), so what it counts came after it **[DECISION D79, VERIFIED F-SDK-3]** | same as E1 (sending implies reading; an intent is created at the own event) | `OWN_LATEST` (overridden: `SDK_UNREAD_AFTER_READ`) |
 | **E2 Server zero** | `serverZero` (both server counts 0 **and** the server could have counted) | notify = highlight = 0 regardless of SDK counts; if SDK counts > 0 → audit (explained) | `SERVER_ZERO` (+`SDK_STALE`) |
 | **E2x Server blind** | server counts are 0 but `!serverCanCount` (encrypted room in mentions/keywords or mute mode: the server can't see mentions in encrypted content and room rules suppress counting) | E2 does **not** apply; continue with E3b/E3c using SDK counts; confidence approximate if `sdk.unreadMentions > 0` and no intent covers the latest event | `SERVER_BLIND` |
 | **E3a Unencrypted** | `!isEncrypted` and not E1/E2 | notify = server.notification, highlight = server.highlight, confidence exact | `SERVER_COUNTS` |
-| **E3b Encrypted, SDK saw it** | `isEncrypted`, `sdk.unreadMessages > 0` | notify = sdk.unreadNotifications, highlight = sdk.unreadMentions; confidence exact, **except** approximate when `serverCanCount ∧ server.notification > sdk.unreadNotifications` (a possible gap, or C4 overcounting — Halo can't tell which) | `SDK_COUNTS` (+`ENC_SERVER_OVERCOUNT`) |
-| **E3c Encrypted, SDK blind** | `isEncrypted`, `sdk.unreadMessages == 0`, server notification > 0 | notify = 1 (at least), highlight = unknown → 0, display .dot, confidence approximate | `ENC_SDK_BLIND` |
+| **E3b Encrypted, SDK counts** | `isEncrypted`, any SDK count > 0 (`unreadMessages`, `unreadNotifications` or `unreadMentions`: the SDK re-evaluates push rules on the decrypted event, so a call invite is a notification without being a message **[VERIFIED F-SDK-3]**) | notify = sdk.unreadNotifications, highlight = sdk.unreadMentions; confidence exact, **except** approximate when `serverCanCount ∧ server.notification > sdk.unreadNotifications` (a possible gap, or C4 overcounting — Halo can't tell which) | `SDK_COUNTS` (+`ENC_SERVER_OVERCOUNT`) |
+| **E3c Encrypted, server only** | `isEncrypted`, all SDK counts 0, server notification > 0 | **no unread**: notify = highlight = 0, hasUnread = false (the server counts every encrypted event, a poll vote or an encrypted reaction included; the SDK, which holds the same events over classic sync and counts one it can't decrypt, counts nothing) **[DECISION D78, VERIFIED F-SDK-3]**; a message the SDK hasn't got shows only through E4 | `ENC_SERVER_ONLY` (auditor: explained) |
 | **E4 Notified not yet synced** | `unconfirmedNotified` non-empty | notify ≥ count, highlight ≥ mentions among them | `NOTIFIED_UNSYNCED` |
 | **E5 Marked unread** | `isMarkedUnread` | attention = true (all modes), display at least .dot | `MARKED_UNREAD` |
 
@@ -152,9 +152,9 @@ flowchart TD
   E2 -- yes --> Z
   E2 -- no --> ENC{encrypted?}
   ENC -- no --> SC[server counts, exact]
-  ENC -- yes --> SAW{SDK unreadMessages > 0?}
+  ENC -- yes --> SAW{any SDK count > 0?}
   SAW -- yes --> SDKC[SDK counts<br/>approximate if server counts more]
-  SAW -- no --> BLIND[notify ≥ 1, approximate]
+  SAW -- no --> BLIND[server only: no unread, D78]
   Z --> E4
   SC --> E4
   SDKC --> E4
@@ -183,9 +183,7 @@ stateDiagram-v2
   Unread --> Read: read on another device (server zero / receipt)
   Read --> MarkedUnread: user marks unread (any device)
   MarkedUnread --> Read: room opened (flag cleared)
-  Unread --> Uncertain: encrypted, SDK blind (E3c)
-  Uncertain --> Unread: SDK catches up
-  Uncertain --> Read: server zero
+  Read --> Read: encrypted, server counts a non-message only (E3c)
 ```
 
 ## 7. Coordinator responsibilities (`ReadStateCoordinator`)
@@ -210,12 +208,12 @@ No counts and no attention are persisted. The NSE's last computed badge is cache
 | Snapshot arrives after the intent but carries an older receipt | E1 still applies (intent covers latest); the intent stays until confirmed ([READ_RECEIPTS.md](READ_RECEIPTS.md) §1 "Confirmation") |
 | App and NSE write simultaneously | Monotonic upserts; PK de-duplication; Darwin notify → the app reloads |
 | Receipt for an event in the gap | Doesn't matter for E2 (server counts already reflect it) |
-| Clock skew: `originServerTs` comparisons across servers (federation) | **Limitation**: ordering by timestamp can misorder federated events with skewed clocks. Mitigation: when both events are present in the timeline, the adapter supplies a timeline order index ([ASSUMPTION V-RS-3]); otherwise timestamps. Covered by tests with skewed timestamps |
+| Clock skew: `originServerTs` comparisons across servers (federation) | Since D79 a skewed new message shows once the SDK has applied the read position (it counts the message; S18). **Limitation** while the local position is ahead of the SDK's receipt: ordering by timestamp can misorder federated events with skewed clocks. Mitigation: when both events are present in the timeline, the adapter supplies a timeline order index ([ASSUMPTION V-RS-3]); otherwise timestamps. Covered by tests with skewed timestamps |
 | Redaction of the only unread event | SDK/server counts drop → E2/E3 rules |
 | Push rules change on another device | Account data → snapshot → re-evaluate |
 | Room left / forgotten | Removed from states; its notification records are cleared |
 | User opens a room but scrolls nothing | Only visible events create intents (D6); the latest event may be visible at once |
-| Mention inside a timeline gap of an **encrypted** room | **Limitation.** The server can't see mentions in ciphertext and the SDK hasn't seen the event, so only a push (E4) reveals it. In all-messages mode the room still gets attention once the SDK has seen any later message (E3b) or none at all (E3c); in mentions/keywords mode (E2x) nothing reveals it until the SDK catches up. Covered by S22 |
+| Mention inside a timeline gap of an **encrypted** room | **Limitation.** The server can't see mentions in ciphertext and the SDK hasn't seen the event, so only a push (E4) reveals it. In all-messages mode the room still gets attention once the SDK has seen any later message (E3b); a server count the SDK doesn't share gives none (E3c, D78); in mentions/keywords mode (E2x) nothing reveals it until the SDK catches up. Covered by S22 |
 | Default mode for group rooms is mentions/keywords (NOTIFICATIONS FR-8) | **Trade-off.** Most encrypted group rooms therefore run on E2x — SDK counts only, no server cross-check, approximate confidence for mentions. This is the weakest path of the policy and the one most rooms use; the auditor reports `SERVER_BLIND` for it, and G-UNREAD must be judged with this default in place (S07, S21, S22) |
 
 ## 10. Acceptance criteria

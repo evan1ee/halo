@@ -45,6 +45,9 @@ struct ReadStateAuditorTests {
         let over = input(server: ServerCounts(notification: 5, highlight: 0), sdk: SDKCounts(unreadMessages: 2, unreadNotifications: 2, unreadMentions: 0), encrypted: true)
         #expect(audit(over).contains(AuditFinding(kind: .explained, reason: "ENC_SERVER_OVERCOUNT")))
         #expect(!audit(over).contains { $0.kind == .unexplained })
+        // R-01: a server count with no SDK count in an encrypted room (a poll vote) is shown as read, for a known reason.
+        let serverOnly = input(server: ServerCounts(notification: 1, highlight: 0), encrypted: true)
+        #expect(audit(serverOnly) == [AuditFinding(kind: .explained, reason: "ENC_SERVER_ONLY")])
     }
 
     @Test("a policy output the inputs can't support is unexplained")

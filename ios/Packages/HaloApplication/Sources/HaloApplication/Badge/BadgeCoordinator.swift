@@ -154,7 +154,7 @@ public actor BadgeCoordinator {
                 .map { NotifiedRef(timestamp: $0.timestamp, isMention: $0.isMention) }
             let effective = RoomReadInputs(
                 roomID: input.roomID, membership: input.membership, isEncrypted: input.isEncrypted, counts: input.counts,
-                latestEvent: input.latestEvent, localIntent: readThrough, unconfirmedNotified: notified)
+                latestEvent: input.latestEvent, localIntent: readThrough, receiptReadThrough: input.receiptReadThrough, unconfirmedNotified: notified)
             result.append((effective, ReadStatePolicy.evaluate(effective)))
         }
         return result

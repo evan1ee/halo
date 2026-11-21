@@ -12,7 +12,7 @@ public enum AuditKind: String, Sendable, Equatable, Hashable {
 /// One disagreement between the policy's output and an input, with the stable reason code stored for it.
 public struct AuditFinding: Sendable, Equatable, Hashable {
     public let kind: AuditKind
-    /// `SDK_STALE_PENDING_RECEIPT`, `SERVER_BLIND`, `ENC_SERVER_OVERCOUNT`, `INTENT_UNCONFIRMED` (explained), or an
+    /// `SDK_STALE_PENDING_RECEIPT`, `SERVER_BLIND`, `ENC_SERVER_OVERCOUNT`, `ENC_SERVER_ONLY`, `INTENT_UNCONFIRMED` (explained), or an
     /// `UNEXPLAINED_*` code.
     public let reason: String
 
@@ -33,9 +33,14 @@ public enum ReadStateAuditor {
 
         // The server counted unread messages (a highlight implies a notification), the policy says there are none.
         if serverCanCount, counts.server.notification > 0, !state.hasUnread, !state.attention {
-            findings.append(covered
-                ? AuditFinding(kind: .explained, reason: "INTENT_UNCONFIRMED")
-                : AuditFinding(kind: .unexplained, reason: "UNEXPLAINED_SERVER_UNREAD_HIDDEN"))
+            if covered {
+                findings.append(AuditFinding(kind: .explained, reason: "INTENT_UNCONFIRMED"))
+            } else if state.reasons.contains(.encServerOnly) {
+                // An encrypted event that isn't a message (a poll vote, a call signal): the SDK's zero wins (E3c, R-01).
+                findings.append(AuditFinding(kind: .explained, reason: "ENC_SERVER_ONLY"))
+            } else {
+                findings.append(AuditFinding(kind: .unexplained, reason: "UNEXPLAINED_SERVER_UNREAD_HIDDEN"))
+            }
         }
         // The SDK still counts unread messages, the server says zero: the SDK hasn't applied the newest receipt yet.
         if serverCanCount, counts.server == .zero, counts.sdk.unreadMessages > 0 {

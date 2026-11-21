@@ -211,7 +211,7 @@ public final class MatrixRoomListPort: RoomListPort {
         switch value {
         case .none, .remoteInvite: return nil
         case .remote(let timestamp, _, let isOwn, _, _): return LatestEventRef(timestamp: date(timestamp), senderIsSelf: isOwn)
-        case .local(let timestamp, _, _, _, _): return LatestEventRef(timestamp: date(timestamp), senderIsSelf: true)
+        case .local(let timestamp, _, _, _, _): return LatestEventRef(timestamp: date(timestamp), senderIsSelf: true, isLocal: true)
         }
     }
 

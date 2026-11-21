@@ -17,11 +17,12 @@ struct LatestEventMappingTests {
         #expect(own == LatestEventRef(timestamp: Date(timeIntervalSince1970: 5), senderIsSelf: true))
     }
 
-    @Test("a local echo is the user's own event in every sending state")
+    @Test("a local echo is the user's own, unconfirmed event in every sending state")
     func local() {
         for state in [LatestEventValueLocalState.isSending, .hasBeenSent, .cannotBeSent] {
             let ref = map(.local(timestamp: 9_000, sender: "@a:x", profile: .pending, content: .callInvite, state: state))
-            #expect(ref == LatestEventRef(timestamp: Date(timeIntervalSince1970: 9), senderIsSelf: true))
+            // Local in every state, `hasBeenSent` included: the SDK applies an own event as a receipt only from its remote echo.
+            #expect(ref == LatestEventRef(timestamp: Date(timeIntervalSince1970: 9), senderIsSelf: true, isLocal: true))
         }
     }
 

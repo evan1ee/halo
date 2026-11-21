@@ -3,6 +3,7 @@
 #
 #   scripts/contract-test.sh                  # the whole AdapterContractTests suite
 #   scripts/contract-test.sh stickers createPack
+#   scripts/contract-test.sh ClassicSyncEvidenceTests/encryptedNonMessageEvidence
 #
 # Settings come from $HALO_CONTRACT_ENV (default ~/.config/halo-dev/contract.env), a private file outside the repository
 # with TEST_RUNNER_HALO_DEV_* lines. Values are never printed. Tests whose fixture variable is missing skip themselves.
@@ -32,7 +33,11 @@ only=()
 if [[ $# -eq 0 ]]; then
   only=(-only-testing:HaloMatrixAdapterTests/AdapterContractTests -only-testing:HaloMatrixAdapterTests/ClassicSyncEvidenceTests)
 else
-  for name in "$@"; do only+=("-only-testing:HaloMatrixAdapterTests/AdapterContractTests/${name%()}()"); done
+  # A bare name is an AdapterContractTests test; `Suite/test` names a test of another suite (e.g. ClassicSyncEvidenceTests).
+  for name in "$@"; do
+    if [[ "$name" == */* ]]; then only+=("-only-testing:HaloMatrixAdapterTests/${name%()}()")
+    else only+=("-only-testing:HaloMatrixAdapterTests/AdapterContractTests/${name%()}()"); fi
+  done
 fi
 
 cd "$(dirname "$0")/../ios/Packages/HaloMatrixAdapter"

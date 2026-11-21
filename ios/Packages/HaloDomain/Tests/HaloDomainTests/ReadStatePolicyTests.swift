@@ -11,12 +11,12 @@ struct ReadStatePolicyTests {
     private func inputs(
         membership: Membership = .joined, encrypted: Bool = false, mode: NotificationMode = .allMessages,
         server: ServerCounts = .zero, sdk: SDKCounts = .zero, marked: Bool = false,
-        latest: LatestEventRef? = nil, intent: Date? = nil, notified: [NotifiedRef] = []
+        latest: LatestEventRef? = nil, intent: Date? = nil, receipt: Date? = nil, notified: [NotifiedRef] = []
     ) -> RoomReadInputs {
         RoomReadInputs(
             roomID: room, membership: membership, isEncrypted: encrypted,
             counts: RoomReadCounts(mode: mode, server: server, sdk: sdk, isMarkedUnread: marked),
-            latestEvent: latest, localIntent: intent, unconfirmedNotified: notified)
+            latestEvent: latest, localIntent: intent, receiptReadThrough: receipt, unconfirmedNotified: notified)
     }
 
     private func eval(_ i: RoomReadInputs) -> RoomReadState { ReadStatePolicy.evaluate(i) }
@@ -43,6 +43,34 @@ struct ReadStatePolicyTests {
         #expect(eval(inputs(server: counted, latest: own)).reasons == [.ownLatest])
         // …unless a notified event is still unsynced.
         #expect(eval(inputs(server: counted, latest: own, notified: [NotifiedRef(timestamp: t0 + 1, isMention: false)])).attention)
+    }
+
+    @Test("R-07: once the SDK has applied the read position, its positive counts beat 'covers the latest event' (E1, E1b)")
+    func sdkCountsAfterRead() {
+        let latest = LatestEventRef(timestamp: t0, senderIsSelf: false)
+        let utd = SDKCounts(unreadMessages: 1, unreadNotifications: 1, unreadMentions: 0)
+        let server = ServerCounts(notification: 1, highlight: 0)
+        // The receipt the SDK holds is the read position: a newer event it can't decrypt is unread, though the latest event leaves it out.
+        let applied = eval(inputs(encrypted: true, server: server, sdk: utd, latest: latest, intent: t0, receipt: t0))
+        #expect(applied.attention && applied.display == .count(1) && applied.reasons == [.sdkUnreadAfterRead, .sdkCounts])
+        // Read on another device further than here: still applied.
+        #expect(eval(inputs(encrypted: true, server: server, sdk: utd, latest: latest, intent: t0 + 5, receipt: t0 + 5)).attention)
+        // The local read position is ahead of the SDK's receipt (sent or not, not echoed yet): the SDK's count is stale, E1 holds.
+        let ahead = eval(inputs(encrypted: true, server: server, sdk: utd, latest: latest, intent: t0, receipt: t0 - 1))
+        #expect(!ahead.attention && ahead.reasons == [.intentCovers])
+        // The receipt is unknown: E1 holds as before.
+        #expect(eval(inputs(encrypted: true, server: server, sdk: utd, latest: latest, intent: t0)).reasons == [.intentCovers])
+        // No SDK count: E1 holds even with the receipt applied.
+        #expect(eval(inputs(encrypted: true, server: server, latest: latest, intent: t0, receipt: t0)).reasons == [.intentCovers])
+        // E1b: the own latest event is on the server, so the SDK took it as a receipt; what it still counts came after it.
+        let own = LatestEventRef(timestamp: t0, senderIsSelf: true)
+        let afterOwn = eval(inputs(encrypted: true, server: server, sdk: utd, latest: own))
+        #expect(afterOwn.attention && afterOwn.reasons == [.sdkUnreadAfterRead, .sdkCounts])
+        // A local echo (sending, or failed) isn't a receipt for the SDK yet: E1b holds.
+        let echo = LatestEventRef(timestamp: t0, senderIsSelf: true, isLocal: true)
+        #expect(eval(inputs(encrypted: true, server: server, sdk: utd, latest: echo)).reasons == [.ownLatest])
+        // S13: an own message after unread the SDK already reset (implicit receipt): no SDK count, the server's are hidden.
+        #expect(eval(inputs(server: ServerCounts(notification: 3, highlight: 0), latest: own)).reasons == [.ownLatest])
     }
 
     @Test("E2: server zero wins over stale SDK counts in all-messages rooms")
@@ -77,10 +105,22 @@ struct ReadStatePolicyTests {
         #expect(over.confidence == .approximate && over.display == .dot && over.reasons == [.sdkCounts, .encServerOvercount])
     }
 
-    @Test("E3c: encrypted room the SDK hasn't seen but the server counts → at least one, approximate, a dot")
-    func encryptedBlind() {
+    @Test("E3c: in an encrypted room a server count the SDK doesn't share (a poll vote, a call signal) is no unread (R-01)")
+    func encryptedServerOnly() {
         let state = eval(inputs(encrypted: true, server: ServerCounts(notification: 5, highlight: 0)))
-        #expect(state.attention && state.display == .dot && state.confidence == .approximate && state.reasons == [.encSDKBlind])
+        #expect(!state.attention && !state.hasUnread && state.display == .none && state.confidence == .exact && state.reasons == [.encServerOnly])
+        // A server highlight without an SDK count is treated the same: the server can't see mentions in ciphertext.
+        #expect(!eval(inputs(encrypted: true, server: ServerCounts(notification: 1, highlight: 1))).attention)
+        // Evidence the policy still adds on top: a pushed event, or the user's own unread flag.
+        let pushed = eval(inputs(encrypted: true, server: ServerCounts(notification: 1, highlight: 0), notified: [NotifiedRef(timestamp: Date(timeIntervalSince1970: 50), isMention: false)]))
+        #expect(pushed.attention && pushed.reasons == [.encServerOnly, .notifiedUnsynced])
+        #expect(eval(inputs(encrypted: true, server: ServerCounts(notification: 1, highlight: 0), marked: true)).attention)
+        // An event the SDK can't decrypt is counted by the SDK too, so it is unread (E3b), not E3c.
+        let utd = eval(inputs(encrypted: true, server: ServerCounts(notification: 1, highlight: 0), sdk: SDKCounts(unreadMessages: 1, unreadNotifications: 1, unreadMentions: 0)))
+        #expect(utd.attention && utd.display == .count(1) && utd.reasons == [.sdkCounts])
+        // A call invite: the SDK's push rules notify for it, though it isn't a message. Unread, and the SDK's count is used.
+        let call = eval(inputs(encrypted: true, server: ServerCounts(notification: 1, highlight: 0), sdk: SDKCounts(unreadMessages: 0, unreadNotifications: 1, unreadMentions: 0)))
+        #expect(call.attention && call.hasUnread && call.display == .count(1) && call.reasons == [.sdkCounts])
     }
 
     @Test("E2x: an encrypted room in mentions mode has a blind server; SDK mentions are approximate")

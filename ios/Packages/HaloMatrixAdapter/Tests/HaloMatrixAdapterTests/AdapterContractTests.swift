@@ -1124,7 +1124,7 @@ struct AdapterContractTests {
                     guard let room = items.first(where: { $0.id == target }) else { continue }
                     let state = ReadStatePolicy.evaluate(RoomReadInputs(
                         roomID: room.id, membership: room.membership, isEncrypted: room.isEncrypted, counts: room.read,
-                        latestEvent: room.latestEvent, localIntent: room.ownReadThrough))
+                        latestEvent: room.latestEvent, localIntent: room.ownReadThrough, receiptReadThrough: room.ownReadThrough))
                     if done(state) { log.append("\(label): attention \(state.attention), \(state.display), reasons \(state.reasons.map(\.rawValue).sorted())"); return }
                 }
                 throw ContractViolation("stream ended before: \(label)")

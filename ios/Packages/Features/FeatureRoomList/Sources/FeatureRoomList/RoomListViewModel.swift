@@ -259,7 +259,7 @@ public final class RoomListViewModel {
                 let state = ReadStatePolicy.evaluate(RoomReadInputs(
                     roomID: room.id, membership: room.membership, isEncrypted: room.isEncrypted, counts: room.read,
                     latestEvent: room.latestEvent,
-                    localIntent: [positions[room.id], room.ownReadThrough].compactMap { $0 }.max()))
+                    localIntent: [positions[room.id], room.ownReadThrough].compactMap { $0 }.max(), receiptReadThrough: room.ownReadThrough))
                 return Row(
                     id: room.id, name: room.name ?? "Unnamed room", display: state.display, hasUnread: state.hasUnread, isInvite: room.membership == .invited,
                     isFavourite: room.isFavourite, isMuted: room.read.mode == .mute, lastActivity: room.latestEvent?.timestamp,

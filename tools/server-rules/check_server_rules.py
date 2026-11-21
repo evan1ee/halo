@@ -62,6 +62,18 @@ check("encrypted room, all messages: events notify but never highlight", a.count
 req("PUT",f"/pushrules/global/room/{q(r4)}",a.tok,{"actions":[]}); b.send(r4,"",ENC,typ="m.room.encrypted")
 check("encrypted room after a no-action room rule: new events are not counted, earlier counts stay", a.counts(r4), (2,0))
 
+# R-01: the server's rules see only `m.room.encrypted`, so an encrypted event that isn't a message (a poll vote, an encrypted
+# reaction) counts like one; the SDK, which decrypts, doesn't count it. The read-state policy therefore never takes the
+# server's count alone as unread in an encrypted room (E3c). Plaintext reactions (what the Rust SDK sends) don't count.
+r5=mkroom(True); m5=b.send(r5,"",ENC,typ="m.room.encrypted"); a.read(r5,m5)
+b.send(r5,"",dict(ENC,**{"m.relates_to":{"rel_type":"m.reference","event_id":m5}}),typ="m.room.encrypted")
+check("encrypted room: an encrypted poll vote (cleartext m.reference) counts", a.counts(r5), (1,0))
+r6=mkroom(True); m6=b.send(r6,"",ENC,typ="m.room.encrypted"); a.read(r6,m6)
+b.send(r6,"",dict(ENC,**{"m.relates_to":{"rel_type":"m.annotation","event_id":m6,"key":"x"}}),typ="m.room.encrypted")
+check("encrypted room: an encrypted reaction counts", a.counts(r6), (1,0))
+b.send(r6,"",{"m.relates_to":{"rel_type":"m.annotation","event_id":m6,"key":"y"}},typ="m.reaction")
+check("encrypted room: a plaintext reaction does not count", a.counts(r6), (1,0))
+
 bad=[x for x in results if x[1]!=x[2]]
 for name,got,want in results: print(("ok   " if got==want else "FAIL ")+f"{name}: got {got}, expected {want}")
 sys.exit(1 if bad else 0)

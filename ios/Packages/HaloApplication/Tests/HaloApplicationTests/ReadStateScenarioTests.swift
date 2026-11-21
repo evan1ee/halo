@@ -6,7 +6,7 @@ import Synchronization
 import Testing
 @testable import HaloApplication
 
-// Scenarios S01–S22 of docs/testing/UNREAD_REGRESSION_TESTS.md §3.
+// Scenarios S01–S24 of docs/testing/UNREAD_REGRESSION_TESTS.md §3.
 //
 // These run the real `ReadStatePolicy`, `ReadReceiptCoordinator` and `BadgeCoordinator` against `World`, an in-process
 // model of the parts of Synapse and of device A1's sync that the scenarios need (server counts after the user's newest
@@ -16,7 +16,9 @@ import Testing
 // scenario depends on a reading that is not checked there, it says so.
 
 private enum Who { case a, b, c }
-private enum Kind { case message, edit, redacted }
+/// `vote`: an encrypted event that isn't a message (a poll vote, a call signal): the server's rules see only `m.room.encrypted`
+/// and count it, the SDK doesn't (verified: ClassicSyncEvidenceTests.encryptedNonMessageEvidence, R-01).
+private enum Kind { case message, edit, redacted, vote }
 
 private struct Ev {
     let id: EventID
@@ -92,7 +94,7 @@ private struct World {
     static func serverCounts(_ r: WRoom) -> ServerCounts {
         guard !r.encrypted || r.mode == .allMessages, r.mode != .mute else { return .zero }
         var n = 0, h = 0
-        for (i, ev) in r.events.enumerated() where i > (r.receipt ?? -1) && ev.sender != .a && ev.kind == .message {
+        for (i, ev) in r.events.enumerated() where i > (r.receipt ?? -1) && ev.sender != .a && (ev.kind == .message || (ev.kind == .vote && r.encrypted)) {
             if r.mode == .allMessages || ev.mention {
                 n += 1
                 if ev.mention && !r.encrypted { h += 1 }
@@ -101,11 +103,21 @@ private struct World {
         return ServerCounts(notification: n, highlight: h)
     }
 
+    /// The SDK counts messages after the receipt that it holds. One it can't decrypt counts as a message too, notifying by the
+    /// encrypted-event rule (all-messages mode only) and never as a mention, as the real SDK does (verified against
+    /// `infra/dev`: ClassicSyncEvidenceTests.encryptedNonMessageEvidence).
+    /// An own event it holds counts as a receipt too (the SDK's implicit receipt, `select_best_receipt`).
     static func sdkCounts(_ r: WRoom, _ s: Snap) -> SDKCounts {
         var m = 0, n = 0, h = 0
+        let ownIdx = r.events.indices.last { r.events[$0].sender == .a && s.known.contains(r.events[$0].id) }
+        let start = max(s.receiptIdx ?? -1, ownIdx ?? -1)
         for (i, ev) in r.events.enumerated()
-        where i > (s.receiptIdx ?? -1) && s.known.contains(ev.id) && !s.undecrypted.contains(ev.id) && ev.sender != .a && ev.kind == .message {
+        where i > start && s.known.contains(ev.id) && ev.sender != .a && ev.kind == .message {
             m += 1
+            if s.undecrypted.contains(ev.id) {
+                if s.mode == .allMessages { n += 1 }
+                continue
+            }
             if ev.mention { h += 1 }
             if s.mode == .allMessages || (s.mode == .mentionsAndKeywords && ev.mention) { n += 1 }
         }
@@ -129,7 +141,9 @@ private struct World {
             if applyOwnReceipt && !serverStale { s.receiptIdx = r.receipt }
             if !serverStale { s.server = Self.serverCounts(r) }
             s.sdk = Self.sdkCounts(r, s)
-            s.latest = r.events.last(where: { $0.kind != .edit }).map { LatestEventRef(timestamp: $0.ts, senderIsSelf: $0.sender == .a) }
+            // The SDK's latest event leaves out edits, votes and events it can't decrypt (F-SDK-3).
+            s.latest = r.events.last(where: { $0.kind != .edit && $0.kind != .vote && !undecrypted.contains($0.id) })
+                .map { LatestEventRef(timestamp: $0.ts, senderIsSelf: $0.sender == .a) }
             snaps[id] = s
         }
     }
@@ -146,7 +160,7 @@ private struct World {
         let s = summary(id)
         return RoomReadInputs(
             roomID: id, membership: s.membership, isEncrypted: s.isEncrypted, counts: s.read, latestEvent: s.latestEvent,
-            localIntent: s.ownReadThrough)
+            localIntent: s.ownReadThrough, receiptReadThrough: s.ownReadThrough)
     }
 
     func inputs() -> [RoomReadInputs] { order.filter { snaps[$0] != nil }.map(input) }
@@ -249,7 +263,7 @@ private struct Rig {
             .map { NotifiedRef(timestamp: $0.timestamp, isMention: $0.isMention) }
         return ReadStatePolicy.evaluate(RoomReadInputs(
             roomID: room, membership: input.membership, isEncrypted: input.isEncrypted, counts: input.counts,
-            latestEvent: input.latestEvent, localIntent: read, unconfirmedNotified: notified))
+            latestEvent: input.latestEvent, localIntent: read, receiptReadThrough: input.receiptReadThrough, unconfirmedNotified: notified))
     }
 
     /// The badge's attention set. Cross-checks `BadgeCoordinator.attention` against the per-room states.
@@ -267,7 +281,7 @@ private func eventually(_ condition: @Sendable () -> Bool) async -> Bool {
     return false
 }
 
-@Suite("Read-state scenarios S01–S22")
+@Suite("Read-state scenarios S01–S24")
 struct ReadStateScenarioTests {
     @Test("S01: B sends 5, A1 views them: no attention, receipt at the 5th, badge 0")
     func s01() async throws {
@@ -342,14 +356,15 @@ struct ReadStateScenarioTests {
         #expect(await again.attention().isEmpty)
     }
 
-    @Test("S06: encrypted group room, all messages, B mentions A, keys arrive late: dot, then one mention")
+    @Test("S06: encrypted group room, all messages, B mentions A, keys arrive late: one unread, then one mention")
     func s06() async throws {
         var rig = Rig()
         let r = rig.addRoom(encrypted: true, mode: .allMessages)
         let id = rig.send(r, mention: true)
         rig.sync(undecrypted: [id])
         var state = await rig.state(r)
-        #expect(state.attention && state.display == .dot && state.reasons.contains(.encSDKBlind))
+        // The SDK counts the event it can't decrypt; the mention is hidden in the ciphertext until the keys arrive.
+        #expect(state.attention && state.display == .count(1) && state.reasons == [.sdkCounts])
         rig.sync()  // decrypted
         state = await rig.state(r)
         #expect(state.attention && state.display == .mentions(1))
@@ -584,7 +599,7 @@ struct ReadStateScenarioTests {
         #expect(await eventually { badgePort.history.last == [] })
     }
 
-    @Test("S18: B's clock is 10 minutes behind: viewing the latest event leaves no phantom unread; a late skewed message is a known limitation")
+    @Test("S18: B's clock is 10 minutes behind: viewing the latest event leaves no phantom unread; a late skewed message shows once the receipt is applied")
     func s18() async throws {
         var rig = Rig()
         let r = rig.addRoom()
@@ -596,12 +611,14 @@ struct ReadStateScenarioTests {
         rig.sync()
         #expect(await rig.attention().isEmpty)
 
-        // [LIMITATION] ordering uses origin_server_ts: a new message stamped before the read position isn't flagged,
-        // although the server counts it. The test pins this so a change is noticed.
+        // A new message stamped before the read position: "covers the latest event" by time, but the SDK has applied the
+        // receipt and counts the message, so it shows (R-07). [LIMITATION] while the local position is ahead of the SDK's
+        // receipt (not confirmed yet) the timestamp still decides (R-06).
         rig.send(r, skew: -2000)
         rig.sync()
         #expect(rig.world.input(r).counts.server.notification == 1)
-        #expect(await rig.attention().isEmpty)
+        let state = await rig.state(r)
+        #expect(state.attention && state.reasons.contains(.sdkUnreadAfterRead))
     }
 
     @Test("S19: 50 rooms change while the app reconciles: the final badge equals a fresh evaluation")
@@ -712,4 +729,71 @@ struct ReadStateScenarioTests {
         state = await b.state(rb)
         #expect(state.attention && state.display == .mentions(1))
     }
+
+    @Test("S23: encrypted room with no read position yet (joined, never opened), B votes in a poll: no attention; a message after it shows; viewing clears (R-01)")
+    func s23() async throws {
+        var rig = Rig()
+        let r = rig.addRoom(encrypted: true, mode: .allMessages)
+        let vote = rig.send(r, kind: .vote)  // an encrypted non-message: the server counts it, the SDK doesn't
+        #expect(!rig.push(vote))  // the extension decrypts a vote and has nothing to show or record
+        rig.sync()
+        #expect(rig.world.input(r).counts.server.notification == 1)
+        var state = await rig.state(r)
+        #expect(!state.attention && !state.hasUnread && state.display == .none && state.reasons == [.encServerOnly])
+        #expect(await rig.attention().isEmpty)
+
+        // A real message after the vote: attention. The server still counts the vote, so the number is approximate (a dot).
+        let message = rig.send(r)
+        rig.sync()
+        state = await rig.state(r)
+        #expect(state.attention && state.display == .dot && state.reasons == [.sdkCounts, .encServerOvercount])
+        await rig.view(r, message)
+        await rig.settle()
+        rig.sync()
+        #expect(await rig.attention().isEmpty)
+        #expect(rig.world.input(r).counts.server == .zero)  // the receipt is after the vote
+    }
+
+    @Test("S24: A1 read the room, then B sends a message A1 can't decrypt yet: attention although the latest event is still the read one; also after A's own message (R-07)")
+    func s24() async throws {
+        // (a) after a receipt: the SDK applied it and counts the undecryptable event; its latest event leaves it out.
+        var rig = Rig()
+        let r = rig.addRoom(encrypted: true, mode: .allMessages)
+        let seen = rig.send(r)
+        rig.sync()
+        await rig.view(r, seen)
+        await rig.settle()
+        rig.sync()
+        #expect(await rig.attention().isEmpty)
+        let hidden = rig.send(r)
+        rig.sync(undecrypted: [hidden])
+        #expect(rig.world.input(r).latestEvent?.timestamp == rig.world.ts(seen))  // still the read event
+        var state = await rig.state(r)
+        #expect(state.attention && state.display == .count(1) && state.reasons == [.sdkUnreadAfterRead, .sdkCounts])
+        #expect(await rig.attention() == [r])
+        rig.sync()  // the keys arrive: the latest event is the new message, nothing covers it
+        await rig.view(r, hidden)
+        await rig.settle()
+        rig.sync()
+        #expect(await rig.attention().isEmpty)
+
+        // (b) after A's own message: the SDK takes it as a receipt and counts what came after.
+        var own = Rig()
+        let r2 = own.addRoom(encrypted: true, mode: .allMessages)
+        own.send(r2, .a)
+        let after = own.send(r2)
+        own.sync(undecrypted: [after])
+        state = await own.state(r2)
+        #expect(state.attention && state.display == .count(1) && state.reasons == [.sdkUnreadAfterRead, .sdkCounts])
+
+        // (c) a local read position ahead of the SDK's receipt (not sent yet): the SDK's count is stale, the room reads as read.
+        var ahead = Rig(hangingBackoff: true)
+        let r3 = ahead.addRoom(encrypted: true, mode: .allMessages)
+        let m = ahead.send(r3)
+        ahead.sync()
+        await ahead.view(r3, m)  // reported here, not yet on the server
+        state = await ahead.state(r3)
+        #expect(!state.attention && state.reasons == [.intentCovers])
+    }
+
 }

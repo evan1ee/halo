@@ -12,7 +12,7 @@ Users are created per test run with random suffixes; every test starts from a fr
 
 | Suite | IDs | Runs on |
 |---|---|---|
-| Read state | S01–S22 ([UNREAD_REGRESSION_TESTS.md](UNREAD_REGRESSION_TESTS.md)) | Linux CI (driver) + local Mac (FFI) |
+| Read state | S01–S24 ([UNREAD_REGRESSION_TESTS.md](UNREAD_REGRESSION_TESTS.md)) | Linux CI (driver) + local Mac (FFI) |
 | Auth | S-AUTH-1 password login · S-AUTH-2 restore offline · S-AUTH-3 soft logout · S-AUTH-4 logout wipes data | Local Mac |
 | E2EE | S-E2EE-1 recovery-key restore decrypts history | Local Mac |
 | Room list | S-RL-1 list matches the server's joined rooms; order by recency | Local Mac |

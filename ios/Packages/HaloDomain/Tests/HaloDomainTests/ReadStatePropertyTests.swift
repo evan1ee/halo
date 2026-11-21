@@ -3,7 +3,7 @@ import HaloFoundation
 import Testing
 @testable import HaloDomain
 
-/// Seeded property tests P1–P6, P9, P10 of docs/testing/UNREAD_REGRESSION_TESTS.md §2. The seed is part of
+/// Seeded property tests P1–P6, P9–P11 of docs/testing/UNREAD_REGRESSION_TESTS.md §2. The seed is part of
 /// every failure message.
 @Suite("ReadStatePolicy properties")
 struct ReadStatePropertyTests {
@@ -14,7 +14,9 @@ struct ReadStatePropertyTests {
         let mode = [NotificationMode.allMessages, .mentionsAndKeywords, .mute].randomElement(using: &rng)!
         let membership = [Membership.joined, .joined, .joined, .invited, .left].randomElement(using: &rng)!
         let latest: LatestEventRef? = Bool.random(using: &rng)
-            ? LatestEventRef(timestamp: Date(timeIntervalSince1970: Double(Int.random(in: 0...200, using: &rng))), senderIsSelf: Bool.random(using: &rng))
+            ? LatestEventRef(
+                timestamp: Date(timeIntervalSince1970: Double(Int.random(in: 0...200, using: &rng))), senderIsSelf: Bool.random(using: &rng),
+                isLocal: Bool.random(using: &rng))
             : nil
         let notified = (0..<Int.random(in: 0...2, using: &rng)).map { _ in
             NotifiedRef(timestamp: Date(timeIntervalSince1970: Double(Int.random(in: 0...200, using: &rng))), isMention: Bool.random(using: &rng))
@@ -30,6 +32,7 @@ struct ReadStatePropertyTests {
                 isMarkedUnread: Bool.random(using: &rng) && Bool.random(using: &rng)),
             latestEvent: latest,
             localIntent: Bool.random(using: &rng) ? Date(timeIntervalSince1970: Double(Int.random(in: 0...200, using: &rng))) : nil,
+            receiptReadThrough: Bool.random(using: &rng) ? Date(timeIntervalSince1970: Double(Int.random(in: 0...200, using: &rng))) : nil,
             unconfirmedNotified: notified)
     }
 
@@ -41,13 +44,33 @@ struct ReadStatePropertyTests {
         }
     }
 
-    @Test("P1: a covering intent with nothing newer notified leaves attention only for marked-unread rooms and invites")
+    /// The SDK has applied the user's read position and still counts something (R-07): its receipt is at least the local
+    /// position, or the own latest event is on the server (the SDK takes it as a receipt).
+    private func sdkCountsAfterRead(_ input: RoomReadInputs) -> Bool {
+        guard input.counts.sdk != .zero else { return false }
+        if let intent = input.localIntent, let receipt = input.receiptReadThrough, let latest = input.latestEvent, latest.timestamp <= intent,
+           intent <= receipt { return true }
+        return input.latestEvent?.senderIsSelf == true && input.latestEvent?.isLocal == false && input.unconfirmedNotified.isEmpty
+    }
+
+    @Test("P1: a covering intent with nothing newer notified leaves attention only for marked-unread rooms and invites (unless P11)")
     func p1() {
         forAll { input, state, label in
             guard input.membership == .joined, let intent = input.localIntent, let latest = input.latestEvent, latest.timestamp <= intent,
-                input.unconfirmedNotified.isEmpty
+                input.unconfirmedNotified.isEmpty, !sdkCountsAfterRead(input)
             else { return }
             #expect(state.attention == input.counts.isMarkedUnread, Comment(rawValue: label))
+        }
+    }
+
+    @Test("P11: when the SDK has applied the read position and counts a notification, an all-messages room the server can't clear has attention (R-07)")
+    func p11() {
+        forAll { input, state, label in
+            let serverCanCount = !input.isEncrypted || input.counts.mode == .allMessages
+            guard input.membership == .joined, input.counts.mode == .allMessages, input.counts.sdk.unreadNotifications > 0,
+                sdkCountsAfterRead(input), !(input.counts.server == .zero && serverCanCount)
+            else { return }
+            #expect(state.attention, Comment(rawValue: label))
         }
     }
 
@@ -61,7 +84,7 @@ struct ReadStatePropertyTests {
     private func withNotified(_ a: RoomReadInputs, _ notified: [NotifiedRef]) -> RoomReadInputs {
         RoomReadInputs(
             roomID: a.roomID, membership: a.membership, isEncrypted: a.isEncrypted, counts: a.counts, latestEvent: a.latestEvent,
-            localIntent: a.localIntent, unconfirmedNotified: notified)
+            localIntent: a.localIntent, receiptReadThrough: a.receiptReadThrough, unconfirmedNotified: notified)
     }
 
     @Test("P3: the order of the notified events never changes the result")
@@ -145,7 +168,7 @@ struct ReadStatePropertyTests {
                 counts: RoomReadCounts(
                     mode: a.counts.mode, server: ServerCounts(notification: Int.random(in: 0...3, using: &rng), highlight: 0),
                     sdk: a.counts.sdk, isMarkedUnread: a.counts.isMarkedUnread),
-                latestEvent: a.latestEvent, localIntent: a.localIntent, unconfirmedNotified: a.unconfirmedNotified)
+                latestEvent: a.latestEvent, localIntent: a.localIntent, receiptReadThrough: a.receiptReadThrough, unconfirmedNotified: a.unconfirmedNotified)
             let ra = ReadStatePolicy.evaluate(a), rb = ReadStatePolicy.evaluate(b)
             #expect(ra.reasons.contains(.intentCovers) == rb.reasons.contains(.intentCovers), Comment(rawValue: "seed 7 case \(n)"))
         }

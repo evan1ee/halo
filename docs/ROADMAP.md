@@ -56,6 +56,9 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 - [x] Unit test for the `latestEvent` mapping; contract test for `deletePusher`.
 - [x] G-UNREAD and G-FFI evaluation written up ([testing/GATE_EVALUATION_M3.md](testing/GATE_EVALUATION_M3.md)); 👤 founder confirms the outcomes (HANDOFF §5).
 - [ ] 📱 V-RS-1, file-protection class on `halo.sqlite`, NSE access to the database.
+- [x] **P0** Review R-01 (docs/CODEBASE_REVIEW.md, D78): server-only counts in encrypted rooms are no unread (E3c), SDK counts decide whenever any is non-zero (E3b); S23, `encryptedNonMessageEvidence`, server-rules checks.
+- [x] **P0** Review R-07 (D79): E1/E1b give way to the SDK's counts once the SDK has applied the read position; S24, P11, `encryptedNonMessageEvidence`.
+- [ ] **P0** Review Phase 0, the rest (docs/CODEBASE_REVIEW.md §14): R-02/R-03/R-13 record lifecycle, R-04 carry-over end, R-05 one `ReadStateCoordinator`, R-06 order by event identity (ADR revisiting D47), R-10/R-12 session lifecycle, R-09 NSE runtime.
 
 **M4 Stickers v1** (exit: AC-S1–S5)
 - [x] Hide pack rooms (`one.mbm.halo.sticker_rooms`) from the room list and the badge (`RoomListCoordinator(hiddenRooms:)`; not checked on screen).

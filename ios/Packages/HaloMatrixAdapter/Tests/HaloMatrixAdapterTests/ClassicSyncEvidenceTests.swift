@@ -1,7 +1,9 @@
 import Foundation
+import HaloDomain
 import HaloFoundation
 import MatrixRustSDK
 import Testing
+@testable import HaloMatrixAdapter
 
 /// V-RS-7 decision (D73): classic `/sync` is the source of unread evidence. This checks, against `infra/dev`, that the pinned
 /// SDK exposes what the policy needs per room when it runs classic sync (`Client.syncOnceV2`, sliding sync off): the
@@ -105,6 +107,157 @@ struct ClassicSyncEvidenceTests {
         #expect(after.sdk == 0 && after.sdkMentions == 0, "the SDK's own counts after the other device read: \(after)")
         let receipt = try await room.loadUserReceipt(receiptType: .read, thread: .unthreaded, userId: me)
         #expect(receipt?.eventId == mention)
+    }
+
+    /// R-01 (docs/CODEBASE_REVIEW.md): in an encrypted room the server counts every encrypted event its push rules can't look
+    /// into (here a poll vote and a call invite) while the SDK counts only events that mark a room unread; and the SDK does count an event it
+    /// can't decrypt. The policy must not show unread for the first and must for the second; the SDK's `markAsRead` receipts
+    /// the vote itself, so the server count goes back to zero.
+    @Test("encrypted room over classic sync: a poll vote and a call invite are counted by the server only, an undecryptable event by the SDK too, also after the read position (R-01, R-07)")
+    func encryptedNonMessageEvidence() async throws {
+        let server = try #require(env["HALO_DEV_SERVER"])
+        let user = try #require(env["HALO_DEV_USER"]), peerUser = try #require(env["HALO_DEV_PEER_USER"])
+        let me = "@\(user):halo.localhost"
+        let mine = try await makeClient(server: server, user: user, password: try #require(env["HALO_DEV_PASSWORD"]), name: "enc-r01-me")
+        let peer = try await makeClient(server: server, user: peerUser, password: try #require(env["HALO_DEV_PEER_PASSWORD"]), name: "enc-r01-peer")
+        defer { Task { try? await mine.logout(); try? await peer.logout() } }
+
+        let roomID = try await peer.createRoom(request: CreateRoomParameters(
+            name: "Encrypted poll vote evidence", isEncrypted: true, visibility: .private, preset: .privateChat, invite: [me]))
+        try await sync(peer); try await sync(mine)
+        var joined: Room?
+        for _ in 0..<15 {
+            if let r = try? await mine.joinRoomById(roomId: roomID) { joined = r; break }
+            try await sync(mine); try await sync(peer)
+        }
+        let room = try #require(joined)
+        defer { Task { try? await room.leave(); try? await room.forget() } }
+        let peerRoom = try await { () async throws -> Room in
+            for _ in 0..<15 { try await sync(peer); if let r = try peer.getRoom(roomId: roomID) { return r } }
+            throw CancellationError()
+        }()
+        for _ in 0..<5 { try await sync(peer); try await sync(mine) }
+        let timeline = try await peerRoom.timeline()
+        func settle(_ done: @escaping (RoomInfo) -> Bool) async throws -> RoomInfo {
+            for _ in 0..<25 {
+                try await sync(mine)
+                let info = try await room.roomInfo()
+                if done(info) { return info }
+            }
+            return try await room.roomInfo()
+        }
+        /// What the room list and the badge evaluate for the room: the adapter's summary, read through the own receipt.
+        /// `readPosition: false` evaluates a device that has no read position for the room (never opened here, no receipt).
+        func policy(readPosition: Bool = true) async throws -> RoomReadState {
+            let summary = try await MatrixRoomListPort.summary(room, await mine.getNotificationSettings())
+            return ReadStatePolicy.evaluate(RoomReadInputs(
+                roomID: summary.id, membership: summary.membership, isEncrypted: summary.isEncrypted, counts: summary.read,
+                latestEvent: summary.latestEvent, localIntent: readPosition ? summary.ownReadThrough : nil,
+                receiptReadThrough: readPosition ? summary.ownReadThrough : nil))
+        }
+        func describe(_ info: RoomInfo) -> String {
+            "server \(info.notificationCount)/\(info.highlightCount), sdk \(info.numUnreadMessages) messages, \(info.numUnreadNotifications) notifications"
+        }
+
+        // A poll from the peer, read here.
+        try await timeline.createPoll(question: "Lunch?", answers: ["Yes", "No"], maxSelections: 1, pollKind: .disclosed)
+        for _ in 0..<3 { try await sync(peer) }
+        _ = try await settle { $0.numUnreadMessages >= 1 }
+        try await room.markAsRead(receiptType: .read)
+        var info = try await settle { $0.notificationCount == 0 && $0.numUnreadMessages == 0 }
+        #expect(info.notificationCount == 0 && info.numUnreadMessages == 0, "read baseline: \(describe(info))")
+        let pollID = try #require(await timeline.latestEventId())
+
+        // The SDK sends reactions in plaintext ("famously not encrypted"), so the server's push rules see `m.reaction` and don't count it.
+        _ = try await timeline.toggleReaction(itemId: .eventId(eventId: pollID), key: "👍")
+        for _ in 0..<3 { try await sync(peer) }
+        for _ in 0..<5 { try await sync(mine) }
+        info = try await room.roomInfo()
+        print("EVIDENCE reaction (plaintext from the SDK): \(describe(info))")
+        #expect(info.notificationCount == 0 && info.numUnreadMessages == 0, "a plaintext reaction counts nowhere: \(describe(info))")
+
+        // The peer votes: an encrypted `m.poll.response`. The server's rules see only `m.room.encrypted` and count it; the SDK
+        // doesn't count a poll response as unread.
+        let item = try await timeline.getEventTimelineItemByEventId(eventId: pollID)
+        guard case .msgLike(let like) = item.content, case .poll(_, _, _, let answers, _, _, _) = like.kind, let answer = answers.first else {
+            Issue.record("the poll isn't in the peer's timeline"); return
+        }
+        try await timeline.sendPollResponse(pollStartEventId: pollID, answers: [answer.id])
+        for _ in 0..<3 { try await sync(peer) }
+        info = try await settle { $0.notificationCount >= 1 }
+        print("EVIDENCE encrypted poll vote: \(describe(info))")
+        #expect(info.notificationCount == 1, "the server counts the encrypted poll vote: \(describe(info))")
+        #expect(info.numUnreadMessages == 0 && info.numUnreadNotifications == 0, "the SDK doesn't count a poll vote: \(describe(info))")
+        var state = try await policy()
+        #expect(!state.attention && !state.hasUnread && state.display == .none, "no unread for a poll vote: \(state)")
+        // Without a read position the latest event isn't covered, so the counts decide: the server's alone mean nothing (E3c).
+        state = try await policy(readPosition: false)
+        #expect(!state.attention && !state.hasUnread && state.display == .none && state.reasons == [.encServerOnly],
+                "no unread for a poll vote without a read position (R-01): \(state)")
+
+        // A call invite, encrypted like every event but reactions: the server counts it; the SDK, evaluating the push rules on
+        // the decrypted event, counts it as a notification (not a message); it becomes the room's latest event.
+        let invite = #"{"call_id":"r01","party_id":"p","version":"1","lifetime":60000,"offer":{"type":"offer","sdp":"v=0"}}"#
+        _ = try await peerRoom.sendRaw(eventType: "m.call.invite", content: invite)
+        for _ in 0..<3 { try await sync(peer) }
+        info = try await settle { $0.notificationCount >= 2 }
+        print("EVIDENCE encrypted call invite after the vote: \(describe(info))")
+        #expect(info.notificationCount == 2, "the server counts the vote and the call invite: \(describe(info))")
+        #expect(info.numUnreadMessages == 0 && info.numUnreadNotifications == 1, "the SDK counts the invite as a notification: \(describe(info))")
+        // The SDK updates the latest event asynchronously after a sync.
+        func latestIsCallInvite() async -> Bool {
+            if case .remote(_, _, _, _, .callInvite) = await room.latestEvent() { return true }
+            return false
+        }
+        for _ in 0..<10 where !(await latestIsCallInvite()) { try await sync(mine) }
+        let latest = await room.latestEvent()
+        #expect(await latestIsCallInvite(), "the call invite should be the latest event: \(latest)")
+        state = try await policy()
+        // Attention from the SDK's count; the server's extra count (the vote) makes the number approximate.
+        #expect(state.attention && state.display == .dot && state.reasons == [.sdkCounts, .encServerOvercount], "a call invite needs attention: \(state)")
+
+        // The SDK's mark-as-read receipts the latest event: the server count returns to zero.
+        try await room.markAsRead(receiptType: .read)
+        info = try await settle { $0.notificationCount == 0 }
+        #expect(info.notificationCount == 0, "mark as read covers the vote and the invite: \(describe(info))")
+
+        // An event no device can decrypt (opaque ciphertext sent over HTTP by the peer): the SDK counts it as unread, but its
+        // latest event leaves it out, so the read position still "covers the latest event". R-07: the SDK has applied that
+        // read position (its receipt is the one the room holds), so its count wins over E1.
+        let token = try peer.session().accessToken
+        func sendOpaque() async throws {
+            let opaque: [String: Any] = ["algorithm": "m.megolm.v1.aes-sha2", "ciphertext": "AwgA", "sender_key": "x", "session_id": "unknown-session", "device_id": "X"]
+            var request = URLRequest(url: try #require(URL(string: server + "/_matrix/client/v3/rooms/\(roomID.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? roomID)/send/m.room.encrypted/\(UUID().uuidString)")))
+            request.httpMethod = "PUT"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+            request.httpBody = try JSONSerialization.data(withJSONObject: opaque)
+            _ = try await URLSession.shared.data(for: request)
+        }
+        try await sendOpaque()
+        info = try await settle { $0.numUnreadMessages >= 1 }
+        print("EVIDENCE undecryptable event: \(describe(info))")
+        #expect(info.notificationCount == 1, "the server counts the undecryptable event: \(describe(info))")
+        #expect(info.numUnreadMessages == 1 && info.numUnreadNotifications == 1, "the SDK counts the undecryptable event: \(describe(info))")
+        state = try await policy()
+        #expect(state.attention && state.display == .count(1) && state.reasons.contains(.sdkUnreadAfterRead),
+                "an undecryptable message after the read position is unread (R-07): \(state)")
+        state = try await policy(readPosition: false)
+        #expect(state.attention && state.display == .count(1), "without a read position the SDK's count shows: \(state)")
+
+        // E1b: the user's own message, then another undecryptable event. The SDK takes the own event as a receipt and counts
+        // only what came after it; the latest event is the own message.
+        let myTimeline = try await room.timeline()
+        _ = try await myTimeline.send(msg: messageEventContentFromMarkdown(md: "my reply"))
+        info = try await settle { $0.numUnreadMessages == 0 }
+        #expect(info.numUnreadMessages == 0, "the own message resets the SDK's count (implicit receipt): \(describe(info))")
+        try await sendOpaque()
+        info = try await settle { $0.numUnreadMessages >= 1 }
+        print("EVIDENCE undecryptable event after an own message: \(describe(info))")
+        #expect(info.numUnreadMessages == 1, "the SDK counts only the event after the own message: \(describe(info))")
+        state = try await policy()
+        #expect(state.attention && state.display != .none && state.reasons.contains(.sdkUnreadAfterRead),
+                "an undecryptable message after the own message is unread (R-07): \(state)")
     }
 
     private func makeClient(server: String, user: String, password: String, name: String) async throws -> Client {
