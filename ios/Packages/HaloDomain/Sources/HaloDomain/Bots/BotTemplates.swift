@@ -113,13 +113,70 @@ public enum BotTemplates {
 
     private static func isID(_ text: String) -> Bool { !text.isEmpty && text.count <= 9 && text.allSatisfy(\.isASCII) && text.allSatisfy(\.isNumber) }
 
-    /// Text without markup: any tag or stray angle bracket fails the parse; the five basic entities are decoded.
+    /// Text without markup: any tag or stray angle bracket fails the parse; named and numeric entities decode in one pass.
     static func plain(_ text: String) -> String? {
         guard !text.contains("<"), !text.contains(">") else { return nil }
-        let decoded = text.replacingOccurrences(of: "&lt;", with: "<").replacingOccurrences(of: "&gt;", with: ">")
-            .replacingOccurrences(of: "&quot;", with: "\"").replacingOccurrences(of: "&#39;", with: "'")
-            .replacingOccurrences(of: "&amp;", with: "&")
-        let trimmed = decoded.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = HTMLEntities.decode(text).trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+/// Bounded O(n) single-pass HTML entity decoder shared by bot template parsers and formatted-body rendering.
+public enum HTMLEntities {
+    public static func decode(_ text: String) -> String {
+        guard text.contains("&") else { return text }
+        var out = ""
+        out.reserveCapacity(text.count)
+        var index = text.startIndex
+        while index < text.endIndex {
+            if text[index] == "&", let semi = findEntityEnd(in: text, after: index) {
+                let name = text[text.index(after: index)..<semi]
+                if let decoded = decodeEntity(name) {
+                    out.append(decoded)
+                    index = text.index(after: semi)
+                    continue
+                }
+            }
+            out.append(text[index])
+            index = text.index(after: index)
+        }
+        return out
+    }
+
+    /// Scans at most 12 characters ahead for `;` so malformed input with many `&` stays O(n).
+    private static func findEntityEnd(in text: String, after amp: String.Index) -> String.Index? {
+        var cursor = text.index(after: amp)
+        var steps = 0
+        while cursor < text.endIndex, steps < 12 {
+            let ch = text[cursor]
+            if ch == ";" { return cursor }
+            if ch == "&" || ch.isWhitespace { return nil }
+            cursor = text.index(after: cursor)
+            steps += 1
+        }
+        return nil
+    }
+
+    private static func decodeEntity(_ name: Substring) -> String? {
+        switch name {
+        case "lt": return "<"
+        case "gt": return ">"
+        case "quot": return "\""
+        case "apos": return "'"
+        case "nbsp": return " "
+        case "amp": return "&"
+        default: break
+        }
+        guard name.hasPrefix("#") else { return nil }
+        let digits = name.dropFirst()
+        let codePoint: UInt32?
+        if digits.hasPrefix("x") || digits.hasPrefix("X") {
+            let hex = digits.dropFirst()
+            codePoint = !hex.isEmpty ? UInt32(hex, radix: 16) : nil
+        } else {
+            codePoint = !digits.isEmpty ? UInt32(digits, radix: 10) : nil
+        }
+        guard let codePoint, codePoint != 0, let scalar = Unicode.Scalar(codePoint) else { return nil }
+        return String(scalar)
     }
 }

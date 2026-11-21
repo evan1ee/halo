@@ -12,6 +12,10 @@ struct BotTemplatesTests {
             .init(id: "2", text: "Call mum", isDone: true),
             .init(id: "14", text: "Tom & Jerry", isDone: false),
         ]))
+        #expect(BotTemplates.parse("📋 <b>Ann&#x27;s tasks:</b><br/>• [<b>#1</b>] Don&#x27;t &amp;#x27; forget<br/>")
+            == .todoList(title: "Ann's tasks", rows: [.init(id: "1", text: "Don't &#x27; forget", isDone: false)]))
+        #expect(BotTemplates.parse("✅ Marked task as done: <i>\"Buy Mom&#8217;s gift\"</i>")
+            == .taskDone(title: "Buy Mom\u{2019}s gift"))
     }
 
     @Test("line breaks spelled <br> or <br /> (as a sanitiser re-serialises them) parse the same")
