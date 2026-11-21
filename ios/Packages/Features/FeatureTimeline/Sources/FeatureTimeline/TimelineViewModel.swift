@@ -423,6 +423,12 @@ public final class TimelineViewModel {
         await coordinator.close()
     }
 
+    /// The id of the newest row on screen, or `nil` while there are none.
+    public var lastRowID: String? {
+        if case .live(let rows, _, _, _) = content { return rows.last?.id }
+        return nil
+    }
+
     /// The view has scrolled to the landing row.
     public func landingShown() { landingRow = nil }
 

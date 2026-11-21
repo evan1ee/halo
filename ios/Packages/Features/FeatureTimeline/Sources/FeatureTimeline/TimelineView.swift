@@ -87,7 +87,10 @@ public struct TimelineView: View {
                     // A lazy list estimates the height of rows it hasn't laid out, so one jump to a row far below the visible
                     // part lands short (seen in the simulator with 14 unread messages); jumping again after each layout converges.
                     for _ in 0..<4 {
-                        proxy.scrollTo(landing, anchor: model.landingIsUnread ? .top : .bottom)
+                        // Landing at the bottom means the newest row now: history can still be arriving in batches after
+                        // the landing row was chosen (seen on a reopened room), and that row would leave the list mid-history.
+                        let target = model.landingIsUnread ? landing : (model.lastRowID ?? landing)
+                        proxy.scrollTo(target, anchor: model.landingIsUnread ? .top : .bottom)
                         try? await Task.sleep(for: .milliseconds(120))
                     }
                     model.landingShown()
