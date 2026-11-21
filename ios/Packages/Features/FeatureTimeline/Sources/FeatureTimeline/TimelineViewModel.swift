@@ -494,7 +494,14 @@ public final class TimelineViewModel {
     }
 
     /// The view has scrolled to the landing row.
-    public func landingShown() { landingRow = nil }
+    public func landingShown() {
+        landingRow = nil
+        // Opened at a specific message (Activity → task): go there once the opening scroll is done.
+        if let target = initialEvent {
+            initialEvent = nil
+            Task { await jump(toEvent: target) }
+        }
+    }
 
     /// Reports whether the newest row is currently visible (TIMELINE §6: Detached state and "↓ N new" pill).
     public func setAtBottom(_ atBottom: Bool) {
@@ -529,6 +536,12 @@ public final class TimelineViewModel {
     @discardableResult
     public func jumpToReplyOriginal(from row: TimelineRow) async -> Bool {
         guard let target = row.reply?.eventID else { return false }
+        return await jump(toEvent: target)
+    }
+
+    /// Scrolls to the message with `target` and tints it, loading older pages (up to `maxJumpPages`) when it isn't loaded yet.
+    @discardableResult
+    public func jump(toEvent target: EventID) async -> Bool {
         for _ in 0...Self.maxJumpPages {
             guard case .live(let rows, _, let canLoadEarlier, _) = content else { return false }
             if let original = rows.first(where: { $0.eventID == target }) {
@@ -548,6 +561,9 @@ public final class TimelineViewModel {
         }
         return false
     }
+
+    /// The message to scroll to once the timeline has landed (set by whoever opens the room at a specific event, e.g. Activity).
+    public var initialEvent: EventID?
 
     public func jumpHandled() { jumpRequest = nil }
 

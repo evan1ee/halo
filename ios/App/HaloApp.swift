@@ -32,6 +32,8 @@ private struct RootView: View {
     @State private var newChat: NewChatViewModel?
     @State private var roomInfo: RoomDetailsViewModel?
     @State private var activity: BotActivityViewModel?
+    /// The message to scroll to in the room about to open (from Activity); consumed by that room's screen.
+    @State private var pendingEvent: EventID?
     @AppStorage(AppPreferences.appearanceKey) private var appearance = Appearance.system.rawValue
 
     private var colorScheme: ColorScheme? {
@@ -112,8 +114,9 @@ private struct RootView: View {
                     }
                     .sheet(item: $newChat) { NewChatView(model: $0) }
                     .sheet(item: $activity) { model in
-                        BotActivityView(model: model) { room, _ in
+                        BotActivityView(model: model) { room, event in
                             activity = nil
+                            pendingEvent = event
                             path.append(room)
                         }
                     }
@@ -128,7 +131,8 @@ private struct RootView: View {
                             })
                     }
                     .navigationDestination(for: RoomID.self) { room in
-                        TimelineScreen(root: root, room: room, openRoom: { path.append($0) })
+                        TimelineScreen(root: root, room: room, jumpTo: pendingEvent, openRoom: { path.append($0) })
+                            .onAppear { pendingEvent = nil }
                     }
                 }
             default:
@@ -172,11 +176,12 @@ private struct TimelineScreen: View {
     private let room: RoomID
     private let openRoom: @MainActor (RoomID) -> Void
 
-    init(root: AppRoot, room: RoomID, openRoom: @escaping @MainActor (RoomID) -> Void) {
+    init(root: AppRoot, room: RoomID, jumpTo: EventID? = nil, openRoom: @escaping @MainActor (RoomID) -> Void) {
         self.openRoom = openRoom
         self.root = root
         self.room = room
         let timeline = root.makeTimeline(room: room)
+        timeline.initialEvent = jumpTo
         _model = State(initialValue: timeline)
         _stickers = State(initialValue: root.makeStickerPanel(room: room, timeline: timeline))
     }

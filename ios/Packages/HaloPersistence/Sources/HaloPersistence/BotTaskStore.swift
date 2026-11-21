@@ -64,6 +64,16 @@ public struct BotTaskStore: BotTaskPort {
         } catch { throw .storage(.corrupted) }
     }
 
+    public func prune(before date: Date) async throws(HaloError) {
+        do {
+            let account = account
+            let cutoff = Self.millis(date)
+            try await database.pool.write { db in
+                try db.execute(sql: "DELETE FROM bot_task WHERE account = ? AND as_of_ts < ?", arguments: [account, cutoff])
+            }
+        } catch { throw .storage(.corrupted) }
+    }
+
     public func removeAll() async throws(HaloError) {
         do {
             let account = account

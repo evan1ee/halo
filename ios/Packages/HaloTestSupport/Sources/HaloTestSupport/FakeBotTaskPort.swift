@@ -37,6 +37,11 @@ public final class FakeBotTaskPort: BotTaskPort {
         return all.sorted { ($0.asOf, $1.key) > ($1.asOf, $0.key) }
     }
 
+    public func prune(before date: Date) async throws(HaloError) {
+        if let error = state.withLock({ $0.error }) { throw error }
+        state.withLock { state in state.entries = state.entries.filter { $0.value.asOf >= date } }
+    }
+
     public func removeAll() async throws(HaloError) {
         if let error = state.withLock({ $0.error }) { throw error }
         state.withLock { $0.entries = [:] }

@@ -70,9 +70,13 @@ public enum BotTaskDerivation {
     public static func entries(room: RoomID, observations: [BotObservation]) -> [BotTaskEntry] {
         var map: [BotTaskEntry.Key: BotTaskEntry] = [:]
 
-        /// The one task of `bot` with this title that isn't deleted; `nil` when there are none or several (a guess would be wrong).
+        /// The task a confirmation by title means: the one task `bot` created in this room (it has a source message) with that title,
+        /// as the timeline's `BotTaskTracker` reads it; else the one task of `bot` with that title. `nil` when there are none or
+        /// several (a guess would be wrong). Deleted tasks never match.
         func uniqueTodo(bot: String, title: String) -> BotTaskEntry.Key? {
             let matches = map.filter { $0.key.bot == bot && $0.key.kind == .todo && $0.value.title == title && $0.value.status != .deleted }
+            let created = matches.filter { $0.value.sourceEventID != nil }
+            if created.count == 1 { return created.keys.first }
             return matches.count == 1 ? matches.keys.first : nil
         }
 

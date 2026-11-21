@@ -51,4 +51,16 @@ struct BotTaskStoreTests {
         #expect(try await a.entries().isEmpty)
         #expect(try await b.entries().count == 1)
     }
+
+    @Test("prune deletes only the account's entries older than the cutoff")
+    func pruning() async throws {
+        let db = try database()
+        let a = BotTaskStore(database: db, account: try UserID("@a:x.org"))
+        let b = BotTaskStore(database: db, account: try UserID("@b:x.org"))
+        try await a.upsert([try entry("old", at: 10), try entry("new", at: 100)])
+        try await b.upsert([try entry("old", at: 10)])
+        try await a.prune(before: Date(timeIntervalSince1970: 50))
+        #expect(try await a.entries().map(\.key.id) == ["new"])
+        #expect(try await b.entries().count == 1)
+    }
 }

@@ -64,4 +64,17 @@ struct BotActivityCoordinatorTests {
         port.fail(with: .storage(.corrupted))
         #expect(await coordinator.snapshot().failed)
     }
+
+    @Test("attaching an account drops entries older than 90 days and keeps newer ones")
+    func pruningOnAttach() async throws {
+        let now = Date(timeIntervalSince1970: 1_000_000_000)
+        let port = FakeBotTaskPort()
+        func entry(_ id: String, age: TimeInterval) -> BotTaskEntry {
+            BotTaskEntry(key: .init(room: room, bot: bot, kind: .todo, id: id), title: id, status: .open, sourceEventID: nil, asOf: now.addingTimeInterval(-age))
+        }
+        try await port.upsert([entry("old", age: 91 * 24 * 3600), entry("fresh", age: 89 * 24 * 3600)])
+        let coordinator = BotActivityCoordinator(now: { now })
+        await coordinator.attach(port)
+        #expect(await coordinator.snapshot().entries.map(\.key.id) == ["fresh"])
+    }
 }

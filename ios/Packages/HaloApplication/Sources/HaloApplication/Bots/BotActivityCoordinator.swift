@@ -19,10 +19,14 @@ public actor BotActivityCoordinator {
 
     private var port: (any BotTaskPort)?
     private let log: HaloLog?
+    private let now: @Sendable () -> Date
+    /// Entries whose newest bot message is older than this are dropped when an account is attached (BOT_ACTIVITY FR-5).
+    public static let retention: TimeInterval = 90 * 24 * 3600
     /// The last entries stored per room, so an unchanged timeline snapshot writes nothing.
     private var lastWritten: [RoomID: [BotTaskEntry]] = [:]
 
-    public init(port: (any BotTaskPort)? = nil, log: HaloLog? = nil) {
+    public init(port: (any BotTaskPort)? = nil, log: HaloLog? = nil, now: @escaping @Sendable () -> Date = { Date() }) {
+        self.now = now
         self.port = port
         self.log = log?.with(category: .bot)
     }
@@ -61,9 +65,10 @@ public actor BotActivityCoordinator {
     }
 
     /// Starts keeping the index of the signed-in account in `port`.
-    public func attach(_ port: any BotTaskPort) {
+    public func attach(_ port: any BotTaskPort) async {
         self.port = port
         lastWritten = [:]
+        do { try await port.prune(before: now().addingTimeInterval(-Self.retention)) } catch { log?.warning("bot task prune failed", error: error) }
     }
 
     /// Sign-out: drops the port and the write cache, so nothing of this account is read or written for the next one.

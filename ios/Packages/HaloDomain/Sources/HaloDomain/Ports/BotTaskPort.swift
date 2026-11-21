@@ -1,3 +1,4 @@
+import Foundation
 import HaloFoundation
 
 /// Where the derived bot task index is kept (docs/features/BOT_ACTIVITY.md, `bot_task`). Implemented by `HaloPersistence`; faked
@@ -9,6 +10,9 @@ public protocol BotTaskPort: Sendable {
 
     /// All entries of the signed-in account, newest `asOf` first.
     func entries() async throws(HaloError) -> [BotTaskEntry]
+
+    /// Deletes entries whose newest bot message (`asOf`) is before `date` (BOT_ACTIVITY FR-5).
+    func prune(before date: Date) async throws(HaloError)
 
     /// Empties the index ("Rebuild index"): it is filled again as timelines are opened.
     func removeAll() async throws(HaloError)

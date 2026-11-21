@@ -47,6 +47,18 @@ struct BotTaskDerivationTests {
         #expect(deleted.first?.status == .deleted)
     }
 
+    @Test("a confirmation by title prefers the one task created in the room over list-only tasks with the same title")
+    func createdTaskWins() {
+        let entries = derive([
+            obs(1, "$l1", .todoList(title: "Tasks", rows: [.init(id: "3", text: "Pay rent", isDone: false)])),
+            obs(2, "$a", .taskAdded(id: "7", owner: "Ann", title: "Pay rent")),
+            obs(3, "$l2", .todoList(title: "Tasks", rows: [.init(id: "7", text: "Pay rent", isDone: false)])),
+            obs(4, nil, .taskDone(title: "Pay rent")),
+        ])
+        #expect(entries.first { $0.key.id == "7" }?.status == .completed)
+        #expect(entries.first { $0.key.id == "3" }?.status == .open)
+    }
+
     @Test("a reused id starts a new open task; the same input always gives the same entries (determinism, AC-A3)")
     func reuseAndDeterminism() {
         let input = [

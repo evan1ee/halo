@@ -893,6 +893,30 @@ struct TimelineViewModelTests {
         #expect(await !vm.jumpToReplyOriginal(from: rows[0]))
     }
 
+    @Test("opening at a specific event jumps to it once the landing is shown, loading history if needed, and only once")
+    func initialEventJump() async throws {
+        let room = try RoomID("!r:x.org")
+        let ann = try UserID("@ann:x.org")
+        func msg(_ id: String, ts: TimeInterval) throws -> TimelineItem {
+            TimelineItem(id: TimelineItemID(id), content: .event(TimelineEvent(
+                eventID: try EventID("$\(id)"), sender: ann, senderName: "Ann", timestamp: Date(timeIntervalSince1970: ts), isOwn: false, kind: .text(id, isEdited: false))))
+        }
+        let port = FakeTimelinePort()
+        port.addRoom(room, items: [try msg("new", ts: 100)], older: [[try msg("old", ts: 10)]])
+        let vm = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room), room: room)
+        vm.initialEvent = try EventID("$old")
+        await vm.start()
+        for _ in 0..<200_000 where vm.lastRowID != "new" { await Task.yield() }
+        #expect(vm.jumpRequest == nil && vm.initialEvent != nil)  // not before the landing is shown
+        vm.landingShown()
+        for _ in 0..<500_000 where vm.jumpRequest == nil { await Task.yield() }
+        #expect(vm.jumpRequest == "old" && vm.initialEvent == nil)
+        vm.jumpHandled()
+        vm.landingShown()
+        await Task.yield()
+        #expect(vm.jumpRequest == nil)
+    }
+
     @Test("a reply to a message older than the loaded page loads older pages until it is found, then jumps (FR-8)")
     func replyJumpLoadsHistory() async throws {
         let room = try RoomID("!r:x.org")
