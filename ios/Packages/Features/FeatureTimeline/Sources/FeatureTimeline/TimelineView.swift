@@ -392,7 +392,7 @@ private struct RowView: View {
                             .padding(.leading, 6)
                             .overlay(alignment: .leading) { Rectangle().fill(.secondary).frame(width: 2) }
                             .contentShape(Rectangle())
-                            .onTapGesture { model.jumpToReplyOriginal(from: row) }
+                            .onTapGesture { Task { await model.jumpToReplyOriginal(from: row) } }
                             .accessibilityAddTraits(.isButton)
                         }
                         if let image = row.image { ThumbnailView(image: image, model: model, isSticker: row.isSticker).accessibilityLabel(row.isSticker ? row.text : "Image") }

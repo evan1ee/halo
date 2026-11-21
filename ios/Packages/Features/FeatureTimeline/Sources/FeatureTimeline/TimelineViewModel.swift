@@ -510,15 +510,32 @@ public final class TimelineViewModel {
         return nil
     }
 
-    /// Scrolls to the message `row` replies to if it is among the loaded rows (TIMELINE FR-8). Returns `false` when it isn't
-    /// (older than the loaded page, or deleted); loading around an unloaded event is not built.
+    /// How many pages of history a reply jump may load to find its original.
+    static let maxJumpPages = 10
+
+    /// Scrolls to the message `row` replies to (TIMELINE FR-8). When it isn't loaded yet, older pages are loaded one at a time
+    /// (up to `maxJumpPages`) until it appears. Returns `false` when it wasn't found (deleted, too far back, or the load failed).
     @discardableResult
-    public func jumpToReplyOriginal(from row: TimelineRow) -> Bool {
-        guard let target = row.reply?.eventID, case .live(let rows, _, _, _) = content,
-              let original = rows.first(where: { $0.eventID == target }) else { return false }
-        jumpRequest = original.id
-        highlightedRowID = original.id
-        return true
+    public func jumpToReplyOriginal(from row: TimelineRow) async -> Bool {
+        guard let target = row.reply?.eventID else { return false }
+        for _ in 0...Self.maxJumpPages {
+            guard case .live(let rows, _, let canLoadEarlier, _) = content else { return false }
+            if let original = rows.first(where: { $0.eventID == target }) {
+                jumpRequest = original.id
+                highlightedRowID = original.id
+                return true
+            }
+            guard canLoadEarlier else { return false }
+            let before = rows.count
+            await loadEarlier()
+            // The page's diffs reach `content` a moment after the load returns.
+            for _ in 0..<5_000 {
+                if case .live(let now, false, _, _) = content, now.count != before { break }
+                if case .live(_, false, false, _) = content { break }
+                await Task.yield()
+            }
+        }
+        return false
     }
 
     public func jumpHandled() { jumpRequest = nil }

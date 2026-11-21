@@ -825,13 +825,33 @@ struct TimelineViewModelTests {
         await vm.start()
         for _ in 0..<200_000 where vm.lastRowID != "m3" { await Task.yield() }
         guard case .live(let rows, _, _, _) = vm.content else { Issue.record("not live"); return }
-        #expect(vm.jumpToReplyOriginal(from: rows[1]) && vm.jumpRequest == "m1" && vm.highlightedRowID == "m1")
+        #expect(await vm.jumpToReplyOriginal(from: rows[1]) && vm.jumpRequest == "m1" && vm.highlightedRowID == "m1")
         vm.clearHighlight()
         #expect(vm.highlightedRowID == nil)
         vm.jumpHandled()
         #expect(vm.jumpRequest == nil)
-        #expect(!vm.jumpToReplyOriginal(from: rows[2]) && vm.jumpRequest == nil)
-        #expect(!vm.jumpToReplyOriginal(from: rows[0]))
+        #expect(await !vm.jumpToReplyOriginal(from: rows[2]) && vm.jumpRequest == nil)
+        #expect(await !vm.jumpToReplyOriginal(from: rows[0]))
+    }
+
+    @Test("a reply to a message older than the loaded page loads older pages until it is found, then jumps (FR-8)")
+    func replyJumpLoadsHistory() async throws {
+        let room = try RoomID("!r:x.org")
+        let ann = try UserID("@ann:x.org")
+        func msg(_ id: String, replyTo: String? = nil, ts: TimeInterval) throws -> TimelineItem {
+            TimelineItem(id: TimelineItemID(id), content: .event(TimelineEvent(
+                eventID: try EventID("$\(id)"), sender: ann, senderName: "Ann", timestamp: Date(timeIntervalSince1970: ts), isOwn: false,
+                kind: .text(id, isEdited: false),
+                replyTo: try replyTo.map { ReplyPreview(eventID: try EventID($0), senderName: "Ann", snippet: "x") })))
+        }
+        let port = FakeTimelinePort()
+        port.addRoom(room, items: [try msg("new", replyTo: "$old", ts: 100)], older: [[try msg("mid", ts: 50)], [try msg("old", ts: 10)]])
+        let vm = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room))
+        await vm.start()
+        for _ in 0..<200_000 where vm.lastRowID != "new" { await Task.yield() }
+        guard case .live(let rows, _, _, _) = vm.content else { Issue.record("not live"); return }
+        #expect(await vm.jumpToReplyOriginal(from: rows[0]))
+        #expect(vm.jumpRequest == "old")
     }
 
     @Test("opening a file downloads it into a temporary folder, shows it, and deleting it again on close; big files are refused")
