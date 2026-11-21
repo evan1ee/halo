@@ -211,6 +211,17 @@ public enum TimelinePortContract {
         try await session.edit(event: id, newText: edited)
         _ = try await wait("the edit", body: edited) { event in if case .text(_, let isEdited) = event.kind { isEdited } else { false } }
 
+        // The edit history lists the original text first and the edit last (TIMELINE FR-9).
+        // (The SDK reads its event cache, which holds the edit a moment after the timeline shows it.)
+        var history = try await session.editHistory(of: id)
+        for _ in 0..<20 where history.count < 2 {
+            try await Task.sleep(for: .milliseconds(500))
+            history = try await session.editHistory(of: id)
+        }
+        guard history.count >= 2, history.first?.text == text, history.last?.text == edited else {
+            throw ContractViolation("editHistory must list the original first and the edit last, got \(history.map(\.text))")
+        }
+
         try await session.delete(event: id)
         _ = try await wait("the deletion", body: "<redacted>") { _ in true }
         await session.close()

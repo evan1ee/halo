@@ -761,6 +761,41 @@ struct TimelineViewModelTests {
         #expect(mine.readers.map(\.name) == ["Ann", "bob", "cy"] && mine.readers.first?.avatar == avatar)
     }
 
+    @Test("edit history lists every version newest first with the current one marked; unedited rows offer none; failures are explained (FR-9)")
+    func editHistory() async throws {
+        let room = try RoomID("!r:x.org")
+        let me = try UserID("@me:x.org")
+        let event = try EventID("$m1")
+        let item = TimelineItem(id: TimelineItemID("m1"), content: .event(TimelineEvent(
+            eventID: event, sender: me, senderName: "Me", timestamp: Date(timeIntervalSince1970: 10), isOwn: true, kind: .text("third", isEdited: true))))
+        let plain = TimelineItem(id: TimelineItemID("m2"), content: .event(TimelineEvent(
+            eventID: try EventID("$m2"), sender: me, senderName: "Me", timestamp: Date(timeIntervalSince1970: 20), isOwn: true, kind: .text("x", isEdited: false))))
+        let port = FakeTimelinePort()
+        port.addRoom(room, items: [item, plain])
+        port.setEditHistory([
+            EditRevision(text: "first", timestamp: Date(timeIntervalSince1970: 100)),
+            EditRevision(text: "second", timestamp: Date(timeIntervalSince1970: 200)),
+            EditRevision(text: "third", timestamp: nil),
+        ], for: event, in: room)
+        let vm = TimelineViewModel(
+            coordinator: TimelineCoordinator(port: port, room: room), locale: Locale(identifier: "en_US"), timeZone: TimeZone(identifier: "UTC") ?? .gmt)
+        await vm.start()
+        for _ in 0..<200_000 where vm.lastRowID != "m2" { await Task.yield() }
+        guard case .live(let rows, _, _, _) = vm.content else { Issue.record("not live"); return }
+        #expect(rows[0].isEdited && !rows[1].isEdited)
+        await vm.showEditHistory(rows[1])
+        #expect(vm.editHistory == nil)  // not edited: nothing opens
+        await vm.showEditHistory(rows[0])
+        guard case .loaded(let versions)? = vm.editHistory else { Issue.record("not loaded: \(String(describing: vm.editHistory))"); return }
+        #expect(versions.map(\.text) == ["third", "second", "first"] && versions.map(\.isCurrent) == [true, false, false])
+        #expect(versions[0].time == nil && versions[2].time?.contains("1970") == true)
+        vm.closeEditHistory()
+        #expect(vm.editHistory == nil)
+        // An event the port knows no history for.
+        await vm.showEditHistory(TimelineRow(id: "z", style: .ownMessage, sender: nil, text: "t (edited)", eventID: try EventID("$unknown"), isOwn: true).editedForTest())
+        guard case .failed? = vm.editHistory else { Issue.record("expected failure"); return }
+    }
+
     @Test("a shared location shows its description with a Maps link; bad geo URIs give no link and never crash")
     func locations() throws {
         let vm = TimelineViewModel(
@@ -1116,5 +1151,13 @@ struct MediaPreviewPolicyTests {
         #expect(vm.newSinceDetached == 0)
 
         await vm.stop()
+    }
+}
+
+private extension TimelineRow {
+    func editedForTest() -> TimelineRow {
+        var copy = self
+        copy.isEdited = true
+        return copy
     }
 }

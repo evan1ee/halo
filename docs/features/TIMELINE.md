@@ -19,7 +19,7 @@ Show a room's history correctly and smoothly, and report what the user has actua
 - FR-6 Read receipts: up to 3 avatars + count under the newest message each user has read. *Built: up to 3 avatars + count under own sent messages (name/picture from the timeline's own senders, else the ID's name part); not built: receipts under others' messages, tap for the full list.*
 - FR-7 Reactions row; tap toggles (`toggle_reaction`).
 - FR-8 Reply preview (`load_reply_details`), tap to jump (built for loaded rows only) (paginate around the event if needed — `timeline_with_configuration` with `TimelineFocus.Event` **[VERIFIED F-FFI-22]**).
-- FR-9 Edits show "(edited)"; long-press → "View edit history" (`edit_revisions`, F-FFI-22) (P2).
+- FR-9 Edits show "(edited)"; long-press → "View edit history" (`edit_revisions`, F-FFI-22) (P2; built).
 - FR-10 Bot messages from allowlisted senders go through `BotMessageRenderer` ([BOT_MESSAGES.md](BOT_MESSAGES.md)); all messages get "View source".
 - FR-11 Threads: thread replies inline as replies (D17).
 

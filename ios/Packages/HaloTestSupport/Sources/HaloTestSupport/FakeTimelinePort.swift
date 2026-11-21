@@ -13,6 +13,7 @@ public final class FakeTimelinePort: TimelinePort {
         var openSessions = 0
         var sent: [String] = []
         var paginateCalls = 0
+        var histories: [EventID: [EditRevision]] = [:]
         var typing: [UserID] = []
         var typingContinuations: [UUID: AsyncStream<[UserID]>.Continuation] = [:]
         var typingCalls: [Bool] = []
@@ -76,6 +77,8 @@ public final class FakeTimelinePort: TimelinePort {
     public func sentMentions(in id: RoomID) -> [[UserID]] { rooms.withLock { $0[id]?.sentMentions ?? [] } }
     public func sentTexts(in id: RoomID) -> [String] { rooms.withLock { $0[id]?.sent ?? [] } }
     public func openSessions(in id: RoomID) -> Int { rooms.withLock { $0[id]?.openSessions ?? 0 } }
+    /// What `editHistory(of:)` returns for `event`.
+    public func setEditHistory(_ revisions: [EditRevision], for event: EventID, in id: RoomID) { rooms.withLock { $0[id]?.histories[event] = revisions } }
     public func paginateCalls(in id: RoomID) -> Int { rooms.withLock { $0[id]?.paginateCalls ?? 0 } }
 
     // MARK: TimelinePort
@@ -230,10 +233,22 @@ public final class FakeTimelinePort: TimelinePort {
         func edit(event: EventID, newText: String) async throws(HaloError) {
             let trimmed = newText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { throw .invalidInput("EMPTY_MESSAGE") }
+            nonisolated(unsafe) var original = ""
             try modify(event) { e in
                 guard e.isOwn else { return nil }
+                if case .text(let before, _) = e.kind { original = before }
                 return TimelineEvent(eventID: e.eventID, sender: e.sender, senderName: e.senderName, timestamp: e.timestamp, isOwn: true, kind: .text(trimmed, isEdited: true), sendState: e.sendState, reactions: e.reactions)
             }
+            port.rooms.withLock {
+                var history = $0[room]?.histories[event] ?? [EditRevision(text: original, timestamp: nil)]
+                history.append(EditRevision(text: trimmed, timestamp: nil))
+                $0[room]?.histories[event] = history
+            }
+        }
+
+        func editHistory(of event: EventID) async throws(HaloError) -> [EditRevision] {
+            guard let revisions = port.rooms.withLock({ $0[room]?.histories[event] }) else { throw .notFound }
+            return revisions
         }
 
         func delete(event: EventID) async throws(HaloError) {

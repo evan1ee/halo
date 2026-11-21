@@ -29,6 +29,12 @@ def main():
     mine = fx.send(me, room, {"msgtype": "m.text", "body": "Seen check from the app user"})
     time.sleep(1)
     fx.call("POST", f"/_matrix/client/v3/rooms/{room}/receipt/m.read/{mine}", {}, peer)
+    # An edited message of the app user, for "View edit history".
+    draft = fx.send(me, room, {"msgtype": "m.text", "body": "Edit history: first version"})
+    for text in ("Edit history: second version", "Edit history: third version"):
+        time.sleep(1)
+        fx.send(me, room, {"msgtype": "m.text", "body": "* " + text, "m.new_content": {"msgtype": "m.text", "body": text},
+                           "m.relates_to": {"rel_type": "m.replace", "event_id": draft}})
     print("sent sample events to", room)
 
 

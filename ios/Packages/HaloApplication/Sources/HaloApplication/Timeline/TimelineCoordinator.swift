@@ -182,6 +182,12 @@ public actor TimelineCoordinator {
         try await session.edit(event: event, newText: newText)
     }
 
+    /// The versions of an edited message, oldest first. Throws `.cancelled` when the timeline isn't open.
+    public func editHistory(of event: EventID) async throws(HaloError) -> [EditRevision] {
+        guard let session, case .live = status else { throw .cancelled }
+        return try await session.editHistory(of: event)
+    }
+
     /// Deletes the user's own message.
     public func delete(event: EventID) async throws(HaloError) {
         guard let session, case .live = status else { throw .cancelled }

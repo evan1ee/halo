@@ -178,6 +178,9 @@ public struct TimelineView: View {
         .alert("Can't open file", isPresented: Binding(get: { model.openFileError != nil }, set: { if !$0 { model.dismissOpenFileError() } })) {
             Button("OK", role: .cancel) {}
         } message: { Text(model.openFileError ?? "") }
+        .sheet(isPresented: Binding(get: { model.editHistory != nil }, set: { if !$0 { model.closeEditHistory() } })) {
+            EditHistoryView(state: model.editHistory ?? .loading)
+        }
         .sheet(isPresented: Binding(get: { model.reactionTarget != nil }, set: { if !$0 { model.cancelReactionPicker() } })) {
             ReactionPicker(model: model).presentationDetents([.medium])
         }
@@ -338,6 +341,7 @@ private struct RowView: View {
             Button("Copy", systemImage: "doc.on.doc") { UIPasteboard.general.string = text }
         }
         #endif
+        if row.isEdited { Button("View edit history", systemImage: "clock.arrow.circlepath") { Task { await model.showEditHistory(row) } } }
         if row.source != nil { Button("View source", systemImage: "chevron.left.forwardslash.chevron.right") { showingSource = true } }
         if row.isOwn {
             if row.canEdit { Button("Edit", systemImage: "pencil") { model.beginEdit(row) } }
@@ -627,6 +631,33 @@ private struct PaginationTrigger: Hashable {
 }
 
 /// "View source" for a text message: who sent it, which event, and the plain and HTML bodies exactly as received.
+private struct EditHistoryView: View {
+    let state: TimelineViewModel.EditHistoryState
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                switch state {
+                case .loading: ProgressView()
+                case .failed(let text): ContentUnavailableView("Edit history unavailable", systemImage: "clock.badge.exclamationmark", description: Text(text))
+                case .loaded(let versions):
+                    List(versions) { version in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(version.text.isEmpty ? "(no text)" : version.text)
+                            Text([version.isCurrent ? "Current" : nil, version.time].compactMap { $0 }.joined(separator: " · "))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Edit history")
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+        .presentationDetents([.medium, .large])
+    }
+}
+
 private struct MessageSourceView: View {
     let source: TimelineRow.Source
     @Environment(\.dismiss) private var dismiss

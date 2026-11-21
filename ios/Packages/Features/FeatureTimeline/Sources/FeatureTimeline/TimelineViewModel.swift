@@ -60,6 +60,8 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     public var endsRun = true
     /// When it was sent, as a short time ("9:41 AM"); set for messages.
     public var time: String?
+    /// The text was edited; "View edit history" is offered.
+    public var isEdited = false
     /// How many other people's newest read receipt is on this own message (TIMELINE FR-6); 0 for anything else.
     public var seenBy = 0
     /// The first three of them, for the avatars under the message; the name is theirs if they wrote in this timeline, else their Matrix ID's name part.
@@ -313,6 +315,7 @@ public final class TimelineViewModel {
     private var observation: Task<Void, Never>?
     private let dateFormatter: DateFormatter
     private let timeFormatter: DateFormatter
+    private let editTimeFormatter: DateFormatter
     private let receipts: ReadReceiptCoordinator?
     private let drafts: DraftCoordinator?
     private let imagePreparer: (any ImagePreparing)?
@@ -384,6 +387,12 @@ public final class TimelineViewModel {
         time.dateStyle = .none
         time.timeStyle = .short
         timeFormatter = time
+        let edit = DateFormatter()
+        edit.locale = time.locale
+        edit.timeZone = time.timeZone
+        edit.dateStyle = .medium
+        edit.timeStyle = .short
+        editTimeFormatter = edit
     }
 
     isolated deinit { observation?.cancel(); dwellTask?.cancel() }
@@ -589,6 +598,46 @@ public final class TimelineViewModel {
     public func dismissOpenFileError() { openFileError = nil }
 
     public func loadEarlier() async { await coordinator.paginateBackwards() }
+
+    // MARK: Edit history (TIMELINE FR-9)
+
+    public struct EditVersion: Equatable, Identifiable, Sendable {
+        public let id: Int
+        public let text: String
+        public let time: String?
+        public let isCurrent: Bool
+    }
+
+    public enum EditHistoryState: Equatable, Sendable {
+        case loading
+        /// Newest first.
+        case loaded([EditVersion])
+        case failed(String)
+    }
+
+    /// The edit history sheet; `nil` while closed.
+    public private(set) var editHistory: EditHistoryState?
+
+    /// Opens the history of an edited message: every version with the time of the edit, newest first.
+    public func showEditHistory(_ row: TimelineRow) async {
+        guard row.isEdited, let id = row.eventID else { return }
+        editHistory = .loading
+        do {
+            let revisions = try await coordinator.editHistory(of: id)
+            guard editHistory == .loading else { return }  // closed meanwhile
+            let versions = revisions.enumerated().map { index, revision in
+                EditVersion(
+                    id: index, text: revision.text, time: revision.timestamp.map { editTimeFormatter.string(from: $0) },
+                    isCurrent: index == revisions.count - 1)
+            }
+            editHistory = .loaded(versions.reversed())
+        } catch {
+            guard editHistory == .loading else { return }
+            editHistory = .failed(error == .network(retryable: true) ? "Can't reach the server." : "The edit history isn't available.")
+        }
+    }
+
+    public func closeEditHistory() { editHistory = nil }
 
     /// Sends the draft (MESSAGING FR-2). The message shows up in the timeline as a local echo.
     public func send() async {
@@ -987,6 +1036,10 @@ public final class TimelineViewModel {
         var row = baseRow(item)
         if case .event(let event) = item.content {
             if !event.isOwn { row.avatar = event.senderAvatar }
+            switch event.kind {
+            case .text(_, true), .notice(_, true), .emote(_, true): row.isEdited = true
+            default: break
+            }
             if event.isOwn, row.style == .ownMessage, event.sendState == .sent {
                 row.seenBy = event.readBy.count
                 row.readers = event.readBy.prefix(Self.maxReaderAvatars).map { user in

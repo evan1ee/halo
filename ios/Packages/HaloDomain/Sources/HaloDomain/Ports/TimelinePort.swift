@@ -14,6 +14,10 @@ public protocol TimelinePort: Sendable {
     func dropWarm() async
 }
 
+extension TimelineSession {
+    public func editHistory(of event: EventID) async throws(HaloError) -> [EditRevision] { throw .unsupported("EDIT_HISTORY") }
+}
+
 extension TimelinePort {
     public func warm(_ rooms: [RoomID]) async {}
     public func dropWarm() async {}
@@ -54,6 +58,9 @@ public protocol TimelineSession: Sendable {
     /// Replaces the text of the user's own message. Blank text throws `.invalidInput("EMPTY_MESSAGE")`; someone
     /// else's message throws `.forbidden`.
     func edit(event: EventID, newText: String) async throws(HaloError)
+
+    /// The versions of an edited message, oldest first (TIMELINE FR-9). Sessions that can't tell throw `.unsupported`.
+    func editHistory(of event: EventID) async throws(HaloError) -> [EditRevision]
 
     /// Deletes (redacts) the user's own message.
     func delete(event: EventID) async throws(HaloError)

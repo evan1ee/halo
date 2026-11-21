@@ -206,6 +206,19 @@ final class MatrixTimelineSession: TimelineSession {
         } catch { throw ErrorMapper.map(error) }
     }
 
+    func editHistory(of event: EventID) async throws(HaloError) -> [EditRevision] {
+        do {
+            return try await timeline.editRevisions(eventId: event.rawValue).map { record in
+                let text: String
+                switch TimelineMapper.kind(of: record.content) {
+                case .text(let body, _), .notice(let body, _), .emote(let body, _): text = body
+                default: text = ""
+                }
+                return EditRevision(text: text, timestamp: record.timestamp.map { TimelineMapper.date($0) })
+            }
+        } catch { throw ErrorMapper.map(error) }
+    }
+
     func delete(event: EventID) async throws(HaloError) {
         do { try await timeline.redactEvent(eventOrTransactionId: .eventId(eventId: event.rawValue), reason: nil) } catch { throw ErrorMapper.map(error) }
     }

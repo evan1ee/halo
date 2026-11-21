@@ -207,3 +207,13 @@ public struct PollOption: Sendable, Equatable {
         self.votes = votes
     }
 }
+
+/// One version of an edited message, oldest first (the original text, then each edit); TIMELINE FR-9.
+public struct EditRevision: Sendable, Equatable {
+    public let text: String
+    public let timestamp: Date?
+    public init(text: String, timestamp: Date?) {
+        self.text = text
+        self.timestamp = timestamp
+    }
+}
