@@ -15,7 +15,7 @@ One place for account, notifications, privacy, appearance, storage, diagnostics 
 |---|---|
 | Account | Profile, sessions/devices, sign out |
 | Security | Verification status, recovery key setup/change, key backup state |
-| Notifications | Permission status, push health, defaults for DMs/groups, mentions & keywords |
+| Notifications | Permission status, push health, defaults for DMs/groups (built: all messages / mentions and keywords), mentions & keywords toggles (not built) |
 | Privacy | Read receipts: public / private (D7); typing notices on/off; media previews; URL previews |
 | Appearance | System / light / dark, text size follows Dynamic Type, timeline density |
 | Stickers | Manage packs (built: list + remove enabled packs), favourites (links to the sticker manager; not built) |

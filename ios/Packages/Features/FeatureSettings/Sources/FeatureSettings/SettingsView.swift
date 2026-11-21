@@ -29,6 +29,7 @@ public struct SettingsView: View {
     private let replaceRecovery: (@MainActor () async -> Result<String, SettingsMessage>)?
     @State private var newRecoveryKey: String?
     @State private var settingUpRecovery = false
+    private let notificationDefaults: NotificationDefaultsActions?
     private let notificationStatus: (@Sendable () async -> String)?
     private let openSystemSettings: (() -> Void)?
     @State private var notifications = ""
@@ -53,7 +54,7 @@ public struct SettingsView: View {
         reconcile: (@Sendable () async -> Void)? = nil, unexplainedAuditCount: (@Sendable () async -> Int?)? = nil,
         storageSizes: (@Sendable () async -> [StorageSize])? = nil,
         security: (@MainActor () -> [StorageSize])? = nil, setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil,
-        replaceRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil, notificationStatus: (@Sendable () async -> String)? = nil, openSystemSettings: (() -> Void)? = nil, onSignOut: @escaping () -> Void
+        replaceRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil, notificationDefaults: NotificationDefaultsActions? = nil, notificationStatus: (@Sendable () async -> String)? = nil, openSystemSettings: (() -> Void)? = nil, onSignOut: @escaping () -> Void
     ) {
         self.diagnostics = diagnostics
         self.reconcile = reconcile
@@ -62,6 +63,7 @@ public struct SettingsView: View {
         self.stickerPacks = stickerPacks
         self.storageSizes = storageSizes
         self.notificationStatus = notificationStatus
+        self.notificationDefaults = notificationDefaults
         self.security = security
         self.setUpRecovery = setUpRecovery
         self.replaceRecovery = replaceRecovery
@@ -178,6 +180,7 @@ public struct SettingsView: View {
                 }
                 .task { notifications = await notificationStatus() }
             }
+            if let notificationDefaults { NotificationDefaultsSection(actions: notificationDefaults) }
             if let storageSizes {
                 Section {
                     ForEach(storage) { LabeledContent($0.name, value: $0.formatted) }

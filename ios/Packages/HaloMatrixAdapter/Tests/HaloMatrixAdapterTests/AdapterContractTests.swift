@@ -531,6 +531,35 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
+    @Test("Notification defaults per chat type round-trip through push rules and are restored (changes the account's defaults while it runs)")
+    func notificationDefaults() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
+            on: details)
+        try await MatrixSyncPort(session: session).start()  // the push rules arrive with the first sync
+        try await Task.sleep(for: .seconds(4))
+        let defaults = MatrixNotificationDefaultsPort(session: session)
+        func waitFor(_ expected: RoomNotificationChoice, _ kind: NotificationDefaultKind) async throws -> RoomNotificationChoice {
+            var seen = try await defaults.mode(for: kind)
+            for _ in 0..<20 where seen != expected {  // the rule change reaches the SDK's ruleset with a sync
+                try await Task.sleep(for: .seconds(1))
+                seen = try await defaults.mode(for: kind)
+            }
+            return seen
+        }
+        for kind in NotificationDefaultKind.allCases {
+            let original = try await defaults.mode(for: kind)
+            let other: RoomNotificationChoice = original == .allMessages ? .mentionsAndKeywords : .allMessages
+            try await defaults.setMode(other, for: kind)
+            #expect(try await waitFor(other, kind) == other)
+            try await defaults.setMode(original, for: kind)
+            #expect(try await waitFor(original, kind) == original)
+        }
+        try await session.logout()
+    }
+
     @Test("Bot allowlist syncs via one.mbm.halo.bot_allowlist account data and restores original", .enabled(if: env["HALO_DEV_SERVER"] != nil))
     func botAllowlist() async throws {
         let session = port()

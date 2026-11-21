@@ -37,6 +37,7 @@ final class AppRoot {
     private let roomPort: MatrixRoomPort
     private let chatCreation: MatrixChatCreationPort
     private let profilePort: MatrixProfilePort
+    private let notificationDefaultsPort: MatrixNotificationDefaultsPort
     private let botAllowlistPort: MatrixBotAllowlistPort
     private let roomCoordinator: RoomListCoordinator
     /// The signed-in account, once the session is ready (kept out of "New chat" results).
@@ -58,6 +59,7 @@ final class AppRoot {
         self.sessionCoordinator = sessionCoordinator
         let profilePort = MatrixProfilePort(session: session)
         self.profilePort = profilePort
+        self.notificationDefaultsPort = MatrixNotificationDefaultsPort(session: session)
         botAllowlistPort = MatrixBotAllowlistPort(session: session)
         let roomCoordinator = RoomListCoordinator(port: MatrixRoomListPort(session: session), loadsAllPages: true, hiddenRooms: MatrixHiddenRoomsPort(session: session), profiles: profilePort)
         self.roomCoordinator = roomCoordinator
@@ -269,6 +271,24 @@ final class AppRoot {
             isMe: member.isMe, avatar: member.avatar, media: media,
             onIgnoreChanged: { [roomCoordinator] in await roomCoordinator.refreshIgnoredUsers() },
             onOpenRoom: onOpenRoom)
+    }
+
+    /// Settings → Notifications → default per chat type (account push rules).
+    func notificationDefaults() -> NotificationDefaultsActions {
+        let port = notificationDefaultsPort
+        @Sendable func kind(_ target: NotificationDefaultTarget) -> NotificationDefaultKind { target == .directChats ? .directChats : .groupChats }
+        return NotificationDefaultsActions(
+            load: { target in
+                switch try? await port.mode(for: kind(target)) {
+                case .allMessages: .allMessages
+                case .mentionsAndKeywords: .mentionsAndKeywords
+                case .mute, nil: nil
+                }
+            },
+            save: { target, choice in
+                do { try await port.setMode(choice == .allMessages ? .allMessages : .mentionsAndKeywords, for: kind(target)) } catch { return false }
+                return true
+            })
     }
 
     /// Settings → Stickers → Sticker packs: the packs the user enabled (the only ones that can be removed from the list).

@@ -90,6 +90,7 @@ private struct RootView: View {
                                         case .failure(let failure): .failure(SettingsMessage(failure.text))
                                         }
                                     },
+                                    notificationDefaults: root.notificationDefaults(),
                                     notificationStatus: { await root.notificationStatus() },
                                     openSystemSettings: {
                                         if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
