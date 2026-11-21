@@ -738,6 +738,26 @@ struct TimelineViewModelTests {
         #expect(vm.row(try item(own: true, state: .sending, readers: 2)).seenLabel == nil)
     }
 
+    @Test("a shared location shows its description with a Maps link; bad geo URIs give no link and never crash")
+    func locations() throws {
+        let vm = TimelineViewModel(
+            coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: try RoomID("!r:x.org")),
+            locale: Locale(identifier: "en_US"), timeZone: TimeZone(identifier: "UTC") ?? .gmt)
+        func item(_ body: String, _ geo: String) throws -> TimelineItem {
+            TimelineItem(
+                id: TimelineItemID("id"),
+                content: .event(TimelineEvent(
+                    eventID: nil, sender: try UserID("@alice:x.org"), senderName: "Alice", timestamp: Date(timeIntervalSince1970: 0),
+                    isOwn: false, kind: .location(body: body, geoURI: geo))))
+        }
+        let row = vm.row(try item("Cafe", "geo:52.5,13.4;u=10"))
+        #expect(row.text == "📍 Cafe" && row.styled?.runs.first?.link?.host == "maps.apple.com")
+        #expect(vm.row(try item("", "geo:1,2")).text == "📍 Shared location")
+        for bad in ["geo:", "geo:;", "geo:abc", "geo:91,0", "http://x", ""] {
+            #expect(TimelineViewModel.mapsURL(geoURI: bad) == nil)
+        }
+    }
+
     @Test("opening a file downloads it into a temporary folder, shows it, and deleting it again on close; big files are refused")
     func openingFiles() async throws {
         let port = FakeMediaPort()

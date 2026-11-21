@@ -130,6 +130,7 @@ enum TimelineMapper {
                 .media(MediaAttachment(
                     kind: .file, body: message.body, source: ref(content.source),
                     mimeType: content.info?.mimetype, size: content.info?.size.map(Int.init)))
+            case .location(let content): .location(body: message.body, geoURI: content.geoUri)
             default: .unsupported
             }
         case .sticker(let body, _, let source): .sticker(body: body, source: ref(source))

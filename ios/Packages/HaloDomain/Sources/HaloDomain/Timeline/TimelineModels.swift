@@ -120,6 +120,8 @@ public enum TimelineEventKind: Sendable, Equatable {
     /// Can't be decrypted (yet). The reason is shown honestly, never hidden (R-P0-3).
     case undecryptable(UTDReason)
     case membership(user: UserID?, displayName: String?, change: MembershipChange)
+    /// A shared place (`m.location`): the sender's description and the raw `geo:` URI (TIMELINE FR-2, static, no map).
+    case location(body: String, geoURI: String)
     case otherState
     case unsupported
 }

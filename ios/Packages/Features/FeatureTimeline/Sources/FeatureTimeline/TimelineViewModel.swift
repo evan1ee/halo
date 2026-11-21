@@ -489,7 +489,7 @@ public final class TimelineViewModel {
         for item in items {
             guard case .event(let event) = item.content, !event.isOwn, event.timestamp > readThrough else { continue }
             switch event.kind {
-            case .text, .notice, .emote, .media, .sticker: return item.id.rawValue
+            case .text, .notice, .emote, .media, .sticker, .location: return item.id.rawValue
             default: continue
             }
         }
@@ -1013,12 +1013,28 @@ public final class TimelineViewModel {
             case .membership(_, let displayName, let change):
                 let who = displayName ?? name
                 return TimelineRow(id: id, style: .state, sender: nil, text: "\(who) \(Self.phrase(change))")
+            case .location(let body, let geoURI):
+                let text = "📍 \(body.isEmpty ? "Shared location" : body)"
+                var styled = AttributedString(text)
+                if let url = Self.mapsURL(geoURI: geoURI) { styled.link = url }
+                return TimelineRow(
+                    id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: text, eventID: event.eventID, isOwn: event.isOwn,
+                    reactions: Self.chips(event.reactions), styled: styled, source: plainSource(event, body))
             case .otherState:
                 return TimelineRow(id: id, style: .state, sender: nil, text: Self.settingsText)
             case .unsupported:
                 return TimelineRow(id: id, style: .placeholder, sender: name, text: "Unsupported event", isOwn: event.isOwn)
             }
         }
+    }
+
+    /// An Apple Maps link for a `geo:lat,lon[;u=…]` URI; `nil` when the coordinates are missing or out of range.
+    static func mapsURL(geoURI: String) -> URL? {
+        guard geoURI.hasPrefix("geo:") else { return nil }
+        guard let head = geoURI.dropFirst(4).split(separator: ";").first else { return nil }
+        let coords = head.split(separator: ",")
+        guard coords.count >= 2, let lat = Double(coords[0]), let lon = Double(coords[1]), abs(lat) <= 90, abs(lon) <= 180 else { return nil }
+        return URL(string: "https://maps.apple.com/?ll=\(lat),\(lon)&q=Shared%20location")
     }
 
     static func reply(_ preview: ReplyPreview?) -> TimelineRow.Reply? {
