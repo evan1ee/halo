@@ -105,6 +105,9 @@ public struct HaloDatabase: Sendable {
                 """)
             try db.execute(sql: "CREATE INDEX notification_record_room ON notification_record(account, room_id, event_ts)")
         }
+        migrator.registerMigration("v8-read-intent-order") { db in
+            try db.execute(sql: "ALTER TABLE read_intent ADD COLUMN timeline_order INTEGER NOT NULL DEFAULT 0")
+        }
         return migrator
     }
 }

@@ -27,6 +27,8 @@ public final class FakeTimelinePort: TimelinePort {
         var imageFailure: HaloError?
         var stickerFailure: HaloError?
         var sentMentions: [[UserID]] = []
+        /// Optional override for `latestEventID()` (e.g. a trailing hidden event like an encrypted poll vote, R-01/R-06).
+        var latestEventOverride: EventID?
     }
 
     private let rooms = Mutex<[RoomID: Room]>([:])
@@ -82,6 +84,8 @@ public final class FakeTimelinePort: TimelinePort {
     public func openSessions(in id: RoomID) -> Int { rooms.withLock { $0[id]?.openSessions ?? 0 } }
     /// What `editHistory(of:)` returns for `event`.
     public func setEditHistory(_ revisions: [EditRevision], for event: EventID, in id: RoomID) { rooms.withLock { $0[id]?.histories[event] = revisions } }
+    /// Overrides what `TimelineSession.latestEventID()` returns (models a trailing non-row event like a poll vote).
+    public func setLatestEventID(_ eventID: EventID?, in id: RoomID) { rooms.withLock { $0[id]?.latestEventOverride = eventID } }
     public func paginateCalls(in id: RoomID) -> Int { rooms.withLock { $0[id]?.paginateCalls ?? 0 } }
 
     // MARK: TimelinePort
@@ -311,6 +315,17 @@ public final class FakeTimelinePort: TimelinePort {
             port.rooms.withLock { rooms in
                 for (index, item) in (rooms[room]?.items ?? []).enumerated() {
                     if case .event(let e) = item.content, e.localID == localID, e.eventID == nil { return (index, item) }
+                }
+                return nil
+            }
+        }
+
+        func latestEventID() async -> EventID? {
+            port.rooms.withLock { rooms in
+                guard let r = rooms[room] else { return nil }
+                if let override = r.latestEventOverride { return override }
+                for item in r.items.reversed() {
+                    if case .event(let e) = item.content, let id = e.eventID { return id }
                 }
                 return nil
             }

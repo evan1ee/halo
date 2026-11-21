@@ -18,6 +18,7 @@ public actor ReadReceiptCoordinator {
         var event: EventID
         var timestamp: Date
         var sent: Bool
+        var sequence: Int64
     }
 
     /// The last storage failure, if any (also logged). Intents stay in memory and are still sent.
@@ -35,6 +36,7 @@ public actor ReadReceiptCoordinator {
     private var lastSend: [RoomID: ContinuousClock.Instant] = [:]
     private var failures: [RoomID: Int] = [:]
     private var positionBroadcaster = SnapshotBroadcaster<[RoomID: Date]>()
+    private var readPositionBroadcaster = SnapshotBroadcaster<[RoomID: LocalReadPosition]>()
     private var scheduled: [RoomID: Task<Void, Never>] = [:]
     /// Rooms with a send in progress; a second send for the same room would repeat the receipt.
     private var sending: Set<RoomID> = []
@@ -84,12 +86,15 @@ public actor ReadReceiptCoordinator {
         } catch { if generation == started { storageFailed(error) }; return }
         guard generation == started else { return }
         for intent in stored {
-            if let current = intents[intent.room], current.timestamp >= intent.timestamp { continue }
-            intents[intent.room] = Intent(event: intent.event, timestamp: intent.timestamp, sent: intent.isSent)
+            if let current = intents[intent.room] {
+                if current.sequence > intent.sequence { continue }
+                if current.sequence == intent.sequence && current.timestamp >= intent.timestamp { continue }
+            }
+            intents[intent.room] = Intent(event: intent.event, timestamp: intent.timestamp, sent: intent.isSent, sequence: intent.sequence)
             created[intent.room] = intent.createdAt
             if !intent.isSent { schedule(intent.room, after: dueIn(intent.room)) }
         }
-        positionBroadcaster.publish(currentPositions())
+        publishPositions()
     }
 
     /// Forgets the signed-out account: its intents, timers and store. Nothing of it is sent with the next account's
@@ -104,28 +109,51 @@ public actor ReadReceiptCoordinator {
         failures = [:]
         store = nil
         lastStorageError = nil
-        positionBroadcaster.publish([:])
+        publishPositions()
     }
 
     /// The privacy setting (D7); applies to receipts sent from now on.
     public func setPrivateReceipts(_ value: Bool) { isPrivate = value }
 
-    /// The event time the user reached in each room on this device, now and after every change (the policy's local
-    /// intent, UNREAD_STATE rule E1).
+    /// The event time the user reached in each room on this device, now and after every change.
     public func positions() -> AsyncStream<[RoomID: Date]> { positionBroadcaster.subscribe(current: currentPositions()) }
 
+    /// The full read position (event ID, timestamp, send state) reached in each room on this device (R-06, ADR-0020).
+    public func readPositions() -> AsyncStream<[RoomID: LocalReadPosition]> {
+        readPositionBroadcaster.subscribe(current: currentReadPositions())
+    }
+
     private func currentPositions() -> [RoomID: Date] { intents.mapValues(\.timestamp) }
+
+    private func currentReadPositions() -> [RoomID: LocalReadPosition] {
+        intents.mapValues { LocalReadPosition(eventID: $0.event, timestamp: $0.timestamp, isSent: $0.sent) }
+    }
+
+    private func publishPositions() {
+        positionBroadcaster.publish(currentPositions())
+        readPositionBroadcaster.publish(currentReadPositions())
+    }
 
     /// The time of the newest event the user has read in `room` through this coordinator, if any.
     public func readPosition(of room: RoomID) -> Date? { intents[room]?.timestamp }
 
+    /// The full local read position (event ID, timestamp, sent flag) in `room`, if any (R-06).
+    public func localReadPosition(of room: RoomID) -> LocalReadPosition? {
+        intents[room].map { LocalReadPosition(eventID: $0.event, timestamp: $0.timestamp, isSent: $0.sent) }
+    }
+
     /// The newest event the user has seen in `room`. Local echoes have no event ID and must not be reported.
-    /// Candidates not newer than the current intent are ignored.
-    public func reportSeen(room: RoomID, event: EventID, timestamp: Date) {
-        if let current = intents[room], timestamp <= current.timestamp { return }
-        intents[room] = Intent(event: event, timestamp: timestamp, sent: false)
+    /// - Parameter advancesOrder: pass `true` when the open timeline proves `event` is strictly after the previously
+    ///   seen event in timeline order; equal or clock-skewed timestamps then still advance the intent (R-06, ADR-0020).
+    public func reportSeen(room: RoomID, event: EventID, timestamp: Date, advancesOrder: Bool = false) {
+        if let current = intents[room] {
+            if current.event == event { return }
+            if !advancesOrder && timestamp <= current.timestamp { return }
+        }
+        let nextSequence = (intents[room]?.sequence ?? 0) + 1
+        intents[room] = Intent(event: event, timestamp: timestamp, sent: false, sequence: nextSequence)
         created[room] = wallClock()
-        positionBroadcaster.publish(currentPositions())
+        publishPositions()
         failures[room] = nil
         persist(room)
         schedule(room, after: dueIn(room))
@@ -136,12 +164,20 @@ public actor ReadReceiptCoordinator {
     public func markRoomRead(_ room: RoomID, latestEventTime: Date?) async throws(HaloError) {
         let event = try await port.markRoomRead(room: room, isPrivate: isPrivate)
         try await port.setMarkedUnread(room: room, false)
-        guard let event, let latestEventTime, latestEventTime > (intents[room]?.timestamp ?? .distantPast) else { return }
-        intents[room] = Intent(event: event, timestamp: latestEventTime, sent: true)
+        guard let event else { return }
+        let timestamp = latestEventTime ?? intents[room]?.timestamp ?? wallClock()
+        if let current = intents[room], current.event == event {
+            intents[room]?.sent = true
+            publishPositions()
+            persist(room)
+            return
+        }
+        let nextSequence = (intents[room]?.sequence ?? 0) + 1
+        intents[room] = Intent(event: event, timestamp: timestamp, sent: true, sequence: nextSequence)
         created[room] = wallClock()
         scheduled[room]?.cancel()
         scheduled[room] = nil
-        positionBroadcaster.publish(currentPositions())
+        publishPositions()
         persist(room)
     }
 
@@ -170,7 +206,7 @@ public actor ReadReceiptCoordinator {
     /// Writes the room's intent without blocking the caller; writes are ordered by the store's own monotonic rules.
     private func persist(_ room: RoomID) {
         guard let store, let intent = intents[room], let createdAt = created[room] else { return }
-        let record = ReadIntent(room: room, event: intent.event, timestamp: intent.timestamp, isSent: intent.sent, createdAt: createdAt)
+        let record = ReadIntent(room: room, event: intent.event, timestamp: intent.timestamp, isSent: intent.sent, createdAt: createdAt, sequence: intent.sequence)
         Task { [weak self] in
             do throws(HaloError) { try await store.save(record) } catch { await self?.storageFailed(error) }
         }
@@ -213,7 +249,11 @@ public actor ReadReceiptCoordinator {
         do {
             try await port.sendReceipt(room: room, event: intent.event, isPrivate: isPrivate)
             // A newer intent may have arrived while sending; only mark ours.
-            if intents[room]?.event == intent.event { intents[room]?.sent = true; persist(room) }
+            if intents[room]?.event == intent.event {
+                intents[room]?.sent = true
+                publishPositions()
+                persist(room)
+            }
             failures[room] = nil
             do { try await port.setFullyRead(room: room, event: intent.event) } catch {
                 // The receipt is what counts; the marker follows with the next intent.

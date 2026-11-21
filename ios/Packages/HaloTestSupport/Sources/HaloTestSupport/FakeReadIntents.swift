@@ -16,7 +16,8 @@ public final class FakeReadIntents: ReadIntentPort {
     public func save(_ intent: ReadIntent) async throws(HaloError) {
         store.withLock { rooms in
             if let existing = rooms[intent.room] {
-                if intent.timestamp < existing.timestamp { return }
+                if intent.sequence < existing.sequence { return }
+                if intent.sequence == existing.sequence, intent.timestamp < existing.timestamp { return }
                 if intent.event == existing.event, existing.isSent, !intent.isSent { return }
             }
             rooms[intent.room] = intent
@@ -27,7 +28,8 @@ public final class FakeReadIntents: ReadIntentPort {
         store.withLock { rooms in
             guard let i = rooms[room], i.event == event, !i.isSent else { return }
             rooms[room] = ReadIntent(
-                room: room, event: event, timestamp: i.timestamp, isSent: false, createdAt: i.createdAt, attempts: i.attempts + 1, lastError: code)
+                room: room, event: event, timestamp: i.timestamp, isSent: false, createdAt: i.createdAt,
+                attempts: i.attempts + 1, lastError: code, sequence: i.sequence)
         }
     }
 

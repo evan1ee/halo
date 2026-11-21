@@ -11,12 +11,16 @@ struct ReadStatePolicyTests {
     private func inputs(
         membership: Membership = .joined, encrypted: Bool = false, mode: NotificationMode = .allMessages,
         server: ServerCounts = .zero, sdk: SDKCounts = .zero, marked: Bool = false,
-        latest: LatestEventRef? = nil, intent: Date? = nil, receipt: Date? = nil, notified: [NotifiedRef] = []
+        latest: LatestEventRef? = nil, intent: Date? = nil, receipt: Date? = nil,
+        intentEventID: EventID? = nil, intentConfirmed: Bool = false, ownReceiptEventID: EventID? = nil,
+        notified: [NotifiedRef] = []
     ) -> RoomReadInputs {
         RoomReadInputs(
             roomID: room, membership: membership, isEncrypted: encrypted,
             counts: RoomReadCounts(mode: mode, server: server, sdk: sdk, isMarkedUnread: marked),
-            latestEvent: latest, localIntent: intent, receiptReadThrough: receipt, unconfirmedNotified: notified)
+            latestEvent: latest, localIntent: intent, receiptReadThrough: receipt,
+            localIntentEventID: intentEventID, localIntentConfirmed: intentConfirmed, ownReceiptEventID: ownReceiptEventID,
+            unconfirmedNotified: notified)
     }
 
     private func eval(_ i: RoomReadInputs) -> RoomReadState { ReadStatePolicy.evaluate(i) }
@@ -71,6 +75,48 @@ struct ReadStatePolicyTests {
         #expect(eval(inputs(encrypted: true, server: server, sdk: utd, latest: echo)).reasons == [.ownLatest])
         // S13: an own message after unread the SDK already reset (implicit receipt): no SDK count, the server's are hidden.
         #expect(eval(inputs(server: ServerCounts(notification: 3, highlight: 0), latest: own)).reasons == [.ownLatest])
+    }
+
+    @Test("R-06 (ADR-0020): E1 orders by event identity when known and yields to server/SDK counts once the receipt is confirmed")
+    func identityAndConfirmedIntent() throws {
+        let e1 = try EventID("$e1"), e2 = try EventID("$e2")
+        let counted = ServerCounts(notification: 1, highlight: 0)
+
+        // Same timestamp, different event IDs: identity says e1 does NOT cover e2.
+        let equalTs = eval(inputs(
+            server: counted,
+            latest: LatestEventRef(timestamp: t0, senderIsSelf: false, eventID: e2),
+            intent: t0, intentEventID: e1))
+        #expect(equalTs.attention && equalTs.display == .count(1) && equalTs.reasons == [.serverCounts])
+
+        // Skewed earlier timestamp, different event IDs: identity says e1 does NOT cover e2.
+        let skewed = eval(inputs(
+            server: counted,
+            latest: LatestEventRef(timestamp: t0 - 600, senderIsSelf: false, eventID: e2),
+            intent: t0, intentEventID: e1))
+        #expect(skewed.attention && skewed.display == .count(1) && skewed.reasons == [.serverCounts])
+
+        // Matching event IDs, unconfirmed receipt: E1 clears optimistically even if timestamp were skewed.
+        let matched = eval(inputs(
+            server: counted,
+            latest: LatestEventRef(timestamp: t0 + 600, senderIsSelf: false, eventID: e1),
+            intent: t0, intentEventID: e1, intentConfirmed: false))
+        #expect(!matched.attention && matched.reasons == [.intentCovers])
+
+        // Latest event ID unknown (Room.latestEvent, F-FFI-15), receipt confirmed on server, yet server still counts:
+        // stale intent yields immediately instead of hiding unread for 7 days (revisiting D72).
+        let staleConfirmed = eval(inputs(
+            server: counted,
+            latest: LatestEventRef(timestamp: t0, senderIsSelf: false),
+            intent: t0, intentEventID: e1, intentConfirmed: true))
+        #expect(staleConfirmed.attention && staleConfirmed.display == .count(1) && staleConfirmed.reasons == [.intentStale, .serverCounts])
+
+        // Unconfirmed (pending) intent with unknown latest event ID still clears optimistically.
+        let pending = eval(inputs(
+            server: counted,
+            latest: LatestEventRef(timestamp: t0, senderIsSelf: false),
+            intent: t0, intentEventID: e1, intentConfirmed: false))
+        #expect(!pending.attention && pending.reasons == [.intentCovers])
     }
 
     @Test("E2: server zero wins over stale SDK counts in all-messages rooms")

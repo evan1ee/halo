@@ -9,7 +9,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 - **Checks:** `scripts/prepush.sh` passes (SwiftLint not configured, skipped); `scripts/prepush.sh` now also builds `Halo-Debug` for the simulator. All 17 contract tests (`infra/dev`) pass, none skipped (`scripts/contract-test.sh` after `infra/dev/create-fixtures.py`).
 - **CI:** PRs #1–#15 merged. CI runs only the Linux-portable packages (Foundation, Domain, TestSupport, Application): adapter, persistence, platform, features and the app are tested only by `prepush.sh` on a Mac. `licenses` runs only on SDK/inventory changes.
 
-- **Codebase review (2026-11-21):** [docs/CODEBASE_REVIEW.md](docs/CODEBASE_REVIEW.md), 27 findings (7 P0, all unread/badge), Top 10 risks, Phase 0–3 roadmap. **Fixed:** R-01 (D78), R-07 (D79), R-02/R-03/R-13 (record lifecycle + GRDB `notification_record`), R-04 (carry-over completeness), R-05/R-08 (`ReadStateCoordinator` + `NotificationProcessor`). Next in Phase 0: R-06 (ADR revisiting D47/D72), R-10/R-12, R-09.
+- **Codebase review (2026-11-21):** [docs/CODEBASE_REVIEW.md](docs/CODEBASE_REVIEW.md), 27 findings (7 P0, all unread/badge), Top 10 risks, Phase 0–3 roadmap. **All 7 P0s FIXED:** R-01 (D78), R-07 (D79), R-02/R-03/R-13 (record lifecycle + GRDB), R-04 (carry-over completeness), R-05/R-08 (`ReadStateCoordinator` + `NotificationProcessor`, PR #50), R-06 (identity/timeline read order, D80/ADR-0020). Next in Phase 0: R-10/R-12, R-09.
 - **Loop state (2026-11-21, paused):** the small unblocked items are done (this session: timeline receipts/location/polls/calls/reply jump, Sticker packs, notification defaults and mention toggles, room info refresh; all but a few taps seen in the simulator). What is left is large or needs a decision: see §6 "Candidates". Restart with `/loop` once the founder picks one.
 - **Earlier loop state (2026-11-20):** what is left that needs no device, signing, gate decision or product decision is small polish: the bot reaction menu (FR-4, product detail), V-ST-2 (needs an expiring token the dev Synapse can't give). The loop paused here; restart it to take those.
 
@@ -28,13 +28,15 @@ Summary only; details per feature: [docs/development/IMPLEMENTATION_NOTES.md](do
 **D78 (founder approved the R-01 fix):** in an encrypted room the SDK's counts decide whenever any is non-zero (E3b); server counts with all SDK counts at zero are no unread (E3c, `ENC_SERVER_ONLY`). Evidence F-SDK-3.
 **D79 (founder approved the R-07 fix):** E1/E1b give way to positive SDK counts once the SDK has applied the read position (its receipt ≥ the local one, or the own latest event is on the server); a local position ahead of the receipt and a pending echo still clear at once.
 
-Full list: docs/DECISION_LOG.md (D1–D79), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
+**D80 (ADR-0020, R-06):** open timelines pick receipt candidates by timeline index (`TimelineReadTracker`) and target `Timeline.latestEventId()` at the tail (clearing trailing poll votes); `read_intent` adds monotonic `timeline_order` (v8); E1 compares event IDs when both are known and yields (`INTENT_STALE`) once a sent receipt is confirmed by the server/sync (revises D47, D72).
+
+Full list: docs/DECISION_LOG.md (D1–D80), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
 Earlier pushes: `git log`.
-- **R-05 / R-08 (`ReadStateCoordinator` + `NotificationProcessor`):** `HaloApplication` (`ReadState/ReadStateCoordinator.swift` replacing `Badge/BadgeCoordinator.swift`, `Notifications/NotificationProcessor.swift`), `FeatureRoomList` (`RoomListViewModel.swift` consumes `ReadStateCoordinator`, no `ReadStatePolicy` calls), `HaloDomain` (`NotificationFetchPort.swift` room `mode` + `isInvite`), `HaloMatrixAdapter` (`MatrixNotificationPort.swift` resolves room mode), `HaloPlatform` (`SystemBadge.swift` `AttentionCache.setForeground`/`isForeground`/`roomIDs`), `HaloTestSupport` (`FakeNotificationFetchPort.swift`), `ios/App/{AppRoot,HaloApp}.swift`, `ios/NotificationService/NotificationService.swift`, `ios/project.yml` + `Halo.xcodeproj`, `scripts/check_boundaries.py`.
-- **Tests:** `RoomListViewModelTests.roomListAndBadgeAlwaysAgree` (PS31), `NotificationProcessorTests` (PS32 + display/encrypted/duplicate/suppressed/error), `AttentionCacheTests`.
-- **Docs:** `docs/CODEBASE_REVIEW.md`, `docs/ROADMAP.md`, `HANDOFF.md`.
+- **R-06 (identity/timeline read order, D80 / ADR-0020):** `HaloDomain` (`ReadState.swift` `LocalReadPosition`, `LatestEventRef.eventID`, `RoomReadInputs` identity/confirmation fields, `ReasonCode.intentStale`; `RoomList.swift` `ownReceiptEventID`; `ReadIntentPort.swift` `sequence`; `TimelinePort.swift` `latestEventID()`), `HaloPersistence` (`HaloDatabase.swift` migration v8, `ReadIntentStore.swift` monotonic `timeline_order`), `HaloApplication` (`ReadReceiptCoordinator.swift` `advancesOrder`/`readPositions()`, `RoomListCoordinator.swift`, `ReadStateCoordinator.swift` sync-epoch confirmation, `TimelineCoordinator.swift`), `FeatureTimeline` (`TimelineReadTracker.swift`, `TimelineViewModel.swift`), `HaloMatrixAdapter` (`MatrixRoomListPort.swift`, `MatrixTimelinePort.swift`), `HaloTestSupport` (`FakeReadIntents.swift`, `FakeTimelinePort.swift`).
+- **Tests:** `ReadStatePolicyTests.identityAndConfirmedIntent`, `ReadIntentStoreTests.timelineOrderAdvancesAcrossEqualAndSkewedTimestamps`, `ReadReceiptCoordinatorTests`, `TimelineReadTrackerTests` (PS28, PS29, tail poll-vote), scenarios S18 (inverted) and S29.
+- **Docs:** `docs/adr/0020-identity-read-order.md` (new), `docs/adr/README.md`, `docs/DECISION_LOG.md` (D80), `docs/testing/UNREAD_REGRESSION_TESTS.md` (S18, S29), `docs/CODEBASE_REVIEW.md`, `docs/ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
 Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
@@ -50,7 +52,7 @@ Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISS
 
 ## 6. Next steps
 The queue is docs/ROADMAP.md §"Remaining work", worked by the loop in docs/development/AUTONOMOUS_LOOP.md.
-0. **Review Phase 0 (P0, correctness first):** docs/CODEBASE_REVIEW.md §14, in order: R-06 (PR + ADR revisiting D47/D72), R-10/R-12, R-09; then Phase 1–3.
+0. **Review Phase 0 (remaining):** docs/CODEBASE_REVIEW.md §14, in order: R-10/R-12 (`ClientDelegate`, single-flight restore), R-09 (NSE lightweight runtime); then Phase 1–3.
 
 **Candidates for the founder to pick** after Phase 0 (each is a PR-sized feature or needs a decision):
 1. **M7 Bot Activity** slices 1–3 are merged/pushed (founder picked it); the rest is ROADMAP "M7 Bot Activity": nothing in M7 except `bot_action` persistence and the 👎 😝 🎉 menu (BOT_MESSAGES FR-4, product detail).

@@ -189,6 +189,7 @@ public final class MatrixRoomListPort: RoomListPort {
         let read = await readCounts(of: room, settings: settings, isEncrypted: isEncrypted, isOneToOne: isDirect)
         let inviter = await inviterInfo(room)
         let latest = await room.latestEvent()
+        let ownReceipt = await ownReadThrough(of: room, counts: read, hasRecords: hasRecords)
         return try RoomSummary(
             id: RoomID(room.id()),
             name: room.displayName(),
@@ -197,7 +198,8 @@ public final class MatrixRoomListPort: RoomListPort {
             membership: membership(room.membership()),
             read: read,
             latestEvent: latestEvent(latest),
-            ownReadThrough: await ownReadThrough(of: room, counts: read, hasRecords: hasRecords),
+            ownReadThrough: ownReceipt?.timestamp,
+            ownReceiptEventID: ownReceipt?.eventID,
             isFavourite: (try? await room.roomInfo())?.isFavourite ?? false,
             preview: preview(latest, ownUserID: room.ownUserId()),
             avatar: avatar(room.avatarUrl()),
@@ -222,10 +224,10 @@ public final class MatrixRoomListPort: RoomListPort {
     /// Event id → time for resolved receipt targets; an event's time never changes.
     private static let eventTimes = Mutex<[String: Date]>([:])
 
-    /// The time of the event the user's newest own receipt points at (read from another device). Resolved for rooms that
-    /// look unread or have pending notification records (so a UTD push read on another device is still covered, R-02);
-    /// quiet rooms without records cost nothing. A failed lookup leaves the room as unread, the safe error.
-    static func ownReadThrough(of room: Room, counts: RoomReadCounts, hasRecords: Bool = false) async -> Date? {
+    /// The event ID and time of the event the user's newest own receipt points at (read from another device). Resolved for
+    /// rooms that look unread or have pending notification records (so a UTD push read on another device is still covered,
+    /// R-02); quiet rooms without records cost nothing. A failed lookup leaves the room as unread, the safe error.
+    static func ownReadThrough(of room: Room, counts: RoomReadCounts, hasRecords: Bool = false) async -> (eventID: EventID, timestamp: Date)? {
         let looksUnread = counts.server.notification > 0 || counts.server.highlight > 0 || counts.sdk.unreadMessages > 0
             || counts.sdk.unreadNotifications > 0 || counts.isMarkedUnread
         guard looksUnread || hasRecords else { return nil }
@@ -236,12 +238,12 @@ public final class MatrixRoomListPort: RoomListPort {
             let at = found.receipt.timestamp ?? 0
             if newest == nil || at >= newest!.receipt { newest = (found.eventId, at) }
         }
-        guard let eventId = newest?.eventId else { return nil }
-        if let known = eventTimes.withLock({ $0[eventId] }) { return known }
-        guard let event = try? await room.loadOrFetchEvent(eventId: eventId) else { return nil }
+        guard let rawEventId = newest?.eventId, let eventID = try? EventID(rawEventId) else { return nil }
+        if let known = eventTimes.withLock({ $0[rawEventId] }) { return (eventID, known) }
+        guard let event = try? await room.loadOrFetchEvent(eventId: rawEventId) else { return nil }
         let time = Date(timeIntervalSince1970: Double(event.timestamp()) / 1000)
-        eventTimes.withLock { $0[eventId] = time }
-        return time
+        eventTimes.withLock { $0[rawEventId] = time }
+        return (eventID, time)
     }
 
     /// The room's unread counts and effective notification mode. A mode that can't be read counts as "all messages":

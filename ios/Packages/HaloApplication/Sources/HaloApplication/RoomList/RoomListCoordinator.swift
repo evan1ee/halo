@@ -223,7 +223,12 @@ public actor RoomListCoordinator {
     }
 
     private func publishReadInputs() {
-        let inputs = rooms.map { RoomReadInputs(roomID: $0.id, membership: $0.membership, isEncrypted: $0.isEncrypted, counts: $0.read, latestEvent: $0.latestEvent, localIntent: $0.ownReadThrough, receiptReadThrough: $0.ownReadThrough) }
+        let inputs = rooms.map {
+            RoomReadInputs(
+                roomID: $0.id, membership: $0.membership, isEncrypted: $0.isEncrypted, counts: $0.read,
+                latestEvent: $0.latestEvent, localIntent: $0.ownReadThrough, receiptReadThrough: $0.ownReadThrough,
+                ownReceiptEventID: $0.ownReceiptEventID)
+        }
         guard inputs != readInputsCache else { return }
         readInputsCache = inputs
         readBroadcaster.publish(inputs)

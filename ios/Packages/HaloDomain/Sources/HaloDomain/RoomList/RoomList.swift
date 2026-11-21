@@ -16,6 +16,8 @@ public struct RoomSummary: Sendable, Equatable, Identifiable {
     public let latestEvent: LatestEventRef?
     /// The time of the event the user's own newest read receipt (any device) points at; `nil` when unknown or not resolved.
     public let ownReadThrough: Date?
+    /// The event ID the user's own newest read receipt (any device) points at; `nil` when unknown or not resolved (R-06).
+    public let ownReceiptEventID: EventID?
     /// The user marked the room as a favourite (room tag `m.favourite`).
     public let isFavourite: Bool
     /// The newest message as one line for the room list (ROOM_LIST FR-3); `nil` when the newest event has no text form.
@@ -29,7 +31,8 @@ public struct RoomSummary: Sendable, Equatable, Identifiable {
 
     public init(
         id: RoomID, name: String?, isDirect: Bool, isEncrypted: Bool, membership: Membership, read: RoomReadCounts = .none,
-        latestEvent: LatestEventRef? = nil, ownReadThrough: Date? = nil, isFavourite: Bool = false, preview: LatestMessagePreview? = nil,
+        latestEvent: LatestEventRef? = nil, ownReadThrough: Date? = nil, ownReceiptEventID: EventID? = nil,
+        isFavourite: Bool = false, preview: LatestMessagePreview? = nil,
         avatar: MediaRef? = nil, inviter: String? = nil, inviterID: UserID? = nil
     ) {
         self.inviter = inviter
@@ -39,6 +42,7 @@ public struct RoomSummary: Sendable, Equatable, Identifiable {
         self.isFavourite = isFavourite
         self.latestEvent = latestEvent
         self.ownReadThrough = ownReadThrough
+        self.ownReceiptEventID = ownReceiptEventID
         self.read = read
         self.id = id
         self.name = name

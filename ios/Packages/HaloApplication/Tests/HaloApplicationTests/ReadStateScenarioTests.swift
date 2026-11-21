@@ -64,10 +64,11 @@ private struct World {
         return id
     }
 
-    mutating func send(_ room: RoomID, _ who: Who, mention: Bool, kind: Kind, skew: Int) -> EventID {
+    mutating func send(_ room: RoomID, _ who: Who, mention: Bool, kind: Kind, skew: Int, timestampOverride: Date? = nil) -> EventID {
         tick += 1
         let id = try! EventID("$\(tick)")
-        let ev = Ev(id: id, ts: Date(timeIntervalSince1970: Double(10_000 + tick * 10 + skew)), sender: who, mention: mention, kind: kind)
+        let ts = timestampOverride ?? Date(timeIntervalSince1970: Double(10_000 + tick * 10 + skew))
+        let ev = Ev(id: id, ts: ts, sender: who, mention: mention, kind: kind)
         rooms[room]?.events.append(ev)
         return id
     }
@@ -153,14 +154,15 @@ private struct World {
         return RoomSummary(
             id: id, name: nil, isDirect: false, isEncrypted: s.encrypted, membership: .joined,
             read: RoomReadCounts(mode: s.mode, server: s.server, sdk: s.sdk, isMarkedUnread: s.marked), latestEvent: s.latest,
-            ownReadThrough: s.receiptIdx.map { r.events[$0].ts })
+            ownReadThrough: s.receiptIdx.map { r.events[$0].ts },
+            ownReceiptEventID: s.receiptIdx.map { r.events[$0].id })
     }
 
     func input(_ id: RoomID) -> RoomReadInputs {
         let s = summary(id)
         return RoomReadInputs(
             roomID: id, membership: s.membership, isEncrypted: s.isEncrypted, counts: s.read, latestEvent: s.latestEvent,
-            localIntent: s.ownReadThrough, receiptReadThrough: s.ownReadThrough)
+            localIntent: s.ownReadThrough, receiptReadThrough: s.ownReadThrough, ownReceiptEventID: s.ownReceiptEventID)
     }
 
     func inputs() -> [RoomReadInputs] { order.filter { snaps[$0] != nil }.map(input) }
@@ -212,8 +214,8 @@ private struct Rig {
     }
 
     @discardableResult
-    mutating func send(_ room: RoomID, _ who: Who = .b, mention: Bool = false, kind: Kind = .message, skew: Int = 0) -> EventID {
-        world.send(room, who, mention: mention, kind: kind, skew: skew)
+    mutating func send(_ room: RoomID, _ who: Who = .b, mention: Bool = false, kind: Kind = .message, skew: Int = 0, timestampOverride: Date? = nil) -> EventID {
+        world.send(room, who, mention: mention, kind: kind, skew: skew, timestampOverride: timestampOverride)
     }
 
     mutating func sync(
@@ -227,9 +229,9 @@ private struct Rig {
     mutating func markUnreadOnA2(_ room: RoomID) { world.rooms[room]?.marked = true }
     mutating func setModeOnA2(_ room: RoomID, _ mode: NotificationMode) { world.rooms[room]?.mode = mode }
 
-    /// The user sees `event` on A1 (the timeline's visibility report).
+    /// The user sees `event` on A1 (the timeline's visibility report, ordered by timeline index per R-06).
     func view(_ room: RoomID, _ event: EventID) async {
-        await receipts.reportSeen(room: room, event: event, timestamp: world.ts(event))
+        await receipts.reportSeen(room: room, event: event, timestamp: world.ts(event), advancesOrder: true)
     }
 
     /// Sends every pending receipt now and lets the server (model) take them in.
@@ -257,14 +259,21 @@ private struct Rig {
 
     func state(_ room: RoomID) async -> RoomReadState {
         let input = world.input(room)
-        let read = [await receipts.readPosition(of: room), input.localIntent].compactMap { $0 }.max()
+        let localPos = await receipts.localReadPosition(of: room)
+        let read = [localPos?.timestamp, input.localIntent].compactMap { $0 }.max()
+        let confirmed = (localPos?.isSent == true && localPos?.eventID == input.ownReceiptEventID)
         let base = RoomReadInputs(
             roomID: room, membership: input.membership, isEncrypted: input.isEncrypted, counts: input.counts,
-            latestEvent: input.latestEvent, localIntent: read, receiptReadThrough: input.receiptReadThrough)
+            latestEvent: input.latestEvent, localIntent: read, receiptReadThrough: input.receiptReadThrough,
+            localIntentEventID: localPos?.eventID ?? input.ownReceiptEventID,
+            localIntentConfirmed: confirmed, ownReceiptEventID: input.ownReceiptEventID)
         let notified = ReadStatePolicy.partitionRecords(for: base, records: records.all()).unconfirmed
         return ReadStatePolicy.evaluate(RoomReadInputs(
             roomID: room, membership: input.membership, isEncrypted: input.isEncrypted, counts: input.counts,
-            latestEvent: input.latestEvent, localIntent: read, receiptReadThrough: input.receiptReadThrough, unconfirmedNotified: notified))
+            latestEvent: input.latestEvent, localIntent: read, receiptReadThrough: input.receiptReadThrough,
+            localIntentEventID: localPos?.eventID ?? input.ownReceiptEventID,
+            localIntentConfirmed: confirmed, ownReceiptEventID: input.ownReceiptEventID,
+            unconfirmedNotified: notified))
     }
 
     /// The badge's attention set. Cross-checks `BadgeCoordinator.attention` against the per-room states.
@@ -282,7 +291,7 @@ private func eventually(_ condition: @Sendable () -> Bool) async -> Bool {
     return false
 }
 
-@Suite("Read-state scenarios S01–S28")
+@Suite("Read-state scenarios S01–S29")
 struct ReadStateScenarioTests {
     @Test("S01: B sends 5, A1 views them: no attention, receipt at the 5th, badge 0")
     func s01() async throws {
@@ -600,7 +609,7 @@ struct ReadStateScenarioTests {
         #expect(await eventually { badgePort.history.last == [] })
     }
 
-    @Test("S18: B's clock is 10 minutes behind: viewing the latest event leaves no phantom unread; a late skewed message shows once the receipt is applied")
+    @Test("S18 (PS29, R-06): B's clock is skewed behind: viewing the latest event clears it, a later skewed message shows AND viewing it advances the receipt")
     func s18() async throws {
         var rig = Rig()
         let r = rig.addRoom()
@@ -612,14 +621,18 @@ struct ReadStateScenarioTests {
         rig.sync()
         #expect(await rig.attention().isEmpty)
 
-        // A new message stamped before the read position: "covers the latest event" by time, but the SDK has applied the
-        // receipt and counts the message, so it shows (R-07). [LIMITATION] while the local position is ahead of the SDK's
-        // receipt (not confirmed yet) the timestamp still decides (R-06).
-        rig.send(r, skew: -2000)
+        // A later message stamped earlier than the read position: shows as unread, and viewing it advances the receipt (R-06).
+        let earlierTs = rig.send(r, skew: -2000)
         rig.sync()
         #expect(rig.world.input(r).counts.server.notification == 1)
         let state = await rig.state(r)
-        #expect(state.attention && state.reasons.contains(.sdkUnreadAfterRead))
+        #expect(state.attention)
+        await rig.view(r, earlierTs)
+        await rig.settle()
+        rig.sync()
+        #expect(rig.port.receipts.last?.event == earlierTs)
+        #expect(rig.world.input(r).counts.server == .zero)
+        #expect(await rig.attention().isEmpty)
     }
 
     @Test("S19: 50 rooms change while the app reconciles: the final badge equals a fresh evaluation")
@@ -890,6 +903,32 @@ struct ReadStateScenarioTests {
         // First sync response completes; the server no longer lists `gone` as joined/invited (and didn't even need to send rooms.left).
         port.emitSyncComplete(present: [stayed])
         #expect(await eventually { badgePort.history.last == [] && records.all().isEmpty })
+    }
+
+    @Test("S29 (PS28, R-06): two messages with identical origin_server_ts: viewing only the first doesn't hide the second after confirmation; viewing the second receipts it")
+    func s29() async throws {
+        var rig = Rig()
+        let r = rig.addRoom()
+        let sameTs = Date(timeIntervalSince1970: 20_000)
+        let first = rig.send(r, timestampOverride: sameTs)
+        let second = rig.send(r, timestampOverride: sameTs)
+        rig.sync()
+        #expect(await rig.attention() == [r])
+
+        // A views only the first message; once its receipt is confirmed, the second is NOT hidden by the equal timestamp.
+        await rig.view(r, first)
+        await rig.settle()
+        rig.sync()
+        #expect(rig.world.input(r).counts.server.notification == 1)
+        #expect((await rig.state(r)).attention)
+
+        // A views the second message (same millisecond timestamp): receipt advances to `second`, server count reaches 0.
+        await rig.view(r, second)
+        await rig.settle()
+        rig.sync()
+        #expect(rig.port.receipts.map(\.event) == [first, second])
+        #expect(rig.world.input(r).counts.server == .zero)
+        #expect(await rig.attention().isEmpty)
     }
 
 }

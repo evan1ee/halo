@@ -15,12 +15,17 @@ public struct ReadIntent: Sendable, Equatable {
     /// for diagnosis; both reset when a newer event replaces the intent.
     public let attempts: Int
     public let lastError: String?
+    /// Monotonic per-room order key assigned when timeline order proves an event is newer than the previous intent,
+    /// allowing equal or clock-skewed timestamps to advance cleanly (R-06, ADR-0020).
+    public let sequence: Int64
 
     public init(
-        room: RoomID, event: EventID, timestamp: Date, isSent: Bool = false, createdAt: Date, attempts: Int = 0, lastError: String? = nil
+        room: RoomID, event: EventID, timestamp: Date, isSent: Bool = false, createdAt: Date,
+        attempts: Int = 0, lastError: String? = nil, sequence: Int64 = 0
     ) {
         self.attempts = attempts
         self.lastError = lastError
+        self.sequence = sequence
         self.room = room
         self.event = event
         self.timestamp = timestamp
