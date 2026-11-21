@@ -36,35 +36,44 @@ public struct RecoveryBanner: View {
 public struct RecoveryView: View {
     @Bindable private var model: RecoveryViewModel
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var keyFocused: Bool
 
     public init(model: RecoveryViewModel) { self.model = model }
 
+    private var canSubmit: Bool { !model.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
     public var body: some View {
-        VStack(spacing: 16) {
-            Text("Enter your recovery key").font(.headline)
+        VStack(spacing: 14) {
+            Image(systemName: "lock.shield").font(.system(size: 40)).foregroundStyle(.tint)
+                .accessibilityHidden(true)
+            Text("Enter your recovery key").font(.title3.bold())
             Text("It unlocks your encrypted message history on this device.")
-                .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
             SecureField("Recovery key", text: $model.key).textFieldStyle(.roundedBorder)
+                .focused($keyFocused)
                 .autocorrectionDisabled()
                 #if os(iOS)
                 .textInputAutocapitalization(.never)
                 #endif
-                .submitLabel(.go).onSubmit { Task { await model.submit() } }
-            if model.isWorking {
-                ProgressView()
-            } else {
-                HStack {
-                    Button("Not now") { dismiss() }.buttonStyle(.bordered)
-                    Button("Verify") { Task { await model.submit() } }.buttonStyle(.borderedProminent)
-                        .disabled(model.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
+                .submitLabel(.go).onSubmit { if canSubmit { Task { await model.submit() } } }
             if let message = model.errorMessage {
                 Text(message).foregroundStyle(.red).font(.footnote).multilineTextAlignment(.center)
             }
+            if model.isWorking {
+                ProgressView().frame(minHeight: 44)
+            } else {
+                Button { Task { await model.submit() } } label: { Text("Verify").frame(maxWidth: .infinity) }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
+                    .disabled(!canSubmit)
+                Button("Not now") { dismiss() }
+            }
+            Spacer(minLength: 0)
         }
-        .padding()
+        .padding(.horizontal, 24)
+        .padding(.top, 28)
+        .onAppear { keyFocused = true }
         .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
     }
 }
 #endif
