@@ -19,7 +19,7 @@ SDK's point of view, not what the user actually looked at; Halo needs D6 semanti
 "Mark as read" action in the room list.
 
 **Explicit actions**
-- *Mark as read* (room list swipe): the room list has no event id for the latest event (F-FFI-15), so `ReadMarkerPort.markRoomRead(room)` lets the adapter resolve it (`Timeline.latest_event_id()` on a short-lived timeline, F-FFI-15), send the receipt + fully-read marker, and return the `EventRef`; the coordinator records it as an intent in state `sent`. Then clear `m.marked_unread`.
+- *Mark as read* (room list swipe): `ReadMarkerPort.markRoomRead(room)` calls `Room.markAsRead(receiptType:)` for the public/private receipt and `.fullyRead` (R-20), returns the receipted `EventID` (`loadUserReceipt` with fallback to `Timeline.latestEventId()`), and the coordinator records it as an intent in state `sent`. Then clear `m.marked_unread`.
 - *Mark as unread*: `Room.set_unread_flag(true)` **[VERIFIED F-FFI-6]**.
 - *Opening a room* clears `m.marked_unread` (`set_unread_flag(false)`) once the room is visible.
 - *Sending a message*: write an intent at the own event (E1b) once it has a server event id.

@@ -462,7 +462,7 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 | R-17 | P2 | Auth | Login requires native sliding sync though the app uses classic sync | **FIXED (D81):** removed `NO_SLIDING_SYNC` gate from `SessionCoordinator.discover` and `MatrixSessionPort.loginPassword` and switched discovery probe to `.none`; `SessionCoordinatorTests.classicSyncServerAccepted` |
 | R-18 | P2 | Performance | Unfiltered classic sync; 8 s poll | **Needs founder (upstream SDK change):** verified in pinned `matrix_sdk_ffi.swift:30387` that `SyncSettingsV2` exposes only `timeoutMs` and `fullState` (no filter / lazy-load parameter); requires an upstream `matrix-rust-sdk` PR and SDK pin bump |
 | R-19 | P2 | Performance | Serial per-room FFI fan-out per sync response | **FIXED:** `MatrixRoomListPort.summary` fetches `roomInfo()` once and reuses `isDirect`, `encryptionState`, `isFavourite`, `inviter`, and counts; `includes` uses `summary.isFavourite`; per-room rebuilds run in a bounded `TaskGroup` (max 8) |
-| R-20 | P2 | Protocol | `markRoomRead` reimplements `Room.markAsRead` | Use the SDK API |
+| R-20 | P2 | Protocol | `markRoomRead` reimplements `Room.markAsRead` | **FIXED:** `MatrixReadMarkerPort.markRoomRead` calls `Room.markAsRead(receiptType:)` for both the read receipt and `.fullyRead`; verified against `infra/dev` (`AdapterContractTests/readMarkers`) |
 | R-21 | P2 | Messaging | Stickers bypass the send queue | Send via the timeline/send queue (custom event through the queue) |
 | R-22 | P2 | Lifecycle | Background flush without a background task | Wrap `flush()` in `beginBackgroundTask` |
 | R-23 | P2 | NSE | New `Client` per push | Cache one client per NSE process |
