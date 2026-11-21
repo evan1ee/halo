@@ -3,38 +3,77 @@ import SwiftUI
 
 /// The screens of the sign-in flow; the root view shows the signed-in content itself.
 public struct SignInView: View {
+    private enum Field { case server, username, password }
     @Bindable private var model: AuthViewModel
+    @FocusState private var focus: Field?
 
     public init(model: AuthViewModel) { self.model = model }
 
     public var body: some View {
         VStack(spacing: 16) {
+            Spacer()
+            Image(systemName: "bubble.left.and.bubble.right.fill")
+                .font(.system(size: 44))
+                .foregroundStyle(.tint)
+                .accessibilityHidden(true)
+            Text("Halo").font(.largeTitle.bold())
             switch model.screen {
             case .launching, .busy:
-                ProgressView()
+                ProgressView().padding(.top, 8)
             case .server:
+                Text("Enter your Matrix homeserver to sign in.")
+                    .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 TextField("Server (example.org)", text: $model.server)
                     .plainInput(.URL).textFieldStyle(.roundedBorder)
-                Button("Continue") { Task { await model.submitServer() } }
-                    .buttonStyle(.borderedProminent)
+                    .focused($focus, equals: .server)
+                    .submitLabel(.continue)
+                    .onSubmit { if model.canSubmitServer { Task { await model.submitServer() } } }
+                Button { Task { await model.submitServer() } } label: { Text("Continue").frame(maxWidth: .infinity) }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
+                    .disabled(!model.canSubmitServer)
             case .credentials(let host):
-                Text("Sign in to \(host)").font(.headline)
+                Text("Sign in to \(host)").font(.subheadline).foregroundStyle(.secondary)
                 TextField("Username", text: $model.username)
                     .plainInput(.username).textFieldStyle(.roundedBorder)
+                    .focused($focus, equals: .username)
+                    .submitLabel(.next)
+                    .onSubmit { focus = .password }
                 SecureField("Password", text: $model.password)
                     .plainInput(.password).textFieldStyle(.roundedBorder)
-                Button("Sign in") { Task { await model.submitCredentials() } }
-                    .buttonStyle(.borderedProminent)
+                    .focused($focus, equals: .password)
+                    .submitLabel(.go)
+                    .onSubmit { if model.canSubmitCredentials { Task { await model.submitCredentials() } } }
+                Button { Task { await model.submitCredentials() } } label: { Text("Sign in").frame(maxWidth: .infinity) }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
+                    .disabled(!model.canSubmitCredentials)
+                Button("Change server") { Task { await model.changeServer() } }
             case .restoreFailed:
-                Button("Try again") { Task { await model.retryRestore() } }.buttonStyle(.borderedProminent)
-            case .softLoggedOut, .signedIn:
+                Text("Your saved session couldn't be restored.")
+                    .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                Button { Task { await model.retryRestore() } } label: { Text("Try again").frame(maxWidth: .infinity) }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
+                Button("Sign out", role: .destructive) { Task { await model.signOut() } }
+            case .softLoggedOut:
+                Text("Your session expired. Sign in again to continue.")
+                    .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                Button { Task { await model.signOut() } } label: { Text("Sign in again").frame(maxWidth: .infinity) }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
+            case .signedIn:
                 EmptyView()
             }
             if let message = model.errorMessage {
                 Text(message).foregroundStyle(.red).font(.footnote).multilineTextAlignment(.center)
             }
+            Spacer()
         }
-        .padding()
+        .padding(.horizontal, 24)
+        .onChange(of: model.screen, initial: true) { _, screen in
+            switch screen {
+            case .server: focus = .server
+            case .credentials: focus = .username
+            default: focus = nil
+            }
+        }
     }
 }
 

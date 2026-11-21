@@ -27,6 +27,9 @@ public final class AuthViewModel {
     public var username = ""
     public var password = ""
 
+    public var canSubmitServer: Bool { !server.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    public var canSubmitCredentials: Bool { !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !password.isEmpty }
+
     private let coordinator: SessionCoordinator
     private var observation: Task<Void, Never>?
 
@@ -48,6 +51,11 @@ public final class AuthViewModel {
     }
 
     public func submitServer() async { await coordinator.discover(server: server) }
+
+    public func changeServer() async {
+        password = ""
+        await coordinator.changeServer()
+    }
 
     public func submitCredentials() async {
         let secret = password

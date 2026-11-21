@@ -100,8 +100,6 @@ private struct RootView: View {
                         TimelineScreen(root: root, room: room, openRoom: { path.append($0) })
                     }
                 }
-            case .softLoggedOut:
-                Text("Your session expired. Sign in again.")  // re-authentication arrives in M1
             default:
                 SignInView(model: root.auth)
             }

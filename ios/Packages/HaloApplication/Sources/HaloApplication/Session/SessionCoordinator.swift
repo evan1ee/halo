@@ -75,6 +75,12 @@ public actor SessionCoordinator {
         await restoreStoredSession()
     }
 
+    /// Returns from choosing a login method back to entering a different homeserver.
+    public func changeServer() {
+        guard case .choosingMethod = state else { return }
+        state = .signedOut(failure: nil)
+    }
+
     /// Looks up the homeserver for a server name, URL or user ID (AUTHENTICATION FR-1, FR-2, FR-5).
     public func discover(server: String) async {
         switch state {

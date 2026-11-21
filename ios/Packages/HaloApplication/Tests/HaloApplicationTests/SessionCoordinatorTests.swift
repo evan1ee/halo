@@ -216,4 +216,19 @@ struct SessionCoordinatorTests {
         }
         #expect(latest == .choosingMethod(devServer, failure: nil))
     }
+
+    @Test("changeServer returns from choosingMethod to signedOut and does nothing in other states")
+    func changeServer() async throws {
+        let (port, keychain) = makeSessionFixture()
+        let coordinator = SessionCoordinator(port: port, keychain: keychain)
+        await coordinator.start()
+        await coordinator.discover(server: "halo.localhost")
+        #expect(await coordinator.state == .choosingMethod(devServer, failure: nil))
+        await coordinator.changeServer()
+        #expect(await coordinator.state == .signedOut(failure: nil))
+        // No-op when signed in.
+        let (signedInCoordinator, _, _) = try await signedIn()
+        await signedInCoordinator.changeServer()
+        if case .ready = await signedInCoordinator.state {} else { Issue.record("expected .ready") }
+    }
 }

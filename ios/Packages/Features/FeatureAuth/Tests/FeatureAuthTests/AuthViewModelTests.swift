@@ -65,6 +65,31 @@ struct AuthViewModelTests {
         for _ in 0..<200 where model.screen != .signedIn { await Task.yield() }
         #expect(model.screen == .signedIn)
     }
+
+    @Test("blank inputs keep submit disabled; changeServer returns to the server screen and clears password")
+    func validationAndChangeServer() async throws {
+        let port = FakeSessionPort()
+        let url = try #require(URL(string: "https://example.org"))
+        port.addServer("example.org", ServerDetails(homeserverURL: url, supportsPassword: true, supportsOIDC: false, supportsNativeSlidingSync: true))
+        let model = AuthViewModel(coordinator: SessionCoordinator(port: port, keychain: InMemoryKeychain()))
+        await model.start()
+        #expect(!model.canSubmitServer)
+        model.server = "   "
+        #expect(!model.canSubmitServer)
+        model.server = "example.org"
+        #expect(model.canSubmitServer)
+        await model.submitServer()
+        for _ in 0..<200 where model.screen != .credentials(host: "example.org") { await Task.yield() }
+        #expect(model.screen == .credentials(host: "example.org"))
+        #expect(!model.canSubmitCredentials)
+        model.username = "alice"
+        #expect(!model.canSubmitCredentials)
+        model.password = "secret"
+        #expect(model.canSubmitCredentials)
+        await model.changeServer()
+        for _ in 0..<200 where model.screen != .server { await Task.yield() }
+        #expect(model.screen == .server && model.password.isEmpty && model.errorMessage == nil)
+    }
 }
 
 @MainActor
