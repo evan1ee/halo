@@ -124,9 +124,13 @@ struct StickerPanelViewModelTests {
         port.fail(with: .network(retryable: true))
         await model.create()
         #expect(model.phase == .failed("Can't reach the server. Nothing was created; try again.") && reloaded == 0)
+        #expect(model.canCreate)  // retryable right away without dismissing the error first
         model.dismissError()
         #expect(model.phase == .editing && model.items.count == 1 && model.name == "Cats")  // nothing was lost
 
+        port.fail(with: .network(retryable: true))
+        await model.create()
+        #expect(model.canCreate)
         port.fail(with: nil)
         await model.create()
         #expect(model.phase == .done && reloaded == 1)

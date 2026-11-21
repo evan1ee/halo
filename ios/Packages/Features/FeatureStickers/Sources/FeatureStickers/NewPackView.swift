@@ -24,8 +24,9 @@ public struct NewPackView: View {
                 ToolbarItem(placement: .confirmationAction) { Button("Create") { Task { await model.create() } }.disabled(!model.canCreate) }
             }
             .onChange(of: picked) { _, items in load(items) }
-            .onChange(of: model.phase) { _, phase in react(to: phase) }
+            .onChange(of: model.phase) { _, phase in if case .done = phase { dismiss() } }
         }
+        .interactiveDismissDisabled(model.isBusy)
     }
 
     private var nameSection: some View {
@@ -48,7 +49,18 @@ public struct NewPackView: View {
         if case .uploading(let done, let total) = model.phase {
             Section { ProgressView("Uploading \(done) of \(total)…", value: Double(done), total: Double(total)) }
         }
-        if case .failed(let message) = model.phase { Section { Text(message).foregroundStyle(.red) } }
+        if case .failed(let message) = model.phase {
+            Section {
+                HStack(spacing: 10) {
+                    Text(message).foregroundStyle(.red)
+                    Spacer()
+                    Button { model.dismissError() } label: { Image(systemName: "xmark").font(.footnote.weight(.semibold)) }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Dismiss")
+                }
+            }
+        }
     }
 
     private func load(_ items: [PhotosPickerItem]) {
@@ -60,28 +72,41 @@ public struct NewPackView: View {
             }
         }
     }
-
-    private func react(to phase: NewPackViewModel.Phase) {
-        switch phase {
-        case .done: dismiss()
-        case .failed: Task { try? await Task.sleep(for: .seconds(4)); model.dismissError() }
-        default: break
-        }
-    }
 }
 
 private struct ItemRow: View {
     let item: NewPackViewModel.Item
     let model: NewPackViewModel
+    @State private var thumbnail: UIImage?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            TextField("Name", text: Binding(get: { item.shortcode }, set: { model.setShortcode($0, for: item) }))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-            if let problem = model.problem(with: item) { Text(problem).font(.caption).foregroundStyle(.red) }
+        HStack(spacing: 12) {
+            Group {
+                if let thumbnail {
+                    Image(uiImage: thumbnail).resizable().scaledToFit()
+                } else {
+                    RoundedRectangle(cornerRadius: 8).fill(.secondary.opacity(0.15))
+                        .overlay { Image(systemName: "photo").foregroundStyle(.secondary) }
+                }
+            }
+            .frame(width: 44, height: 44)
+            .clipShape(.rect(cornerRadius: 8))
+            .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                TextField("Shortcode", text: Binding(get: { item.shortcode }, set: { model.setShortcode($0, for: item) }))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                if let problem = model.problem(with: item) { Text(problem).font(.caption).foregroundStyle(.red) }
+            }
         }
+        .task(id: item.id) { thumbnail = await Self.makeThumbnail(item.data) }
         .swipeActions { Button("Remove", role: .destructive) { model.remove(item) } }
+    }
+
+    /// Decodes a small thumbnail off the main actor once per picked photo, so typing shortcodes never re-decodes full images.
+    @concurrent private static func makeThumbnail(_ data: Data) async -> UIImage? {
+        guard let image = UIImage(data: data) else { return nil }
+        return image.preparingThumbnail(of: CGSize(width: 88, height: 88)) ?? image
     }
 }
 #endif

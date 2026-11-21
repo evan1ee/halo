@@ -51,8 +51,12 @@ public final class NewPackViewModel: Identifiable {
     }
 
     public var canCreate: Bool {
-        guard case .editing = phase else { return false }
-        return !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !items.isEmpty && items.allSatisfy { problem(with: $0) == nil }
+        switch phase {
+        case .editing, .failed:
+            !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !items.isEmpty && items.allSatisfy { problem(with: $0) == nil }
+        case .uploading, .done:
+            false
+        }
     }
 
     public var isBusy: Bool { if case .uploading = phase { true } else { false } }
