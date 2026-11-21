@@ -282,7 +282,7 @@ private func eventually(_ condition: @Sendable () -> Bool) async -> Bool {
     return false
 }
 
-@Suite("Read-state scenarios S01–S27")
+@Suite("Read-state scenarios S01–S28")
 struct ReadStateScenarioTests {
     @Test("S01: B sends 5, A1 views them: no attention, receipt at the 5th, badge 0")
     func s01() async throws {
@@ -869,6 +869,27 @@ struct ReadStateScenarioTests {
         #expect(recordsX.all().isEmpty)
         #expect(await eventually { badgePort.history.last == [] })
         #expect(await badge.attentionRooms.isEmpty)
+    }
+
+    @Test("S28: carried attention and stale records for a room left while closed are dropped after the first sync response (R-04, R-03)")
+    func s28() async throws {
+        let port = FakeRoomListPort()
+        let list = RoomListCoordinator(port: port)
+        let records = FakeNotificationRecords()
+        let badgePort = FakeBadgePort()
+        let gone = try RoomID("!gone:x.org")
+        let stayed = try RoomID("!stayed:x.org")
+        badgePort.preload([gone])
+        records.add(NotificationRecord(roomID: gone, eventID: try EventID("$g1"), timestamp: Date(timeIntervalSince1970: 100), isMention: false))
+        let badge = BadgeCoordinator(rooms: list, records: records, port: badgePort)
+        await badge.begin()
+        await list.start()
+        try port.emit(.reset([RoomSummary(id: stayed, name: "stayed", isDirect: true, isEncrypted: false, membership: .joined)]))
+        #expect(await eventually { badgePort.history.last == [gone] })
+
+        // First sync response completes; the server no longer lists `gone` as joined/invited (and didn't even need to send rooms.left).
+        port.emitSyncComplete(present: [stayed])
+        #expect(await eventually { badgePort.history.last == [] && records.all().isEmpty })
     }
 
 }

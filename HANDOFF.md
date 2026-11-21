@@ -9,7 +9,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 - **Checks:** `scripts/prepush.sh` passes (SwiftLint not configured, skipped); `scripts/prepush.sh` now also builds `Halo-Debug` for the simulator. All 17 contract tests (`infra/dev`) pass, none skipped (`scripts/contract-test.sh` after `infra/dev/create-fixtures.py`).
 - **CI:** PRs #1–#15 merged. CI runs only the Linux-portable packages (Foundation, Domain, TestSupport, Application): adapter, persistence, platform, features and the app are tested only by `prepush.sh` on a Mac. `licenses` runs only on SDK/inventory changes.
 
-- **Codebase review (2026-11-21):** [docs/CODEBASE_REVIEW.md](docs/CODEBASE_REVIEW.md), 27 findings (7 P0, all unread/badge), Top 10 risks, Phase 0–3 roadmap. **R-01 fixed** (D78), **R-07 fixed** (D79). The rest of Phase 0 is the head of §6.
+- **Codebase review (2026-11-21):** [docs/CODEBASE_REVIEW.md](docs/CODEBASE_REVIEW.md), 27 findings (7 P0, all unread/badge), Top 10 risks, Phase 0–3 roadmap. **Fixed:** R-01 (D78), R-07 (D79), R-02/R-03/R-13 (record lifecycle + GRDB `notification_record`), R-04 (carry-over completeness at first sync). Next in Phase 0: R-05/R-08 (`ReadStateCoordinator` PR), R-06 (ADR revisiting D47/D72), R-10/R-12, R-09.
 - **Loop state (2026-11-21, paused):** the small unblocked items are done (this session: timeline receipts/location/polls/calls/reply jump, Sticker packs, notification defaults and mention toggles, room info refresh; all but a few taps seen in the simulator). What is left is large or needs a decision: see §6 "Candidates". Restart with `/loop` once the founder picks one.
 - **Earlier loop state (2026-11-20):** what is left that needs no device, signing, gate decision or product decision is small polish: the bot reaction menu (FR-4, product detail), V-ST-2 (needs an expiring token the dev Synapse can't give). The loop paused here; restart it to take those.
 
@@ -32,11 +32,9 @@ Full list: docs/DECISION_LOG.md (D1–D79), docs/adr/. Most relevant now: D70 au
 
 ## 4. Modified files (this push)
 Earlier pushes: `git log`.
-- **Review:** `docs/CODEBASE_REVIEW.md` (new; R-01 and R-07 corrected after the live evidence below).
-- **R-01 fix (D78):** `HaloDomain/ReadState/ReadState.swift` (E3b on any SDK count; E3c → no unread, `ReasonCode.encServerOnly` replaces `encSDKBlind`), `ReadStateAuditor.swift` (`ENC_SERVER_ONLY` explained). Tests: `ReadStatePolicyTests.encryptedServerOnly`, auditor test, `ReadStateScenarioTests` (model SDK now counts undecryptable events like the real one; S06 expects `.count(1)`; new S23), `ClassicSyncEvidenceTests.encryptedNonMessageEvidence` (new contract test, two SDK clients: reaction plaintext 0/0, poll vote server 1 / SDK 0, call invite server 2 / SDK 1 notification, undecryptable server 1 / SDK 1+1; policy checks failed on the old policy, pass now), `tools/server-rules/check_server_rules.py` (+3 encrypted non-message checks, all ok).
-- **R-07 fix (D79):** `ReadState.swift` (`RoomReadInputs.receiptReadThrough`, `LatestEventRef.isLocal`, `ReasonCode.sdkUnreadAfterRead`, E1/E1b), wired in `RoomListCoordinator.publishReadInputs`, `BadgeCoordinator.evaluated`, `RoomListViewModel.listChanged`; adapter maps `.local` echoes to `isLocal`. Tests: `ReadStatePolicyTests.sdkCountsAfterRead`, property P11 (P1 restated), `LatestEventMappingTests`, scenario model (implicit own-event receipt, latest event skips undecryptable events), S24, S18 updated, `encryptedNonMessageEvidence` (known issue removed, own-message case added), `policyOverRealInputs`.
-- **Tooling:** `scripts/contract-test.sh` accepts `Suite/test` names (e.g. `ClassicSyncEvidenceTests/encryptedNonMessageEvidence`).
-- **Docs:** UNREAD_STATE (E1/E1b and E3b/E3c rows, clock-skew row, flowchart, state diagram, §9), UNREAD_REGRESSION_TESTS (P1, P11, S06, S18, S23, S24), INTEGRATION_TESTS, SOURCES (F-SDK-3), DECISION_LOG (D78, D79), ROADMAP (M3: R-01 ticked, Phase 0 rest added).
+- **R-02 / R-03 / R-13 (record lifecycle + GRDB):** `HaloPersistence` (`HaloDatabase.swift` migration v7 + `busy_timeout`, `NotificationRecordStore.swift`), `HaloPlatform` (`DarwinSignal.swift`, old UserDefaults store removed), `HaloDomain` (`NotificationRecordPort.swift`, `NotificationFetchPort.swift`, `RoomListPort.swift`, `ReadState.swift` `notifiedThrough`/`partitionRecords`), `HaloMatrixAdapter` (`MatrixNotificationPort.swift` raw `origin_server_ts`, `MatrixRoomListPort.swift` `leftRooms` + `ownReadThrough` for rooms with records), `HaloApplication` (`RoomListCoordinator.swift`, `BadgeCoordinator.swift`), `ios/App/AppRoot.swift`, `ios/NotificationService/NotificationService.swift`, `ios/project.yml` + `Halo.xcodeproj`. Tests: `ReadStatePolicyTests.partitionRecords`, `NotificationRecordStoreTests` (incl. PS27, PS33), `DarwinSignalTests`, `NotificationMapperTests.rawEventTimestamp`, `BadgeCoordinatorTests`, scenarios S25–S27.
+- **R-04 (carry-over completeness):** `RoomListPort.syncCompletions()`, `MatrixRoomListPort`, `RoomListCoordinator`, `BadgeCoordinator` (drops unconfirmed carried rooms and absent records at first sync response). Tests: `BadgeCoordinatorTests.carriedRoomDroppedAfterFirstSync`, scenario S28.
+- **Docs:** `docs/CODEBASE_REVIEW.md`, `docs/testing/UNREAD_REGRESSION_TESTS.md` (S25–S28), `docs/ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
 Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
@@ -52,7 +50,7 @@ Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISS
 
 ## 6. Next steps
 The queue is docs/ROADMAP.md §"Remaining work", worked by the loop in docs/development/AUTONOMOUS_LOOP.md.
-0. **Review Phase 0 (P0, correctness first):** docs/CODEBASE_REVIEW.md §14, in order: R-02/R-03/R-13 (notification record lifecycle, GRDB table), R-04, R-05 (`ReadStateCoordinator`), R-06 (needs an ADR revisiting D47), R-10/R-12, R-09.
+0. **Review Phase 0 (P0, correctness first):** docs/CODEBASE_REVIEW.md §14, in order: R-05/R-08 (`ReadStateCoordinator` PR), R-06 (needs an ADR revisiting D47/D72), R-10/R-12, R-09; then Phase 1–3.
 
 **Candidates for the founder to pick** after Phase 0 (each is a PR-sized feature or needs a decision):
 1. **M7 Bot Activity** slices 1–3 are merged/pushed (founder picked it); the rest is ROADMAP "M7 Bot Activity": nothing in M7 except `bot_action` persistence and the 👎 😝 🎉 menu (BOT_MESSAGES FR-4, product detail).

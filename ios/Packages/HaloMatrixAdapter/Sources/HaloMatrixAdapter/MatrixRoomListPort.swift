@@ -25,6 +25,7 @@ public final class MatrixRoomListPort: RoomListPort {
     private let hasRecords: @Sendable (RoomID) -> Bool
     private let current = Mutex<Subscription?>(nil)
     private let leftObservers = Mutex<[UUID: AsyncStream<Set<RoomID>>.Continuation]>([:])
+    private let syncObservers = Mutex<[UUID: AsyncStream<Set<RoomID>>.Continuation]>([:])
 
     public init(session: MatrixSessionPort, pageSize: UInt32 = 50, hasRecords: @escaping @Sendable (RoomID) -> Bool = { _ in false }) {
         self.session = session
@@ -43,14 +44,17 @@ public final class MatrixRoomListPort: RoomListPort {
                 let settings = await client.getNotificationSettings()
                 var summaries: [String: RoomSummary] = [:]
                 var last: [RoomSummary]?
-                func publish(changed: Set<String>?) async throws(HaloError) {
+                @discardableResult
+                func publish(changed: Set<String>?) async throws(HaloError) -> Set<RoomID> {
                     let known = client.rooms().filter { !$0.isSpace() && [.joined, .invited].contains($0.membership()) }
                     var present: Set<String> = []
+                    var presentIDs: Set<RoomID> = []
                     for room in known {
                         let roomID = room.id()
                         present.insert(roomID)
+                        let id = try RoomID(roomID)
+                        presentIDs.insert(id)
                         if summaries[roomID] == nil || changed?.contains(roomID) == true {
-                            let id = try RoomID(roomID)
                             summaries[roomID] = try await Self.summary(room, settings, hasRecords: hasRecords(id))
                         }
                     }
@@ -66,23 +70,33 @@ public final class MatrixRoomListPort: RoomListPort {
                         last = list
                         continuation.yield(.reset(list))
                     }
+                    return presentIDs
                 }
                 try await publish(changed: nil)
                 let changes = await session.syncChanges()
+                enum Event: Sendable { case sync(Set<String>), refresh }
                 // Sync responses and filter changes feed one loop, so the list is rebuilt one change at a time.
-                let (events, eventContinuation) = AsyncStream<Set<String>?>.makeStream(bufferingPolicy: .unbounded)
+                let (events, eventContinuation) = AsyncStream<Event>.makeStream(bufferingPolicy: .unbounded)
                 let forward = Task {
                     for await change in changes {
                         if !change.left.isEmpty {
                             let leftIDs = Set(change.left.compactMap { try? RoomID($0) })
                             self?.publishLeft(leftIDs)
                         }
-                        eventContinuation.yield(change.joined.union(change.invited).union(change.left))
+                        eventContinuation.yield(.sync(change.joined.union(change.invited).union(change.left)))
                     }
                 }
-                let refreshes = Task { for await _ in refresh { eventContinuation.yield(nil) } }
+                let refreshes = Task { for await _ in refresh { eventContinuation.yield(.refresh) } }
                 defer { forward.cancel(); refreshes.cancel(); eventContinuation.finish() }
-                for await changed in events { try await publish(changed: changed) }
+                for await event in events {
+                    switch event {
+                    case .sync(let changed):
+                        let present = try await publish(changed: changed)
+                        self?.publishSynced(present)
+                    case .refresh:
+                        try await publish(changed: nil)
+                    }
+                }
             } catch {
                 // The stream ends; the consumer resubscribes (RoomListCoordinator) and gets a fresh `.reset`.
             }
@@ -119,6 +133,19 @@ public final class MatrixRoomListPort: RoomListPort {
         guard !rooms.isEmpty else { return }
         let continuations = leftObservers.withLock { Array($0.values) }
         for continuation in continuations { continuation.yield(rooms) }
+    }
+
+    public func syncCompletions() -> AsyncStream<Set<RoomID>> {
+        let (stream, continuation) = AsyncStream<Set<RoomID>>.makeStream(bufferingPolicy: .unbounded)
+        let id = UUID()
+        syncObservers.withLock { $0[id] = continuation }
+        continuation.onTermination = { [weak self] _ in self?.syncObservers.withLock { _ = $0.removeValue(forKey: id) } }
+        return stream
+    }
+
+    private func publishSynced(_ present: Set<RoomID>) {
+        let continuations = syncObservers.withLock { Array($0.values) }
+        for continuation in continuations { continuation.yield(present) }
     }
 
     // MARK: Mapping

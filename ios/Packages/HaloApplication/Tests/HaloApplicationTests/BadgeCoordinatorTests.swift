@@ -370,4 +370,25 @@ struct BadgeCoordinatorTests {
         #expect(records.all().isEmpty)
         #expect(port.badge == 0)
     }
+
+    @Test("R-04 (PS26): carried attention for a room that never reappears is dropped after the first sync response")
+    func carriedRoomDroppedAfterFirstSync() async throws {
+        let gone = try RoomID("!gone:x.org")
+        let alive = try RoomID("!alive:x.org")
+        let pending = try RoomID("!pending:x.org")
+        let (rooms, port, badge) = try await started(preloaded: [gone.rawValue, alive.rawValue, pending.rawValue])
+        // Before the first sync response: partial list keeps all unshown carried rooms.
+        try rooms.emit(.reset([try summary(alive.rawValue)]))
+        #expect(await eventually { port.history.last == [gone, pending] })
+
+        // First sync response completes: SDK reports only `alive` and `pending` as joined/invited (`gone` was left while closed).
+        // `gone` is dropped immediately; `pending` stays carried (no flicker) until its diff arrives.
+        rooms.emitSyncComplete(present: [alive, pending])
+        #expect(await eventually { port.history.last == [pending] })
+        #expect(await badge.attentionRooms == [pending])
+
+        // Once `pending`'s summary arrives (read), it drops too.
+        try rooms.emit(.reset([try summary(alive.rawValue), try summary(pending.rawValue)]))
+        #expect(await eventually { port.history.last == [] })
+    }
 }

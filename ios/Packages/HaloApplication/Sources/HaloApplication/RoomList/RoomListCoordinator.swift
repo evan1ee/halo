@@ -46,8 +46,11 @@ public actor RoomListCoordinator {
     private var summaryCache: [RoomSummary] = []
     private var excludedBroadcaster = SnapshotBroadcaster<Set<RoomID>>()
     private var excludedCache: Set<RoomID> = []
+    private var syncBroadcaster = SnapshotBroadcaster<Set<RoomID>?>()
+    private var lastSyncedRooms: Set<RoomID>?
     private var subscription: Task<Void, Never>?
     private var leftSubscription: Task<Void, Never>?
+    private var syncSubscription: Task<Void, Never>?
     private var generation = 0
     private var consecutiveFailures = 0
     private var diffsInSubscription = 0
@@ -66,6 +69,7 @@ public actor RoomListCoordinator {
     deinit {
         subscription?.cancel()
         leftSubscription?.cancel()
+        syncSubscription?.cancel()
     }
 
     /// The current status, then its changes; latest value wins (CONCURRENCY §3).
@@ -84,6 +88,10 @@ public actor RoomListCoordinator {
     /// sticker-pack rooms, and pending invitations from ignored users (R-03).
     public func excludedRoomChanges() -> AsyncStream<Set<RoomID>> { excludedBroadcaster.subscribe(current: excludedCache) }
 
+    /// Fires after each completed sync response with the complete set of joined/invited rooms from the SDK (`nil`
+    /// before the first sync response of this subscription, R-04).
+    public func syncCompletions() -> AsyncStream<Set<RoomID>?> { syncBroadcaster.subscribe(current: lastSyncedRooms) }
+
     public func start(filter: RoomListFilter = .all) {
         consecutiveFailures = 0
         requestedAt = 0
@@ -95,10 +103,14 @@ public actor RoomListCoordinator {
         subscription = nil
         leftSubscription?.cancel()
         leftSubscription = nil
+        syncSubscription?.cancel()
+        syncSubscription = nil
         generation += 1
         hidden = []
         ignored = []
         left = []
+        lastSyncedRooms = nil
+        syncBroadcaster.publish(nil)
         publishExcluded()
         status = .idle
     }
@@ -118,12 +130,14 @@ public actor RoomListCoordinator {
     private func subscribe(filter: RoomListFilter) {
         subscription?.cancel()
         leftSubscription?.cancel()
+        syncSubscription?.cancel()
         generation += 1
         diffsInSubscription = 0
         let current = generation
         status = .loading
         let diffs = port.rooms(filter: filter)
         let leftStream = port.leftRooms()
+        let syncStream = port.syncCompletions()
         subscription = Task { [weak self] in
             for await diff in diffs {
                 guard let self, await self.apply(diff, generation: current, filter: filter) else { return }
@@ -134,6 +148,17 @@ public actor RoomListCoordinator {
                 await self?.roomsLeft(rooms, generation: current)
             }
         }
+        syncSubscription = Task { [weak self] in
+            for await present in syncStream {
+                await self?.syncCompleted(present, generation: current)
+            }
+        }
+    }
+
+    private func syncCompleted(_ present: Set<RoomID>, generation: Int) {
+        guard generation == self.generation else { return }
+        lastSyncedRooms = present
+        syncBroadcaster.publish(present)
     }
 
     private func roomsLeft(_ rooms: Set<RoomID>, generation: Int) {

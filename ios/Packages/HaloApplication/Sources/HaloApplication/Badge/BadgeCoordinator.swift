@@ -30,6 +30,10 @@ public actor BadgeCoordinator {
     private var seen: Set<RoomID> = []
     /// Rooms that must not count towards attention (left, hidden sticker-pack rooms, ignored-inviter invites, R-03).
     private var excludedRooms: Set<RoomID> = []
+    /// Whether the first sync response of this run has completed (R-04): once true, carried rooms and records for rooms
+    /// not reported as joined/invited by the server are dropped.
+    private var hasSynced = false
+    private var syncedRooms: Set<RoomID> = []
 
     /// Where the read-state auditor writes (LOGGING_AND_DIAGNOSTICS §2): debug and TestFlight builds only.
     public struct Audit: Sendable {
@@ -79,6 +83,7 @@ public actor BadgeCoordinator {
         carried = await port.lastAttention()
         let roomInputs = await rooms.readInputs()
         let excluded = await rooms.excludedRoomChanges()
+        let syncs = await rooms.syncCompletions()
         var follow: [Task<Void, Never>] = []
         if let receipts {
             let positions = await receipts.positions()
@@ -87,6 +92,7 @@ public actor BadgeCoordinator {
         tasks = follow + [
             Task { [weak self] in for await inputs in roomInputs { await self?.roomsChanged(inputs) } },
             Task { [weak self] in for await rooms in excluded { await self?.excludedChanged(rooms) } },
+            Task { [weak self] in for await present in syncs { await self?.syncCompleted(present) } },
         ]
         observeRecords()
     }
@@ -146,6 +152,8 @@ public actor BadgeCoordinator {
         carried = []
         seen = []
         excludedRooms = []
+        hasSynced = false
+        syncedRooms = []
         inputs = []
         attentionRooms = []
         hasWritten = false
@@ -216,6 +224,25 @@ public actor BadgeCoordinator {
         await recompute()
     }
 
+    private func syncCompleted(_ present: Set<RoomID>?) async {
+        guard let present else {
+            hasSynced = false
+            syncedRooms = []
+            return
+        }
+        hasSynced = true
+        syncedRooms = present
+        // Drop any carried room that the server did not report as joined/invited (R-04).
+        // Rooms in `present` whose diff hasn't arrived yet remain carried until their inputs arrive.
+        carried.formIntersection(present)
+        // Drop stale notification records for rooms not in the post-sync room set (R-03).
+        if let stored = records?.all() {
+            let absent = Set(stored.map(\.roomID)).subtracting(present)
+            if !absent.isEmpty { records?.clear(rooms: absent) }
+        }
+        await recompute()
+    }
+
     /// Writes the findings that are new for a room (a finding that persists isn't written again until it goes away).
     private func runAudit(_ evaluated: [(input: RoomReadInputs, state: RoomReadState)]) async {
         guard let audit else { return }
@@ -268,8 +295,13 @@ public actor BadgeCoordinator {
         let activeRecords = stored.filter { !pass.superseded.contains($0.eventID) && !excludedRooms.contains($0.roomID) }
         var attention = Set(pass.results.filter(\.state.attention).map(\.input.roomID))
         let known = Set(inputs.map(\.roomID))
-        for record in activeRecords where !known.contains(record.roomID) { attention.insert(record.roomID) }
-        attention.formUnion(carried.subtracting(seen))
+        // Before the first sync response of the run, records for rooms not yet in the loaded list still count;
+        // once sync has reported the full joined/invited set, unknown rooms no longer count (R-03, R-04).
+        if !hasSynced {
+            for record in activeRecords where !known.contains(record.roomID) { attention.insert(record.roomID) }
+        }
+        let carryable = hasSynced ? carried.intersection(syncedRooms) : carried
+        attention.formUnion(carryable.subtracting(seen))
         attention.subtract(excludedRooms)
         carried = attention
         guard attention != attentionRooms || !hasWritten else { return }

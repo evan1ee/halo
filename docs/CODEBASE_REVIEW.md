@@ -151,18 +151,11 @@ with **three different input sets**.
 - **Fix (done):** `NotificationRecordPort` gained `clear(rooms:)`, `remove(events:)`, `clearAll()`; `MatrixRoomListPort` emits `rooms.left` from classic sync; `RoomListCoordinator` publishes excluded rooms (left, hidden sticker-pack rooms, ignored-inviter invitations); `BadgeCoordinator` prunes their records, excludes them from unknown-room counting, clears records in `forget(_:)` and `reset()`, and `NotificationRecordStore` scopes every row by `account` in GRDB.
 - **Tests:** `BadgeCoordinatorTests.recordsPrunedOnLeaveHideIgnoreAndReset`, `NotificationRecordStoreTests.accountIsolation`, scenarios **S26**, **S27**.
 
-### R-04 · The carried-over attention set never forgets rooms that don't reappear — CONFIRMED
+### R-04 · The carried-over attention set never forgets rooms that don't reappear — CONFIRMED, FIXED
 
-- **Where:** `BadgeCoordinator.recompute` (`BadgeCoordinator.swift:212-223`): `attention.formUnion(carried.subtracting(seen))`,
-  and `seen` only contains rooms the list has shown *in this run*.
-- **Current behaviour:** D73's rule ("a partial evaluation never erases a stored result") is implemented as "a carried
-  room stays until the list shows it". A room that had attention at the last write and is left (or kicked/banned, or
-  becomes hidden) while the app isn't running is never shown again, so it is carried **forever** — only sign-out resets it.
-  The test `shownThenGone` covers the "shown, then gone" case, not "never shown".
-- **Fix:** the carry-over must end at a defined completeness point: after the first successful sync response of the run
-  (classic sync returns every joined/invited room's state from the stored token), every carried room the SDK does not
-  report as joined/invited is dropped. `MatrixSessionPort.runSync` already knows when the first response arrived.
-- **Tests:** "carried room left while closed → dropped after the first sync"; keep `partialEvaluationKeepsStoredAttention`.
+- **Where:** `RoomListPort.syncCompletions()`, `MatrixRoomListPort`, `RoomListCoordinator`, `BadgeCoordinator`.
+- **Fix (done):** `MatrixRoomListPort` emits the complete joined/invited room ID set on `syncCompletions()` after each completed classic sync response has been applied; `BadgeCoordinator` intersects `carried` with that set (dropping rooms that never reappeared without flickering rooms whose diff is still in flight) and drops stale records for absent rooms. Partial pre-sync evaluations still keep stored attention (`partialEvaluationKeepsStoredAttention`).
+- **Tests:** `BadgeCoordinatorTests.carriedRoomDroppedAfterFirstSync`, scenario **S28**.
 
 ### R-05 · The room list and the badge disagree by construction — CONFIRMED
 
@@ -426,7 +419,7 @@ non-messages), and its SDK didn't count undecryptable events, which the real SDK
 | PS23 | (done as **S23**: poll vote in an encrypted room without a read position, R-01) | — |
 | PS24 | (done as **S25**: UTD push stamped with event ts, sync delivers & decrypts, A reads on A2, R-02) | — |
 | PS25 | (done as **S26**: room with a record left on A2, pruned on sync, R-03) | — |
-| PS26 | Carried attention for room R; R left while closed | R dropped after first sync response |
+| PS26 | (done as **S28** + `BadgeCoordinatorTests.carriedRoomDroppedAfterFirstSync`: carried room left while closed dropped after first sync, R-04) | — |
 | PS27 | (done as **S27** + `NotificationRecordStoreTests.accountIsolation`: sign out X, sign in Y, R-03/R-13) | — |
 | PS28 | Two messages from B with identical `origin_server_ts`; A views both | Receipt targets the second; server count 0 |
 | PS29 | A reads at T; B (slow clock) sends with ts < T | Attention (inverts S18's pinned limitation) |
@@ -481,7 +474,7 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 | R-01 | P0 | Unread | Encrypted non-messages (poll votes, encrypted reactions) counted by the server only → E3c ghost dot + badge when no read position covers the latest event | **Fixed (D78):** SDK counts decide in encrypted rooms; server-only → no unread. Latest-event receipt left for R-06 |
 | R-02 | P0 | Unread/NSE | UTD push records stamped `Date()` are never covered | **FIXED:** raw event `origin_server_ts` on `.encrypted`/invites; `partitionRecords` supersedes on sync and covers via `notifiedThroughTs`; S25 |
 | R-03 | P0 | Unread | Records counted for rooms not in the list; not cleared on leave/hide/sign-out | **FIXED:** pruned on `rooms.left`, hidden, ignored, `forget`, `reset`, and account-scoped in GRDB; S26, S27 |
-| R-04 | P0 | Badge | Carried attention never dropped for rooms that don't reappear | End carry-over at the first sync response |
+| R-04 | P0 | Badge | Carried attention never dropped for rooms that don't reappear | **FIXED:** `RoomListPort.syncCompletions()` drops unconfirmed carried rooms and absent records at first sync; S28 |
 | R-05 | P0 | Unread | Room list evaluates without records; badge with records | One `ReadStateCoordinator` output for list, badge, auditor |
 | R-06 | P0 | Unread/receipts | Timestamp ordering drops receipts (equal/skewed ts) and hides new messages (S18) | Event ids + timeline order; new ADR revisiting D47 |
 | R-07 | P0 | Unread | E1/E1b ("covers latest") suppressed positive SDK counts: an undecryptable message after the read position was hidden (confirmed live) | **Fixed (D79):** SDK counts win once its receipt is applied or the own latest event is on the server |
@@ -530,7 +523,7 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 |---|---|---|---|---|---|
 | 0.1 E3c (R-01) — **done 2026-11-21** | Ghost dot/badge from server-only counts | E3b on any SDK count; E3c → no unread (D78) | HaloDomain | — | S23 green; `encryptedNonMessageEvidence` and server-rules checks pass |
 | 0.2 Record lifecycle (R-02, R-03, R-13) — **done** | Ghost badge units | GRDB `notification_record`; event `origin_server_ts`; supersede on sync; prune on left/hidden/ignored/reset | HaloPersistence, HaloPlatform, NSE, HaloApplication | migration v7 | S25, S26, S27, PS33 green |
-| 0.3 Carry-over completeness (R-04) | Permanent ghosts | Sync emits "first response of run"; coordinator drops unconfirmed carried rooms | HaloMatrixAdapter, HaloApplication | — | PS26 green |
+| 0.3 Carry-over completeness (R-04) — **done** | Permanent ghosts | Sync emits post-sync room set via `RoomListPort.syncCompletions()`; coordinator drops unconfirmed carried rooms | HaloMatrixAdapter, HaloApplication | — | S28 green |
 | 0.4 `ReadStateCoordinator` (R-05, R-08) | One truth for list, badge, NSE | New actor owns input assembly and output; `RoomListViewModel` consumes states; NSE leaves badge or uses app set + policy delta | HaloApplication, FeatureRoomList, NSE | 0.2 | PS31, PS32 green; `RoomListViewModel` no longer calls `ReadStatePolicy` |
 | 0.5 Identity/order instead of timestamps (R-06; R-07 **done 2026-11-21**, D79) | Missed unreads | Inputs carry event ids/order; E1/E1b rewritten; new ADR revising D47/D72 | HaloDomain, adapter, ReadReceiptCoordinator, FeatureTimeline | ADR | PS28–PS30 green; S18 limitation assertion inverted |
 | 0.6 Session lifecycle (R-10, R-12) | Stuck sessions | `ClientDelegate`; single-flight restore | adapter, HaloApplication | — | PS34, PS35 green |

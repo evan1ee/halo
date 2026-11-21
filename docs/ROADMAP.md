@@ -59,7 +59,8 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 - [x] **P0** Review R-01 (docs/CODEBASE_REVIEW.md, D78): server-only counts in encrypted rooms are no unread (E3c), SDK counts decide whenever any is non-zero (E3b); S23, `encryptedNonMessageEvidence`, server-rules checks.
 - [x] **P0** Review R-07 (D79): E1/E1b give way to the SDK's counts once the SDK has applied the read position; S24, P11, `encryptedNonMessageEvidence`.
 - [x] **P0** Review R-02/R-03/R-13 (docs/CODEBASE_REVIEW.md): GRDB `notification_record` (migration v7), raw event `origin_server_ts`, record superseding on sync, pruning on left/hidden/ignored/sign-out; S25–S27, PS33.
-- [ ] **P0** Review Phase 0, the rest (docs/CODEBASE_REVIEW.md §14): R-04 carry-over end, R-05 one `ReadStateCoordinator`, R-06 order by event identity (ADR revisiting D47), R-10/R-12 session lifecycle, R-09 NSE runtime.
+- [x] **P0** Review R-04 (docs/CODEBASE_REVIEW.md): carry-over ends at the first completed sync response (`RoomListPort.syncCompletions()`); S28.
+- [ ] **P0** Review Phase 0, the rest (docs/CODEBASE_REVIEW.md §14): R-05 one `ReadStateCoordinator`, R-06 order by event identity (ADR revisiting D47), R-10/R-12 session lifecycle, R-09 NSE runtime.
 
 **M4 Stickers v1** (exit: AC-S1–S5)
 - [x] Hide pack rooms (`one.mbm.halo.sticker_rooms`) from the room list and the badge (`RoomListCoordinator(hiddenRooms:)`; not checked on screen).

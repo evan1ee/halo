@@ -11,6 +11,7 @@ public final class FakeRoomListPort: RoomListPort {
         var filter: RoomListFilter = .all
         var continuations: [UUID: AsyncStream<RoomListDiff>.Continuation] = [:]
         var leftContinuations: [UUID: AsyncStream<Set<RoomID>>.Continuation] = [:]
+        var syncContinuations: [UUID: AsyncStream<Set<RoomID>>.Continuation] = [:]
         var loadMoreCalls = 0
         var subscriptions = 0
     }
@@ -37,12 +38,21 @@ public final class FakeRoomListPort: RoomListPort {
     public func finishSubscriptions() {
         for continuation in state.withLock({ Array($0.continuations.values) }) { continuation.finish() }
         for continuation in state.withLock({ Array($0.leftContinuations.values) }) { continuation.finish() }
+        for continuation in state.withLock({ Array($0.syncContinuations.values) }) { continuation.finish() }
     }
 
     /// Reports rooms that were left/kicked/banned in sync (`rooms.left`).
     public func emitLeft(_ rooms: Set<RoomID>) {
         guard !rooms.isEmpty else { return }
         for continuation in state.withLock({ Array($0.leftContinuations.values) }) { continuation.yield(rooms) }
+    }
+
+    /// Reports that a sync response has completed with the given joined/invited room IDs (defaults to the current list).
+    public func emitSyncComplete(present: Set<RoomID>? = nil) {
+        let (ids, continuations) = state.withLock { state in
+            (present ?? Set(state.rooms.map(\.id)), Array(state.syncContinuations.values))
+        }
+        for continuation in continuations { continuation.yield(ids) }
     }
 
     public var currentFilter: RoomListFilter { state.withLock { $0.filter } }
@@ -78,6 +88,14 @@ public final class FakeRoomListPort: RoomListPort {
         let id = UUID()
         state.withLock { $0.leftContinuations[id] = continuation }
         continuation.onTermination = { [weak self] _ in self?.state.withLock { _ = $0.leftContinuations.removeValue(forKey: id) } }
+        return stream
+    }
+
+    public func syncCompletions() -> AsyncStream<Set<RoomID>> {
+        let (stream, continuation) = AsyncStream<Set<RoomID>>.makeStream(bufferingPolicy: .unbounded)
+        let id = UUID()
+        state.withLock { $0.syncContinuations[id] = continuation }
+        continuation.onTermination = { [weak self] _ in self?.state.withLock { _ = $0.syncContinuations.removeValue(forKey: id) } }
         return stream
     }
 }

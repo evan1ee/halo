@@ -14,8 +14,12 @@ public protocol RoomListPort: Sendable {
     /// Rooms the server reported as left/kicked/banned in sync (`rooms.left`), so dependent state (such as notification
     /// records) can be pruned (R-03).
     func leftRooms() -> AsyncStream<Set<RoomID>>
+    /// Fires after each completed sync response has been applied to the room list, carrying the complete set of
+    /// joined/invited room IDs known to the SDK at that sync point (R-04).
+    func syncCompletions() -> AsyncStream<Set<RoomID>>
 }
 
 public extension RoomListPort {
     func leftRooms() -> AsyncStream<Set<RoomID>> { AsyncStream { $0.finish() } }
+    func syncCompletions() -> AsyncStream<Set<RoomID>> { AsyncStream { $0.finish() } }
 }
