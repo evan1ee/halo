@@ -25,6 +25,7 @@ public final class FakeRoomPort: RoomPort {
 
     /// Makes every following call throw (nil: stop failing).
     public func fail(with error: HaloError?) { state.withLock { $0.error = error } }
+    public func setDetails(_ details: RoomDetails) { state.withLock { $0.details = details } }
     public var modeChanges: [RoomNotificationChoice] { state.withLock { $0.modes } }
     public var leftRooms: [RoomID] { state.withLock { $0.left } }
 

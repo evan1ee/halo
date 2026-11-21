@@ -42,6 +42,7 @@ public final class RoomDetailsViewModel: Identifiable {
 
     private let images: (any ImagePreparing)?
     private let media: MediaLoader?
+    private let sleep: @Sendable (Duration) async throws -> Void
 
     /// An avatar's image bytes (a small thumbnail); `nil` without a loader or when the download failed, so the initial stays.
     public func avatarData(_ ref: MediaRef) async -> Data? {
@@ -49,21 +50,42 @@ public final class RoomDetailsViewModel: Identifiable {
         return try? await media.thumbnail(ref, width: 96, height: 96)
     }
 
-    public init(port: any RoomPort, room: RoomID, images: (any ImagePreparing)? = nil, media: MediaLoader? = nil) {
+    public init(
+        port: any RoomPort, room: RoomID, images: (any ImagePreparing)? = nil, media: MediaLoader? = nil,
+        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    ) {
         self.images = images
         self.media = media
         self.port = port
         self.room = room
+        self.sleep = sleep
     }
 
     /// The members shown under a heading; administrators carry a badge.
+    /// If power levels haven't reached the SDK on a newly created room yet (`!canEditDetails && !canInvite`),
+    /// re-checks once after 1.5 s so the edit/invite controls appear without requiring a manual pull-to-refresh.
     public func load() async {
         content = .loading
         do throws(HaloError) {
             let details = try await port.details(room)
             let members = try await port.members(room, limit: requestedMembers)
             content = .loaded(details, members: members)
+            if !details.canEditDetails, !details.canInvite {
+                let sleep = self.sleep
+                Task { [weak self] in
+                    try? await sleep(.milliseconds(1500))
+                    guard !Task.isCancelled else { return }
+                    await self?.refreshQuietly()
+                }
+            }
         } catch { content = .failed(Self.text(error)) }
+    }
+
+    private func refreshQuietly() async {
+        guard case .loaded = content else { return }
+        guard let details = try? await port.details(room),
+              let members = try? await port.members(room, limit: requestedMembers) else { return }
+        content = .loaded(details, members: members)
     }
 
     /// Reads the details and members again without the loading screen (pull to refresh), so permissions that reached the SDK

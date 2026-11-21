@@ -189,6 +189,27 @@ struct AdapterContractTests {
         // `infra/dev/add-animated-sticker.py` may have added "spin" (an animated GIF): the two fixtures must be there, in order.
         #expect(pack.stickers.map(\.shortcode).filter { $0 != "spin" } == ["dance", "wave"])
         #expect(pack.stickers.allSatisfy { $0.image != nil })
+        // Real sticker image bytes load from media (`MatrixMediaPort.content`).
+        let stickerMedia = try await MatrixMediaPort(session: session).content(try #require(pack.stickers[0].image))
+        #expect(!stickerMedia.isEmpty)
+
+        // V-ST-2: when the pack GET receives a 401 on the first attempt, `MatrixStickerPackPort` triggers an SDK
+        // request to refresh the token and retries once.
+        let calls = Mutex(0)
+        let retryingPacks = MatrixStickerPackPort(session: session, fetch: { request in
+            let attempt = calls.withLock { count -> Int in
+                count += 1
+                return count
+            }
+            if attempt == 1 {
+                let unauthorized = HTTPURLResponse(url: try #require(request.url), statusCode: 401, httpVersion: nil, headerFields: nil)!
+                return (Data(#"{"errcode":"M_UNKNOWN_TOKEN"}"#.utf8), unauthorized)
+            }
+            return try await MatrixStickerPackPort.urlSessionFetch(request)
+        })
+        let after401 = try await retryingPacks.packs(currentRoom: nil)
+        #expect(after401.packs.contains { $0.ref == cats } && after401.failedSources == 0)
+        #expect(calls.withLock { $0 } >= 2)
 
         // The same pack, found as the current room's pack.
         let asRoomPack = try await packs.packs(currentRoom: room)
@@ -427,6 +448,19 @@ struct AdapterContractTests {
         let preview = try await rooms.invitePreview(toDecline)
         #expect(preview.name == "Invite decline fixture")
         #expect(preview.memberCount.map { $0 >= 1 } ?? true)
+        // Verify inviterID is populated on the invited RoomSummary so `RoomListCoordinator(profiles:)` can hide invites from ignored users.
+        let peerID = try UserID("@\(env["HALO_DEV_PEER_USER"] ?? ""):halo.localhost")
+        var inviteSummary: RoomSummary?
+        for _ in 0..<15 where inviteSummary?.inviterID == nil {
+            var it = list.rooms(filter: .all).makeAsyncIterator()
+            var items: [RoomSummary] = []
+            if let diff = await it.next() {
+                try? RoomListReducer.apply(diff, to: &items)
+                inviteSummary = items.first { $0.id == toDecline }
+            }
+            if inviteSummary?.inviterID == nil { try await Task.sleep(for: .seconds(1)) }
+        }
+        #expect(inviteSummary?.inviterID == peerID)
         try await rooms.acceptInvite(toAccept)
         #expect(try await waitFor(toAccept, .joined) == .joined)
         try await rooms.declineInvite(toDecline)
@@ -749,21 +783,36 @@ struct AdapterContractTests {
         let marker = UUID().uuidString.prefix(6)
         let hostile = "T<b>*x*</b>](https://phish)"
         try await opened.send(text: "hello @\(hostile) \(marker)", mentions: [Mention(user: me, name: hostile)])
-        let body: String? = try await within(seconds: 60) {
+        let sentEvent: HaloDomain.TimelineEvent? = try await within(seconds: 60) {
             var items: [HaloDomain.TimelineItem] = []
             for await diff in stream {
                 try ListReducer.apply(diff, to: &items)
                 for item in items {
                     if case .event(let event) = item.content, event.isOwn, event.eventID != nil, case .text(let text, _) = event.kind, text.contains(String(marker)) {
-                        return event.formattedBody
+                        return event
                     }
                 }
             }
             return nil
         }
+        let body = sentEvent?.formattedBody
         #expect(body?.contains("https://matrix.to/#/\(me.rawValue)") == true, "formatted body: \(body ?? "nil")")
         #expect(body?.contains("<b>") == false && body?.contains("<em>") == false && body?.contains("href=\"https://phish") == false,
                 "formatted body: \(body ?? "nil")")
+        // Verify `m.mentions.user_ids` on the raw event stored by the server via Client-Server `/event`.
+        let sentID = try #require(sentEvent?.eventID)
+        let token = try (try await session.signedInClient()).session().accessToken
+        let encRoom = room.rawValue.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? room.rawValue
+        let encEvent = sentID.rawValue.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? sentID.rawValue
+        let baseStr = details.homeserverURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        var eventReq = URLRequest(url: try #require(URL(string: "\(baseStr)/_matrix/client/v3/rooms/\(encRoom)/event/\(encEvent)")))
+        eventReq.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (eventData, _) = try await URLSession.shared.data(for: eventReq)
+        let rawObj = try JSONSerialization.jsonObject(with: eventData) as? [String: Any]
+        let rawContent = rawObj?["content"] as? [String: Any]
+        let mentionsObj = rawContent?["m.mentions"] as? [String: Any]
+        let mentionedUsers = (mentionsObj?["user_ids"] as? [String]) ?? []
+        #expect(mentionedUsers == [me.rawValue], "expected m.mentions.user_ids == [\(me.rawValue)], got \(mentionedUsers), raw=\(String(describing: rawObj))")
 
         // Retrying or aborting an echo that doesn't exist reports an error instead of crashing.
         await #expect(throws: HaloError.notFound) { try await opened.retrySend(localID: "no-such-echo") }
@@ -1120,10 +1169,13 @@ struct AdapterContractTests {
         let unverified = MatrixEncryptionPort(session: second)
         try await within(seconds: 90) { try await EncryptionPortContract.verifyRecovery(unverified, recoveryKey: key) }
 
-        // Changing the key (Settings → Security → Change recovery key): the verified first device replaces it; the new key
-        // unlocks a third device and the old one no longer does.
-        let replaced = try await within(seconds: 90) { try await MatrixEncryptionPort(session: first).resetRecovery() }
+        // Changing the key (Settings → Security → Change recovery key): the verified first device replaces it, then imports
+        // the new secrets with `recover(recoveryKey:)` (just like `RecoveryViewModel.replaceRecovery`) so it ends up verified;
+        // the new key unlocks a third device and the old one no longer does.
+        let firstEncryption = MatrixEncryptionPort(session: first)
+        let replaced = try await within(seconds: 90) { try await firstEncryption.resetRecovery() }
         #expect(replaced != key)
+        try await within(seconds: 90) { try await EncryptionPortContract.verifyRecovery(firstEncryption, recoveryKey: replaced) }
         let third = port()
         _ = try await third.loginPassword(PasswordCredentials(username: user, password: password, deviceDisplayName: "e2ee-3"), on: details)
         try await MatrixSyncPort(session: third).start()

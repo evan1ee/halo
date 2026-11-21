@@ -132,4 +132,20 @@ struct RecoveryViewModelTests {
         #expect(!RecoveryViewModel.message(for: .invalidInput("RECOVERY_KEY")).contains("RECOVERY_KEY"))
         #expect(RecoveryViewModel.message(for: .network(retryable: true)).contains("connection"))
     }
+
+    @Test("replaceRecovery resets the key and immediately recovers the creating device so it ends up verified")
+    func replaceRecoveryVerifiesDevice() async throws {
+        let port = FakeEncryptionPort(recoveryKey: "old-key", verified: false)
+        let model = try await model(port)
+        for _ in 0..<500_000 where !model.needsRecovery { await Task.yield() }
+        #expect(model.needsRecovery && !model.isVerified)
+        let result = await model.replaceRecovery()
+        guard case .success(let newKey) = result else {
+            Issue.record("expected replaceRecovery to succeed, got \(result)")
+            return
+        }
+        #expect(newKey != "old-key" && !newKey.isEmpty)
+        for _ in 0..<500_000 where !model.isVerified { await Task.yield() }
+        #expect(model.isVerified && !model.needsRecovery && model.deviceStatus == "Verified" && model.recoveryStatus == "On")
+    }
 }

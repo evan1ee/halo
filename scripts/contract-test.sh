@@ -31,7 +31,7 @@ fi
 
 only=()
 if [[ $# -eq 0 ]]; then
-  only=(-only-testing:HaloMatrixAdapterTests/AdapterContractTests -only-testing:HaloMatrixAdapterTests/ClassicSyncEvidenceTests)
+  only=(-only-testing:HaloMatrixAdapterTests/AdapterContractTests -only-testing:HaloMatrixAdapterTests/ClassicSyncEvidenceTests -only-testing:HaloMatrixAdapterTests/ServerReadStateScenarioTests)
 else
   # A bare name is an AdapterContractTests test; `Suite/test` names a test of another suite (e.g. ClassicSyncEvidenceTests).
   for name in "$@"; do

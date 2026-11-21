@@ -63,10 +63,18 @@ public final class MatrixRoomListPort: RoomListPort {
                 _ = try Self.kind(for: filter)
                 let client = try await session.signedInClient()
                 let settings = await client.getNotificationSettings()
+                // Push rules arrive in top-level `account_data` (`m.push_rules`), not `response.rooms.joined`, so a
+                // mode change (on this device or another) does not name the room in `SyncChange.joined` (S07b, S10).
+                // `NotificationSettingsDelegate` fires whenever push rules change and triggers a full summary refresh.
+                let settingsDelegate = PushRulesChangeDelegate(refresh: refreshContinuation)
+                settings.setDelegate(delegate: settingsDelegate)
+                defer { settings.setDelegate(delegate: nil); _ = settingsDelegate }
                 var summaries: [String: RoomSummary] = [:]
                 var last: [RoomSummary]?
                 @discardableResult
-                func publish(changed: Set<String>?) async throws(HaloError) -> Set<RoomID> {
+                func publish(changed: Set<String>?, forceAll: Bool = false) async throws(HaloError) -> Set<RoomID> {
+                    // Fetch `NotificationSettings` per pass so push-rule updates from sync are always visible (S07b, S10).
+                    let currentSettings = await client.getNotificationSettings()
                     let known = client.rooms().filter { !$0.isSpace() && [.joined, .invited].contains($0.membership()) }
                     var present: Set<String> = []
                     var presentIDs: Set<RoomID> = []
@@ -76,7 +84,7 @@ public final class MatrixRoomListPort: RoomListPort {
                         present.insert(roomID)
                         let id = try RoomID(roomID)
                         presentIDs.insert(id)
-                        if summaries[roomID] == nil || changed?.contains(roomID) == true {
+                        if forceAll || summaries[roomID] == nil || changed?.contains(roomID) == true {
                             toRebuild.append((roomID, id, room))
                         }
                     }
@@ -84,7 +92,7 @@ public final class MatrixRoomListPort: RoomListPort {
                         // Bounded per-room parallelism (R-19) avoids serial FFI fan-out on large accounts
                         // without flooding the SDK's SQLite/crypto locks.
                         let rebuilt = try await Self.rebuildSummaries(
-                            toRebuild, settings: settings, hasRecords: hasRecords, eventTimes: eventTimes)
+                            toRebuild, settings: currentSettings, hasRecords: hasRecords, eventTimes: eventTimes)
                         for (roomID, summary) in rebuilt { summaries[roomID] = summary }
                     }
                     summaries = summaries.filter { present.contains($0.key) }
@@ -101,7 +109,7 @@ public final class MatrixRoomListPort: RoomListPort {
                     }
                     return presentIDs
                 }
-                try await publish(changed: nil)
+                try await publish(changed: nil, forceAll: true)
                 let changes = await session.syncChanges()
                 enum Event: Sendable { case sync(Set<String>), refresh }
                 // Sync responses and filter changes feed one loop, so the list is rebuilt one change at a time.
@@ -123,7 +131,7 @@ public final class MatrixRoomListPort: RoomListPort {
                         let present = try await publish(changed: changed)
                         self?.publishSynced(present)
                     case .refresh:
-                        try await publish(changed: nil)
+                        try await publish(changed: nil, forceAll: true)
                     }
                 }
             } catch {
@@ -446,5 +454,18 @@ public final class MatrixRoomListPort: RoomListPort {
         case .knocked: .knocked
         case .banned: .banned
         }
+    }
+}
+
+private final class PushRulesChangeDelegate: NotificationSettingsDelegate {
+    private let refresh: AsyncStream<Void>.Continuation
+
+    init(refresh: AsyncStream<Void>.Continuation) {
+        self.refresh = refresh
+    }
+
+    func settingsDidChange() {
+        // Never block the callback thread or call back into the FFI synchronously (AGENTS.md §8).
+        refresh.yield()
     }
 }

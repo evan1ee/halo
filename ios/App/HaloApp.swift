@@ -188,6 +188,7 @@ private struct RootView: View {
             case .active:
                 HaloDatabase.resumeAll()
                 await root.setForeground(true)
+                await root.receipts.flush()
             case .background:
                 let lease = BackgroundTaskLease(name: "halo.receipts.flush", onEnd: { HaloDatabase.suspendAll() })
                 defer { lease.end() }

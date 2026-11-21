@@ -59,7 +59,22 @@ public final class FakeEncryptionPort: EncryptionPort {
         return key
     }
 
-    public func resetRecovery() async throws(HaloError) -> String { try await enableRecovery() }
+    public func resetRecovery() async throws(HaloError) -> String {
+        let key = "FAKE-RECOVERY-KEY-\(UUID().uuidString)"
+        let result: Result<EncryptionStatus, HaloError> = state.withLock { state in
+            if let error = state.nextError {
+                state.nextError = nil
+                return .failure(error)
+            }
+            state.key = key
+            // Match the real SDK (`F-FFI-19`): `resetRecoveryKey` leaves the creating device in `.incomplete`
+            // until `recover(recoveryKey:)` imports the new secrets.
+            state.status = EncryptionStatus(verification: .unverified, recovery: .incomplete)
+            return .success(state.status)
+        }
+        publish(try result.get())
+        return key
+    }
 
     private func publish(_ status: EncryptionStatus) {
         for continuation in state.withLock({ Array($0.continuations.values) }) { continuation.yield(status) }
