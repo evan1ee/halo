@@ -786,6 +786,29 @@ struct TimelineViewModelTests {
         #expect(row.style == .state && row.text == "Alice started a call — Halo can't join calls")
     }
 
+    @Test("tapping a reply's quote scrolls to the original when it is loaded, and does nothing when it is not (FR-8)")
+    func replyJump() async throws {
+        let room = try RoomID("!r:x.org")
+        let ann = try UserID("@ann:x.org")
+        func msg(_ id: String, replyTo: String? = nil, ts: TimeInterval) throws -> TimelineItem {
+            TimelineItem(id: TimelineItemID(id), content: .event(TimelineEvent(
+                eventID: try EventID("$\(id)"), sender: ann, senderName: "Ann", timestamp: Date(timeIntervalSince1970: ts), isOwn: false,
+                kind: .text(id, isEdited: false),
+                replyTo: try replyTo.map { ReplyPreview(eventID: try EventID($0), senderName: "Ann", snippet: "x") })))
+        }
+        let port = FakeTimelinePort()
+        port.addRoom(room, items: [try msg("m1", ts: 10), try msg("m2", replyTo: "$m1", ts: 20), try msg("m3", replyTo: "$gone", ts: 30)])
+        let vm = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room))
+        await vm.start()
+        for _ in 0..<200_000 where vm.lastRowID != "m3" { await Task.yield() }
+        guard case .live(let rows, _, _, _) = vm.content else { Issue.record("not live"); return }
+        #expect(vm.jumpToReplyOriginal(from: rows[1]) && vm.jumpRequest == "m1")
+        vm.jumpHandled()
+        #expect(vm.jumpRequest == nil)
+        #expect(!vm.jumpToReplyOriginal(from: rows[2]) && vm.jumpRequest == nil)
+        #expect(!vm.jumpToReplyOriginal(from: rows[0]))
+    }
+
     @Test("opening a file downloads it into a temporary folder, shows it, and deleting it again on close; big files are refused")
     func openingFiles() async throws {
         let port = FakeMediaPort()

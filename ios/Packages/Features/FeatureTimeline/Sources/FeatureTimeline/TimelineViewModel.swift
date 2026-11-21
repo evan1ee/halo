@@ -91,6 +91,8 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     }
 
     public struct Reply: Equatable, Sendable {
+        /// The quoted message, so a tap can scroll to it when it is in the loaded timeline (TIMELINE FR-8).
+        public let eventID: EventID?
         public let sender: String?
         /// `nil` when the original isn't available; the view then says so.
         public let snippet: String?
@@ -330,6 +332,8 @@ public final class TimelineViewModel {
     /// The first message that was unread when the room was opened (TIMELINE FR-4): the "Jump to unread" pill leads back to it for as
     /// long as the room stays open (the SDK's own "New messages" row moves with the fully-read marker). `nil` when nothing was unread or the position is unknown.
     public private(set) var unreadMarkerID: String?
+    /// Set by `jumpToReplyOriginal`; the view scrolls to this row and clears it with `jumpHandled`.
+    public private(set) var jumpRequest: String?
     /// `true` while the newest row is in view; `false` when the user scrolled up to read history (TIMELINE §6: Detached).
     public private(set) var isAtBottom = true
     /// Number of incoming messages appended while the user is scrolled up (`!isAtBottom`). Cleared on returning to the bottom.
@@ -495,6 +499,18 @@ public final class TimelineViewModel {
         }
         return nil
     }
+
+    /// Scrolls to the message `row` replies to if it is among the loaded rows (TIMELINE FR-8). Returns `false` when it isn't
+    /// (older than the loaded page, or deleted); loading around an unloaded event is not built.
+    @discardableResult
+    public func jumpToReplyOriginal(from row: TimelineRow) -> Bool {
+        guard let target = row.reply?.eventID, case .live(let rows, _, _, _) = content,
+              let original = rows.first(where: { $0.eventID == target }) else { return false }
+        jumpRequest = original.id
+        return true
+    }
+
+    public func jumpHandled() { jumpRequest = nil }
 
     // MARK: Opening files
 
@@ -1046,7 +1062,7 @@ public final class TimelineViewModel {
     }
 
     static func reply(_ preview: ReplyPreview?) -> TimelineRow.Reply? {
-        preview.map { TimelineRow.Reply(sender: $0.senderName, snippet: $0.snippet) }
+        preview.map { TimelineRow.Reply(eventID: $0.eventID, sender: $0.senderName, snippet: $0.snippet) }
     }
 
     static func chips(_ reactions: [ReactionSummary]) -> [TimelineRow.Chip] {

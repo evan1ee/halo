@@ -117,6 +117,11 @@ public struct TimelineView: View {
                         try? await Task.sleep(for: .milliseconds(step == 0 ? 200 : 250))
                     }
                 }
+                .onChange(of: model.jumpRequest) { _, target in
+                    guard let target else { return }
+                    withAnimation { proxy.scrollTo(target, anchor: .center) }
+                    model.jumpHandled()
+                }
                 // FR-4: the marker is above the viewport once the user is at the bottom and the marker is out of sight.
                 .overlay(alignment: .top) {
                     if let marker = model.unreadMarkerID, landed, !markerVisible, bottomVisible {
@@ -380,6 +385,9 @@ private struct RowView: View {
                             .foregroundStyle(.secondary)
                             .padding(.leading, 6)
                             .overlay(alignment: .leading) { Rectangle().fill(.secondary).frame(width: 2) }
+                            .contentShape(Rectangle())
+                            .onTapGesture { model.jumpToReplyOriginal(from: row) }
+                            .accessibilityAddTraits(.isButton)
                         }
                         if let image = row.image { ThumbnailView(image: image, model: model, isSticker: row.isSticker).accessibilityLabel(row.isSticker ? row.text : "Image") }
                         if let file = row.file { FileTileView(file: file, isOpening: model.openingRow == row.id, model: model) { Task { await model.openFile(row) } } }
