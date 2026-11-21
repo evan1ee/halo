@@ -190,29 +190,45 @@ private struct Composer: View {
                         .accessibilityIdentifier("remove-photo")
                 }
             }
-            HStack(alignment: .bottom) {
+            HStack(alignment: .bottom, spacing: 14) {
                 if model.canSendImages {
-                    PhotosPicker(selection: $picked, matching: .images) { Image(systemName: "photo").font(.title2) }
+                    PhotosPicker(selection: $picked, matching: .images) { Image(systemName: "photo").composerIcon() }
                         .disabled(model.isSendingImage)
                         .accessibilityLabel("Send a photo")
                         .accessibilityIdentifier("photo-button")
                 }
-                Button { choosingFile = true } label: { Image(systemName: "paperclip").font(.title2) }
+                Button { choosingFile = true } label: { Image(systemName: "paperclip").composerIcon() }
                     .disabled(model.isSendingFile)
                     .accessibilityLabel("Send a file")
                     .accessibilityIdentifier("file-button")
                 if let onStickers {
-                    Button(action: onStickers) { Image(systemName: "face.smiling").font(.title2) }
+                    Button(action: onStickers) { Image(systemName: "face.smiling").composerIcon() }
                         .accessibilityLabel("Stickers")
                         .accessibilityIdentifier("sticker-button")
                 }
-                TextField("Message", text: $model.draft, axis: .vertical)
-                    .lineLimit(1...5)
-                    .textFieldStyle(.roundedBorder)
-                    .accessibilityIdentifier("composer")
-                Button { Task { await model.send() } } label: { Image(systemName: "arrow.up.circle.fill").font(.title) }
-                    .disabled(!model.canSend)
-                    .accessibilityLabel("Send")
+                // Messages-style field: a rounded pill with the send arrow inside it, shown once there is something to send.
+                HStack(alignment: .bottom, spacing: 4) {
+                    TextField("Message", text: $model.draft, axis: .vertical)
+                        .lineLimit(1...5)
+                        .textFieldStyle(.plain)
+                        .padding(.vertical, 8)
+                        .padding(.leading, 14)
+                        .padding(.trailing, model.canSend ? 0 : 14)
+                        .accessibilityIdentifier("composer")
+                    if model.canSend {
+                        Button { Task { await model.send() } } label: {
+                            Image(systemName: "arrow.up.circle.fill").font(.system(size: 28)).symbolRenderingMode(.palette)
+                                .foregroundStyle(.white, .tint)
+                        }
+                        .padding(3)
+                        .accessibilityLabel("Send")
+                        .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                .frame(minHeight: 36)
+                .background(.background, in: .rect(cornerRadius: 18))
+                .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.separator))
+                .animation(.snappy(duration: 0.2), value: model.canSend)
             }
         }
         .padding(8)
@@ -617,5 +633,9 @@ private struct SenderAvatar: View {
                 data = await model.avatarData(ref)
             }
     }
+}
+private extension Image {
+    /// The attachment buttons beside the composer: one size, centred on a one-line field.
+    func composerIcon() -> some View { font(.title3).frame(height: 36) }
 }
 #endif
