@@ -231,21 +231,26 @@ public final class MatrixRoomListPort: RoomListPort {
         func single(_ text: String) -> String {
             text.split(whereSeparator: \.isNewline).first.map(String.init) ?? text
         }
+        func labelled(_ kind: String, _ detail: String?) -> String {
+            guard let detail = detail.map(single)?.trimmingCharacters(in: .whitespaces), !detail.isEmpty else { return kind }
+            return "\(kind): \(detail)"
+        }
         switch like.kind {
         case .message(let message):
             switch message.msgType {
             case .text(let text): return single(text.body)
             case .notice(let notice): return single(notice.body)
             case .emote(let emote): return "* " + single(emote.body)
-            case .image: return "Photo"
-            case .video: return "Video"
-            case .audio: return "Audio"
-            case .file: return "File"
+            // A caption or a file's name says more than the kind alone ("Photo: at the beach", "File: report.pdf").
+            case .image(let image): return labelled("Photo", image.caption)
+            case .video(let video): return labelled("Video", video.caption)
+            case .audio(let audio): return labelled("Audio", audio.caption)
+            case .file(let file): return labelled("File", file.filename)
             case .gallery: return "Photos"
             case .location: return "Location"
             case .other(_, let body): return single(body)
             }
-        case .sticker: return "Sticker"
+        case .sticker(let body, _, _): return labelled("Sticker", body)
         case .poll(let question, _, _, _, _, _, _): return "Poll: " + single(question)
         case .redacted: return "Message deleted"
         case .unableToDecrypt: return "Encrypted message"

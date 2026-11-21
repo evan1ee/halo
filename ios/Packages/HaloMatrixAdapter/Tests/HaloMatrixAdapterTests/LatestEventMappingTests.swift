@@ -46,6 +46,13 @@ struct LatestEventMappingTests {
         let redacted = TimelineItemContent.msgLike(content: MsgLikeContent(kind: .redacted, inReplyTo: nil, threadRoot: nil, threadSummary: nil))
         #expect(MatrixRoomListPort.previewText(redacted) == "Message deleted")
         #expect(MatrixRoomListPort.previewText(.callInvite) == nil)
+        let source = try? MediaSource.fromUrl(url: "mxc://x.org/a")
+        if let source {
+            let sticker = TimelineItemContent.msgLike(content: MsgLikeContent(
+                kind: .sticker(body: "Dancing", info: ImageInfo(height: nil, width: nil, mimetype: nil, size: nil, thumbnailInfo: nil, thumbnailSource: nil, blurhash: nil, isAnimated: nil), source: source),
+                inReplyTo: nil, threadRoot: nil, threadSummary: nil))
+            #expect(MatrixRoomListPort.previewText(sticker) == "Sticker: Dancing")
+        }
     }
 
     @Test("the preview carries the sender's display name and whether it is the user's own; invites and empty rooms have none")
