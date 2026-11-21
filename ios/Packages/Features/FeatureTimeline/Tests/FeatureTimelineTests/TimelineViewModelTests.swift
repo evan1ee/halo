@@ -738,6 +738,29 @@ struct TimelineViewModelTests {
         #expect(vm.row(try item(own: true, state: .sending, readers: 2)).seenLabel == nil)
     }
 
+    @Test("receipt avatars: up to three readers with the name and picture they showed in this timeline, else their ID's name part; the count covers all")
+    func receiptReaders() async throws {
+        let room = try RoomID("!r:x.org")
+        let ann = try UserID("@ann:x.org"), bob = try UserID("@bob:x.org"), cy = try UserID("@cy:x.org"), di = try UserID("@di:x.org"), me = try UserID("@me:x.org")
+        let avatar = MediaRef(token: "ann-avatar")
+        func ev(_ id: String, sender: UserID, name: String?, own: Bool, ts: TimeInterval, readBy: [UserID] = [], pic: MediaRef? = nil) throws -> TimelineItem {
+            TimelineItem(id: TimelineItemID(id), content: .event(TimelineEvent(
+                eventID: try EventID("$\(id)"), sender: sender, senderName: name, timestamp: Date(timeIntervalSince1970: ts), isOwn: own,
+                kind: .text(id, isEdited: false), senderAvatar: pic, readBy: readBy)))
+        }
+        let port = FakeTimelinePort()
+        port.addRoom(room, items: [
+            try ev("a1", sender: ann, name: "Ann", own: false, ts: 10, pic: avatar),
+            try ev("m1", sender: me, name: "Me", own: true, ts: 20, readBy: [ann, bob, cy, di]),
+        ])
+        let vm = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room))
+        await vm.start()
+        for _ in 0..<200_000 where vm.lastRowID != "m1" { await Task.yield() }
+        guard case .live(let rows, _, _, _) = vm.content, let mine = rows.first(where: { $0.id == "m1" }) else { Issue.record("no row"); return }
+        #expect(mine.seenBy == 4 && mine.seenLabel == "Seen by 4")
+        #expect(mine.readers.map(\.name) == ["Ann", "bob", "cy"] && mine.readers.first?.avatar == avatar)
+    }
+
     @Test("a shared location shows its description with a Maps link; bad geo URIs give no link and never crash")
     func locations() throws {
         let vm = TimelineViewModel(

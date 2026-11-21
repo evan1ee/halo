@@ -62,8 +62,16 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     public var time: String?
     /// How many other people's newest read receipt is on this own message (TIMELINE FR-6); 0 for anything else.
     public var seenBy = 0
+    /// The first three of them, for the avatars under the message; the name is theirs if they wrote in this timeline, else their Matrix ID's name part.
+    public var readers: [Reader] = []
     /// "Seen" / "Seen by 3" for the footer of an own message someone has read; `nil` otherwise.
     public var seenLabel: String? { seenBy == 0 ? nil : seenBy == 1 ? "Seen" : "Seen by \(seenBy)" }
+
+    public struct Reader: Equatable, Sendable, Identifiable {
+        public let id: String
+        public let name: String
+        public let avatar: MediaRef?
+    }
 
     public struct FileTile: Equatable, Sendable {
         public let kind: MediaKind
@@ -795,6 +803,13 @@ public final class TimelineViewModel {
             botTasks = botTracker(snapshot.items)
             botTapped.subtract(botTasks.completed)
             botUnanswered.subtract(botTasks.completed)
+            var profiles: [UserID: (name: String?, avatar: MediaRef?)] = [:]
+            for item in snapshot.items {
+                if case .event(let event) = item.content, let sender = event.sender, !event.isOwn, event.senderName != nil || event.senderAvatar != nil {
+                    profiles[sender] = (event.senderName, event.senderAvatar)
+                }
+            }
+            readerProfiles = profiles
             let rows = Self.collapsingStateRuns(Self.groupingRuns(snapshot.items.map(row), items: snapshot.items), items: snapshot.items)
             // Wait until there is something to land on: a message, or the whole (message-less) history. The first snapshots of a
             // freshly opened room hold only the start marker and state events.
@@ -941,11 +956,27 @@ public final class TimelineViewModel {
         .init(sender: event.sender?.rawValue, eventID: event.eventID?.rawValue, body: body, formattedBody: event.formattedBody)
     }
 
+    static let maxReaderAvatars = 3
+
+    /// People seen in this timeline (their latest display name and picture), so receipts can show them.
+    private var readerProfiles: [UserID: (name: String?, avatar: MediaRef?)] = [:]
+
+    private static func localpart(_ user: UserID) -> String {
+        let raw = user.rawValue
+        return raw.hasPrefix("@") ? String(raw.dropFirst().prefix { $0 != ":" }) : raw
+    }
+
     func row(_ item: TimelineItem) -> TimelineRow {
         var row = baseRow(item)
         if case .event(let event) = item.content {
             if !event.isOwn { row.avatar = event.senderAvatar }
-            if event.isOwn, row.style == .ownMessage, event.sendState == .sent { row.seenBy = event.readBy.count }
+            if event.isOwn, row.style == .ownMessage, event.sendState == .sent {
+                row.seenBy = event.readBy.count
+                row.readers = event.readBy.prefix(Self.maxReaderAvatars).map { user in
+                    let known = readerProfiles[user]
+                    return TimelineRow.Reader(id: user.rawValue, name: known?.name ?? Self.localpart(user), avatar: known?.avatar)
+                }
+            }
             if row.style == .message || row.style == .ownMessage { row.time = timeFormatter.string(from: event.timestamp) }
         }
         return row

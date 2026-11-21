@@ -412,10 +412,9 @@ private struct RowView: View {
                         if let status = row.status {
                             Text(status).font(.caption2).foregroundStyle(.secondary)
                         } else if row.endsRun, let time = row.time {
-                            Text(row.seenLabel.map { "\(time) · \($0)" } ?? time).font(.caption2).foregroundStyle(.secondary)
-                        } else if let seen = row.seenLabel {
-                            Text(seen).font(.caption2).foregroundStyle(.secondary)
+                            Text(time).font(.caption2).foregroundStyle(.secondary)
                         }
+                        if row.status == nil, !row.readers.isEmpty { ReceiptAvatars(row: row, model: model) }
                         reactionBar
                     }
                     .frame(maxWidth: .infinity, alignment: row.style == .ownMessage ? .trailing : .leading)
@@ -731,10 +730,11 @@ private struct SenderAvatar: View {
     let name: String
     let ref: MediaRef?
     let model: TimelineViewModel
+    var size: CGFloat = 28
     @State private var data: Data?
 
     var body: some View {
-        AvatarCircle(name: name, imageData: data, size: 28)
+        AvatarCircle(name: name, imageData: data, size: size)
             .accessibilityHidden(true)
             .task(id: ref) {
                 data = nil
@@ -743,6 +743,26 @@ private struct SenderAvatar: View {
             }
     }
 }
+/// Up to three small pictures of the people who have read up to this message, and "+N" for the rest (TIMELINE FR-6).
+private struct ReceiptAvatars: View {
+    let row: TimelineRow
+    let model: TimelineViewModel
+
+    var body: some View {
+        HStack(spacing: -4) {
+            ForEach(row.readers) { reader in
+                SenderAvatar(name: reader.name, ref: reader.avatar, model: model, size: 16)
+                    .overlay(Circle().stroke(.background, lineWidth: 1))
+            }
+            if row.seenBy > row.readers.count {
+                Text("+\(row.seenBy - row.readers.count)").font(.caption2).foregroundStyle(.secondary).padding(.leading, 6)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Seen by \(row.readers.map(\.name).joined(separator: ", "))" + (row.seenBy > row.readers.count ? " and \(row.seenBy - row.readers.count) more" : ""))
+    }
+}
+
 private extension Image {
     /// The attachment buttons beside the composer: one size, centred on a one-line field.
     func composerIcon() -> some View { font(.title3).frame(height: 36) }
