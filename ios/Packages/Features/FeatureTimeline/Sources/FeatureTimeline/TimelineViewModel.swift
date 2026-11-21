@@ -46,6 +46,10 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     public var avatar: MediaRef?
     /// Someone else's message that follows their previous one closely: the view leaves out the name and picture (one group).
     public var continuesRun = false
+    /// The last message of a group: the view shows its time (`time`) under it.
+    public var endsRun = true
+    /// When it was sent, as a short time ("9:41 AM"); set for messages.
+    public var time: String?
 
     public struct FileTile: Equatable, Sendable {
         public let kind: MediaKind
@@ -273,6 +277,7 @@ public final class TimelineViewModel {
     private var revealedPreviews: Set<MediaRef> = []
     private var observation: Task<Void, Never>?
     private let dateFormatter: DateFormatter
+    private let timeFormatter: DateFormatter
     private let receipts: ReadReceiptCoordinator?
     private let drafts: DraftCoordinator?
     private let imagePreparer: (any ImagePreparing)?
@@ -329,6 +334,12 @@ public final class TimelineViewModel {
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         dateFormatter = formatter
+        let time = DateFormatter()
+        time.locale = locale
+        time.timeZone = timeZone
+        time.dateStyle = .none
+        time.timeStyle = .short
+        timeFormatter = time
     }
 
     isolated deinit { observation?.cancel(); dwellTask?.cancel() }
@@ -773,15 +784,17 @@ public final class TimelineViewModel {
     /// Messages from the same person within this time of their previous one form a group (one name and picture).
     static let runGap: TimeInterval = 5 * 60
 
-    /// Marks someone else's message that directly follows their previous message (no divider or other row between, within
-    /// `runGap`), so the view shows the name and picture once per group.
+    /// Marks a message that directly follows the same person's previous message (no divider or other row between, within
+    /// `runGap`), so the view shows the name and picture once per group and the time once, under its last message.
     static func groupingRuns(_ rows: [TimelineRow], items: [TimelineItem]) -> [TimelineRow] {
         var result = rows
-        for index in result.indices.dropFirst() where result[index].style == .message && result[index - 1].style == .message {
+        let isMessage: (TimelineRow) -> Bool = { $0.style == .message || $0.style == .ownMessage }
+        for index in result.indices.dropFirst() where isMessage(result[index]) && result[index - 1].style == result[index].style {
             guard case .event(let event) = items[index].content, case .event(let previous) = items[index - 1].content,
                   let sender = event.sender, sender == previous.sender,
                   event.timestamp.timeIntervalSince(previous.timestamp) < runGap else { continue }
             result[index].continuesRun = true
+            result[index - 1].endsRun = false
         }
         return result
     }
@@ -810,7 +823,10 @@ public final class TimelineViewModel {
 
     func row(_ item: TimelineItem) -> TimelineRow {
         var row = baseRow(item)
-        if case .event(let event) = item.content, !event.isOwn { row.avatar = event.senderAvatar }
+        if case .event(let event) = item.content {
+            if !event.isOwn { row.avatar = event.senderAvatar }
+            if row.style == .message || row.style == .ownMessage { row.time = timeFormatter.string(from: event.timestamp) }
+        }
         return row
     }
 

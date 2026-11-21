@@ -293,7 +293,11 @@ private struct RowView: View {
                     .padding(8)
                     .background(row.style == .ownMessage ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.15), in: .rect(cornerRadius: 12))
                     .opacity(row.status == nil ? 1 : 0.6) }
-                if let status = row.status { Text(status).font(.caption2).foregroundStyle(.secondary) }
+                if let status = row.status {
+                    Text(status).font(.caption2).foregroundStyle(.secondary)
+                } else if row.endsRun, let time = row.time {
+                    Text(time).font(.caption2).foregroundStyle(.secondary)
+                }
                 if !row.reactions.isEmpty {
                     HStack {
                         ForEach(row.reactions) { chip in

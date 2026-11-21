@@ -27,7 +27,9 @@ struct TimelineViewModelTests {
     func messages() throws {
         let model = try model()
         let source = TimelineRow.Source(sender: "@alice:x.org", eventID: nil, body: "hi", formattedBody: nil)
-        #expect(model.row(event(.text("hi", isEdited: false))) == TimelineRow(id: "id", style: .message, sender: "Alice", text: "hi", source: source))
+        var expected = TimelineRow(id: "id", style: .message, sender: "Alice", text: "hi", source: source)
+        expected.time = model.row(event(.text("hi", isEdited: false))).time
+        #expect(model.row(event(.text("hi", isEdited: false))) == expected && expected.time?.hasPrefix("12:00") == true)
         #expect(model.row(event(.text("hi", isEdited: true), own: true)).text == "hi (edited)")
         #expect(model.row(event(.text("hi", isEdited: false), own: true)).style == .ownMessage)
         #expect(model.row(event(.emote("waves", isEdited: false))).text == "Alice waves")
@@ -656,7 +658,9 @@ struct TimelineViewModelTests {
             try item("me2", "@me:x.org", at: 720, own: true),
         ]
         let rows = TimelineViewModel.groupingRuns(items.map(model.row), items: items)
-        #expect(rows.map(\.continuesRun) == [false, true, false, false, true, false, false])
+        #expect(rows.map(\.continuesRun) == [false, true, false, false, true, false, true])
+        #expect(rows.map(\.endsRun) == [false, true, true, false, true, false, true])
+        #expect(rows.first?.time?.hasPrefix("12:00") == true)  // "12:00 AM" with the locale's narrow space
     }
 
     @Test("someone else's message carries the sender's picture, your own does not, and the bytes load small")

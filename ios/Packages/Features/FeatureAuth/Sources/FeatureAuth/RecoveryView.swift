@@ -22,9 +22,12 @@ public struct RecoveryBanner: View {
                         .background(.yellow.opacity(0.25))
                 }
                 .buttonStyle(.plain)
+                .transition(.move(edge: .top).combined(with: .opacity))
                 .accessibilityIdentifier("recovery-banner")
             }
         }
+        // It appears once the account's state is known, a moment after launch: slide it in rather than jump the list.
+        .animation(.easeOut(duration: 0.25), value: model.needsRecovery)
         .sheet(isPresented: $isPresented) { RecoveryView(model: model) }
         .onChange(of: model.isVerified) { _, verified in if verified { isPresented = false } }
     }
