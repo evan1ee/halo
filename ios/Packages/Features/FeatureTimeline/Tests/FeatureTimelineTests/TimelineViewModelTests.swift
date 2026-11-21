@@ -774,6 +774,18 @@ struct TimelineViewModelTests {
         #expect(try row(ended: true).text.hasSuffix("Poll ended"))
     }
 
+    @Test("a call event is a quiet state line saying Halo can't join (D43)")
+    func callEvents() throws {
+        let vm = TimelineViewModel(
+            coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: try RoomID("!r:x.org")),
+            locale: Locale(identifier: "en_US"), timeZone: TimeZone(identifier: "UTC") ?? .gmt)
+        let row = vm.row(TimelineItem(
+            id: TimelineItemID("id"),
+            content: .event(TimelineEvent(
+                eventID: nil, sender: try UserID("@alice:x.org"), senderName: "Alice", timestamp: Date(timeIntervalSince1970: 0), isOwn: false, kind: .call))))
+        #expect(row.style == .state && row.text == "Alice started a call — Halo can't join calls")
+    }
+
     @Test("opening a file downloads it into a temporary folder, shows it, and deleting it again on close; big files are refused")
     func openingFiles() async throws {
         let port = FakeMediaPort()

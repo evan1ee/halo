@@ -124,6 +124,8 @@ public enum TimelineEventKind: Sendable, Equatable {
     case location(body: String, geoURI: String)
     /// A poll, read-only (TIMELINE FR-2): the question, each answer with its vote count, and whether it has ended.
     case poll(question: String, options: [PollOption], ended: Bool)
+    /// A call started or rang in the room; display only, Halo has no calling (D43).
+    case call
     case otherState
     case unsupported
 }

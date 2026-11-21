@@ -1026,6 +1026,8 @@ public final class TimelineViewModel {
                 return TimelineRow(
                     id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: text, eventID: event.eventID, isOwn: event.isOwn,
                     reactions: Self.chips(event.reactions))
+            case .call:
+                return TimelineRow(id: id, style: .state, sender: nil, text: "\(name) started a call — Halo can't join calls")
             case .otherState:
                 return TimelineRow(id: id, style: .state, sender: nil, text: Self.settingsText)
             case .unsupported:
