@@ -24,6 +24,16 @@ enum ErrorMapper {
         return mapped == .forbidden ? .unauthorized(soft: false) : mapped
     }
 
+    /// For local-echo send-queue actions (`retrySend`, `abortSend`, R-27): `TimelineError::EventNotInTimeline` crosses
+    /// FFI as `ClientError.Generic(msg: "Event not found in timeline: ...")`, which maps to `.notFound`; every other
+    /// error keeps its real cause via `map(_:)`.
+    static func mapLocalEcho(_ error: any Error) -> HaloError {
+        if case let ClientError.Generic(msg, _) = error, msg.contains("Event not found in timeline") {
+            return .notFound
+        }
+        return map(error)
+    }
+
     static func map(_ error: ClientError) -> HaloError {
         switch error {
         case .MatrixApi(let kind, _, _, _): return map(kind)

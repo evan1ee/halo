@@ -469,7 +469,7 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 | R-24 | P2 | Push/docs | ADR-0015 pushkin missing; no gateway in Beta/Release | Build the pushkin or amend ADR-0015; configure a gateway before TestFlight |
 | R-25 | P2 | Persistence | No GRDB suspension handling in the shared container (V-SQL-2) | **FIXED (📱 device 0xdead10cc check open):** enabled `Configuration.observesSuspensionNotifications = true` in `HaloDatabase`, added `HaloDatabase.suspendAll()` / `resumeAll()` wired to `HaloApp` background/active lifecycle + background-task expiration; `HaloDatabaseTests.suspendsAndResumes` |
 | R-26 | P2 | Testing | Scenarios run against a model; NSE untested; no Mac CI | §11 scenarios; server-rules parity; scenario driver |
-| R-27 | P3 | Hygiene | Unbounded `nse-metrics.jsonl`; global `eventTimes` cache; `retrySend` error flattening; port-level filter hazard | Cap/rotate; scope caches per client; map errors |
+| R-27 | P3 | Hygiene | Unbounded `nse-metrics.jsonl`; global `eventTimes` cache; `retrySend` error flattening; port-level filter hazard | **FIXED:** rotated `nse-metrics.jsonl` at 128 KB (`.prev`, ≤ 256 KB); scoped `MatrixRoomListPort.eventTimes` per instance (capped at 2,000, cleared on teardown); mapped `retrySend`/`abortSend` errors via `ErrorMapper`; locked `RoomListCoordinator.start()` to `.all` so port-level filters cannot shrink read-state inputs |
 
 ---
 

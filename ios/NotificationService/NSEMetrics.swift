@@ -14,6 +14,9 @@ struct NSEMetrics {
         last = now
     }
 
+    /// Cap the metrics log at 128 KB (+ one `.prev` rotation, ≤ 256 KB total) so it never grows unbounded (R-27).
+    private static let maxBytes: UInt64 = 128 * 1024
+
     func write(outcome: String, appGroup: String) {
         var object: [String: Any] = [
             "at": ISO8601DateFormatter().string(from: Date()),
@@ -25,6 +28,13 @@ struct NSEMetrics {
         guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
               let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup) else { return }
         let file = container.appendingPathComponent("nse-metrics.jsonl")
+        let fm = FileManager.default
+        if let attrs = try? fm.attributesOfItem(atPath: file.path),
+           let size = attrs[.size] as? UInt64, size >= Self.maxBytes {
+            let rotated = container.appendingPathComponent("nse-metrics.prev.jsonl")
+            try? fm.removeItem(at: rotated)
+            try? fm.moveItem(at: file, to: rotated)
+        }
         var line = data
         line.append(0x0A)
         if let handle = try? FileHandle(forWritingTo: file) {

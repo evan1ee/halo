@@ -21,11 +21,31 @@ public final class MatrixRoomListPort: RoomListPort {
         var current: RoomListFilter { get { value.withLock { $0 } } set { value.withLock { $0 = newValue } } }
     }
 
+    final class EventTimeCache: Sendable {
+        private let entries = Mutex<[String: Date]>([:])
+        private let limit: Int
+
+        init(limit: Int = 2_000) { self.limit = limit }
+
+        func get(_ key: String) -> Date? { entries.withLock { $0[key] } }
+
+        func set(_ key: String, _ value: Date) {
+            entries.withLock { cache in
+                if cache.count >= limit { cache.removeAll(keepingCapacity: true) }
+                cache[key] = value
+            }
+        }
+
+        func clear() { entries.withLock { $0.removeAll() } }
+    }
+
     private let session: MatrixSessionPort
     private let hasRecords: @Sendable (RoomID) -> Bool
     private let current = Mutex<Subscription?>(nil)
     private let leftObservers = Mutex<[UUID: AsyncStream<Set<RoomID>>.Continuation]>([:])
     private let syncObservers = Mutex<[UUID: AsyncStream<Set<RoomID>>.Continuation]>([:])
+    /// Instance-scoped, bounded event id → time cache for resolved receipt targets (R-27); cleared on stream end.
+    private let eventTimes = EventTimeCache()
 
     public init(session: MatrixSessionPort, pageSize: UInt32 = 50, hasRecords: @escaping @Sendable (RoomID) -> Bool = { _ in false }) {
         self.session = session
@@ -37,7 +57,8 @@ public final class MatrixRoomListPort: RoomListPort {
         let id = UUID()
         let (refresh, refreshContinuation) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
         let filterBox = FilterBox(filter)
-        let task = Task { [session, hasRecords, weak self] in
+        let eventTimes = self.eventTimes
+        let task = Task { [session, hasRecords, eventTimes, weak self] in
             do {
                 _ = try Self.kind(for: filter)
                 let client = try await session.signedInClient()
@@ -62,7 +83,8 @@ public final class MatrixRoomListPort: RoomListPort {
                     if !toRebuild.isEmpty {
                         // Bounded per-room parallelism (R-19) avoids serial FFI fan-out on large accounts
                         // without flooding the SDK's SQLite/crypto locks.
-                        let rebuilt = try await Self.rebuildSummaries(toRebuild, settings: settings, hasRecords: hasRecords)
+                        let rebuilt = try await Self.rebuildSummaries(
+                            toRebuild, settings: settings, hasRecords: hasRecords, eventTimes: eventTimes)
                         for (roomID, summary) in rebuilt { summaries[roomID] = summary }
                     }
                     summaries = summaries.filter { present.contains($0.key) }
@@ -84,7 +106,7 @@ public final class MatrixRoomListPort: RoomListPort {
                 enum Event: Sendable { case sync(Set<String>), refresh }
                 // Sync responses and filter changes feed one loop, so the list is rebuilt one change at a time.
                 let (events, eventContinuation) = AsyncStream<Event>.makeStream(bufferingPolicy: .unbounded)
-                let forward = Task {
+                let forward = Task { [weak self] in
                     for await change in changes {
                         if !change.left.isEmpty {
                             let leftIDs = Set(change.left.compactMap { try? RoomID($0) })
@@ -113,6 +135,7 @@ public final class MatrixRoomListPort: RoomListPort {
         continuation.onTermination = { [weak self] _ in
             task.cancel()
             refreshContinuation.finish()
+            self?.eventTimes.clear()
             self?.current.withLock { if $0?.id == id { $0 = nil } }
         }
         return output
@@ -168,7 +191,8 @@ public final class MatrixRoomListPort: RoomListPort {
     private static func rebuildSummaries(
         _ rooms: [(roomID: String, id: RoomID, room: Room)],
         settings: NotificationSettings,
-        hasRecords: @escaping @Sendable (RoomID) -> Bool
+        hasRecords: @escaping @Sendable (RoomID) -> Bool,
+        eventTimes: EventTimeCache?
     ) async throws(HaloError) -> [(String, RoomSummary)] {
         do {
             return try await withThrowingTaskGroup(of: (String, RoomSummary).self) { group in
@@ -176,7 +200,7 @@ public final class MatrixRoomListPort: RoomListPort {
                 for _ in 0..<min(maxRebuildConcurrency, rooms.count) {
                     guard let next = iterator.next() else { break }
                     let roomHasRecords = hasRecords(next.id)
-                    group.addTask { (next.roomID, try await Self.summary(next.room, settings, hasRecords: roomHasRecords)) }
+                    group.addTask { (next.roomID, try await Self.summary(next.room, settings, hasRecords: roomHasRecords, eventTimes: eventTimes)) }
                 }
                 var results: [(String, RoomSummary)] = []
                 results.reserveCapacity(rooms.count)
@@ -184,7 +208,7 @@ public final class MatrixRoomListPort: RoomListPort {
                     results.append(pair)
                     if let next = iterator.next() {
                         let roomHasRecords = hasRecords(next.id)
-                        group.addTask { (next.roomID, try await Self.summary(next.room, settings, hasRecords: roomHasRecords)) }
+                        group.addTask { (next.roomID, try await Self.summary(next.room, settings, hasRecords: roomHasRecords, eventTimes: eventTimes)) }
                     }
                 }
                 return results
@@ -219,7 +243,9 @@ public final class MatrixRoomListPort: RoomListPort {
         }
     }
 
-    static func summary(_ room: Room, _ settings: NotificationSettings, hasRecords: Bool = false) async throws(HaloError) -> RoomSummary {
+    static func summary(
+        _ room: Room, _ settings: NotificationSettings, hasRecords: Bool = false, eventTimes: EventTimeCache? = nil
+    ) async throws(HaloError) -> RoomSummary {
         // Fetch RoomInfo once per room and reuse it across direct/encryption/counts/favourite/inviter (R-19).
         let info = try? await room.roomInfo()
         let isDirect: Bool = if let info { info.isDirect } else { await room.isDirect() }
@@ -231,7 +257,7 @@ public final class MatrixRoomListPort: RoomListPort {
         let read = await readCounts(of: room, info: info, settings: settings, isEncrypted: isEncrypted, isOneToOne: isDirect)
         let inviter = await inviterInfo(room, cached: info?.inviter)
         let latest = await room.latestEvent()
-        let ownReceipt = await ownReadThrough(of: room, counts: read, hasRecords: hasRecords)
+        let ownReceipt = await ownReadThrough(of: room, counts: read, hasRecords: hasRecords, eventTimes: eventTimes)
         return try RoomSummary(
             id: RoomID(room.id()),
             name: room.displayName(),
@@ -266,13 +292,12 @@ public final class MatrixRoomListPort: RoomListPort {
         return TimelineMapper.ref(source)
     }
 
-    /// Event id → time for resolved receipt targets; an event's time never changes.
-    private static let eventTimes = Mutex<[String: Date]>([:])
-
     /// The event ID and time of the event the user's newest own receipt points at (read from another device). Resolved for
     /// rooms that look unread or have pending notification records (so a UTD push read on another device is still covered,
     /// R-02); quiet rooms without records cost nothing. A failed lookup leaves the room as unread, the safe error.
-    static func ownReadThrough(of room: Room, counts: RoomReadCounts, hasRecords: Bool = false) async -> (eventID: EventID, timestamp: Date)? {
+    static func ownReadThrough(
+        of room: Room, counts: RoomReadCounts, hasRecords: Bool = false, eventTimes: EventTimeCache? = nil
+    ) async -> (eventID: EventID, timestamp: Date)? {
         let looksUnread = counts.server.notification > 0 || counts.server.highlight > 0 || counts.sdk.unreadMessages > 0
             || counts.sdk.unreadNotifications > 0 || counts.isMarkedUnread
         guard looksUnread || hasRecords else { return nil }
@@ -284,10 +309,10 @@ public final class MatrixRoomListPort: RoomListPort {
             if newest == nil || at >= newest!.receipt { newest = (found.eventId, at) }
         }
         guard let rawEventId = newest?.eventId, let eventID = try? EventID(rawEventId) else { return nil }
-        if let known = eventTimes.withLock({ $0[rawEventId] }) { return (eventID, known) }
+        if let known = eventTimes?.get(rawEventId) { return (eventID, known) }
         guard let event = try? await room.loadOrFetchEvent(eventId: rawEventId) else { return nil }
         let time = Date(timeIntervalSince1970: Double(event.timestamp()) / 1000)
-        eventTimes.withLock { $0[rawEventId] = time }
+        eventTimes?.set(rawEventId, time)
         return (eventID, time)
     }
 

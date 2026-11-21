@@ -41,6 +41,16 @@ struct ErrorMapperTests {
         let mapped = ErrorMapper.map(ClientError.Generic(msg: "secret@room", details: nil))
         #expect(!mapped.code.contains("secret"))
     }
+
+    @Test("R-27: mapLocalEcho maps EventNotInTimeline to .notFound and preserves other errors")
+    func localEchoErrors() {
+        let missing = ClientError.Generic(msg: "Event not found in timeline: TransactionId(\"t1\")", details: nil)
+        #expect(ErrorMapper.mapLocalEcho(missing) == .notFound)
+        let other = ClientError.Generic(msg: "database locked", details: nil)
+        #expect(ErrorMapper.mapLocalEcho(other) == .internal(code: "SDK_GENERIC"))
+        let unauth = ClientError.MatrixApi(kind: .unknownToken(softLogout: false), code: "M_UNKNOWN_TOKEN", msg: "", details: nil)
+        #expect(ErrorMapper.mapLocalEcho(unauth) == .unauthorized(soft: false))
+    }
 }
 
 @Suite("TimelineMapper UTD reasons")

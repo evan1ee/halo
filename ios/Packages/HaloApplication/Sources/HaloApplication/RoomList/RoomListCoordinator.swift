@@ -92,10 +92,12 @@ public actor RoomListCoordinator {
     /// before the first sync response of this subscription, R-04).
     public func syncCompletions() -> AsyncStream<Set<RoomID>?> { syncBroadcaster.subscribe(current: lastSyncedRooms) }
 
-    public func start(filter: RoomListFilter = .all) {
+    /// Always subscribes to `.all` so `readInputs()` never shrinks the badge's room set; UI filters run in
+    /// `RoomListViewModel` (R-27).
+    public func start() {
         consecutiveFailures = 0
         requestedAt = 0
-        subscribe(filter: filter)
+        subscribe(filter: .all)
     }
 
     public func stop() {
