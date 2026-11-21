@@ -67,10 +67,11 @@ public struct SettingsView: View {
 
     public var body: some View {
         List {
-            Section("Account") {
-                if let profile { NavigationLink("Profile") { ProfileSettingsView(actions: profile) }.accessibilityIdentifier("profile") }
-                Button("Sign out", role: .destructive) { confirmingSignOut = true }
-                    .accessibilityIdentifier("sign-out")
+            if let profile {
+                Section("Account") {
+                    NavigationLink { ProfileSettingsView(actions: profile) } label: { Label("Profile", systemImage: "person.crop.circle") }
+                        .accessibilityIdentifier("profile")
+                }
             }
             Section {
                 Toggle("Private read receipts", isOn: $privateReceipts)
@@ -166,7 +167,7 @@ public struct SettingsView: View {
             }
             if let diagnostics {
                 Section {
-                    NavigationLink("Diagnostics") { DiagnosticsView(report: diagnostics) }
+                    NavigationLink { DiagnosticsView(report: diagnostics) } label: { Label("Diagnostics", systemImage: "stethoscope") }
                         .accessibilityIdentifier("diagnostics")
                 } footer: {
                     Text("A short report you can share when something looks wrong. It holds no messages, names or account IDs.")
@@ -174,8 +175,14 @@ public struct SettingsView: View {
             }
             Section("About") {
                 LabeledContent("Version", value: "\(version) (\(build))")
-                NavigationLink("Acknowledgements") { AcknowledgementsView() }
+                NavigationLink { AcknowledgementsView() } label: { Label("Acknowledgements", systemImage: "doc.text") }
                     .accessibilityIdentifier("acknowledgements")
+            }
+            // Last and on its own, away from everyday settings, so it isn't tapped by accident (it still asks first).
+            Section {
+                Button("Sign out", role: .destructive) { confirmingSignOut = true }
+                    .frame(maxWidth: .infinity)
+                    .accessibilityIdentifier("sign-out")
             }
         }
         .navigationTitle("Settings")

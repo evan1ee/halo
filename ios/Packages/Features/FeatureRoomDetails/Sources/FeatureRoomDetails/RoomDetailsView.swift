@@ -53,11 +53,15 @@ public struct RoomDetailsView: View {
     private func list(_ details: RoomDetails, _ members: [RoomMemberInfo]) -> some View {
         List {
             Section {
-                HStack(spacing: 12) {
-                    AvatarLoader(name: details.name ?? "?", ref: details.avatar, size: 64) { await model.avatarData($0) }
-                    Text(details.name ?? "Unnamed room").font(.headline)
+                VStack(spacing: 8) {
+                    AvatarLoader(name: details.name ?? "?", ref: details.avatar, size: 80) { await model.avatarData($0) }
+                    Text(details.name ?? "Unnamed room").font(.title3.bold()).multilineTextAlignment(.center)
+                    if let topic = details.topic, !topic.isEmpty {
+                        Text(topic).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    }
                 }
-                if let topic = details.topic, !topic.isEmpty { Text(topic).foregroundStyle(.secondary) }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 4)
                 Label(details.isEncrypted ? "Encrypted" : "Not encrypted", systemImage: details.isEncrypted ? "lock.fill" : "lock.open")
                 Label("\(model.joinedMemberCount) members", systemImage: "person.2")
             }
