@@ -33,6 +33,7 @@ final class AppRoot {
     private let matrixSession: MatrixSessionPort
     private let media: MediaLoader
     private let unrecognisedBots = UnrecognisedBotMessages()
+    let botActivity = BotActivityCoordinator()
     private let previewPolicy: any MediaPreviewPolicyPort
     private let roomPort: MatrixRoomPort
     private let chatCreation: MatrixChatCreationPort
@@ -120,6 +121,7 @@ final class AppRoot {
                     let database = try HaloDatabase(path: directory.appendingPathComponent("halo.sqlite").path)
                     await receipts.restore(from: ReadIntentStore(database: database, account: user))
                     await drafts.attach(DraftStore(database: database, account: user))
+                    await botActivity.attach(BotTaskStore(database: database, account: user))
                     #if DEBUG
                     // The read-state auditor runs in debug (and later TestFlight) builds only (LOGGING_AND_DIAGNOSTICS §2).
                     let log = log
@@ -148,6 +150,7 @@ final class AppRoot {
         auditPort = nil
         await badge.reset()
         await drafts.reset()
+        await botActivity.reset()
         await stickers.reset()
         await timelinePort.dropWarm()
         AppPreferences().botSenders = []
@@ -356,6 +359,7 @@ final class AppRoot {
             readThrough: { [roomCoordinator] in await roomCoordinator.rooms.first { $0.id == room }?.ownReadThrough })
         model.botSenders = Set(AppPreferences().botSenders)
         model.unrecognisedBotMessages = unrecognisedBots
+        model.botActivity = botActivity
         model.sendsTypingNotices = { AppPreferences().sendTypingNotices }
         return model
     }

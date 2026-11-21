@@ -17,12 +17,12 @@ public actor BotActivityCoordinator {
         }
     }
 
-    private let port: any BotTaskPort
+    private var port: (any BotTaskPort)?
     private let log: HaloLog?
     /// The last entries stored per room, so an unchanged timeline snapshot writes nothing.
     private var lastWritten: [RoomID: [BotTaskEntry]] = [:]
 
-    public init(port: any BotTaskPort, log: HaloLog? = nil) {
+    public init(port: (any BotTaskPort)? = nil, log: HaloLog? = nil) {
         self.port = port
         self.log = log?.with(category: .bot)
     }
@@ -30,7 +30,7 @@ public actor BotActivityCoordinator {
     /// Reads the bot messages in `items` (oldest first) and stores the entries they describe. Cheap when `botSenders` is empty or
     /// nothing changed.
     public func observe(room: RoomID, items: [TimelineItem], botSenders: Set<String>) async {
-        guard !botSenders.isEmpty else { return }
+        guard let port, !botSenders.isEmpty else { return }
         var observations: [BotObservation] = []
         for item in items {
             guard case .event(let event) = item.content, let sender = event.sender?.rawValue, botSenders.contains(sender),
@@ -50,15 +50,25 @@ public actor BotActivityCoordinator {
     }
 
     public func snapshot() async -> Snapshot {
+        guard let port else { return Snapshot() }
         do { return Snapshot(entries: try await port.entries()) } catch { return Snapshot(failed: true) }
     }
 
     /// "Rebuild index": empties it; it fills again from timelines as they are opened.
     public func rebuild() async {
         lastWritten = [:]
-        try? await port.removeAll()
+        try? await port?.removeAll()
     }
 
-    /// Forgets the in-memory write cache (sign-out).
-    public func reset() { lastWritten = [:] }
+    /// Starts keeping the index of the signed-in account in `port`.
+    public func attach(_ port: any BotTaskPort) {
+        self.port = port
+        lastWritten = [:]
+    }
+
+    /// Sign-out: drops the port and the write cache, so nothing of this account is read or written for the next one.
+    public func reset() {
+        port = nil
+        lastWritten = [:]
+    }
 }
