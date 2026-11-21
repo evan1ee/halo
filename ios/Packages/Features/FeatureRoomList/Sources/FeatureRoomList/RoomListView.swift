@@ -26,19 +26,24 @@ public struct RoomListView: View {
                     Section {
                         ForEach(rows) { row in
                             if row.isInvite {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(row.name).fontWeight(.bold)
-                                    Text(row.inviter.map { "Invitation from \($0)" } ?? "Invitation").font(.caption).foregroundStyle(.secondary)
-                                    if let preview = model.invitePreviews[row.id] {
-                                        if let topic = preview.topic, !topic.isEmpty { Text(topic).font(.caption) }
-                                        if let members = preview.memberCount { Text("\(members) members").font(.caption).foregroundStyle(.secondary) }
-                                    } else {
-                                        Button("Show details") { Task { await model.previewInvite(row.id) } }.font(.caption)
-                                            .accessibilityIdentifier("previewInvite-\(row.name)")
-                                    }
-                                    HStack {
-                                        Button("Accept") { Task { await model.acceptInvite(row.id) } }.buttonStyle(.borderedProminent)
-                                        Button("Decline", role: .destructive) { Task { await model.declineInvite(row.id) } }.buttonStyle(.bordered)
+                                HStack(alignment: .top, spacing: 12) {
+                                    AvatarView(name: row.name, ref: model.invitePreviews[row.id]?.avatar ?? row.avatar) { await model.avatarData($0) }
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text(row.name).fontWeight(.bold).lineLimit(1)
+                                        Text(row.inviter.map { "Invitation from \($0)" } ?? "Invitation").font(.caption).foregroundStyle(.secondary)
+                                        if let preview = model.invitePreviews[row.id] {
+                                            if let topic = preview.topic, !topic.isEmpty { Text(topic).font(.caption) }
+                                            if let members = preview.memberCount {
+                                                Text(members == 1 ? "1 member" : "\(members) members").font(.caption).foregroundStyle(.secondary)
+                                            }
+                                        } else {
+                                            Button("Show details") { Task { await model.previewInvite(row.id) } }.font(.caption)
+                                                .accessibilityIdentifier("previewInvite-\(row.name)")
+                                        }
+                                        HStack {
+                                            Button("Accept") { Task { await model.acceptInvite(row.id) } }.buttonStyle(.borderedProminent)
+                                            Button("Decline", role: .destructive) { Task { await model.declineInvite(row.id) } }.buttonStyle(.bordered)
+                                        }
                                     }
                                 }
                                 .accessibilityIdentifier("invite-\(row.name)")
@@ -49,7 +54,7 @@ public struct RoomListView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                 HStack {
                                     if row.isFavourite { Image(systemName: "star.fill").foregroundStyle(.yellow).imageScale(.small).accessibilityLabel("Favourite") }
-                                    Text(row.name).fontWeight(row.hasUnread ? .bold : .regular)
+                                    Text(row.name).fontWeight(row.hasUnread ? .bold : .regular).lineLimit(1)
                                     if row.isMuted { Image(systemName: "bell.slash").foregroundStyle(.secondary).imageScale(.small).accessibilityLabel("Muted") }
                                     Spacer()
                                     if let when = row.lastActivity { Text(ActivityTime.text(when)).font(.caption).foregroundStyle(.secondary) }
@@ -81,11 +86,29 @@ public struct RoomListView: View {
                     if rows.isEmpty { ContentUnavailableView(Self.emptyTitle(model.filter), systemImage: "bubble.left.and.bubble.right") }
                 }
                 .safeAreaInset(edge: .bottom) {
-                    if let message = model.actionError { Text(message).font(.footnote).foregroundStyle(.red).padding() }
+                    if let message = model.actionError {
+                        HStack(spacing: 10) {
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red).accessibilityHidden(true)
+                            Text(message).font(.footnote).foregroundStyle(.primary)
+                            Spacer()
+                            Button { model.dismissActionError() } label: { Image(systemName: "xmark").font(.footnote.weight(.semibold)) }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(.secondary)
+                                .accessibilityLabel("Dismiss")
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+                        .background(.bar)
+                    }
                 }
                 }
             case .failed(let message):
-                Text(message).foregroundStyle(.red)
+                ContentUnavailableView {
+                    Label("Couldn't load rooms", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(message)
+                } actions: {
+                    Button("Try again") { Task { await model.retry() } }.buttonStyle(.borderedProminent)
+                }
             }
         }
         .task { await model.start() }

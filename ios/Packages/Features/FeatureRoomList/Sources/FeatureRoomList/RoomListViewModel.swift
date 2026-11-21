@@ -81,8 +81,13 @@ public final class RoomListViewModel {
     private var positions: [RoomID: Date] = [:]
     private var lastStatus: RoomListCoordinator.Status = .idle
 
-    /// Set when a swipe action fails; the view shows it and the next successful action clears it.
+    /// Set when a swipe or invitation action fails; cleared by the next successful action or when dismissed.
     public private(set) var actionError: String?
+
+    public func dismissActionError() { actionError = nil }
+
+    /// Restarts the room-list subscription after a failure (ROOM_LIST §9).
+    public func retry() async { await rooms.start() }
 
     public init(session: SessionCoordinator, rooms: RoomListCoordinator, receipts: ReadReceiptCoordinator? = nil, actions: (any RoomPort)? = nil, media: MediaLoader? = nil) {
         self.media = media
@@ -232,7 +237,7 @@ public final class RoomListViewModel {
                 warmedTop = top
                 Task { await warm(top) }
             }
-        case .failed: content = .failed("The room list couldn't be loaded. Pull to try again.")
+        case .failed: content = .failed("The room list couldn't be loaded.")
         }
     }
 }

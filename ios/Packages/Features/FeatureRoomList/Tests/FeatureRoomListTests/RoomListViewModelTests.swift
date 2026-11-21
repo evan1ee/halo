@@ -31,13 +31,16 @@ struct RoomListViewModelTests {
         ]))
     }
 
-    @Test("a failed list shows a message, an idle list shows nothing")
+    @Test("a failed list shows a message, retry restarts the coordinator, and an idle list shows nothing")
     func failures() async {
+        let rooms = RoomListCoordinator(port: FakeRoomListPort())
         let model = RoomListViewModel(
             session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()),
-            rooms: RoomListCoordinator(port: FakeRoomListPort()))
+            rooms: rooms)
         await model.listChanged(.failed(.internal(code: "X")))
-        #expect(model.content == .failed("The room list couldn't be loaded. Pull to try again."))
+        #expect(model.content == .failed("The room list couldn't be loaded."))
+        await model.retry()
+        #expect(await rooms.status != .idle)
         await model.listChanged(.idle)
         #expect(model.content == .idle)
     }
@@ -113,6 +116,8 @@ struct RoomListInviteTests {
         port.fail(with: .notFound)
         await model.acceptInvite(id)
         #expect(model.actionError != nil)
+        model.dismissActionError()
+        #expect(model.actionError == nil)
     }
 }
 
