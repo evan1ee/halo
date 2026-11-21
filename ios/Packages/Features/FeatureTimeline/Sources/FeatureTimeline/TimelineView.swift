@@ -279,6 +279,13 @@ private struct RowView: View {
         Button("Delete", systemImage: "trash", role: .destructive) { Task { await model.discard(row) } }
     }
 
+    /// The icon for a placeholder row, from its wording (set by the view model).
+    static func placeholderSymbol(_ text: String) -> String {
+        if text == "Message deleted" { return "trash" }
+        if text == "Unsupported event" || text.hasPrefix("Sticker (") { return "questionmark.square.dashed" }
+        return "lock"
+    }
+
     var body: some View {
         switch row.style {
         case .message, .ownMessage:
@@ -341,7 +348,17 @@ private struct RowView: View {
         case .emote:
             Text(row.text).italic()
         case .placeholder:
-            Text(row.text).italic().foregroundStyle(.secondary)
+            // A deleted, unreadable or unknown message still belongs to its sender: a quiet outlined bubble on their side,
+            // with their name, instead of a full-width line of italics.
+            VStack(alignment: row.isOwn ? .trailing : .leading, spacing: 2) {
+                if !row.isOwn, !row.continuesRun, let sender = row.sender { Text(sender).font(.caption).foregroundStyle(.secondary) }
+                Label(row.text, systemImage: Self.placeholderSymbol(row.text))
+                    .font(.footnote).italic().foregroundStyle(.secondary)
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.secondary.opacity(0.4)))
+            }
+            .frame(maxWidth: .infinity, alignment: row.isOwn ? .trailing : .leading)
+            .padding(row.isOwn ? .leading : .trailing, 48)
         case .state, .marker:
             Text(row.text).font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity)
         case .divider:

@@ -804,7 +804,7 @@ public final class TimelineViewModel {
     /// `runGap`), so the view shows the name and picture once per group and the time once, under its last message.
     static func groupingRuns(_ rows: [TimelineRow], items: [TimelineItem]) -> [TimelineRow] {
         var result = rows
-        let isMessage: (TimelineRow) -> Bool = { $0.style == .message || $0.style == .ownMessage }
+        let isMessage: (TimelineRow) -> Bool = { $0.style == .message || $0.style == .ownMessage || $0.style == .placeholder }
         for index in result.indices.dropFirst() where isMessage(result[index]) && result[index - 1].style == result[index].style {
             guard case .event(let event) = items[index].content, case .event(let previous) = items[index - 1].content,
                   let sender = event.sender, sender == previous.sender,
@@ -897,16 +897,16 @@ public final class TimelineViewModel {
                     id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: body, image: .init(ref: source, aspectRatio: 1),
                     eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions), isSticker: true, source: plainSource(event, body))
             case .redacted:
-                return TimelineRow(id: id, style: .placeholder, sender: name, text: "Message deleted")
+                return TimelineRow(id: id, style: .placeholder, sender: name, text: "Message deleted", isOwn: event.isOwn)
             case .undecryptable(let reason):
-                return TimelineRow(id: id, style: .placeholder, sender: name, text: Self.text(for: reason))
+                return TimelineRow(id: id, style: .placeholder, sender: name, text: Self.text(for: reason), isOwn: event.isOwn)
             case .membership(_, let displayName, let change):
                 let who = displayName ?? name
                 return TimelineRow(id: id, style: .state, sender: nil, text: "\(who) \(Self.phrase(change))")
             case .otherState:
                 return TimelineRow(id: id, style: .state, sender: nil, text: Self.settingsText)
             case .unsupported:
-                return TimelineRow(id: id, style: .placeholder, sender: name, text: "Unsupported event")
+                return TimelineRow(id: id, style: .placeholder, sender: name, text: "Unsupported event", isOwn: event.isOwn)
             }
         }
     }
