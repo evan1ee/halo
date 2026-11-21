@@ -49,20 +49,27 @@ public final class MatrixRoomListPort: RoomListPort {
                     let known = client.rooms().filter { !$0.isSpace() && [.joined, .invited].contains($0.membership()) }
                     var present: Set<String> = []
                     var presentIDs: Set<RoomID> = []
+                    var toRebuild: [(roomID: String, id: RoomID, room: Room)] = []
                     for room in known {
                         let roomID = room.id()
                         present.insert(roomID)
                         let id = try RoomID(roomID)
                         presentIDs.insert(id)
                         if summaries[roomID] == nil || changed?.contains(roomID) == true {
-                            summaries[roomID] = try await Self.summary(room, settings, hasRecords: hasRecords(id))
+                            toRebuild.append((roomID, id, room))
                         }
+                    }
+                    if !toRebuild.isEmpty {
+                        // Bounded per-room parallelism (R-19) avoids serial FFI fan-out on large accounts
+                        // without flooding the SDK's SQLite/crypto locks.
+                        let rebuilt = try await Self.rebuildSummaries(toRebuild, settings: settings, hasRecords: hasRecords)
+                        for (roomID, summary) in rebuilt { summaries[roomID] = summary }
                     }
                     summaries = summaries.filter { present.contains($0.key) }
                     var list: [RoomSummary] = []
                     let chosen = filterBox.current
                     for room in known {
-                        guard let summary = summaries[room.id()], try await Self.includes(chosen, room: room, summary: summary) else { continue }
+                        guard let summary = summaries[room.id()], try Self.includes(chosen, summary: summary) else { continue }
                         list.append(summary)
                     }
                     list.sort(by: Self.order)
@@ -156,15 +163,46 @@ public final class MatrixRoomListPort: RoomListPort {
         if case .unread = filter { throw .unsupported("FILTER_UNREAD_M1") }
     }
 
-    static func includes(_ filter: RoomListFilter, room: Room, summary: RoomSummary) async throws(HaloError) -> Bool {
+    private static let maxRebuildConcurrency = 8
+
+    private static func rebuildSummaries(
+        _ rooms: [(roomID: String, id: RoomID, room: Room)],
+        settings: NotificationSettings,
+        hasRecords: @escaping @Sendable (RoomID) -> Bool
+    ) async throws(HaloError) -> [(String, RoomSummary)] {
+        do {
+            return try await withThrowingTaskGroup(of: (String, RoomSummary).self) { group in
+                var iterator = rooms.makeIterator()
+                for _ in 0..<min(maxRebuildConcurrency, rooms.count) {
+                    guard let next = iterator.next() else { break }
+                    let roomHasRecords = hasRecords(next.id)
+                    group.addTask { (next.roomID, try await Self.summary(next.room, settings, hasRecords: roomHasRecords)) }
+                }
+                var results: [(String, RoomSummary)] = []
+                results.reserveCapacity(rooms.count)
+                while let pair = try await group.next() {
+                    results.append(pair)
+                    if let next = iterator.next() {
+                        let roomHasRecords = hasRecords(next.id)
+                        group.addTask { (next.roomID, try await Self.summary(next.room, settings, hasRecords: roomHasRecords)) }
+                    }
+                }
+                return results
+            }
+        } catch let error as HaloError {
+            throw error
+        } catch {
+            throw ErrorMapper.map(error)
+        }
+    }
+
+    static func includes(_ filter: RoomListFilter, summary: RoomSummary) throws(HaloError) -> Bool {
         switch filter {
         case .all: return true
         case .invites: return summary.membership == .invited
         case .people: return summary.membership == .joined && summary.isDirect
         case .rooms: return summary.membership == .joined && !summary.isDirect
-        case .favourites:
-            guard summary.membership == .joined else { return false }
-            return (try? await room.roomInfo())?.isFavourite ?? false
+        case .favourites: return summary.membership == .joined && summary.isFavourite
         case .unread: throw .unsupported("FILTER_UNREAD_M1")
         }
     }
@@ -182,12 +220,16 @@ public final class MatrixRoomListPort: RoomListPort {
     }
 
     static func summary(_ room: Room, _ settings: NotificationSettings, hasRecords: Bool = false) async throws(HaloError) -> RoomSummary {
-        // An unparseable ID is a contract break with the SDK: fail the subscription instead of dropping a
-        // row, which would shift every later index.
-        let isDirect = await room.isDirect()
-        let isEncrypted = await room.isEncrypted()
-        let read = await readCounts(of: room, settings: settings, isEncrypted: isEncrypted, isOneToOne: isDirect)
-        let inviter = await inviterInfo(room)
+        // Fetch RoomInfo once per room and reuse it across direct/encryption/counts/favourite/inviter (R-19).
+        let info = try? await room.roomInfo()
+        let isDirect: Bool = if let info { info.isDirect } else { await room.isDirect() }
+        let isEncrypted: Bool = if let info, info.encryptionState != .unknown {
+            info.encryptionState == .encrypted
+        } else {
+            await room.isEncrypted()
+        }
+        let read = await readCounts(of: room, info: info, settings: settings, isEncrypted: isEncrypted, isOneToOne: isDirect)
+        let inviter = await inviterInfo(room, cached: info?.inviter)
         let latest = await room.latestEvent()
         let ownReceipt = await ownReadThrough(of: room, counts: read, hasRecords: hasRecords)
         return try RoomSummary(
@@ -200,7 +242,7 @@ public final class MatrixRoomListPort: RoomListPort {
             latestEvent: latestEvent(latest),
             ownReadThrough: ownReceipt?.timestamp,
             ownReceiptEventID: ownReceipt?.eventID,
-            isFavourite: (try? await room.roomInfo())?.isFavourite ?? false,
+            isFavourite: info?.isFavourite ?? false,
             preview: preview(latest, ownUserID: room.ownUserId()),
             avatar: avatar(room.avatarUrl()),
             inviter: inviter?.name,
@@ -208,9 +250,12 @@ public final class MatrixRoomListPort: RoomListPort {
         )
     }
 
-    /// Who invited the user, for an invited room only (one lookup per invitation).
-    static func inviterInfo(_ room: Room) async -> (name: String, id: UserID?)? {
-        guard room.membership() == .invited, let member = try? await room.inviter() else { return nil }
+    /// Who invited the user, for an invited room only (reuses `RoomInfo.inviter` when already loaded).
+    static func inviterInfo(_ room: Room, cached: MatrixRustSDK.RoomMember? = nil) async -> (name: String, id: UserID?)? {
+        guard room.membership() == .invited else { return nil }
+        let member: MatrixRustSDK.RoomMember?
+        if let cached { member = cached } else { member = try? await room.inviter() }
+        guard let member else { return nil }
         let name = (member.displayName?.isEmpty == false ? member.displayName! : member.userId)
         return (name, try? UserID(member.userId))
     }
@@ -248,18 +293,19 @@ public final class MatrixRoomListPort: RoomListPort {
 
     /// The room's unread counts and effective notification mode. A mode that can't be read counts as "all messages":
     /// showing too much attention is the safe error (a missed message is worse than an extra dot).
-    static func readCounts(of room: Room, settings: NotificationSettings, isEncrypted: Bool, isOneToOne: Bool) async -> RoomReadCounts {
-        let info = try? await room.roomInfo()
+    static func readCounts(of room: Room, info: RoomInfo? = nil, settings: NotificationSettings, isEncrypted: Bool, isOneToOne: Bool) async -> RoomReadCounts {
+        let resolvedInfo: RoomInfo?
+        if let info { resolvedInfo = info } else { resolvedInfo = try? await room.roomInfo() }
         var mode = NotificationMode.allMessages
         if let effective = try? await settings.getRoomNotificationSettings(roomId: room.id(), isEncrypted: isEncrypted, isOneToOne: isOneToOne) {
             mode = Self.mode(effective.mode)
         }
-        guard let info else { return RoomReadCounts(mode: mode, server: .zero, sdk: .zero, isMarkedUnread: false) }
+        guard let resolvedInfo else { return RoomReadCounts(mode: mode, server: .zero, sdk: .zero, isMarkedUnread: false) }
         return RoomReadCounts(
             mode: mode,
-            server: ServerCounts(notification: Int(info.notificationCount), highlight: Int(info.highlightCount)),
-            sdk: SDKCounts(unreadMessages: Int(info.numUnreadMessages), unreadNotifications: Int(info.numUnreadNotifications), unreadMentions: Int(info.numUnreadMentions)),
-            isMarkedUnread: info.isMarkedUnread)
+            server: ServerCounts(notification: Int(resolvedInfo.notificationCount), highlight: Int(resolvedInfo.highlightCount)),
+            sdk: SDKCounts(unreadMessages: Int(resolvedInfo.numUnreadMessages), unreadNotifications: Int(resolvedInfo.numUnreadNotifications), unreadMentions: Int(resolvedInfo.numUnreadMentions)),
+            isMarkedUnread: resolvedInfo.isMarkedUnread)
     }
 
     /// The newest event for the read-state policy. Invites and rooms without events have none; a local echo is the
