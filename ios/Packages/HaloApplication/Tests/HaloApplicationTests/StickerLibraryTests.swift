@@ -87,6 +87,15 @@ struct StickerLibraryTests {
         #expect(source.disabled == [gone] && source.requests == [room, room])
     }
 
+    @Test("disabling one pack calls the port and reloads for the same room")
+    func disablingOnePack() async throws {
+        let (library, source, _, _) = make(packs: StickerPackLoad(packs: [pack(["a"])]))
+        await library.load(currentRoom: room)
+        let ref = PackRef(room: try RoomID("!p:x.org"), stateKey: "cats")
+        #expect(await library.disablePack(ref))
+        #expect(source.disabled == [ref] && source.requests == [room, room])
+    }
+
     @Test("recents are written at once the first time, then at most once per ten seconds with a trailing write")
     func debounce() async throws {
         let (library, _, store, time) = make(packs: StickerPackLoad(packs: [pack(["a", "b", "c"])]))

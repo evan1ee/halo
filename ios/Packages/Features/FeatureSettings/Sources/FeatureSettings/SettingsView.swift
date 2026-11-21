@@ -22,6 +22,7 @@ public struct SettingsView: View {
     private let unexplainedAuditCount: (@Sendable () async -> Int?)?
     @State private var unexplainedCount: Int?
     private let profile: ProfileSettingsActions?
+    private let stickerPacks: StickerPackSettingsActions?
     private let security: (@MainActor () -> [StorageSize])?
     private let setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)?
     @State private var recoveryFailure: SettingsMessage?
@@ -48,7 +49,7 @@ public struct SettingsView: View {
         saveBotSenders: (@Sendable ([String]) async -> Bool)? = nil,
         loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)? = nil,
         saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)? = nil,
-        profile: ProfileSettingsActions? = nil, diagnostics: (@Sendable () async -> String)? = nil,
+        profile: ProfileSettingsActions? = nil, stickerPacks: StickerPackSettingsActions? = nil, diagnostics: (@Sendable () async -> String)? = nil,
         reconcile: (@Sendable () async -> Void)? = nil, unexplainedAuditCount: (@Sendable () async -> Int?)? = nil,
         storageSizes: (@Sendable () async -> [StorageSize])? = nil,
         security: (@MainActor () -> [StorageSize])? = nil, setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil,
@@ -58,6 +59,7 @@ public struct SettingsView: View {
         self.reconcile = reconcile
         self.unexplainedAuditCount = unexplainedAuditCount
         self.profile = profile
+        self.stickerPacks = stickerPacks
         self.storageSizes = storageSizes
         self.notificationStatus = notificationStatus
         self.security = security
@@ -106,6 +108,11 @@ public struct SettingsView: View {
                     ForEach(Appearance.allCases) { Text($0.title).tag($0.rawValue) }
                 }
                 .accessibilityIdentifier("appearance")
+            }
+            if let stickerPacks {
+                Section("Stickers") {
+                    NavigationLink { StickerPackSettingsView(actions: stickerPacks) } label: { Label("Sticker packs", systemImage: "face.smiling") }
+                }
             }
             BotsSection(preferences: preferences, sync: saveBotSenders)
             if loadMediaPreviews != nil, saveMediaPreviews != nil {

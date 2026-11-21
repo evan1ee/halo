@@ -102,6 +102,18 @@ public actor StickerLibrary {
         await load(currentRoom: currentRoom)
     }
 
+    /// Takes one enabled pack out of the user's list (Settings → Stickers → manage packs), then reloads. Returns `false` when the
+    /// server call failed, so the screen can say so; the pack then stays listed. A pack that only shows because it belongs to the
+    /// current room (never enabled) is not affected by `disable` and comes back after the reload.
+    @discardableResult
+    public func disablePack(_ ref: PackRef) async -> Bool {
+        let started = generation
+        do { try await packSource.disable(ref) } catch { return false }
+        guard generation == started else { return true }
+        await load(currentRoom: currentRoom)
+        return true
+    }
+
     /// Forgets everything of the signed-out account, so none of it is shown to, or written into, the next one. A load or
     /// write still running for the old account drops its result. Call `flush()` first to keep a pending write.
     public func reset() {

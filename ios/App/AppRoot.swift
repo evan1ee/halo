@@ -271,6 +271,27 @@ final class AppRoot {
             onOpenRoom: onOpenRoom)
     }
 
+    /// Settings → Stickers → Sticker packs: the packs the user enabled (the only ones that can be removed from the list).
+    func stickerPackSettings() -> StickerPackSettingsActions {
+        let library = stickers
+        let separator = "\u{1F}"
+        return StickerPackSettingsActions(
+            load: {
+                await library.load(currentRoom: nil)
+                guard let snapshot = await library.snapshots().first(where: { _ in true }) else { return [] }
+                return snapshot.packs.filter { $0.source == .userEnabled }.map { pack in
+                    .init(
+                        id: pack.ref.room.rawValue + separator + pack.ref.stateKey, name: pack.displayName,
+                        detail: "\(pack.stickers.count) \(pack.stickers.count == 1 ? "sticker" : "stickers")")
+                }
+            },
+            remove: { id in
+                let parts = id.components(separatedBy: separator)
+                guard parts.count == 2, let room = try? RoomID(parts[0]) else { return false }
+                return await library.disablePack(PackRef(room: room, stateKey: parts[1]))
+            })
+    }
+
     /// Settings → Account → Profile: the display name and the ignored users.
     func profileSettings() -> ProfileSettingsActions {
         let port = profilePort
