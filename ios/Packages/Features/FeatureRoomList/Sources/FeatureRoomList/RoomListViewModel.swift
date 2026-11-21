@@ -69,6 +69,7 @@ public final class RoomListViewModel {
     private let actions: (any RoomPort)?
     /// Told which rooms are at the top of the list, so their timelines can be prepared before they are opened.
     public var warm: (@Sendable ([RoomID]) async -> Void)?
+    private var warmedTop: [RoomID] = []
     private let media: MediaLoader?
 
     /// The avatar's image bytes (a small thumbnail); `nil` when there is no loader or the download failed, so the row keeps its initials.
@@ -113,10 +114,15 @@ public final class RoomListViewModel {
     /// What the user has asked to see of invitations, by room (ROOM_MANAGEMENT FR-6).
     public private(set) var invitePreviews: [RoomID: RoomInvitePreview] = [:]
 
-    /// Loads the room's topic and size for an invitation row; a failure is shown like any other action error.
+    /// Loads the room's topic and size for an invitation row; a failure says it was the details that couldn't be loaded.
     public func previewInvite(_ room: RoomID) async {
         guard let actions else { return }
-        await perform { () async throws(HaloError) in self.invitePreviews[room] = try await actions.invitePreview(room) }
+        do {
+            invitePreviews[room] = try await actions.invitePreview(room)
+            actionError = nil
+        } catch {
+            actionError = "The invitation's details couldn't be loaded."
+        }
     }
 
     /// Declines an invitation.
@@ -218,7 +224,14 @@ public final class RoomListViewModel {
             }
             let matching = zip(await rooms.rooms, rows).filter { Self.includes(filter, room: $0.0, row: $0.1) }.map(\.1)
             content = .loaded(count: filter == .all ? count : matching.count, rows: matching)
-            if let warm { let top = matching.filter { !$0.isInvite }.prefix(6).map(\.id); Task { await warm(Array(top)) } }
+            let invited = Set(rows.filter(\.isInvite).map(\.id))
+            invitePreviews = invitePreviews.filter { invited.contains($0.key) }  // accepted or declined: the preview goes with it
+            // Only a change at the top of the list asks for new timelines; most sync updates leave it as it is.
+            let top = Array(matching.filter { !$0.isInvite }.prefix(6).map(\.id))
+            if let warm, top != warmedTop {
+                warmedTop = top
+                Task { await warm(top) }
+            }
         case .failed: content = .failed("The room list couldn't be loaded. Pull to try again.")
         }
     }

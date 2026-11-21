@@ -9,47 +9,100 @@ import Synchronization
 public final class MatrixTimelinePort: TimelinePort {
     private let session: MatrixSessionPort
 
-    /// Timelines built (and given their first page) before the user asked for them, newest use last. Each belongs to the
-    /// client that made it; one from an earlier sign-in is dropped, never reused.
-    private struct Warm { var client: ObjectIdentifier?; var timelines: [(room: RoomID, timeline: Timeline)] }
-    private let warmed = Mutex(Warm(client: nil, timelines: []))
+    /// Timelines prepared for the top of the room list (`warm`), each with its first page loaded. `open` takes one out rather
+    /// than sharing it, so a reopened room starts from a fresh timeline instead of everything paginated last time. They belong
+    /// to the client that built it, held weakly: a freed client never matches, and a new sign-in never sees them.
+    private struct WarmState {
+        weak var client: Client?
+        var timelines: [RoomID: Timeline] = [:]
+        /// Open sessions per room: a room on screen isn't prepared again behind it.
+        var open: [RoomID: Int] = [:]
+        var running = false
+        var pending: [RoomID]?
+    }
+    private let warmState = Mutex(WarmState())
     static let warmLimit = 6
 
     public init(session: MatrixSessionPort) { self.session = session }
 
+    /// One warm-up runs at a time; a request arriving meanwhile replaces any waiting one and runs after it.
     public func warm(_ rooms: [RoomID]) async {
-        guard let client = try? await session.signedInClient() else { return }
-        let owner = ObjectIdentifier(client)
-        warmed.withLock { if $0.client != owner { $0 = Warm(client: owner, timelines: []) } }
-        for id in rooms.prefix(Self.warmLimit) {
-            if warmed.withLock({ state in state.timelines.contains { $0.room == id } }) { continue }
-            guard let room = try? await session.room(id), let timeline = try? await room.timeline() else { continue }
-            _ = try? await timeline.paginateBackwards(numEvents: 20)
-            warmed.withLock { state in
-                guard state.client == owner, !state.timelines.contains(where: { $0.room == id }) else { return }
-                state.timelines.append((id, timeline))
-                if state.timelines.count > Self.warmLimit { state.timelines.removeFirst() }
+        let wanted = Array(rooms.prefix(Self.warmLimit))
+        let starts = warmState.withLock { state -> Bool in
+            if state.running { state.pending = wanted; return false }
+            state.running = true
+            return true
+        }
+        guard starts else { return }
+        var next: [RoomID]? = wanted
+        while let request = next {
+            await warmOnce(request)
+            next = warmState.withLock { state in
+                let pending = state.pending
+                state.pending = nil
+                if pending == nil { state.running = false }
+                return pending
             }
         }
     }
 
-    private func warmTimeline(for id: RoomID, client: Client) -> Timeline? {
-        warmed.withLock { state in state.client == ObjectIdentifier(client) ? state.timelines.first { $0.room == id }?.timeline : nil }
+    private func warmOnce(_ wanted: [RoomID]) async {
+        guard let client = try? await session.signedInClient() else { return }
+        warmState.withLock { state in
+            if state.client !== client { state.client = client; state.timelines = [:] }
+            state.timelines = state.timelines.filter { wanted.contains($0.key) }  // rooms that left the top are let go
+        }
+        for id in wanted {
+            let needed = warmState.withLock { state in state.client === client && state.timelines[id] == nil && state.open[id, default: 0] == 0 }
+            guard needed, let room = try? await session.room(id), let timeline = try? await room.timeline() else { continue }
+            // Kept only with its first page: a failed load would otherwise be served later as an empty room.
+            guard (try? await timeline.paginateBackwards(numEvents: 20)) != nil else { continue }
+            warmState.withLock { state in
+                if state.client === client, state.open[id, default: 0] == 0 { state.timelines[id] = timeline }
+            }
+        }
     }
+
+    /// Lets go of every prepared timeline (sign-out).
+    public func dropWarm() async {
+        warmState.withLock { state in
+            state.client = nil
+            state.timelines = [:]
+            state.pending = nil
+        }
+    }
+
+    private func closed(_ id: RoomID) {
+        warmState.withLock { state in
+            let count = state.open[id, default: 1] - 1
+            state.open[id] = count > 0 ? count : nil
+        }
+    }
+
+    /// Whether `room` has a prepared timeline waiting (tests).
+    func isWarm(_ room: RoomID) -> Bool { warmState.withLock { $0.timelines[room] != nil } }
 
     public func open(room id: RoomID) async throws(HaloError) -> any TimelineSession {
         let room = try await session.room(id)
         let own = try await session.ownUserID()
-        if let client = try? await session.signedInClient(), let ready = warmTimeline(for: id, client: client) {
-            return MatrixTimelineSession(room: room, timeline: ready, ownUserID: own)
+        let client = try? await session.signedInClient()
+        let ready = warmState.withLock { state -> Timeline? in
+            state.open[id, default: 0] += 1
+            guard let client, state.client === client else { return nil }
+            return state.timelines.removeValue(forKey: id)
         }
+        let release: @Sendable () -> Void = { [weak self] in self?.closed(id) }
+        if let ready { return MatrixTimelineSession(room: room, timeline: ready, ownUserID: own, release: release) }
         do {
             let timeline = try await room.timeline()
             // Classic sync (D73) doesn't pre-fill a timeline the way sliding sync did: it starts empty and fills from the
             // server. One page is requested at once, in the background; its events arrive through `items()`.
             Task { _ = try? await timeline.paginateBackwards(numEvents: 20) }
-            return MatrixTimelineSession(room: room, timeline: timeline, ownUserID: own)
-        } catch { throw ErrorMapper.map(error) }
+            return MatrixTimelineSession(room: room, timeline: timeline, ownUserID: own, release: release)
+        } catch {
+            release()
+            throw ErrorMapper.map(error)
+        }
     }
 }
 
@@ -57,11 +110,22 @@ final class MatrixTimelineSession: TimelineSession {
     private let room: Room
     private let timeline: Timeline
     private let ownUserID: String
+    /// Tells the port this session is gone; runs once, on `close` or when the session is dropped.
+    private let release: Mutex<(@Sendable () -> Void)?>
 
-    init(room: Room, timeline: Timeline, ownUserID: String) {
+    init(room: Room, timeline: Timeline, ownUserID: String, release: @escaping @Sendable () -> Void = {}) {
         self.room = room
         self.timeline = timeline
         self.ownUserID = ownUserID
+        self.release = Mutex(release)
+    }
+
+    deinit {
+        let done = release.withLock { action in
+            defer { action = nil }
+            return action
+        }
+        done?()
     }
 
     func items() -> AsyncStream<HaloDomain.TimelineDiff> {
@@ -210,7 +274,13 @@ final class MatrixTimelineSession: TimelineSession {
         do { guard try await timeline.abortSend(itemId: .transactionId(transactionId: localID), target: .event) else { throw HaloError.notFound } } catch { throw HaloError.notFound }
     }
 
-    func close() async {}
+    func close() async {
+        let done = release.withLock { action in
+            defer { action = nil }
+            return action
+        }
+        done?()
+    }
 }
 
 private final class Listener: TimelineListener {

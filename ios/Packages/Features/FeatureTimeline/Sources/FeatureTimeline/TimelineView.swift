@@ -519,8 +519,6 @@ private struct BotCardView: View {
         .accessibilityIdentifier("bot-card")
     }
 }
-#endif
-
 /// The small round picture beside someone else's message (their initial until the image loads).
 private struct SenderAvatar: View {
     let name: String
@@ -538,3 +536,4 @@ private struct SenderAvatar: View {
             }
     }
 }
+#endif

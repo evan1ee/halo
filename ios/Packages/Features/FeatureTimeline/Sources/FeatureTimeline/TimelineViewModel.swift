@@ -669,13 +669,13 @@ public final class TimelineViewModel {
     /// The user tapped a hidden photo: it loads and stays shown while the room is open.
     public func revealPreview(of image: TimelineRow.Image) { revealedPreviews.insert(image.ref) }
 
-    /// Thumbnail bytes for an image row, or `nil` if it can't be loaded (the row then shows a placeholder).
     /// A sender's profile picture, small; `nil` if it can't be loaded (the view keeps the initial).
     public func avatarData(_ ref: MediaRef) async -> Data? {
         guard let media else { return nil }
         return try? await media.thumbnail(ref, width: 64, height: 64)
     }
 
+    /// Thumbnail bytes for an image row, or `nil` if it can't be loaded (the row then shows a placeholder).
     public func thumbnail(for image: TimelineRow.Image) async -> Data? {
         guard let media else { return nil }
         return try? await media.thumbnail(image.ref, width: 600, height: 600)

@@ -138,6 +138,7 @@ final class AppRoot {
         await badge.reset()
         await drafts.reset()
         await stickers.reset()
+        await timelinePort.dropWarm()
     }
 
     private static func pushConfiguration() -> (appID: String, gateway: URL)? {

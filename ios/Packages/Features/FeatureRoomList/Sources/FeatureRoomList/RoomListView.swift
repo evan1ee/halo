@@ -31,7 +31,7 @@ public struct RoomListView: View {
                                     Text(row.inviter.map { "Invitation from \($0)" } ?? "Invitation").font(.caption).foregroundStyle(.secondary)
                                     if let preview = model.invitePreviews[row.id] {
                                         if let topic = preview.topic, !topic.isEmpty { Text(topic).font(.caption) }
-                                        Text("\(preview.memberCount) members").font(.caption).foregroundStyle(.secondary)
+                                        if let members = preview.memberCount { Text("\(members) members").font(.caption).foregroundStyle(.secondary) }
                                     } else {
                                         Button("Show details") { Task { await model.previewInvite(row.id) } }.font(.caption)
                                             .accessibilityIdentifier("previewInvite-\(row.name)")

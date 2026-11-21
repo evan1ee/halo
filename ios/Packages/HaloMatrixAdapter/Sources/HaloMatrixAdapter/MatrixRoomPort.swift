@@ -86,7 +86,7 @@ public final class MatrixRoomPort: RoomPort {
         do {
             let info = try await client.getRoomPreviewFromRoomId(roomId: id.rawValue, viaServers: []).info()
             return RoomInvitePreview(
-                name: info.name, topic: info.topic, memberCount: Int(clamping: info.numJoinedMembers),
+                name: info.name, topic: info.topic, memberCount: info.numJoinedMembers > 0 ? Int(clamping: info.numJoinedMembers) : nil,
                 avatar: MatrixRoomListPort.avatar(info.avatarUrl))
         } catch { throw ErrorMapper.map(error) }
     }

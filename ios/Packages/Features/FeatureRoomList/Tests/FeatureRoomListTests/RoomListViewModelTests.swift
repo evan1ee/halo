@@ -102,6 +102,10 @@ struct RoomListInviteTests {
         #expect(model.content == .loaded(count: 1, rows: [.init(id: id, name: "Book club", display: .dot, hasUnread: true, isInvite: true, inviter: "Ann")]))
         await model.previewInvite(id)
         #expect(model.invitePreviews[id]?.memberCount == 3 && model.actionError == nil)
+        port.fail(with: .notFound)
+        await model.previewInvite(id)
+        #expect(model.actionError == "The invitation's details couldn't be loaded.")
+        port.fail(with: nil)
         await model.acceptInvite(id)
         #expect(port.acceptedInvites == [id] && model.actionError == nil)
         await model.declineInvite(id)
@@ -208,5 +212,58 @@ struct RoomListPreviewTests {
         #expect(rows.map(\.inviter) == [nil, nil])
         #expect(await model.avatarData(ref) == Data([1, 2, 3]))
         #expect(await model.avatarData(MediaRef(token: "missing")) == nil)
+    }
+}
+
+@MainActor
+@Suite("RoomListViewModel warm-up and invitation previews")
+struct RoomListWarmTests {
+    private actor Calls {
+        var requests: [[RoomID]] = []
+        func add(_ rooms: [RoomID]) { requests.append(rooms) }
+    }
+
+    @Test("the top rooms are handed to warm once per change of the top, never invitations")
+    func warmsTopOnce() async throws {
+        let a = RoomSummary(id: try RoomID("!a:x.org"), name: "A", isDirect: false, isEncrypted: false, membership: .joined)
+        let inv = RoomSummary(id: try RoomID("!i:x.org"), name: "I", isDirect: false, isEncrypted: false, membership: .invited)
+        let port = FakeRoomListPort(rooms: [inv, a])
+        let coordinator = RoomListCoordinator(port: port)
+        let model = RoomListViewModel(session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()), rooms: coordinator)
+        let calls = Calls()
+        model.warm = { await calls.add($0) }
+        await coordinator.start()
+        for await status in await coordinator.statuses() {
+            if case .loaded = status { await model.listChanged(status); break }
+        }
+        await model.listChanged(.loaded(roomCount: 2))  // same top: no second request
+        for _ in 0..<10_000 { if await !calls.requests.isEmpty { break }; await Task.yield() }
+        for _ in 0..<1_000 { await Task.yield() }
+        #expect(await calls.requests == [[a.id]])
+    }
+
+    @Test("a preview disappears once its room is no longer an invitation")
+    func previewsPruned() async throws {
+        let id = try RoomID("!inv:x.org")
+        func summary(_ membership: Membership) -> RoomSummary {
+            RoomSummary(id: id, name: "Club", isDirect: false, isEncrypted: false, membership: membership)
+        }
+        let listPort = FakeRoomListPort(rooms: [summary(.invited)])
+        let coordinator = RoomListCoordinator(port: listPort)
+        let actions = FakeRoomPort(details: RoomDetails(id: id, name: nil, topic: nil, isDirect: false, isEncrypted: false, joinedMemberCount: 0, notificationMode: .allMessages))
+        let model = RoomListViewModel(session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()), rooms: coordinator, actions: actions)
+        await coordinator.start()
+        for await status in await coordinator.statuses() {
+            if case .loaded = status { await model.listChanged(status); break }
+        }
+        await model.previewInvite(id)
+        #expect(model.invitePreviews[id] != nil)
+        try listPort.emit(.set(index: 0, summary(.joined)))
+        for _ in 0..<200_000 {
+            if await coordinator.rooms.first?.membership == .joined { break }
+            await Task.yield()
+        }
+        await model.listChanged(.loaded(roomCount: 1))
+        #expect(model.invitePreviews[id] == nil)
     }
 }

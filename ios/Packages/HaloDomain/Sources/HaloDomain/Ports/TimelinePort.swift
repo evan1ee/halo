@@ -9,10 +9,14 @@ public protocol TimelinePort: Sendable {
     /// Prepares the timelines of the rooms the user is most likely to open next (the top of the room list), so opening one
     /// shows its messages at once. Best effort: failures are ignored. Ports with nothing to prepare keep the default.
     func warm(_ rooms: [RoomID]) async
+
+    /// Lets go of everything `warm` prepared (sign-out).
+    func dropWarm() async
 }
 
 extension TimelinePort {
     public func warm(_ rooms: [RoomID]) async {}
+    public func dropWarm() async {}
 }
 
 /// One open timeline. Closing (or dropping) it cancels every upstream subscription.

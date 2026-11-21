@@ -143,8 +143,8 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
-    @Test("Opening a room works cold and after warm(); the times are written to /tmp/halo-open-timing.txt")
-    func openTiming() async throws {
+    @Test("warm() prepares a room's timeline with its first page; open() takes it, an open room isn't prepared again, dropWarm() lets go")
+    func warmTimelines() async throws {
         let session = port()
         let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
         _ = try await session.loginPassword(
@@ -155,25 +155,27 @@ struct AdapterContractTests {
         try await within(seconds: 60) { try await RoomListPortContract.verify(MatrixRoomListPort(session: session), expectedRoomCount: rooms) }
         let room = try RoomID(env["HALO_DEV_TIMELINE_ROOM"] ?? "")
         let timelines = MatrixTimelinePort(session: session)
-        func firstEvent() async throws -> Double {
-            let start = ContinuousClock.now
-            let timeline = try await timelines.open(room: room)
-            _ = try await within(seconds: 60) {
-                var items: [HaloDomain.TimelineItem] = []
-                for await diff in timeline.items() {
-                    try ListReducer.apply(diff, to: &items)
-                    if items.contains(where: { if case .event = $0.content { true } else { false } }) { return true }
-                }
-                return false
-            }
-            let d = ContinuousClock.now - start
-            await timeline.close()
-            return Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18
-        }
-        let cold = try await firstEvent()
         await timelines.warm([room])
-        let again = try await firstEvent()
-        try? "cold=\(cold) second=\(again)".write(toFile: "/tmp/halo-open-timing.txt", atomically: true, encoding: .utf8)
+        #expect(timelines.isWarm(room))
+        let opened = try await timelines.open(room: room)
+        #expect(!timelines.isWarm(room))
+        // The prepared timeline already holds events: the first state shows one without another pagination.
+        let shown = try await within(seconds: 30) {
+            var items: [HaloDomain.TimelineItem] = []
+            for await diff in opened.items() {
+                try ListReducer.apply(diff, to: &items)
+                if items.contains(where: { if case .event = $0.content { true } else { false } }) { return true }
+            }
+            return false
+        }
+        #expect(shown)
+        await timelines.warm([room])
+        #expect(!timelines.isWarm(room))  // on screen: not prepared again behind it
+        await opened.close()
+        await timelines.warm([room])
+        #expect(timelines.isWarm(room))
+        await timelines.dropWarm()
+        #expect(!timelines.isWarm(room))
         try await session.logout()
     }
 
@@ -332,7 +334,8 @@ struct AdapterContractTests {
         #expect(try await waitFor(toAccept, .invited) == .invited)
         #expect(try await waitFor(toDecline, .invited) == .invited)
         let preview = try await rooms.invitePreview(toDecline)
-        #expect(preview.memberCount >= 0)
+        #expect(preview.name == "Invite decline fixture")
+        #expect(preview.memberCount.map { $0 >= 1 } ?? true)
         try await rooms.acceptInvite(toAccept)
         #expect(try await waitFor(toAccept, .joined) == .joined)
         try await rooms.declineInvite(toDecline)

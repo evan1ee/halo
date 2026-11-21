@@ -86,10 +86,11 @@ public enum RoomMemberRole: Sendable, Equatable {
 public struct RoomInvitePreview: Sendable, Equatable {
     public let name: String?
     public let topic: String?
-    public let memberCount: Int
+    /// Joined members; `nil` when unknown (an invited room's local state often has no count, and an invited room is never empty).
+    public let memberCount: Int?
     public let avatar: MediaRef?
 
-    public init(name: String?, topic: String?, memberCount: Int, avatar: MediaRef? = nil) {
+    public init(name: String?, topic: String?, memberCount: Int?, avatar: MediaRef? = nil) {
         self.name = name
         self.topic = topic
         self.memberCount = memberCount
