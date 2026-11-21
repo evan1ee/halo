@@ -783,13 +783,20 @@ public final class TimelineViewModel {
         }
     }
 
-    /// A run of unnamed room-setting changes (creation, power levels, join rules …) becomes one row
-    /// (TIMELINE FR-2: state events grouped). Membership changes stay visible.
+    /// Unnamed room-setting changes (creation, power levels, join rules …) show once per stretch of room events
+    /// (TIMELINE FR-2: state events grouped). Membership changes in between stay visible and don't start a new stretch,
+    /// so a new room's setup reads "The room was updated", then who joined, instead of repeating the line.
     static func collapsingStateRuns(_ rows: [TimelineRow], items: [TimelineItem]) -> [TimelineRow] {
         var result: [TimelineRow] = []
+        var stretchHasSettings = false
         for (row, item) in zip(rows, items) {
             let isSettings: Bool = { if case .event(let e) = item.content, e.kind == .otherState { true } else { false } }()
-            if isSettings, let last = result.last, last.style == .state, last.text == Self.settingsText { continue }
+            let isRoomEvent: Bool = { if case .event(let e) = item.content, case .membership = e.kind { true } else { isSettings } }()
+            if !isRoomEvent { stretchHasSettings = false }
+            if isSettings {
+                if stretchHasSettings { continue }
+                stretchHasSettings = true
+            }
             result.append(row)
         }
         return result

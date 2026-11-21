@@ -144,6 +144,11 @@ struct TimelineViewModelTests {
         let items = [event(.otherState), event(.otherState), event(.text("hi", isEdited: false)), event(.otherState)]
         let rows = TimelineViewModel.collapsingStateRuns(items.map(model.row), items: items)
         #expect(rows.map(\.text) == ["The room was updated", "hi", "The room was updated"])
+        let joined = event(.membership(user: nil, displayName: "Ann", change: .joined))
+        let setup = [event(.otherState), joined, event(.otherState), joined, event(.text("hi", isEdited: false)), event(.otherState)]
+        let setupRows = TimelineViewModel.collapsingStateRuns(setup.map(model.row), items: setup)
+        #expect(setupRows.map(\.text).filter { $0 == "The room was updated" }.count == 2)
+        #expect(setupRows.count == 5)
     }
 
     @Test("unconfirmed own messages say so; sent ones carry no status")
