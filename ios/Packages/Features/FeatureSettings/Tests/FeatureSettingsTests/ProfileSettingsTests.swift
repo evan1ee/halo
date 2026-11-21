@@ -66,5 +66,13 @@ struct ProfileSettingsTests {
         box.accept = false
         await m.choosePhoto(Data([1]))
         #expect(m.avatar == nil && m.message?.contains("couldn't be used") == true)
+
+        // If the server hasn't synced the new avatar URL yet, keep the uploaded bytes visible.
+        let delayed = ProfileSettingsModel(actions: ProfileSettingsActions(
+            loadName: { "Ann" }, saveName: { _ in true }, loadIgnored: { [] }, unignore: { _ in true },
+            loadAvatar: { nil }, setAvatar: { _ in true }, removeAvatar: { true }))
+        await delayed.load()
+        await delayed.choosePhoto(Data([5, 6]))
+        #expect(delayed.avatar == Data([5, 6]) && delayed.message == "Photo updated.")
     }
 }

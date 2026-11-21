@@ -18,17 +18,21 @@ struct ProfileSettingsView: View {
     var body: some View {
         List {
             Section("Photo") {
+                let photoLabel = model.avatar == nil ? "Choose photo" : "Change photo"
                 HStack(spacing: 16) {
                     // The same round picture (or initial) others see beside your messages.
                     AvatarCircle(name: model.savedName.isEmpty ? (actions.userID ?? "?") : model.savedName, imageData: model.avatar, size: 64)
                         .accessibilityHidden(true)
-                    PhotosPicker(selection: $picked, matching: .images) { Text(model.avatar == nil ? "Choose photo" : "Change photo") }
+                    PhotosPicker(selection: $picked, matching: .images) { Text(photoLabel) }
                         .accessibilityIdentifier("avatar-picker")
                     if model.avatar != nil { Button("Remove", role: .destructive) { Task { await model.removePhoto() } } }
                 }
             }
             Section {
-                TextField("Display name", text: $model.name).accessibilityIdentifier("display-name")
+                TextField("Display name", text: $model.name)
+                    .submitLabel(.done)
+                    .onSubmit { if model.canSave { Task { await model.save() } } }
+                    .accessibilityIdentifier("display-name")
                 Button("Save") { Task { await model.save() } }.disabled(!model.canSave)
             } header: {
                 Text("Display name")

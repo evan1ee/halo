@@ -75,7 +75,7 @@ public final class ProfileSettingsModel {
     /// A photo the user picked (already read into memory).
     public func choosePhoto(_ data: Data) async {
         if await actions.setAvatar(data) {
-            avatar = await actions.loadAvatar()
+            avatar = await actions.loadAvatar() ?? data
             message = "Photo updated."
         } else { message = "That photo couldn't be used. Try another one." }
     }

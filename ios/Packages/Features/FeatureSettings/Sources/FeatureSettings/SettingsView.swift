@@ -233,7 +233,7 @@ private struct BotsSection: View {
                 }
             HStack {
                 field
-                Button("Add", action: add).buttonStyle(.borderless).disabled(!Self.looksLikeUserID(trimmed))
+                Button("Add", action: add).buttonStyle(.borderless).disabled(!canAdd)
             }
         } header: {
             Text("Bots")
@@ -243,17 +243,22 @@ private struct BotsSection: View {
     }
 
     private var trimmed: String { newBot.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var canAdd: Bool { Self.looksLikeUserID(trimmed) && !senders.contains(trimmed) }
 
     @ViewBuilder private var field: some View {
         #if os(iOS)
-        TextField("@bot:server.org", text: $newBot).textInputAutocapitalization(.never).autocorrectionDisabled()
-        #else
         TextField("@bot:server.org", text: $newBot)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .submitLabel(.done)
+            .onSubmit(add)
+        #else
+        TextField("@bot:server.org", text: $newBot).onSubmit(add)
         #endif
     }
 
     private func add() {
-        guard Self.looksLikeUserID(trimmed), !senders.contains(trimmed) else { return }
+        guard canAdd else { return }
         senders.append(trimmed)
         preferences.botSenders = senders
         newBot = ""
@@ -274,6 +279,7 @@ private struct RecoveryKeyItem: Identifiable { let key: String; var id: String {
 private struct RecoveryKeySheet: View {
     let key: String
     let done: () -> Void
+    @State private var copied = false
 
     var body: some View {
         NavigationStack {
@@ -287,13 +293,29 @@ private struct RecoveryKeySheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(.secondary.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
                     .accessibilityIdentifier("recovery-key")
-                ShareLink("Save or copy the key", item: key)
+                HStack(spacing: 16) {
+                    #if canImport(UIKit)
+                    Button {
+                        UIPasteboard.general.string = key
+                        copied = true
+                    } label: {
+                        Label(copied ? "Copied" : "Copy key", systemImage: copied ? "checkmark" : "doc.on.doc")
+                    }
+                    #endif
+                    ShareLink("Share", item: key)
+                }
                 Spacer()
-                Button("I've saved it", action: done).buttonStyle(.borderedProminent).frame(maxWidth: .infinity)
+                Button { done() } label: { Text("I've saved it").frame(maxWidth: .infinity) }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
             }
             .padding()
         }
         .interactiveDismissDisabled()
+        .task(id: copied) {
+            guard copied else { return }
+            try? await Task.sleep(for: .seconds(1.5))
+            copied = false
+        }
     }
 }
 
@@ -339,18 +361,24 @@ public struct AcknowledgementsView: View {
     public init() {}
 
     public var body: some View {
+        let filtered = Acknowledgements.filter(entries, query: query)
         List {
-            Section {
-                Text("Halo is built on the Matrix Rust SDK and the open-source components below.").font(.footnote).foregroundStyle(.secondary)
-            }
-            Section("\(Acknowledgements.filter(entries, query: query).count) components") {
-                ForEach(Acknowledgements.filter(entries, query: query)) { entry in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(entry.name) \(entry.version)")
-                        Text(entry.license).font(.caption).foregroundStyle(.secondary)
+            if !filtered.isEmpty || query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Section {
+                    Text("Halo is built on the Matrix Rust SDK and the open-source components below.").font(.footnote).foregroundStyle(.secondary)
+                }
+                Section("\(filtered.count) components") {
+                    ForEach(filtered) { entry in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(entry.name) \(entry.version)")
+                            Text(entry.license).font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
+        }
+        .overlay {
+            if !entries.isEmpty, filtered.isEmpty { ContentUnavailableView.search(text: query) }
         }
         .navigationTitle("Acknowledgements")
         .searchable(text: $query)
