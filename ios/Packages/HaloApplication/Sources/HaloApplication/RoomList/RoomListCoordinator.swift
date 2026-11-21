@@ -16,16 +16,25 @@ public actor RoomListCoordinator {
     /// How often a subscription is restarted after a diff that doesn't apply before giving up.
     public static let maximumResubscriptions = 3
 
-    /// The rooms to show: the list minus the rooms Halo itself created for sticker packs.
-    public var rooms: [RoomSummary] { hidden.isEmpty ? allRooms : allRooms.filter { !hidden.contains($0.id) } }
+    /// The rooms to show: the list minus sticker-pack rooms and pending invitations from ignored users.
+    public var rooms: [RoomSummary] {
+        guard !hidden.isEmpty || !ignored.isEmpty else { return allRooms }
+        return allRooms.filter { room in
+            if hidden.contains(room.id) { return false }
+            if room.membership == .invited, let inviter = room.inviterID, ignored.contains(inviter) { return false }
+            return true
+        }
+    }
     private var allRooms: [RoomSummary] = []
     private var hidden: Set<RoomID> = []
+    private var ignored: Set<UserID> = []
     public private(set) var status: Status = .idle {
         didSet { if status != oldValue { broadcaster.publish(status) } }
     }
 
     private let port: any RoomListPort
     private let hiddenRooms: (any HiddenRoomsPort)?
+    private let profiles: (any ProfilePort)?
     private let loadsAllPages: Bool
     /// The room count at the last automatic page request; a page that adds no rooms yields no diff, which ends the loop.
     private var requestedAt = 0
@@ -42,8 +51,10 @@ public actor RoomListCoordinator {
     /// - Parameter loadsAllPages: keep requesting pages while each one adds rooms, so the badge sees every room
     ///   (UNREAD_STATE: the badge counts all rooms, not the first page).
     /// - Parameter hiddenRooms: rooms to leave out of the list and the badge (sticker pack rooms); read again after every change.
-    public init(port: any RoomListPort, loadsAllPages: Bool = false, hiddenRooms: (any HiddenRoomsPort)? = nil) {
+    /// - Parameter profiles: used to hide pending invitations from ignored users in both the list and the badge.
+    public init(port: any RoomListPort, loadsAllPages: Bool = false, hiddenRooms: (any HiddenRoomsPort)? = nil, profiles: (any ProfilePort)? = nil) {
         self.hiddenRooms = hiddenRooms
+        self.profiles = profiles
         self.port = port
         self.loadsAllPages = loadsAllPages
     }
@@ -74,7 +85,15 @@ public actor RoomListCoordinator {
         subscription?.cancel()
         subscription = nil
         generation += 1
+        hidden = []
+        ignored = []
         status = .idle
+    }
+
+    /// Re-reads the ignored-user list immediately (e.g. after ignoring or unignoring someone in the UI).
+    public func refreshIgnoredUsers() async {
+        guard let profiles, let list = try? await profiles.ignoredUsers() else { return }
+        setIgnored(Set(list), generation: generation)
     }
 
     public func loadMore() async throws(HaloError) {
@@ -114,6 +133,23 @@ public actor RoomListCoordinator {
         publishSummaries()
     }
 
+    /// Reads the ignored-user list when pending invitations exist, so invitations from ignored users stay hidden.
+    private func refreshIgnored(generation: Int) {
+        guard let profiles, allRooms.contains(where: { $0.membership == .invited }) else { return }
+        Task { [weak self] in
+            guard let list = try? await profiles.ignoredUsers() else { return }
+            await self?.setIgnored(Set(list), generation: generation)
+        }
+    }
+
+    private func setIgnored(_ value: Set<UserID>, generation: Int) {
+        guard generation == self.generation, value != ignored else { return }
+        ignored = value
+        if case .loaded = status { status = .loaded(roomCount: rooms.count) }
+        publishReadInputs()
+        publishSummaries()
+    }
+
     private func publishSummaries() {
         let current = rooms
         guard current != summaryCache else { return }
@@ -145,6 +181,7 @@ public actor RoomListCoordinator {
                 Task { [port] in try? await port.loadMore() }
             }
             refreshHidden(generation: generation)
+            refreshIgnored(generation: generation)
             return true
         } catch {
             consecutiveFailures += 1

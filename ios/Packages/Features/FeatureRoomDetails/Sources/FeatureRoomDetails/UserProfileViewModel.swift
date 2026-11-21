@@ -27,10 +27,12 @@ public final class UserProfileViewModel: Identifiable {
     private let fallbackName: String?
     private let media: MediaLoader?
     private let onOpenRoom: @MainActor (RoomID) -> Void
+    private let onIgnoreChanged: (@Sendable () async -> Void)?
 
     public init(
         profiles: any ProfilePort, chats: any ChatCreationPort, user: UserID, roomDisplayName: String?, isMe: Bool,
-        avatar: MediaRef? = nil, media: MediaLoader? = nil, onOpenRoom: @escaping @MainActor (RoomID) -> Void
+        avatar: MediaRef? = nil, media: MediaLoader? = nil,
+        onIgnoreChanged: (@Sendable () async -> Void)? = nil, onOpenRoom: @escaping @MainActor (RoomID) -> Void
     ) {
         self.profiles = profiles
         self.chats = chats
@@ -39,6 +41,7 @@ public final class UserProfileViewModel: Identifiable {
         self.isMe = isMe
         self.avatar = avatar
         self.media = media
+        self.onIgnoreChanged = onIgnoreChanged
         self.onOpenRoom = onOpenRoom
     }
 
@@ -66,6 +69,7 @@ public final class UserProfileViewModel: Identifiable {
             if ignored { try await profiles.unignore(userID) } else { try await profiles.ignore(userID) }
             content = .loaded(profile, isIgnored: !ignored)
             actionError = nil
+            await onIgnoreChanged?()
         } catch { actionError = Self.text(error) }
     }
 

@@ -116,4 +116,26 @@ struct RoomListCoordinatorTests {
         #expect(await coordinator.status == .idle)
         #expect(await coordinator.rooms.count == 1)
     }
+
+    @Test("pending invitations from ignored users are hidden from the room list and badge, and return after unignoring")
+    func ignoredInvitationsHidden() async throws {
+        let spammer = try UserID("@spam:x.org")
+        let friend = try UserID("@ann:x.org")
+        let spamInvite = RoomSummary(id: try RoomID("!spam:x.org"), name: "Spam", isDirect: true, isEncrypted: false, membership: .invited, inviter: "Spam", inviterID: spammer)
+        let friendInvite = RoomSummary(id: try RoomID("!friend:x.org"), name: "Friend", isDirect: true, isEncrypted: false, membership: .invited, inviter: "Ann", inviterID: friend)
+        let joined = RoomSummary(id: try RoomID("!joined:x.org"), name: "General", isDirect: false, isEncrypted: false, membership: .joined)
+
+        let profiles = FakeProfilePort()
+        try await profiles.ignore(spammer)
+        let port = FakeRoomListPort(rooms: [spamInvite, friendInvite, joined])
+        let coordinator = RoomListCoordinator(port: port, profiles: profiles)
+        await coordinator.start()
+        for _ in 0..<200_000 where await coordinator.rooms.map(\.id) != [friendInvite.id, joined.id] { await Task.yield() }
+        #expect(await coordinator.rooms.map(\.id) == [friendInvite.id, joined.id])
+        #expect(await coordinator.status == .loaded(roomCount: 2))
+
+        try await profiles.unignore(spammer)
+        await coordinator.refreshIgnoredUsers()
+        #expect(await coordinator.rooms.map(\.id) == [spamInvite.id, friendInvite.id, joined.id])
+    }
 }

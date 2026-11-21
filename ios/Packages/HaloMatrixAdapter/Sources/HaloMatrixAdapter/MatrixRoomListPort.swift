@@ -132,6 +132,7 @@ public final class MatrixRoomListPort: RoomListPort {
         let isDirect = await room.isDirect()
         let isEncrypted = await room.isEncrypted()
         let read = await readCounts(of: room, settings: settings, isEncrypted: isEncrypted, isOneToOne: isDirect)
+        let inviter = await inviterInfo(room)
         return try RoomSummary(
             id: RoomID(room.id()),
             name: room.displayName(),
@@ -144,15 +145,16 @@ public final class MatrixRoomListPort: RoomListPort {
             isFavourite: (try? await room.roomInfo())?.isFavourite ?? false,
             preview: preview(await room.latestEvent()),
             avatar: avatar(room.avatarUrl()),
-            inviter: await inviterName(room)
+            inviter: inviter?.name,
+            inviterID: inviter?.id
         )
     }
 
     /// Who invited the user, for an invited room only (one lookup per invitation).
-    static func inviterName(_ room: Room) async -> String? {
+    static func inviterInfo(_ room: Room) async -> (name: String, id: UserID?)? {
         guard room.membership() == .invited, let member = try? await room.inviter() else { return nil }
-        if let name = member.displayName, !name.isEmpty { return name }
-        return member.userId
+        let name = (member.displayName?.isEmpty == false ? member.displayName! : member.userId)
+        return (name, try? UserID(member.userId))
     }
 
     /// The avatar's media reference from its `mxc://` URI; `nil` for none or an unusable URI.

@@ -55,7 +55,9 @@ final class AppRoot {
         matrixSession = session
         let sessionCoordinator = SessionCoordinator(port: session, keychain: keychain)
         self.sessionCoordinator = sessionCoordinator
-        let roomCoordinator = RoomListCoordinator(port: MatrixRoomListPort(session: session), loadsAllPages: true, hiddenRooms: MatrixHiddenRoomsPort(session: session))
+        let profilePort = MatrixProfilePort(session: session)
+        self.profilePort = profilePort
+        let roomCoordinator = RoomListCoordinator(port: MatrixRoomListPort(session: session), loadsAllPages: true, hiddenRooms: MatrixHiddenRoomsPort(session: session), profiles: profilePort)
         self.roomCoordinator = roomCoordinator
         let suite = "group.\(HaloShared.namespace())"
         records = NotificationRecordStore(suiteName: suite)
@@ -71,7 +73,6 @@ final class AppRoot {
         previewPolicy = MatrixMediaPreviewPolicyPort(session: session)
         roomPort = MatrixRoomPort(session: session)
         chatCreation = MatrixChatCreationPort(session: session)
-        profilePort = MatrixProfilePort(session: session)
         recovery = RecoveryViewModel(coordinator: EncryptionCoordinator(port: MatrixEncryptionPort(session: session), session: sessionCoordinator))
         sync = SyncCoordinator(port: MatrixSyncPort(session: session), session: sessionCoordinator)
         let push = Self.pushConfiguration().map {
@@ -231,20 +232,24 @@ final class AppRoot {
         guard let user = try? UserID(member.userID) else { return nil }
         return UserProfileViewModel(
             profiles: profilePort, chats: chatCreation, user: user, roomDisplayName: member.displayName,
-            isMe: member.isMe, avatar: member.avatar, media: media, onOpenRoom: onOpenRoom)
+            isMe: member.isMe, avatar: member.avatar, media: media,
+            onIgnoreChanged: { [roomCoordinator] in await roomCoordinator.refreshIgnoredUsers() },
+            onOpenRoom: onOpenRoom)
     }
 
     /// Settings → Account → Profile: the display name and the ignored users.
     func profileSettings() -> ProfileSettingsActions {
         let port = profilePort
         let media = media
+        let rooms = roomCoordinator
         return ProfileSettingsActions(
             loadName: { try? await port.ownDisplayName() },
             saveName: { name in (try? await port.setOwnDisplayName(name)) != nil },
             loadIgnored: { (try? await port.ignoredUsers())?.map(\.rawValue) },
             unignore: { raw in
-                guard let user = try? UserID(raw) else { return false }
-                return (try? await port.unignore(user)) != nil
+                guard let user = try? UserID(raw), (try? await port.unignore(user)) != nil else { return false }
+                await rooms.refreshIgnoredUsers()
+                return true
             },
             loadAvatar: {
                 guard let ref = try? await port.ownAvatar() else { return nil }
