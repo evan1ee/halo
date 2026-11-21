@@ -38,6 +38,8 @@ final class AppRoot {
     private let chatCreation: MatrixChatCreationPort
     private let profilePort: MatrixProfilePort
     private let roomCoordinator: RoomListCoordinator
+    /// The signed-in account, once the session is ready (kept out of "New chat" results).
+    private var signedInUser: UserID?
     private let log: HaloLog
     private var auditPort: (any AuditEventPort)?
 
@@ -105,6 +107,7 @@ final class AppRoot {
                 guard user != current else { continue }  // the same account again (e.g. after a soft logout)
                 if current != nil { await resetAccountState() }
                 current = user
+                signedInUser = user
                 do {
                     let directory = HaloShared.storeDirectory().appendingPathComponent("halo", isDirectory: true)
                     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -124,6 +127,7 @@ final class AppRoot {
             case .signedOut:
                 guard current != nil else { continue }
                 current = nil
+                signedInUser = nil
                 await resetAccountState()
             default:
                 continue
@@ -213,7 +217,7 @@ final class AppRoot {
     }
 
     /// The "New chat" sheet (ROOM_MANAGEMENT FR-5); `onCreated` gets the room to open.
-    func makeNewChat(onCreated: @escaping @MainActor (RoomID) -> Void) -> NewChatViewModel { NewChatViewModel(port: chatCreation, onCreated: onCreated) }
+    func makeNewChat(onCreated: @escaping @MainActor (RoomID) -> Void) -> NewChatViewModel { NewChatViewModel(port: chatCreation, ownUserID: signedInUser, onCreated: onCreated) }
 
     /// The profile sheet of a room member (USER_PROFILES); `nil` when the member's ID is not valid.
     func makeUserProfile(member: RoomMemberInfo, onOpenRoom: @escaping @MainActor (RoomID) -> Void) -> UserProfileViewModel? {

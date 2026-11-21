@@ -17,9 +17,12 @@ public final class NewChatViewModel: Identifiable {
 
     private let port: any ChatCreationPort
     private let onCreated: @MainActor (RoomID) -> Void
+    /// The signed-in user: never offered as someone to chat with.
+    private let ownUserID: UserID?
     private var searchTask: Task<Void, Never>?
 
-    public init(port: any ChatCreationPort, onCreated: @escaping @MainActor (RoomID) -> Void) {
+    public init(port: any ChatCreationPort, ownUserID: UserID? = nil, onCreated: @escaping @MainActor (RoomID) -> Void) {
+        self.ownUserID = ownUserID
         self.port = port
         self.onCreated = onCreated
     }
@@ -34,8 +37,9 @@ public final class NewChatViewModel: Identifiable {
 
     /// Directory matches, preceded by the typed Matrix ID when the directory doesn't list it.
     public var candidates: [UserSummary] {
-        if let typed = typedUser, !results.contains(where: { $0.id == typed.id }) { return [typed] + results }
-        return results
+        let all: [UserSummary]
+        if let typed = typedUser, !results.contains(where: { $0.id == typed.id }) { all = [typed] + results } else { all = results }
+        return all.filter { $0.id != ownUserID }
     }
 
     func search() async {

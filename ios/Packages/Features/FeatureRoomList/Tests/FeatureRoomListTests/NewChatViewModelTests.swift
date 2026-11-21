@@ -27,6 +27,18 @@ struct NewChatViewModelTests {
         #expect(model.candidates == [ann])
     }
 
+    @Test("the signed-in user is never offered, whether found in the directory or typed in full")
+    func ownUserHidden() async throws {
+        let me = try user("@me:x.org", "Me")
+        let model = NewChatViewModel(port: FakeChatCreationPort(directory: [me, try user("@meg:x.org", "Meg")]), ownUserID: me.id, onCreated: { _ in })
+        model.query = "me"
+        await model.search()
+        #expect(model.candidates.map(\.id.rawValue) == ["@meg:x.org"])
+        model.query = "@me:x.org"
+        await model.search()
+        #expect(model.candidates.isEmpty)
+    }
+
     @Test("starting a chat opens the room; asking again for the same user gives the same room")
     func startChat() async throws {
         let ann = try user("@ann:x.org", "Ann")
