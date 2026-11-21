@@ -2,6 +2,7 @@ import Foundation
 import HaloDomain
 import HaloFoundation
 import HaloTestSupport
+import Synchronization
 import Testing
 @testable import HaloApplication
 
@@ -91,5 +92,42 @@ struct NotificationProcessorTests {
         #expect(await processor.process(room: roomA, event: ev2) == .suppressed(outcome: "suppressed"))
         #expect(await processor.process(room: roomA, event: ev3) == .fallback(outcome: "error"))
         #expect(records.all().count == 1)
+    }
+
+    @Test("R-23: SingleFlightCache reuses one initialized client across concurrent pushes and rebuilds when the session key changes")
+    func singleFlightClientCache() async throws {
+        let cache = SingleFlightCache<String, Int>()
+        let builds = Mutex(0)
+        let started = Mutex<CheckedContinuation<Void, Never>?>(nil)
+        let release = Mutex<CheckedContinuation<Void, Never>?>(nil)
+
+        let first = Task {
+            try await cache.value(for: "alice:dev1") {
+                let n = builds.withLock { count -> Int in count += 1; return count }
+                started.withLock { $0 }?.resume()
+                await withCheckedContinuation { cont in release.withLock { $0 = cont } }
+                return n
+            }
+        }
+        await withCheckedContinuation { cont in
+            let alreadyStarted = builds.withLock { $0 > 0 }
+            if alreadyStarted { cont.resume() } else { started.withLock { $0 = cont } }
+        }
+        let second = Task {
+            try await cache.value(for: "alice:dev1") {
+                builds.withLock { count -> Int in count += 1; return count }
+            }
+        }
+        for _ in 0..<2_000 { await Task.yield() }
+        release.withLock { $0 }?.resume()
+
+        #expect(try await first.value == 1)
+        #expect(try await second.value == 1)
+        #expect(builds.withLock { $0 } == 1)
+
+        // Subsequent push for the same session reuses cached value; different session rebuilds.
+        #expect(try await cache.value(for: "alice:dev1") { builds.withLock { $0 += 1; return $0 } } == 1)
+        #expect(try await cache.value(for: "bob:dev2") { builds.withLock { $0 += 1; return $0 } } == 2)
+        #expect(builds.withLock { $0 } == 2)
     }
 }

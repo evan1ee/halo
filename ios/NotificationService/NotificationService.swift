@@ -11,6 +11,21 @@ import UserNotifications
 /// `halo.sqlite` (`notification_record`, R-13), and evaluates any badge fallback via `ReadStatePolicy` (R-08).
 /// Never sets `aps.badge` from a payload and never creates attention from a payload (AGENTS.md §17).
 final class NotificationService: UNNotificationServiceExtension, @unchecked Sendable {
+    private struct SessionKey: Hashable, Sendable {
+        let userID: UserID
+        let deviceID: DeviceID
+    }
+
+    private struct CachedRuntime: Sendable {
+        let session: MatrixSessionPort
+        let database: HaloDatabase
+        let records: NotificationRecordStore
+    }
+
+    /// Reuses one restored SDK `Client` + GRDB handle across pushes in the same extension process (R-23),
+    /// coalescing concurrent pushes so two clients never race on the same store.
+    private static let runtimeCache = SingleFlightCache<SessionKey, CachedRuntime>()
+
     private var handler: ((UNNotificationContent) -> Void)?
     private var original: UNNotificationContent?
     private let lock = NSLock()
@@ -47,29 +62,33 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
             }
             let stored = try JSONDecoder().decode(StoredSession.self, from: data)
             metrics.step("keychain")
-            let directory = HaloShared.storeDirectory().appendingPathComponent("halo", isDirectory: true)
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let database = try HaloDatabase(path: directory.appendingPathComponent("halo.sqlite").path)
-            let signal = DarwinSignal()
-            let records = NotificationRecordStore(database: database, account: stored.userID, onChange: { signal.post() })
-            let session = MatrixSessionPort(
-                baseDirectory: HaloShared.storeDirectory(),
-                holderName: "nse",
-                sendsMessages: false,
-                lightweightRuntime: true,
-                readStoredSession: {
-                    (try? keychain.readSync(.session)).flatMap { try? JSONDecoder().decode(StoredSession.self, from: $0) }
-                },
-                persistRefreshedSession: { refreshed in
-                    if let encoded = try? JSONEncoder().encode(refreshed) {
-                        try? keychain.writeSync(encoded, for: .session)
-                    }
-                })
-            try await session.restore(stored)
+            let key = SessionKey(userID: stored.userID, deviceID: stored.deviceID)
+            let runtime = try await Self.runtimeCache.value(for: key) {
+                let directory = HaloShared.storeDirectory().appendingPathComponent("halo", isDirectory: true)
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                let database = try HaloDatabase(path: directory.appendingPathComponent("halo.sqlite").path)
+                let signal = DarwinSignal()
+                let records = NotificationRecordStore(database: database, account: stored.userID, onChange: { signal.post() })
+                let session = MatrixSessionPort(
+                    baseDirectory: HaloShared.storeDirectory(),
+                    holderName: "nse",
+                    sendsMessages: false,
+                    lightweightRuntime: true,
+                    readStoredSession: {
+                        (try? keychain.readSync(.session)).flatMap { try? JSONDecoder().decode(StoredSession.self, from: $0) }
+                    },
+                    persistRefreshedSession: { refreshed in
+                        if let encoded = try? JSONEncoder().encode(refreshed) {
+                            try? keychain.writeSync(encoded, for: .session)
+                        }
+                    })
+                try await session.restore(stored)
+                return CachedRuntime(session: session, database: database, records: records)
+            }
             metrics.step("restore")
             let processor = NotificationProcessor(
-                fetcher: MatrixNotificationPort(session: session),
-                records: records,
+                fetcher: MatrixNotificationPort(session: runtime.session),
+                records: runtime.records,
                 lastAttention: { attention.roomIDs() },
                 isAppForeground: { attention.isForeground() })
             let decision = await processor.process(room: room, event: event)

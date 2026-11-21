@@ -98,3 +98,37 @@ public struct NotificationProcessor: Sendable {
         return lastAttention().union([room]).count
     }
 }
+
+/// Caches one initialized resource per key and coalesces concurrent builds (used by the NSE to reuse one
+/// SDK `Client` + DB across pushes in the same extension process, R-23).
+public actor SingleFlightCache<Key: Hashable & Sendable, Value: Sendable> {
+    private var cached: (key: Key, value: Value)?
+    private var inFlight: (id: UUID, key: Key, task: Task<Value, any Error>)?
+
+    public init() {}
+
+    public func value(for key: Key, build: @escaping @Sendable () async throws -> Value) async throws -> Value {
+        if let cached, cached.key == key { return cached.value }
+        if let inFlight, inFlight.key == key { return try await inFlight.task.value }
+        let id = UUID()
+        let task = Task { try await build() }
+        inFlight = (id, key, task)
+        do {
+            let value = try await task.value
+            if inFlight?.id == id { inFlight = nil }
+            cached = (key, value)
+            return value
+        } catch {
+            if inFlight?.id == id { inFlight = nil }
+            throw error
+        }
+    }
+
+    public func invalidate(key: Key? = nil) {
+        if let key {
+            if cached?.key == key { cached = nil }
+        } else {
+            cached = nil
+        }
+    }
+}
