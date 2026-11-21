@@ -81,15 +81,41 @@ struct BadgeCoordinatorTests {
         #expect(port.history == [[]])
     }
 
-    @Test("opening a timeline clears that room's records")
-    func openClears() async throws {
+    @Test("R-15 (D6): opening a timeline keeps records until a message is seen; reporting a read position clears only covered records")
+    func openKeepsUntilSeen() async throws {
+        let rooms = FakeRoomListPort()
+        let roomList = RoomListCoordinator(port: rooms)
         let records = FakeNotificationRecords()
-        let timelines = FakeTimelinePort()
+        let markers = FakeReadMarkerPort()
+        let receipts = ReadReceiptCoordinator(port: markers)
+        let port = FakeBadgePort()
+        let coordinator = ReadStateCoordinator(rooms: roomList, records: records, port: port, receipts: receipts)
+        defer { withExtendedLifetime(coordinator) {} }
+        await coordinator.begin()
+        await roomList.start()
+
         let room = try RoomID("!a:x.org")
+        let timelines = FakeTimelinePort()
         timelines.addRoom(room)
-        records.add(try record("!a:x.org", "$1"))
+        try rooms.emit(.reset([try summary("!a:x.org"), try summary("!b:x.org")]))
+        records.add(NotificationRecord(roomID: room, eventID: try EventID("$1"), timestamp: Date(timeIntervalSince1970: 100), isMention: false, deliveredAt: Date(timeIntervalSince1970: 100), source: .nse))
+        records.add(NotificationRecord(roomID: room, eventID: try EventID("$3"), timestamp: Date(timeIntervalSince1970: 200), isMention: false, deliveredAt: Date(timeIntervalSince1970: 200), source: .nse))
         records.add(try record("!b:x.org", "$2"))
-        await TimelineCoordinator(port: timelines, room: room, records: records).open()
+        #expect(await eventually { port.badge == 2 })
+
+        // Opening the room alone does NOT wipe its notification records before anything is seen (D6, R-15).
+        await TimelineCoordinator(port: timelines, room: room).open()
+        #expect(Set(records.all().map(\.eventID.rawValue)) == ["$1", "$2", "$3"])
+
+        // Seeing $1 (ts 100) clears only $1; unseen newer record $3 (ts 200) and other room's $2 stay.
+        await receipts.reportSeen(room: room, event: try EventID("$1"), timestamp: Date(timeIntervalSince1970: 100))
+        #expect(await eventually { !records.all().contains { $0.eventID.rawValue == "$1" } })
+        #expect(Set(records.all().map(\.eventID.rawValue)) == ["$2", "$3"])
+        #expect(port.badge == 2)
+
+        // Seeing $3 (ts 200) clears $3 and drops room !a from the badge.
+        await receipts.reportSeen(room: room, event: try EventID("$3"), timestamp: Date(timeIntervalSince1970: 200))
+        #expect(await eventually { port.badge == 1 })
         #expect(records.all().map(\.eventID.rawValue) == ["$2"])
     }
 

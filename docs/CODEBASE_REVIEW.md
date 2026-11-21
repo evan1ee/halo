@@ -458,7 +458,7 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 | R-12 | P1 | Session | Restore timeout can leave a late-adopted client and a second client on retry | **FIXED:** single-flight restore + generation guard in `SessionCoordinator` and `MatrixSessionPort`; retry awaits in-flight task, late completion adopts on `.restoreFailed` or discards after `logout`; PS35 |
 | R-13 | P1 | Persistence | Records in `UserDefaults`, non-atomic cross-process RMW | **FIXED:** GRDB `notification_record` (migration v7) + `DarwinSignal` (`one.mbm.halo.db.changed`); PS33 |
 | R-14 | P1 | Notifications | Suppressed/filtered pushes (e.g. encrypted reactions) show "Halo: New message" | Deliver silent content when suppressed; pursue the filtering entitlement (V-PUSH-3) |
-| R-15 | P2 | Unread | Opening a room clears all its records before anything is seen (vs D6) | Clear records covered by the sent receipt |
+| R-15 | P2 | Unread | Opening a room clears all its records before anything is seen (vs D6) | **FIXED:** removed blanket `records.clear(room:)` from `TimelineCoordinator.open()`; `ReadStateCoordinator` prunes only records covered by the read position (`notifiedThroughTs` / `localIntentEventID`) once visible; `BadgeCoordinatorTests.openKeepsUntilSeen` |
 | R-16 | P1 | Security | Documented field encryption missing; plaintext drafts/bot text from E2EE rooms | Implement AES-GCM field encryption or record a decision |
 | R-17 | P2 | Auth | Login requires native sliding sync though the app uses classic sync | Remove the stale gate (or document why it stays) |
 | R-18 | P2 | Performance | Unfiltered classic sync; 8 s poll | Upstream a filter option in `SyncSettingsV2`; lazy-load members |

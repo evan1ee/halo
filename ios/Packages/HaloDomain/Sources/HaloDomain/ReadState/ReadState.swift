@@ -217,6 +217,10 @@ public enum ReadStatePolicy {
         var unconfirmed: [NotifiedRef] = []
         var superseded: Set<EventID> = []
         for record in records where record.roomID == input.roomID {
+            if record.eventID == input.localIntentEventID || record.eventID == input.ownReceiptEventID {
+                superseded.insert(record.eventID)
+                continue
+            }
             if let coveredThrough, record.timestamp <= coveredThrough {
                 superseded.insert(record.eventID)
                 continue
