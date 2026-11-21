@@ -104,10 +104,58 @@ enum HTMLText {
 
     private static func decode(_ text: String) -> String {
         guard text.contains("&") else { return text }
-        var out = text
-        for (entity, value) in [("&lt;", "<"), ("&gt;", ">"), ("&quot;", "\""), ("&#39;", "'"), ("&apos;", "'"), ("&nbsp;", " "), ("&amp;", "&")] {
-            out = out.replacingOccurrences(of: entity, with: value)
+        var out = ""
+        out.reserveCapacity(text.count)
+        var index = text.startIndex
+        while index < text.endIndex {
+            if text[index] == "&", let semi = findEntityEnd(in: text, after: index) {
+                let name = text[text.index(after: index)..<semi]
+                if let decoded = decodeEntity(name) {
+                    out.append(decoded)
+                    index = text.index(after: semi)
+                    continue
+                }
+            }
+            out.append(text[index])
+            index = text.index(after: index)
         }
         return out
+    }
+
+    /// Scans at most 12 characters ahead for `;` so malformed input with many `&` stays O(n).
+    private static func findEntityEnd(in text: String, after amp: String.Index) -> String.Index? {
+        var cursor = text.index(after: amp)
+        var steps = 0
+        while cursor < text.endIndex, steps < 12 {
+            let ch = text[cursor]
+            if ch == ";" { return cursor }
+            if ch == "&" || ch.isWhitespace { return nil }
+            cursor = text.index(after: cursor)
+            steps += 1
+        }
+        return nil
+    }
+
+    private static func decodeEntity(_ name: Substring) -> String? {
+        switch name {
+        case "lt": return "<"
+        case "gt": return ">"
+        case "quot": return "\""
+        case "apos": return "'"
+        case "nbsp": return " "
+        case "amp": return "&"
+        default: break
+        }
+        guard name.hasPrefix("#") else { return nil }
+        let digits = name.dropFirst()
+        let codePoint: UInt32?
+        if digits.hasPrefix("x") || digits.hasPrefix("X") {
+            let hex = digits.dropFirst()
+            codePoint = !hex.isEmpty ? UInt32(hex, radix: 16) : nil
+        } else {
+            codePoint = !digits.isEmpty ? UInt32(digits, radix: 10) : nil
+        }
+        guard let codePoint, codePoint != 0, let scalar = Unicode.Scalar(codePoint) else { return nil }
+        return String(scalar)
     }
 }

@@ -46,4 +46,12 @@ struct HTMLTextTests {
     func replyFallback() {
         #expect(String(HTMLText.attributed("<mx-reply><blockquote>old</blockquote></mx-reply>answer").characters) == "answer")
     }
+
+    @Test("decimal and hex numeric entities decode in a single pass without double-unescaping or crashing on bad codes")
+    func numericEntities() {
+        #expect(String(HTMLText.attributed("don&#x27;t &amp;#x27; &#8217; &#x1F44D; &#128077;").characters) == "don't &#x27; \u{2019} 👍 👍")
+        #expect(String(HTMLText.attributed("&amp;lt; &amp;amp; a & b &lt; c").characters) == "&lt; &amp; a & b < c")
+        // Invalid, NUL, surrogate and out-of-range code points stay literal text.
+        #expect(String(HTMLText.attributed("&#0; &#xD800; &#x9999999; &#xZZ; &#; &unknown;").characters) == "&#0; &#xD800; &#x9999999; &#xZZ; &#; &unknown;")
+    }
 }
