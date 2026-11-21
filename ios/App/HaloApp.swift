@@ -167,10 +167,11 @@ private struct TimelineScreen: View {
                         .accessibilityIdentifier("roomInfo")
                 }
             }
-            .sheet(item: $details) { model in
+            .sheet(item: $details, onDismiss: { Task { title = await root.roomName(room) ?? title } }) { model in
                 RoomDetailsView(
                     model: model,
                     profile: { member in root.makeUserProfile(member: member, onOpenRoom: { room in details = nil; openRoom(room) }) },
+                    onRenamed: { title = $0 },
                     onLeft: { dismiss() })
             }
             .task { title = await root.roomName(room) ?? "Unnamed room" }

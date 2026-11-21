@@ -222,7 +222,9 @@ final class AppRoot {
     /// The profile sheet of a room member (USER_PROFILES); `nil` when the member's ID is not valid.
     func makeUserProfile(member: RoomMemberInfo, onOpenRoom: @escaping @MainActor (RoomID) -> Void) -> UserProfileViewModel? {
         guard let user = try? UserID(member.userID) else { return nil }
-        return UserProfileViewModel(profiles: profilePort, chats: chatCreation, user: user, roomDisplayName: member.displayName, isMe: member.isMe, onOpenRoom: onOpenRoom)
+        return UserProfileViewModel(
+            profiles: profilePort, chats: chatCreation, user: user, roomDisplayName: member.displayName,
+            isMe: member.isMe, avatar: member.avatar, media: media, onOpenRoom: onOpenRoom)
     }
 
     /// Settings → Account → Profile: the display name and the ignored users.

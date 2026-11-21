@@ -44,6 +44,11 @@ extension RoomDetails {
     public func with(name: String?, topic: String?) -> RoomDetails {
         RoomDetails(id: id, name: name, topic: topic, isDirect: isDirect, isEncrypted: isEncrypted, joinedMemberCount: joinedMemberCount, notificationMode: notificationMode, canEditDetails: canEditDetails, canInvite: canInvite, avatar: avatar)
     }
+
+    /// A copy with another avatar.
+    public func with(avatar: MediaRef?) -> RoomDetails {
+        RoomDetails(id: id, name: name, topic: topic, isDirect: isDirect, isEncrypted: isEncrypted, joinedMemberCount: joinedMemberCount, notificationMode: notificationMode, canEditDetails: canEditDetails, canInvite: canInvite, avatar: avatar)
+    }
 }
 
 /// The three notification modes of a room (ROOM_MANAGEMENT FR-3).

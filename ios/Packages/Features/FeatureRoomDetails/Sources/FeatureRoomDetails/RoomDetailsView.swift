@@ -15,14 +15,20 @@ public struct RoomDetailsView: View {
     @State private var picked: PhotosPickerItem?
 
     private let onLeft: @MainActor () -> Void
+    private let onRenamed: @MainActor (String) -> Void
     private let profile: (@MainActor (RoomMemberInfo) -> UserProfileViewModel?)?
     @State private var shownProfile: UserProfileViewModel?
 
     /// `onLeft` runs after the user left the room and the sheet closed (the caller closes the room's screen).
+    /// `onRenamed` runs when the user saves a new room name so the caller can update its navigation title at once.
     /// `profile` makes the profile sheet of a tapped member; without it members aren't tappable.
-    public init(model: RoomDetailsViewModel, profile: (@MainActor (RoomMemberInfo) -> UserProfileViewModel?)? = nil, onLeft: @escaping @MainActor () -> Void = {}) {
+    public init(
+        model: RoomDetailsViewModel, profile: (@MainActor (RoomMemberInfo) -> UserProfileViewModel?)? = nil,
+        onRenamed: @escaping @MainActor (String) -> Void = { _ in }, onLeft: @escaping @MainActor () -> Void = {}
+    ) {
         _model = State(initialValue: model)
         self.profile = profile
+        self.onRenamed = onRenamed
         self.onLeft = onLeft
     }
 
@@ -54,7 +60,11 @@ public struct RoomDetailsView: View {
         List {
             Section {
                 VStack(spacing: 8) {
-                    AvatarLoader(name: details.name ?? "?", ref: details.avatar, size: 80) { await model.avatarData($0) }
+                    if let local = model.localAvatar {
+                        AvatarCircle(name: details.name ?? "?", imageData: local, size: 80)
+                    } else {
+                        AvatarLoader(name: details.name ?? "?", ref: details.avatar, size: 80) { await model.avatarData($0) }
+                    }
                     Text(details.name ?? "Unnamed room").font(.title3.bold()).multilineTextAlignment(.center)
                     if let topic = details.topic, !topic.isEmpty {
                         Text(topic).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
@@ -63,19 +73,32 @@ public struct RoomDetailsView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 4)
                 Label(details.isEncrypted ? "Encrypted" : "Not encrypted", systemImage: details.isEncrypted ? "lock.fill" : "lock.open")
-                Label("\(model.joinedMemberCount) members", systemImage: "person.2")
+                Label(model.memberCountText, systemImage: "person.2")
             }
             if details.canEditDetails || details.canInvite {
                 Section {
                     if details.canEditDetails {
-                        Button("Edit name and topic") { draftName = details.name ?? ""; draftTopic = details.topic ?? ""; editing = true }.accessibilityIdentifier("editRoom")
-                    }
-                    if details.canEditDetails {
-                        PhotosPicker(selection: $picked, matching: .images) { Text("Change photo") }.accessibilityIdentifier("changeRoomPhoto")
-                        Button("Remove photo", role: .destructive) { Task { await model.removePhoto() } }.accessibilityIdentifier("removeRoomPhoto")
+                        let photoLabel = model.hasAvatar ? "Change photo" : "Choose photo"
+                        Button { draftName = details.name ?? ""; draftTopic = details.topic ?? ""; editing = true } label: {
+                            Label("Edit name and topic", systemImage: "pencil")
+                        }
+                        .accessibilityIdentifier("editRoom")
+                        PhotosPicker(selection: $picked, matching: .images) {
+                            Label(photoLabel, systemImage: "photo")
+                        }
+                        .accessibilityIdentifier("changeRoomPhoto")
+                        if model.hasAvatar {
+                            Button(role: .destructive) { Task { await model.removePhoto() } } label: {
+                                Label("Remove photo", systemImage: "trash")
+                            }
+                            .accessibilityIdentifier("removeRoomPhoto")
+                        }
                     }
                     if details.canInvite {
-                        Button("Invite someone") { inviteText = ""; inviting = true }.accessibilityIdentifier("inviteToRoom")
+                        Button { inviteText = ""; inviting = true } label: {
+                            Label("Invite someone", systemImage: "person.badge.plus")
+                        }
+                        .accessibilityIdentifier("inviteToRoom")
                     }
                 }
             }
@@ -117,7 +140,10 @@ public struct RoomDetailsView: View {
         .alert("Edit room", isPresented: $editing) {
             TextField("Name", text: $draftName)
             TextField("Topic", text: $draftTopic)
-            Button("Save") { Task { _ = await model.saveDetails(name: draftName, topic: draftTopic) } }
+            Button("Save") {
+                let saved = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
+                Task { if await model.saveDetails(name: draftName, topic: draftTopic) { onRenamed(saved) } }
+            }
             Button("Cancel", role: .cancel) {}
         }
         .alert("Invite someone", isPresented: $inviting) {

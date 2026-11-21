@@ -1,3 +1,5 @@
+import Foundation
+import HaloApplication
 import HaloDomain
 import HaloFoundation
 import HaloTestSupport
@@ -48,5 +50,19 @@ struct UserProfileViewModelTests {
         await me.load()
         await me.toggleIgnore()
         #expect(opened.count == 1)
+    }
+
+    @Test("profile avatar loads from MediaLoader when available")
+    func avatarLoading() async throws {
+        let ann = try UserID("@ann:x.org")
+        let ref = MediaRef(token: "u1")
+        let mediaPort = FakeMediaPort()
+        mediaPort.add(ref, data: Data([9, 8]))
+        let withAvatar = UserProfileViewModel(
+            profiles: FakeProfilePort(), chats: FakeChatCreationPort(), user: ann, roomDisplayName: "Ann",
+            isMe: false, avatar: ref, media: MediaLoader(port: mediaPort), onOpenRoom: { _ in })
+        #expect(await withAvatar.avatarData() == Data([9, 8]))
+        let withoutAvatar = try make(profiles: FakeProfilePort())
+        #expect(await withoutAvatar.avatarData() == nil)
     }
 }

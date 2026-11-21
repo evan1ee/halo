@@ -1,9 +1,12 @@
+import HaloDesignSystem
 import HaloDomain
 import SwiftUI
 
 /// The profile sheet of a person. All logic lives in `UserProfileViewModel`.
 public struct UserProfileView: View {
     @State private var model: UserProfileViewModel
+    @State private var avatar: Data?
+    @State private var copied = false
     @Environment(\.dismiss) private var dismiss
 
     public init(model: UserProfileViewModel) { _model = State(initialValue: model) }
@@ -21,21 +24,39 @@ public struct UserProfileView: View {
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
         .task { await model.load() }
+        .task { avatar = await model.avatarData() }
     }
 
     private func list(_ profile: UserProfile, ignored: Bool) -> some View {
-        List {
+        let name = profile.displayName?.isEmpty == false ? profile.displayName! : "No display name"
+        let initialSeed = profile.displayName?.isEmpty == false ? profile.displayName! : profile.userID.rawValue
+        return List {
             Section {
-                // The user ID always shows under the name: a display name alone can impersonate (USER_PROFILES §10).
-                Text(profile.displayName?.isEmpty == false ? profile.displayName! : "No display name").font(.headline)
-                Text(profile.userID.rawValue).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
-                Button("Copy user ID") { copy(profile.userID.rawValue) }
+                VStack(spacing: 8) {
+                    AvatarCircle(name: initialSeed, imageData: avatar, size: 80)
+                    // The user ID always shows under the name: a display name alone can impersonate (USER_PROFILES §10).
+                    Text(name).font(.title3.bold()).multilineTextAlignment(.center)
+                    Text(profile.userID.rawValue).font(.subheadline).foregroundStyle(.secondary).textSelection(.enabled)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 4)
+                Button {
+                    copy(profile.userID.rawValue)
+                    copied = true
+                } label: {
+                    Label(copied ? "Copied" : "Copy user ID", systemImage: copied ? "checkmark" : "doc.on.doc")
+                }
             }
             if !model.isMe {
                 Section {
-                    Button("Message") { Task { await model.message() } }.accessibilityIdentifier("messageUser")
-                    Button(ignored ? "Unignore" : "Ignore", role: ignored ? nil : .destructive) { Task { await model.toggleIgnore() } }
-                        .accessibilityIdentifier("ignoreUser")
+                    Button { Task { await model.message() } } label: {
+                        Label("Message", systemImage: "bubble.left")
+                    }
+                    .accessibilityIdentifier("messageUser")
+                    Button(role: ignored ? nil : .destructive) { Task { await model.toggleIgnore() } } label: {
+                        Label(ignored ? "Unignore" : "Ignore", systemImage: ignored ? "hand.raised.slash" : "hand.raised")
+                    }
+                    .accessibilityIdentifier("ignoreUser")
                 } footer: {
                     Text(ignored ? "You don't see this person's messages." : "Ignoring hides this person's messages and invitations everywhere.")
                 }
@@ -43,6 +64,11 @@ public struct UserProfileView: View {
             if let error = model.actionError { Section { Text(error).foregroundStyle(.red) } }
         }
         .disabled(model.isWorking)
+        .task(id: copied) {
+            guard copied else { return }
+            try? await Task.sleep(for: .seconds(1.5))
+            copied = false
+        }
     }
 
     private func copy(_ text: String) {

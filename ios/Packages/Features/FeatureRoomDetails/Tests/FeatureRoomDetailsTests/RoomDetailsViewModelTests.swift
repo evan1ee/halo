@@ -84,6 +84,10 @@ extension RoomDetailsViewModelTests {
         let (_, model, _) = try fixture(count: 0)
         await model.load()
         #expect(model.joinedMemberCount == 2)
+        #expect(model.memberCountText == "2 members")
+        let (_, solo, _) = try fixture(members: [RoomMemberInfo(userID: "@a:x.org", displayName: "Ann", role: .administrator, isMe: true)], count: 1)
+        await solo.load()
+        #expect(solo.memberCountText == "1 member")
     }
 }
 
@@ -140,12 +144,15 @@ extension RoomDetailsViewModelTests {
     func roomPhoto() async throws {
         let (port, _, id) = try fixture()
         let model = RoomDetailsViewModel(port: port, room: id, images: PassThrough())
+        await model.load()
+        #expect(!model.hasAvatar && model.localAvatar == nil)
         #expect(await model.changePhoto(Data([1, 2])))
         #expect(port.avatarUploads == [Data([1, 2])])
+        #expect(model.hasAvatar && model.localAvatar == Data([1, 2]))
         #expect(await model.changePhoto(Data()) == false)
         #expect(model.actionError?.contains("couldn't be used") == true)
         await model.removePhoto()
-        #expect(port.avatarRemovals == 1 && model.actionError == nil)
+        #expect(port.avatarRemovals == 1 && model.actionError == nil && !model.hasAvatar && model.localAvatar == nil)
         port.fail(with: .forbidden)
         #expect(await model.changePhoto(Data([3])) == false)
         #expect(model.actionError?.contains("permission") == true)

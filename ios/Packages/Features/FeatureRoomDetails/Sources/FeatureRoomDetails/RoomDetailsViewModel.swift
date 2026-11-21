@@ -25,6 +25,15 @@ public final class RoomDetailsViewModel: Identifiable {
     public private(set) var hasLeft = false
     /// `true` while the leave confirmation is shown.
     public var confirmsLeave = false
+    /// Bytes of a photo just uploaded during this sheet visit, shown immediately before the next sync delivers a new `MediaRef`.
+    public private(set) var localAvatar: Data?
+
+    /// `true` when the room currently has an avatar (either from the server or just uploaded).
+    public var hasAvatar: Bool {
+        if localAvatar != nil { return true }
+        if case .loaded(let details, _) = content { return details.avatar != nil }
+        return false
+    }
 
     private let port: any RoomPort
     private let room: RoomID
@@ -67,6 +76,7 @@ public final class RoomDetailsViewModel: Identifiable {
         do throws(HaloError) {
             let image = try images.prepare(data: data, filename: "avatar")
             try await port.setAvatar(mimeType: image.mimeType, data: image.data, in: room)
+            localAvatar = image.data
             actionError = nil
             return true
         } catch {
@@ -78,6 +88,10 @@ public final class RoomDetailsViewModel: Identifiable {
     public func removePhoto() async {
         do throws(HaloError) {
             try await port.removeAvatar(in: room)
+            localAvatar = nil
+            if case .loaded(let details, let members) = content {
+                content = .loaded(details.with(avatar: nil), members: members)
+            }
             actionError = nil
         } catch { actionError = Self.photoText(error) }
     }
@@ -115,6 +129,11 @@ public final class RoomDetailsViewModel: Identifiable {
     public var joinedMemberCount: Int {
         guard case .loaded(let details, let members) = content else { return 0 }
         return max(details.joinedMemberCount, members.filter { !$0.isInvited }.count)
+    }
+
+    /// Grammatically pluralised member count ("1 member" / "3 members").
+    public var memberCountText: String {
+        joinedMemberCount == 1 ? "1 member" : "\(joinedMemberCount) members"
     }
 
     /// Whether leaving needs a warning: the user is the only administrator of a room with other people (FR-4).

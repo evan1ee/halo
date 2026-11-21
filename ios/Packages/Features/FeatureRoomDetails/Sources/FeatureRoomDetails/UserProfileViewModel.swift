@@ -1,9 +1,10 @@
 import Foundation
+import HaloApplication
 import HaloDomain
 import HaloFoundation
 import Observation
 
-/// Another person's profile (USER_PROFILES FR-2, FR-3): name, user ID, message, ignore, copy ID.
+/// Another person's profile (USER_PROFILES FR-2, FR-3): avatar, name, user ID, message, ignore, copy ID.
 @MainActor @Observable
 public final class UserProfileViewModel: Identifiable {
     public enum Content: Equatable {
@@ -18,22 +19,33 @@ public final class UserProfileViewModel: Identifiable {
     /// `true` for the signed-in user: no message or ignore actions.
     public let isMe: Bool
     public let userID: UserID
+    /// The member's known avatar, if any; loaded via `avatarData()`.
+    public let avatar: MediaRef?
 
     private let profiles: any ProfilePort
     private let chats: any ChatCreationPort
     private let fallbackName: String?
+    private let media: MediaLoader?
     private let onOpenRoom: @MainActor (RoomID) -> Void
 
     public init(
         profiles: any ProfilePort, chats: any ChatCreationPort, user: UserID, roomDisplayName: String?, isMe: Bool,
-        onOpenRoom: @escaping @MainActor (RoomID) -> Void
+        avatar: MediaRef? = nil, media: MediaLoader? = nil, onOpenRoom: @escaping @MainActor (RoomID) -> Void
     ) {
         self.profiles = profiles
         self.chats = chats
         self.userID = user
         self.fallbackName = roomDisplayName
         self.isMe = isMe
+        self.avatar = avatar
+        self.media = media
         self.onOpenRoom = onOpenRoom
+    }
+
+    /// Loads the profile avatar thumbnail; `nil` when absent, without a loader, or on failure (the view keeps the initial).
+    public func avatarData() async -> Data? {
+        guard let avatar, let media else { return nil }
+        return try? await media.thumbnail(avatar, width: 160, height: 160)
     }
 
     /// Loads the profile and whether the user is ignored. A profile that can't be fetched still shows the name known from the room.
