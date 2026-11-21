@@ -24,6 +24,7 @@ public actor MatrixSessionPort: SessionPort {
     private let holderName: String
     private let sendsMessages: Bool
     private let lightweightRuntime: Bool
+    private let initialisePlatform: @Sendable (Bool) throws(HaloError) -> Void
     private var client: Client?
     private var syncTask: Task<Void, Never>?
     private var stoppingTask: Task<Void, Never>?
@@ -49,10 +50,20 @@ public actor MatrixSessionPort: SessionPort {
     ///   - sendsMessages: whether this process owns the unsent-message queues (the app does; the extension must not).
     ///   - lightweightRuntime: use the SDK's lightweight runtime (the extension does).
     public init(baseDirectory: URL, holderName: String = "app", sendsMessages: Bool = true, lightweightRuntime: Bool = false) {
+        self.init(
+            baseDirectory: baseDirectory, holderName: holderName, sendsMessages: sendsMessages,
+            lightweightRuntime: lightweightRuntime, initialisePlatform: MatrixBootstrap.initialise(lightweightRuntime:))
+    }
+
+    init(
+        baseDirectory: URL, holderName: String = "app", sendsMessages: Bool = true,
+        lightweightRuntime: Bool = false, initialisePlatform: @escaping @Sendable (Bool) throws(HaloError) -> Void
+    ) {
         self.baseDirectory = baseDirectory
         self.holderName = holderName
         self.sendsMessages = sendsMessages
         self.lightweightRuntime = lightweightRuntime
+        self.initialisePlatform = initialisePlatform
     }
 
     // MARK: SessionPort
@@ -60,7 +71,7 @@ public actor MatrixSessionPort: SessionPort {
     public func loginDetails(server: String) async throws(HaloError) -> ServerDetails {
         let trimmed = server.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw .invalidInput("SERVER_EMPTY") }
-        try MatrixBootstrap.initialise(lightweightRuntime: lightweightRuntime)
+        try initialisePlatform(lightweightRuntime)
         do {
             let probe = try await ClientBuilder()
                 .serverNameOrHomeserverUrl(serverNameOrUrl: trimmed)
@@ -81,7 +92,7 @@ public actor MatrixSessionPort: SessionPort {
         _ credentials: PasswordCredentials, on server: ServerDetails
     ) async throws(HaloError) -> StoredSession {
         guard server.supportsNativeSlidingSync else { throw .unsupported("NO_SLIDING_SYNC") }
-        try MatrixBootstrap.initialise()
+        try initialisePlatform(lightweightRuntime)
         let newStoreID = UUID().uuidString
         let passphrase = Self.randomPassphrase()
         do {
@@ -108,7 +119,7 @@ public actor MatrixSessionPort: SessionPort {
     }
 
     public func restore(_ session: StoredSession) async throws(HaloError) {
-        try MatrixBootstrap.initialise()
+        try initialisePlatform(lightweightRuntime)
         if let existing = inFlightRestore, existing.payload == session.payload, existing.generation == sessionGeneration {
             do { try await existing.task.value; return } catch { throw ErrorMapper.map(error) }
         }

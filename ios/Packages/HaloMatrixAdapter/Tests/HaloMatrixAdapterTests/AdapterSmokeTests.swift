@@ -2,6 +2,7 @@ import Foundation
 import HaloDomain
 import HaloFoundation
 import MatrixRustSDK
+import Synchronization
 import Testing
 @testable import HaloMatrixAdapter
 
@@ -80,5 +81,35 @@ struct RoomListMappingTests {
     func membership() {
         #expect(MatrixRoomListPort.membership(.joined) == .joined)
         #expect(MatrixRoomListPort.membership(.banned) == .banned)
+    }
+}
+
+@Suite("MatrixBootstrap (R-09 / §7)")
+struct MatrixBootstrapTests {
+    @Test("tracing disables Sentry and stdout/system logging (§7, SECURITY §6)")
+    func tracingConfig() {
+        let config = MatrixBootstrap.tracingConfiguration()
+        #expect(config.sentryConfig == nil)
+        #expect(config.writeToStdoutOrSystem == false)
+        #expect(config.writeToFiles == nil)
+    }
+
+    @Test("R-09: MatrixSessionPort forwards lightweightRuntime through restore and loginPassword")
+    func lightweightRuntimeForwarded() async throws {
+        let recorded = Mutex<[Bool]>([])
+        let port = MatrixSessionPort(
+            baseDirectory: FileManager.default.temporaryDirectory,
+            holderName: "nse",
+            sendsMessages: false,
+            lightweightRuntime: true,
+            initialisePlatform: { lightweight throws(HaloError) in
+                recorded.withLock { $0.append(lightweight) }
+                throw .cancelled  // stop before touching the network/filesystem
+            })
+        let dummy = StoredSession(userID: try UserID("@a:x"), deviceID: try DeviceID("DEV"), payload: Data())
+        do { try await port.restore(dummy) } catch {}
+        let server = ServerDetails(homeserverURL: URL(string: "https://example.invalid")!, supportsPassword: true, supportsOIDC: false, supportsNativeSlidingSync: true)
+        do { _ = try await port.loginPassword(PasswordCredentials(username: "a", password: "b", deviceDisplayName: "d"), on: server) } catch {}
+        #expect(recorded.withLock { $0 } == [true, true])
     }
 }
