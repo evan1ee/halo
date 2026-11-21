@@ -35,6 +35,16 @@ def main():
         time.sleep(1)
         fx.send(me, room, {"msgtype": "m.text", "body": "* " + text, "m.new_content": {"msgtype": "m.text", "body": text},
                            "m.relates_to": {"rel_type": "m.replace", "event_id": draft}})
+    # Messages in the formats of the bot templates (BOT_MESSAGES §3), from the peer, for the Activity screen. Add the peer under
+    # Settings → Bots to see them as cards and in Activity.
+    fx.send(peer, room, {"msgtype": "m.text", "body": "Added Task #41 for me: \"Water the plants\"",
+                         "format": "org.matrix.custom.html", "formatted_body": "Added Task <b>#41</b> for me: <i>\"Water the plants\"</i>"})
+    fx.send(peer, room, {"msgtype": "m.text", "body": "Reminder #42 set! tomorrow 9am for: \"Call the dentist\"",
+                         "format": "org.matrix.custom.html", "formatted_body": "<b>Reminder #42 set!</b> tomorrow 9am for: <i>\"Call the dentist\"</i>"})
+    fx.send(peer, room, {"msgtype": "m.text", "body": "Added Task #43 for me: \"File taxes\"",
+                         "format": "org.matrix.custom.html", "formatted_body": "Added Task <b>#43</b> for me: <i>\"File taxes\"</i>"})
+    fx.send(peer, room, {"msgtype": "m.text", "body": "Marked task as done: \"File taxes\"",
+                         "format": "org.matrix.custom.html", "formatted_body": "✅ Marked task as done: <i>\"File taxes\"</i>"})
     print("sent sample events to", room)
 
 

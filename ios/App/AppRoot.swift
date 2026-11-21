@@ -1,4 +1,5 @@
 import FeatureAuth
+import FeatureBotActivity
 import FeatureRoomList
 import FeatureRoomDetails
 import FeatureSettings
@@ -350,6 +351,16 @@ final class AppRoot {
 
     /// The room info sheet for `room` (ROOM_MANAGEMENT).
     func makeRoomDetails(room: RoomID) -> RoomDetailsViewModel { RoomDetailsViewModel(port: roomPort, room: room, images: ImagePreparer(maximumDimension: 512), media: media) }
+
+    /// The Activity screen's model: names of rooms from the room list.
+    func makeBotActivity() -> BotActivityViewModel {
+        BotActivityViewModel(
+            coordinator: botActivity,
+            roomName: { [roomList] room in
+                guard case .loaded(_, let rows) = roomList.content else { return nil }
+                return rows.first { $0.id == room }?.name
+            })
+    }
 
     /// A view model for the timeline of `room`; each screen gets its own coordinator and session.
     func makeTimeline(room: RoomID) -> TimelineViewModel {
