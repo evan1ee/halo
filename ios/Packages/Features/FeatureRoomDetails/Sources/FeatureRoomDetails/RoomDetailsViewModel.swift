@@ -19,8 +19,10 @@ public final class RoomDetailsViewModel: Identifiable {
     public private(set) var requestedMembers = RoomDetailsViewModel.memberPage
 
     public private(set) var content: Content = .loading
-    /// Set when changing the mode or leaving fails; cleared by the next successful action.
+    /// Set when changing the mode or leaving fails; cleared by the next successful action or when dismissed.
     public private(set) var actionError: String?
+
+    public func dismissActionError() { actionError = nil }
     /// `true` once the user has left; the screen closes.
     public private(set) var hasLeft = false
     /// `true` while the leave confirmation is shown.
@@ -56,6 +58,7 @@ public final class RoomDetailsViewModel: Identifiable {
 
     /// The members shown under a heading; administrators carry a badge.
     public func load() async {
+        content = .loading
         do throws(HaloError) {
             let details = try await port.details(room)
             let members = try await port.members(room, limit: requestedMembers)

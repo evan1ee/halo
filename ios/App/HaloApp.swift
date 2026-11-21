@@ -29,6 +29,7 @@ private struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var path: [RoomID] = []
     @State private var newChat: NewChatViewModel?
+    @State private var roomInfo: RoomDetailsViewModel?
     @AppStorage(AppPreferences.appearanceKey) private var appearance = Appearance.system.rawValue
 
     private var colorScheme: ColorScheme? {
@@ -46,7 +47,7 @@ private struct RootView: View {
                 NavigationStack(path: $path) {
                     VStack(spacing: 0) {
                         RecoveryBanner(model: root.recovery)
-                        RoomListView(model: root.roomList) { path.append($0) }
+                        RoomListView(model: root.roomList, onRoomInfo: { roomInfo = root.makeRoomDetails(room: $0) }) { path.append($0) }
                     }
                     .navigationTitle("Halo")
                     .toolbar {
@@ -98,6 +99,16 @@ private struct RootView: View {
                         }
                     }
                     .sheet(item: $newChat) { NewChatView(model: $0) }
+                    .sheet(item: $roomInfo) {
+                        RoomDetailsView(
+                            model: $0,
+                            profile: { member in
+                                root.makeUserProfile(member: member) { target in
+                                    roomInfo = nil
+                                    path.append(target)
+                                }
+                            })
+                    }
                     .navigationDestination(for: RoomID.self) { room in
                         TimelineScreen(root: root, room: room, openRoom: { path.append($0) })
                     }

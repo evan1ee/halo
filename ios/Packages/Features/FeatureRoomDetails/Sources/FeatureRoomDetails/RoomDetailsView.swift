@@ -37,7 +37,14 @@ public struct RoomDetailsView: View {
             Group {
                 switch model.content {
                 case .loading: ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-                case .failed(let text): ContentUnavailableView("Couldn't load the room", systemImage: "exclamationmark.triangle", description: Text(text))
+                case .failed(let text):
+                    ContentUnavailableView {
+                        Label("Couldn't load the room", systemImage: "exclamationmark.triangle")
+                    } description: {
+                        Text(text)
+                    } actions: {
+                        Button("Try again") { Task { await model.load() } }.buttonStyle(.borderedProminent)
+                    }
                 case .loaded(let details, let members): list(details, members)
                 }
             }
@@ -131,7 +138,18 @@ public struct RoomDetailsView: View {
                         .accessibilityIdentifier("roomMoreMembers")
                 }
             }
-            if let error = model.actionError { Section { Text(error).foregroundStyle(.red) } }
+            if let error = model.actionError {
+                Section {
+                    HStack(spacing: 10) {
+                        Text(error).foregroundStyle(.red)
+                        Spacer()
+                        Button { model.dismissActionError() } label: { Image(systemName: "xmark").font(.footnote.weight(.semibold)) }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("Dismiss")
+                    }
+                }
+            }
             Section {
                 Button("Leave room", role: .destructive) { model.confirmsLeave = true }.accessibilityIdentifier("leaveRoom")
             }

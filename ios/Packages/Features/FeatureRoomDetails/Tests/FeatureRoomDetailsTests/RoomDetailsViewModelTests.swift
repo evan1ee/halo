@@ -169,4 +169,21 @@ extension RoomDetailsViewModelTests {
         #expect(await withMedia.avatarData(MediaRef(token: "none")) == nil)
         #expect(await RoomDetailsViewModel(port: port, room: id).avatarData(ref) == nil)
     }
+
+    @Test("load recovers after a failure and dismissActionError clears an action error")
+    func retryAndDismiss() async throws {
+        let (port, _, id) = try fixture()
+        port.fail(with: .network(retryable: true))
+        let model = RoomDetailsViewModel(port: port, room: id)
+        await model.load()
+        if case .failed = model.content {} else { Issue.record("expected failed") }
+        port.fail(with: nil)
+        await model.load()
+        if case .loaded = model.content {} else { Issue.record("expected loaded on retry") }
+        port.fail(with: .forbidden)
+        await model.removePhoto()
+        #expect(model.actionError != nil)
+        model.dismissActionError()
+        #expect(model.actionError == nil)
+    }
 }

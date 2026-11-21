@@ -7,10 +7,17 @@ import SwiftUI
 public struct RoomListView: View {
     @Bindable private var model: RoomListViewModel
     private let onSelect: (RoomID) -> Void
+    private let onRoomInfo: ((RoomID) -> Void)?
 
-    /// `onSelect` is called when a room is tapped; navigation itself belongs to the composition root.
-    public init(model: RoomListViewModel, onSelect: @escaping (RoomID) -> Void = { _ in }) {
+    /// `onSelect` is called when a room is tapped; `onRoomInfo` opens the room info sheet from a row's context menu.
+    /// Navigation itself belongs to the composition root.
+    public init(
+        model: RoomListViewModel,
+        onRoomInfo: ((RoomID) -> Void)? = nil,
+        onSelect: @escaping (RoomID) -> Void = { _ in }
+    ) {
         self.model = model
+        self.onRoomInfo = onRoomInfo
         self.onSelect = onSelect
     }
 
@@ -76,6 +83,19 @@ public struct RoomListView: View {
                                 .swipeActions(edge: .trailing) {
                                     Button("Unread") { Task { await model.markUnread(row.id) } }.tint(.orange)
                                     Button(row.isMuted ? "Unmute" : "Mute") { Task { await model.toggleMute(row) } }.tint(.gray)
+                                }
+                                .contextMenu {
+                                    if let onRoomInfo {
+                                        Button("Room info", systemImage: "info.circle") { onRoomInfo(row.id) }
+                                    }
+                                    Button("Mark as read", systemImage: "envelope.open") { Task { await model.markRead(row.id) } }
+                                    Button("Mark as unread", systemImage: "envelope.badge") { Task { await model.markUnread(row.id) } }
+                                    Button(row.isFavourite ? "Unfavourite" : "Favourite", systemImage: row.isFavourite ? "star.slash" : "star") {
+                                        Task { await model.toggleFavourite(row) }
+                                    }
+                                    Button(row.isMuted ? "Unmute" : "Mute", systemImage: row.isMuted ? "bell" : "bell.slash") {
+                                        Task { await model.toggleMute(row) }
+                                    }
                                 }
                             }
                         }
