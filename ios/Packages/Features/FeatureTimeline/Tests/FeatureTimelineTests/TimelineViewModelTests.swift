@@ -758,6 +758,22 @@ struct TimelineViewModelTests {
         }
     }
 
+    @Test("a poll is shown read-only with each answer's vote count")
+    func polls() throws {
+        let vm = TimelineViewModel(
+            coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: try RoomID("!r:x.org")),
+            locale: Locale(identifier: "en_US"), timeZone: TimeZone(identifier: "UTC") ?? .gmt)
+        func row(ended: Bool) throws -> TimelineRow {
+            vm.row(TimelineItem(
+                id: TimelineItemID("id"),
+                content: .event(TimelineEvent(
+                    eventID: nil, sender: try UserID("@alice:x.org"), senderName: "Alice", timestamp: Date(timeIntervalSince1970: 0), isOwn: false,
+                    kind: .poll(question: "Lunch?", options: [PollOption(text: "Pizza", votes: 2), PollOption(text: "Soup", votes: 1)], ended: ended)))))
+        }
+        #expect(try row(ended: false).text == "📊 Lunch?\n• Pizza — 2 votes\n• Soup — 1 vote\nVoting isn't available in Halo yet")
+        #expect(try row(ended: true).text.hasSuffix("Poll ended"))
+    }
+
     @Test("opening a file downloads it into a temporary folder, shows it, and deleting it again on close; big files are refused")
     func openingFiles() async throws {
         let port = FakeMediaPort()

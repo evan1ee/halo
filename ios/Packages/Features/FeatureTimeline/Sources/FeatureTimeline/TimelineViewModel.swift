@@ -489,7 +489,7 @@ public final class TimelineViewModel {
         for item in items {
             guard case .event(let event) = item.content, !event.isOwn, event.timestamp > readThrough else { continue }
             switch event.kind {
-            case .text, .notice, .emote, .media, .sticker, .location: return item.id.rawValue
+            case .text, .notice, .emote, .media, .sticker, .location, .poll: return item.id.rawValue
             default: continue
             }
         }
@@ -1020,6 +1020,12 @@ public final class TimelineViewModel {
                 return TimelineRow(
                     id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: text, eventID: event.eventID, isOwn: event.isOwn,
                     reactions: Self.chips(event.reactions), styled: styled, source: plainSource(event, body))
+            case .poll(let question, let options, let ended):
+                let lines = options.map { "• \($0.text) — \($0.votes) \($0.votes == 1 ? "vote" : "votes")" }
+                let text = (["📊 \(question)"] + lines + [ended ? "Poll ended" : "Voting isn't available in Halo yet"]).joined(separator: "\n")
+                return TimelineRow(
+                    id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: text, eventID: event.eventID, isOwn: event.isOwn,
+                    reactions: Self.chips(event.reactions))
             case .otherState:
                 return TimelineRow(id: id, style: .state, sender: nil, text: Self.settingsText)
             case .unsupported:

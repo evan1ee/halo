@@ -122,6 +122,8 @@ public enum TimelineEventKind: Sendable, Equatable {
     case membership(user: UserID?, displayName: String?, change: MembershipChange)
     /// A shared place (`m.location`): the sender's description and the raw `geo:` URI (TIMELINE FR-2, static, no map).
     case location(body: String, geoURI: String)
+    /// A poll, read-only (TIMELINE FR-2): the question, each answer with its vote count, and whether it has ended.
+    case poll(question: String, options: [PollOption], ended: Bool)
     case otherState
     case unsupported
 }
@@ -193,3 +195,13 @@ public enum VirtualItem: Sendable, Equatable {
 }
 
 public typealias TimelineDiff = ListDiff<TimelineItem>
+
+/// One answer of a poll with the number of people who chose it.
+public struct PollOption: Sendable, Equatable {
+    public let text: String
+    public let votes: Int
+    public init(text: String, votes: Int) {
+        self.text = text
+        self.votes = votes
+    }
+}

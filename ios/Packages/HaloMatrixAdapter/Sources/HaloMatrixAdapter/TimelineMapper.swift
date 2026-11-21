@@ -136,7 +136,9 @@ enum TimelineMapper {
         case .sticker(let body, _, let source): .sticker(body: body, source: ref(source))
         case .redacted: .redacted
         case .unableToDecrypt(let message): .undecryptable(reason(of: message))
-        case .poll, .other, .liveLocation: .unsupported
+        case .poll(let question, _, _, let answers, let votes, let endTime, _):
+            .poll(question: question, options: answers.map { PollOption(text: $0.text, votes: votes[$0.id]?.count ?? 0) }, ended: endTime != nil)
+        case .other, .liveLocation: .unsupported
         }
     }
 
