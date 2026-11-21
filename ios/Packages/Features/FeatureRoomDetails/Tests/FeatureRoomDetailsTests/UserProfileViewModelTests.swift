@@ -65,4 +65,10 @@ struct UserProfileViewModelTests {
         let withoutAvatar = try make(profiles: FakeProfilePort())
         #expect(await withoutAvatar.avatarData() == nil)
     }
+
+    @Test("shareURL returns the person's matrix.to permalink (USER_PROFILES FR-3)")
+    func shareLink() throws {
+        let model = try make(profiles: FakeProfilePort())
+        #expect(model.shareURL?.absoluteString == "https://matrix.to/#/@ann:x.org")
+    }
 }

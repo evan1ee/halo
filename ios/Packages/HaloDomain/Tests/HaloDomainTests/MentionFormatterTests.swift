@@ -40,4 +40,11 @@ struct MentionFormatterTests {
         #expect(markdown == #"[@x\<\/a\>\<a href\=\"https\:\/\/phish\"\>\*hi\*](https://matrix.to/#/@e:x.org) ok"#)
         #expect(MentionFormatter.escape("Zoë_🙂 (B)") == #"Zoë\_🙂 \(B\)"#)
     }
+
+    @Test("matrixToURL builds a valid permalink and percent-encodes unusual user IDs")
+    func matrixToURL() throws {
+        #expect(MentionFormatter.matrixToURL(for: alice.user)?.absoluteString == "https://matrix.to/#/@alice:x.org")
+        let historical = try UserID("@a(b):x.org")
+        #expect(MentionFormatter.matrixToURL(for: historical)?.absoluteString == "https://matrix.to/#/@a%28b%29:x.org")
+    }
 }

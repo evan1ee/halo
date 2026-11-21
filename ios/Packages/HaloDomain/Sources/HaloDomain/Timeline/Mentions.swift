@@ -67,6 +67,11 @@ public enum MentionFormatter {
         return nil
     }
 
+    /// The user's `matrix.to` permalink (`https://matrix.to/#/@user:server`), percent-encoding any unusual characters.
+    public static func matrixToURL(for user: UserID) -> URL? {
+        URL(string: "https://matrix.to/#/\(link(user))")
+    }
+
     /// The user ID as a URL fragment. Current user IDs only use these characters; anything else (historical IDs) is
     /// percent-encoded so it can't end the link.
     static func link(_ user: UserID) -> String {

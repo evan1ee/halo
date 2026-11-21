@@ -21,6 +21,8 @@ public final class UserProfileViewModel: Identifiable {
     public let userID: UserID
     /// The member's known avatar, if any; loaded via `avatarData()`.
     public let avatar: MediaRef?
+    /// The `matrix.to` permalink for this person (USER_PROFILES FR-3).
+    public var shareURL: URL? { MentionFormatter.matrixToURL(for: userID) }
 
     private let profiles: any ProfilePort
     private let chats: any ChatCreationPort

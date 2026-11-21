@@ -46,6 +46,12 @@ public struct UserProfileView: View {
                 } label: {
                     Label(copied ? "Copied" : "Copy user ID", systemImage: copied ? "checkmark" : "doc.on.doc")
                 }
+                if let url = model.shareURL {
+                    ShareLink(item: url) {
+                        Label("Share profile link", systemImage: "square.and.arrow.up")
+                    }
+                    .accessibilityIdentifier("shareUserLink")
+                }
             }
             if !model.isMe {
                 Section {
