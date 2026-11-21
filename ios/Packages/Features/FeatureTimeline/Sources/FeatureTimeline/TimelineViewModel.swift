@@ -943,11 +943,12 @@ public final class TimelineViewModel {
     /// The reason is shown honestly; where the user can do something about it, the text says what.
     static func text(for reason: UTDReason) -> String {
         switch reason {
-        case .unknown: "Unable to decrypt this message. It will appear if the keys arrive."
-        case .sentBeforeJoining: "This message was sent before you joined, so you can't read it."
-        case .keysNotShared: "Unable to decrypt: the sender's device hasn't shared its keys with this device yet."
-        case .senderVerificationProblem: "Unable to decrypt: the sender's identity has changed or isn't verified."
-        case .backupDisabled: "Unable to decrypt this older message. Verify this device with your recovery key to load your key backup."
+        // Short enough for one line in a bubble; each still says what the reader can expect or do.
+        case .unknown: "Waiting for this message's key"
+        case .sentBeforeJoining: "Sent before you joined, so you can't read it."
+        case .keysNotShared: "Waiting for the sender's device to share the key."
+        case .senderVerificationProblem: "Not shown: the sender isn't verified."
+        case .backupDisabled: "Enter your recovery key to read older messages."
         }
     }
 

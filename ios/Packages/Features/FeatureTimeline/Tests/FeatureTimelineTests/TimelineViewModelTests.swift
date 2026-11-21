@@ -104,7 +104,7 @@ struct TimelineViewModelTests {
     @Test("undecryptable, deleted and unsupported events are shown honestly, never hidden")
     func placeholders() throws {
         let model = try model()
-        #expect(model.row(event(.undecryptable(.unknown))).text.hasPrefix("Unable to decrypt this message"))
+        #expect(model.row(event(.undecryptable(.unknown))).text.hasPrefix("Waiting for this message"))
         // Every reason has its own explanation, and none is empty.
         let reasons: [UTDReason] = [.unknown, .sentBeforeJoining, .keysNotShared, .senderVerificationProblem, .backupDisabled]
         #expect(Set(reasons.map(TimelineViewModel.text(for:))).count == reasons.count)
