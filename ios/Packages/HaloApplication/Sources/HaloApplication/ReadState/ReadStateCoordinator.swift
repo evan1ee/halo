@@ -2,16 +2,18 @@ import Foundation
 import HaloDomain
 import HaloFoundation
 
-/// Keeps the app badge equal to the number of rooms that need attention, recomputed from the room list's read inputs
-/// and the notification records on every change (D5, D9: never incremented). A notifying event the extension fetched
-/// through the SDK is a provisional record (rule E4, UNREAD_STATE §2) that counts until sync delivers the event or
-/// the user reads the room; records are pruned when superseded, covered, or when the room is left/hidden/ignored or
-/// the account signs out (R-02, R-03).
-public actor BadgeCoordinator {
+/// The single owner of read-state evaluation (docs/matrix/UNREAD_STATE.md §7, R-05).
+///
+/// Assembles `RoomReadInputs` for every room from the room list, local read intents, notification records and
+/// sync completeness, evaluates `ReadStatePolicy` once, publishes `[RoomID: RoomReadState]` to the room list,
+/// runs the read-state auditor, and writes the recomputed attention set / app badge (D5, D9: never incremented).
+public actor ReadStateCoordinator {
     public typealias Sleep = @Sendable (Duration) async throws -> Void
     /// How often the read-state auditor re-runs while the app is in the foreground (LOGGING_AND_DIAGNOSTICS §2).
     public static let defaultAuditInterval: Duration = .seconds(600)
 
+    /// The latest evaluated read state per visible room; consumed by the room list so list and badge always agree (R-05).
+    public private(set) var roomStates: [RoomID: RoomReadState] = [:]
     public private(set) var attentionRooms: Set<RoomID> = []
     /// The first evaluation always writes, even an empty set, so a stale badge can be cleared.
     private var hasWritten = false
@@ -23,8 +25,7 @@ public actor BadgeCoordinator {
     private var audit: Audit?
     private var audited: [RoomID: Set<AuditFinding>] = [:]
     /// Rooms that needed attention at the last write (loaded from the port at launch) and that this run's room list
-    /// hasn't shown yet. They keep their state until the list shows them: an evaluation over a partial or empty list must
-    /// never erase a valid earlier result (V-RS-7 / D73, P0).
+    /// hasn't shown yet. They keep their state until the list shows them or the first sync completes (D73, R-04).
     private var carried: Set<RoomID> = []
     /// Rooms the list has shown in this run; once shown, a room that disappears from the list is dropped, not carried.
     private var seen: Set<RoomID> = []
@@ -51,6 +52,7 @@ public actor BadgeCoordinator {
     }
     private var positions: [RoomID: Date] = [:]
     private var inputs: [RoomReadInputs] = []
+    private var statesBroadcaster = SnapshotBroadcaster<[RoomID: RoomReadState]>()
     private var tasks: [Task<Void, Never>] = []
     private var recordsTask: Task<Void, Never>?
     private let auditInterval: Duration
@@ -60,7 +62,7 @@ public actor BadgeCoordinator {
 
     public init(
         rooms: RoomListCoordinator, records: (any NotificationRecordPort)? = nil, port: any BadgePort,
-        receipts: ReadReceiptCoordinator? = nil, auditInterval: Duration = BadgeCoordinator.defaultAuditInterval,
+        receipts: ReadReceiptCoordinator? = nil, auditInterval: Duration = ReadStateCoordinator.defaultAuditInterval,
         sleep: @escaping Sleep = { try await Task.sleep(for: $0) }
     ) {
         self.receipts = receipts
@@ -77,7 +79,12 @@ public actor BadgeCoordinator {
         periodicAudit?.cancel()
     }
 
-    /// Starts following the room list and the records. Call once at launch.
+    /// The latest evaluated read states per room, now and after each change; latest value wins (R-05).
+    public func states() -> AsyncStream<[RoomID: RoomReadState]> {
+        statesBroadcaster.subscribe(current: roomStates)
+    }
+
+    /// Starts following the room list, read receipts, sync completions and notification records. Call once at launch.
     public func begin() async {
         guard tasks.isEmpty else { return }
         carried = await port.lastAttention()
@@ -155,6 +162,10 @@ public actor BadgeCoordinator {
         hasSynced = false
         syncedRooms = []
         inputs = []
+        if !roomStates.isEmpty {
+            roomStates = [:]
+            statesBroadcaster.publish([:])
+        }
         attentionRooms = []
         hasWritten = false
         audited = [:]
@@ -289,6 +300,11 @@ public actor BadgeCoordinator {
         if !pass.superseded.isEmpty {
             records?.remove(events: pass.superseded)
         }
+        let nextStates = Dictionary(uniqueKeysWithValues: pass.results.map { ($0.input.roomID, $0.state) })
+        if nextStates != roomStates {
+            roomStates = nextStates
+            statesBroadcaster.publish(nextStates)
+        }
         await runAudit(pass.results)
         seen.formUnion(inputs.map(\.roomID))
         seen.formUnion(excludedRooms)
@@ -310,3 +326,6 @@ public actor BadgeCoordinator {
         await port.update(attentionRooms: attention)
     }
 }
+
+/// Compatibility alias for tests and docs referencing the earlier name.
+public typealias BadgeCoordinator = ReadStateCoordinator

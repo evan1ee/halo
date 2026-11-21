@@ -9,20 +9,29 @@ public struct NotificationDisplay: Sendable, Equatable {
     /// When the event was sent, and whether it mentions the user; both feed the notification record.
     public let timestamp: Date?
     public let isMention: Bool
+    /// The room's effective notification mode, used by the NSE's mode-aware badge evaluation (R-08).
+    public let mode: NotificationMode
+    /// Whether this event is a room invitation (rule E0: always needs attention).
+    public let isInvite: Bool
 
-    public init(title: String, body: String, timestamp: Date? = nil, isMention: Bool = false) {
+    public init(
+        title: String, body: String, timestamp: Date? = nil, isMention: Bool = false,
+        mode: NotificationMode = .allMessages, isInvite: Bool = false
+    ) {
         self.title = title
         self.body = body
         self.timestamp = timestamp
         self.isMention = isMention
+        self.mode = mode
+        self.isInvite = isInvite
     }
 }
 
 public enum NotificationFetchResult: Sendable, Equatable {
     case display(NotificationDisplay)
     /// The event is encrypted and this device can't read it (yet): "Encrypted message" in `roomName`, stamped with the
-    /// raw event's `origin_server_ts` (R-02).
-    case encrypted(roomName: String?, timestamp: Date?)
+    /// raw event's `origin_server_ts` (R-02) and carrying the room's notification mode (R-08).
+    case encrypted(roomName: String?, timestamp: Date?, mode: NotificationMode = .allMessages)
     /// The user's push rules or the event's state say nothing should be shown (filtered out, redacted).
     case suppressed
 }

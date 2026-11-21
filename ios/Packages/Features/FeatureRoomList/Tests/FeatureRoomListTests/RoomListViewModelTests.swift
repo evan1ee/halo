@@ -7,6 +7,24 @@ import Testing
 @testable import FeatureRoomList
 
 @MainActor
+private func makeReadState(
+    rooms: RoomListCoordinator, records: FakeNotificationRecords = FakeNotificationRecords(),
+    badge: FakeBadgePort = FakeBadgePort(), receipts: ReadReceiptCoordinator? = nil
+) async -> ReadStateCoordinator {
+    let readState = ReadStateCoordinator(rooms: rooms, records: records, port: badge, receipts: receipts)
+    await readState.begin()
+    return readState
+}
+
+private func eventually(_ condition: @Sendable () async -> Bool) async -> Bool {
+    for _ in 0..<200_000 {
+        if await condition() { return true }
+        await Task.yield()
+    }
+    return false
+}
+
+@MainActor
 @Suite("RoomListViewModel")
 struct RoomListViewModelTests {
     private func summary(_ id: String, _ name: String?) throws -> RoomSummary {
@@ -17,8 +35,10 @@ struct RoomListViewModelTests {
     func loaded() async throws {
         let port = FakeRoomListPort(rooms: [try summary("!a:x.org", "General"), try summary("!b:x.org", nil)])
         let coordinator = RoomListCoordinator(port: port)
+        let readState = await makeReadState(rooms: coordinator)
         let model = RoomListViewModel(
-            session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()), rooms: coordinator)
+            session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()),
+            rooms: coordinator, readState: readState)
         await coordinator.start()
         for await status in await coordinator.statuses() {
             if case .loaded = status {
@@ -34,9 +54,10 @@ struct RoomListViewModelTests {
     @Test("a failed list shows a message, retry restarts the coordinator, and an idle list shows nothing")
     func failures() async {
         let rooms = RoomListCoordinator(port: FakeRoomListPort())
+        let readState = await makeReadState(rooms: rooms)
         let model = RoomListViewModel(
             session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()),
-            rooms: rooms)
+            rooms: rooms, readState: readState)
         await model.listChanged(.failed(.internal(code: "X")))
         #expect(model.content == .failed("The room list couldn't be loaded."))
         await model.retry()
@@ -53,15 +74,18 @@ struct RoomListViewModelTests {
             read: RoomReadCounts(mode: .allMessages, server: ServerCounts(notification: 2, highlight: 0), sdk: .zero, isMarkedUnread: false),
             latestEvent: LatestEventRef(timestamp: Date(timeIntervalSince1970: 100), senderIsSelf: false))
         let coordinator = RoomListCoordinator(port: FakeRoomListPort(rooms: [unread]))
+        let receipts = ReadReceiptCoordinator(port: FakeReadMarkerPort())
+        let readState = await makeReadState(rooms: coordinator, receipts: receipts)
         let model = RoomListViewModel(
-            session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()), rooms: coordinator,
-            receipts: ReadReceiptCoordinator(port: FakeReadMarkerPort()))
+            session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()),
+            rooms: coordinator, readState: readState, receipts: receipts)
         await coordinator.start()
-        for await status in await coordinator.statuses() {
-            if case .loaded = status { await model.listChanged(status); break }
-        }
+        #expect(await eventually { await readState.roomStates[id]?.display == .count(2) })
+        await model.listChanged(.loaded(roomCount: 1))
         #expect(model.content == .loaded(count: 1, rows: [.init(id: id, name: "A", display: .count(2), hasUnread: true, lastActivity: Date(timeIntervalSince1970: 100))]))
-        await model.positionsChanged([id: Date(timeIntervalSince1970: 100)])
+        await receipts.reportSeen(room: id, event: try EventID("$e"), timestamp: Date(timeIntervalSince1970: 100))
+        #expect(await eventually { await readState.roomStates[id]?.display == DisplayCount.none })
+        await model.listChanged(.loaded(roomCount: 1))
         #expect(model.content == .loaded(count: 1, rows: [.init(id: id, name: "A", lastActivity: Date(timeIntervalSince1970: 100))]))
     }
 
@@ -76,7 +100,10 @@ struct RoomListViewModelTests {
         }
         let port = FakeRoomListPort(rooms: [room(0)])
         let coordinator = RoomListCoordinator(port: port)
-        let model = RoomListViewModel(session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()), rooms: coordinator)
+        let readState = await makeReadState(rooms: coordinator)
+        let model = RoomListViewModel(
+            session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()),
+            rooms: coordinator, readState: readState)
         await model.start()
         for _ in 0..<50_000 { await Task.yield() }  // the signed-out fake session has stopped the (idle) list by now
         await coordinator.start()
@@ -84,6 +111,71 @@ struct RoomListViewModelTests {
         try port.emit(.set(index: 0, room(3)))
         for _ in 0..<200_000 { if model.content == .loaded(count: 1, rows: [.init(id: id, name: "A", display: .count(3), hasUnread: true, lastActivity: Date(timeIntervalSince1970: 100))]) { break }; await Task.yield() }
         #expect(model.content == .loaded(count: 1, rows: [.init(id: id, name: "A", display: .count(3), hasUnread: true, lastActivity: Date(timeIntervalSince1970: 100))]))
+    }
+
+    @Test("PS31 (R-05): room list and badge always agree across generated inputs, including push-only notification records")
+    func roomListAndBadgeAlwaysAgree() async throws {
+        var rng = SeededRandomNumberGenerator(seed: 31)
+        let modes: [NotificationMode] = [.allMessages, .mentionsAndKeywords, .mute]
+        let port = FakeRoomListPort()
+        let coordinator = RoomListCoordinator(port: port)
+        let records = FakeNotificationRecords()
+        let badgePort = FakeBadgePort()
+        let receipts = ReadReceiptCoordinator(port: FakeReadMarkerPort())
+        let readState = await makeReadState(rooms: coordinator, records: records, badge: badgePort, receipts: receipts)
+        let model = RoomListViewModel(
+            session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()),
+            rooms: coordinator, readState: readState, receipts: receipts)
+        await coordinator.start()
+
+        for trial in 0..<100 {
+            records.clearAll()
+            let count = Int.random(in: 1...6, using: &rng)
+            var summaries: [RoomSummary] = []
+            for i in 0..<count {
+                let id = try RoomID("!r\(trial)_\(i):x.org")
+                let encrypted = Bool.random(using: &rng)
+                let mode = modes.randomElement(using: &rng)!
+                let membership: Membership = Int.random(in: 0..<6, using: &rng) == 0 ? .invited : .joined
+                let serverNotify = Int.random(in: 0...2, using: &rng)
+                let serverHighlight = Int.random(in: 0...serverNotify, using: &rng)
+                let sdkMsg = Int.random(in: 0...2, using: &rng)
+                let sdkNotify = Int.random(in: 0...sdkMsg, using: &rng)
+                let sdkMention = Int.random(in: 0...sdkNotify, using: &rng)
+                let latest: LatestEventRef? = Bool.random(using: &rng)
+                    ? LatestEventRef(timestamp: Date(timeIntervalSince1970: Double(Int.random(in: 10...100, using: &rng))), senderIsSelf: Bool.random(using: &rng))
+                    : nil
+                summaries.append(RoomSummary(
+                    id: id, name: "R\(i)", isDirect: false, isEncrypted: encrypted, membership: membership,
+                    read: RoomReadCounts(
+                        mode: mode,
+                        server: ServerCounts(notification: serverNotify, highlight: serverHighlight),
+                        sdk: SDKCounts(unreadMessages: sdkMsg, unreadNotifications: sdkNotify, unreadMentions: sdkMention),
+                        isMarkedUnread: Int.random(in: 0..<5, using: &rng) == 0),
+                    latestEvent: latest))
+                if Bool.random(using: &rng) {
+                    records.add(NotificationRecord(
+                        roomID: id, eventID: try EventID("$p\(trial)_\(i)"),
+                        timestamp: Date(timeIntervalSince1970: Double(Int.random(in: 50...150, using: &rng))),
+                        isMention: Bool.random(using: &rng)))
+                }
+            }
+            try port.emit(.reset(summaries))
+            port.emitSyncComplete(present: Set(summaries.map(\.id)))
+            let expectedIDs = Set(summaries.map(\.id))
+            #expect(await eventually { Set(await readState.roomStates.keys) == expectedIDs })
+            await model.listChanged(.loaded(roomCount: summaries.count))
+
+            guard case .loaded(_, let rows) = model.content else {
+                Issue.record("trial \(trial): not loaded")
+                return
+            }
+            let badgeCount = await readState.badge
+            let attentionRooms = await readState.attentionRooms
+            let rowsWithIndicator = rows.filter { $0.display != .none }
+            #expect(badgeCount == rowsWithIndicator.count, "seed 31 trial \(trial): badge \(badgeCount) != rows \(rowsWithIndicator.count)")
+            #expect(attentionRooms == Set(rowsWithIndicator.map(\.id)), "seed 31 trial \(trial): attention rooms disagree with list rows")
+        }
     }
 }
 
@@ -95,13 +187,14 @@ struct RoomListInviteTests {
         let id = try RoomID("!inv:x.org")
         let invited = RoomSummary(id: id, name: "Book club", isDirect: false, isEncrypted: false, membership: .invited, inviter: "Ann")
         let coordinator = RoomListCoordinator(port: FakeRoomListPort(rooms: [invited]))
+        let readState = await makeReadState(rooms: coordinator)
         let port = FakeRoomPort(details: RoomDetails(id: id, name: nil, topic: nil, isDirect: false, isEncrypted: false, joinedMemberCount: 0, notificationMode: .allMessages))
         let model = RoomListViewModel(
-            session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()), rooms: coordinator, actions: port)
+            session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()),
+            rooms: coordinator, readState: readState, actions: port)
         await coordinator.start()
-        for await status in await coordinator.statuses() {
-            if case .loaded = status { await model.listChanged(status); break }
-        }
+        #expect(await eventually { await readState.roomStates[id]?.display == .dot })
+        await model.listChanged(.loaded(roomCount: 1))
         #expect(model.content == .loaded(count: 1, rows: [.init(id: id, name: "Book club", display: .dot, hasUnread: true, isInvite: true, inviter: "Ann")]))
         await model.previewInvite(id)
         #expect(model.invitePreviews[id]?.memberCount == 3 && model.actionError == nil)
@@ -131,7 +224,10 @@ struct RoomListFilterTests {
 
     private func loaded(_ rooms: [RoomSummary], actions: FakeRoomPort? = nil) async throws -> RoomListViewModel {
         let coordinator = RoomListCoordinator(port: FakeRoomListPort(rooms: rooms))
-        let model = RoomListViewModel(session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()), rooms: coordinator, actions: actions)
+        let readState = await makeReadState(rooms: coordinator)
+        let model = RoomListViewModel(
+            session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()),
+            rooms: coordinator, readState: readState, actions: actions)
         await coordinator.start()
         for await status in await coordinator.statuses() {
             if case .loaded = status { await model.listChanged(status); break }
@@ -190,7 +286,10 @@ struct RoomListPreviewTests {
         let club = RoomSummary(id: try RoomID("!b:x.org"), name: "Club", isDirect: false, isEncrypted: false, membership: .joined, preview: LatestMessagePreview(text: "Photo", senderName: "Bob", isOwn: false))
         let quiet = RoomSummary(id: try RoomID("!c:x.org"), name: "Quiet", isDirect: false, isEncrypted: false, membership: .joined)
         let coordinator = RoomListCoordinator(port: FakeRoomListPort(rooms: [ann, club, quiet]))
-        let model = RoomListViewModel(session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()), rooms: coordinator)
+        let readState = await makeReadState(rooms: coordinator)
+        let model = RoomListViewModel(
+            session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()),
+            rooms: coordinator, readState: readState)
         await coordinator.start()
         for await status in await coordinator.statuses() {
             if case .loaded = status { await model.listChanged(status); break }
@@ -207,7 +306,10 @@ struct RoomListPreviewTests {
         let port = FakeMediaPort()
         port.add(ref, data: Data([1, 2, 3]))
         let coordinator = RoomListCoordinator(port: FakeRoomListPort(rooms: [ann, quiet]))
-        let model = RoomListViewModel(session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()), rooms: coordinator, media: MediaLoader(port: port))
+        let readState = await makeReadState(rooms: coordinator)
+        let model = RoomListViewModel(
+            session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()),
+            rooms: coordinator, readState: readState, media: MediaLoader(port: port))
         await coordinator.start()
         for await status in await coordinator.statuses() {
             if case .loaded = status { await model.listChanged(status); break }
@@ -234,7 +336,10 @@ struct RoomListWarmTests {
         let inv = RoomSummary(id: try RoomID("!i:x.org"), name: "I", isDirect: false, isEncrypted: false, membership: .invited)
         let port = FakeRoomListPort(rooms: [inv, a])
         let coordinator = RoomListCoordinator(port: port)
-        let model = RoomListViewModel(session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()), rooms: coordinator)
+        let readState = await makeReadState(rooms: coordinator)
+        let model = RoomListViewModel(
+            session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()),
+            rooms: coordinator, readState: readState)
         let calls = Calls()
         model.warm = { await calls.add($0) }
         await coordinator.start()
@@ -255,8 +360,11 @@ struct RoomListWarmTests {
         }
         let listPort = FakeRoomListPort(rooms: [summary(.invited)])
         let coordinator = RoomListCoordinator(port: listPort)
+        let readState = await makeReadState(rooms: coordinator)
         let actions = FakeRoomPort(details: RoomDetails(id: id, name: nil, topic: nil, isDirect: false, isEncrypted: false, joinedMemberCount: 0, notificationMode: .allMessages))
-        let model = RoomListViewModel(session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()), rooms: coordinator, actions: actions)
+        let model = RoomListViewModel(
+            session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()),
+            rooms: coordinator, readState: readState, actions: actions)
         await coordinator.start()
         for await status in await coordinator.statuses() {
             if case .loaded = status { await model.listChanged(status); break }
@@ -278,7 +386,9 @@ struct RoomListWarmTests {
         let session = SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain())
         let sync = SyncCoordinator(port: syncPort, session: session, sleep: { _ in })
         await sync.begin()
-        let model = RoomListViewModel(session: session, rooms: RoomListCoordinator(port: FakeRoomListPort()), sync: sync)
+        let rooms = RoomListCoordinator(port: FakeRoomListPort())
+        let readState = await makeReadState(rooms: rooms)
+        let model = RoomListViewModel(session: session, rooms: rooms, readState: readState, sync: sync)
         await model.start()
         #expect(model.syncNotice == nil)
         syncPort.report(.offline)
@@ -302,7 +412,10 @@ struct RoomListWarmTests {
                 text: "📋 Work:", senderName: "TodoBot", isOwn: false, senderID: botID,
                 formattedBody: "📋 <b>Work:</b><br/>• [<b>#1</b>] Ship<br/>• [<b>#2</b>] <del>Plan</del> ✅"))
         let coordinator = RoomListCoordinator(port: FakeRoomListPort(rooms: [summary]))
-        let model = RoomListViewModel(session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()), rooms: coordinator)
+        let readState = await makeReadState(rooms: coordinator)
+        let model = RoomListViewModel(
+            session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()),
+            rooms: coordinator, readState: readState)
         await coordinator.start()
         for await status in await coordinator.statuses() {
             if case .loaded = status { await model.listChanged(status); break }

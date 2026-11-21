@@ -25,7 +25,8 @@ final class AppRoot {
     let recovery: RecoveryViewModel
     /// `nil` when no push gateway is configured (Beta/Release until one is deployed).
     let push: PushCoordinator?
-    let badge: BadgeCoordinator
+    let readState: ReadStateCoordinator
+    private let attentionCache: AttentionCache
     private let activeRecords = ActiveRecordsBox()
     private let timelinePort: MatrixTimelinePort
     let receipts: ReadReceiptCoordinator
@@ -73,6 +74,7 @@ final class AppRoot {
         self.passwordPort = MatrixAccountPasswordPort(session: session)
         botAllowlistPort = MatrixBotAllowlistPort(session: session)
         let suite = "group.\(HaloShared.namespace())"
+        attentionCache = AttentionCache(suiteName: suite)
         let legacyStorageName = "notificationRecords.v1"
         UserDefaults(suiteName: suite)?.removeObject(forKey: legacyStorageName)
         let recordsBox = activeRecords
@@ -87,7 +89,7 @@ final class AppRoot {
         drafts = DraftCoordinator()
         let stickers = StickerLibrary(packs: MatrixStickerPackPort(session: session), prefs: MatrixStickerPrefsPort(session: session))
         self.stickers = stickers
-        badge = BadgeCoordinator(rooms: roomCoordinator, port: SystemBadge(suiteName: suite), receipts: receipts)
+        readState = ReadStateCoordinator(rooms: roomCoordinator, port: SystemBadge(suiteName: suite), receipts: receipts)
 
         timelinePort = MatrixTimelinePort(session: session)
         botActivity = BotActivityCoordinator(timelines: timelinePort)
@@ -110,7 +112,7 @@ final class AppRoot {
             }
         }
         auth = AuthViewModel(coordinator: sessionCoordinator)
-        roomList = RoomListViewModel(session: sessionCoordinator, rooms: roomCoordinator, sync: sync, receipts: receipts, actions: roomPort, media: media)
+        roomList = RoomListViewModel(session: sessionCoordinator, rooms: roomCoordinator, readState: readState, sync: sync, receipts: receipts, actions: roomPort, media: media)
         roomList.warm = { [timelinePort] rooms in await timelinePort.warm(rooms) }
         roomList.botSenders = { Set(AppPreferences().botSenders) }
         #if DEBUG
@@ -141,7 +143,7 @@ final class AppRoot {
                         database: database, account: user,
                         onChange: { signal.post() }, externalChanges: { signal.observe() })
                     activeRecords.current = recordStore
-                    await badge.attach(records: recordStore)
+                    await readState.attach(records: recordStore)
                     await receipts.restore(from: ReadIntentStore(database: database, account: user))
                     await drafts.attach(DraftStore(database: database, account: user))
                     await botActivity.attach(BotTaskStore(database: database, account: user))
@@ -150,7 +152,7 @@ final class AppRoot {
                     let log = log
                     let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
                     auditPort = AuditEventStore(database: database, account: user)
-                    await badge.setAudit(.init(port: AuditEventStore(database: database, account: user), roomHash: { log.id($0) }, appVersion: version))
+                    await readState.setAudit(.init(port: AuditEventStore(database: database, account: user), roomHash: { log.id($0) }, appVersion: version))
                     #endif
                 } catch {
                     // Without a database, receipts and drafts still work from memory; there is nothing to restore.
@@ -169,10 +171,10 @@ final class AppRoot {
 
     private func resetAccountState() async {
         await receipts.reset()
-        await badge.setAudit(nil)
+        await readState.setAudit(nil)
         auditPort = nil
-        await badge.reset()
-        await badge.attach(records: nil)
+        await readState.reset()
+        await readState.attach(records: nil)
         activeRecords.current = nil
         await drafts.reset()
         await botActivity.reset()
@@ -240,7 +242,14 @@ final class AppRoot {
     /// and re-evaluates the attention set and app badge from current state.
     func reconcileNow() async {
         await receipts.flush()
-        await badge.reconcile()
+        await readState.reconcile()
+    }
+
+    /// Updates foreground state for sync, read-state auditing, and the shared App Group flag checked by the NSE (R-08).
+    func setForeground(_ active: Bool) async {
+        attentionCache.setForeground(active)
+        await sync.setForeground(active)
+        await readState.setForeground(active)
     }
 
     /// Settings → Storage: sizes of the Matrix store and of Halo's own database on this device.

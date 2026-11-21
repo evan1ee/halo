@@ -72,6 +72,7 @@ public final class RoomListViewModel {
 
     private let session: SessionCoordinator
     private let rooms: RoomListCoordinator
+    private let readState: ReadStateCoordinator
     private let sync: SyncCoordinator?
     private let receipts: ReadReceiptCoordinator?
     private let actions: (any RoomPort)?
@@ -88,7 +89,7 @@ public final class RoomListViewModel {
         return try? await media.thumbnail(ref, width: 96, height: 96)
     }
     private var tasks: [Task<Void, Never>] = []
-    private var positions: [RoomID: Date] = [:]
+    private var roomStates: [RoomID: RoomReadState] = [:]
     private var lastStatus: RoomListCoordinator.Status = .idle
 
     /// Set when a swipe or invitation action fails; cleared by the next successful action or when dismissed.
@@ -105,13 +106,15 @@ public final class RoomListViewModel {
     }
 
     public init(
-        session: SessionCoordinator, rooms: RoomListCoordinator, sync: SyncCoordinator? = nil,
-        receipts: ReadReceiptCoordinator? = nil, actions: (any RoomPort)? = nil, media: MediaLoader? = nil
+        session: SessionCoordinator, rooms: RoomListCoordinator, readState: ReadStateCoordinator,
+        sync: SyncCoordinator? = nil, receipts: ReadReceiptCoordinator? = nil,
+        actions: (any RoomPort)? = nil, media: MediaLoader? = nil
     ) {
         self.media = media
         self.actions = actions
         self.session = session
         self.rooms = rooms
+        self.readState = readState
         self.sync = sync
         self.receipts = receipts
     }
@@ -173,21 +176,14 @@ public final class RoomListViewModel {
 
     isolated deinit { tasks.forEach { $0.cancel() } }
 
-    /// Starts following the session and the list. Call once when the screen appears.
+    /// Starts following the session, the list, and the single read-state stream (R-05). Call once when the screen appears.
     public func start() async {
         guard tasks.isEmpty else { return }
         let sessionStates = await session.states()
         let listStatuses = await rooms.statuses()
-        // A change of unread counts keeps the room count, so the status alone would not refresh the rows.
-        let readInputs = await rooms.readInputs()
+        let readStates = await readState.states()
         let summaries = await rooms.summaryChanges()
         var follow: [Task<Void, Never>] = []
-        if let receipts {
-            let positions = await receipts.positions()
-            follow.append(Task { [weak self] in
-                for await positions in positions { await self?.positionsChanged(positions) }
-            })
-        }
         if let sync {
             let syncStatuses = await sync.statuses()
             follow.append(Task { [weak self] in
@@ -195,11 +191,11 @@ public final class RoomListViewModel {
             })
         }
         follow.append(Task { [weak self] in
-            for await _ in readInputs { await self?.readInputsChanged() }
+            for await states in readStates { await self?.readStatesChanged(states) }
         })
-        // Renames, favourites and new latest events don't change the read inputs.
+        // Renames, favourites and new latest events don't change the read states.
         follow.append(Task { [weak self] in
-            for await _ in summaries { await self?.readInputsChanged() }
+            for await _ in summaries { await self?.summariesChanged() }
         })
         tasks = follow + [
             Task { [weak self] in
@@ -227,13 +223,13 @@ public final class RoomListViewModel {
         }
     }
 
-    func readInputsChanged() async {
+    func summariesChanged() async {
         if case .loaded = lastStatus { await listChanged(lastStatus) }
     }
 
-    func positionsChanged(_ positions: [RoomID: Date]) async {
-        self.positions = positions
-        await listChanged(lastStatus)
+    func readStatesChanged(_ states: [RoomID: RoomReadState]) async {
+        roomStates = states
+        if case .loaded = lastStatus { await listChanged(lastStatus) }
     }
 
     /// Whether a room belongs to the chosen filter (ROOM_LIST FR-2); an invitation shows under All and Invites only.
@@ -255,17 +251,19 @@ public final class RoomListViewModel {
         case .loading: content = .loading
         case .loaded(let count):
             let bots = botSenders()
-            let rows = await rooms.rooms.map { room in
-                let state = ReadStatePolicy.evaluate(RoomReadInputs(
-                    roomID: room.id, membership: room.membership, isEncrypted: room.isEncrypted, counts: room.read,
-                    latestEvent: room.latestEvent,
-                    localIntent: [positions[room.id], room.ownReadThrough].compactMap { $0 }.max(), receiptReadThrough: room.ownReadThrough))
+            let currentRooms = await rooms.rooms
+            let currentStates = await readState.roomStates
+            roomStates = currentStates
+            let rows = currentRooms.map { room in
+                let state = currentStates[room.id]
                 return Row(
-                    id: room.id, name: room.name ?? "Unnamed room", display: state.display, hasUnread: state.hasUnread, isInvite: room.membership == .invited,
+                    id: room.id, name: room.name ?? "Unnamed room",
+                    display: state?.display ?? .none, hasUnread: state?.hasUnread ?? false,
+                    isInvite: room.membership == .invited,
                     isFavourite: room.isFavourite, isMuted: room.read.mode == .mute, lastActivity: room.latestEvent?.timestamp,
                     preview: room.preview?.line(isDirect: room.isDirect, botSenders: bots), avatar: room.avatar, inviter: room.inviter)
             }
-            let matching = zip(await rooms.rooms, rows).filter { Self.includes(filter, room: $0.0, row: $0.1) }.map(\.1)
+            let matching = zip(currentRooms, rows).filter { Self.includes(filter, room: $0.0, row: $0.1) }.map(\.1)
             content = .loaded(count: filter == .all ? count : matching.count, rows: matching)
             let invited = Set(rows.filter(\.isInvite).map(\.id))
             invitePreviews = invitePreviews.filter { invited.contains($0.key) }  // accepted or declined: the preview goes with it

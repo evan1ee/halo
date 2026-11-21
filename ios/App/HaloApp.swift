@@ -165,7 +165,7 @@ private struct RootView: View {
         .task {
             PushDelegate.coordinator = root.push
             await root.push?.begin()
-            await root.badge.begin()
+            await root.readState.begin()
             Task { await root.followReadIntents() }
             await root.sync.begin()
             await root.recovery.start()  // before the banner exists: a hidden banner view runs no task
@@ -181,8 +181,7 @@ private struct RootView: View {
         }
         // Sync and periodic read-state auditing run only in the foreground (SYNC_ENGINE §2 rule 1, LOGGING_AND_DIAGNOSTICS §2).
         .task(id: scenePhase) {
-            await root.sync.setForeground(scenePhase == .active)
-            await root.badge.setForeground(scenePhase == .active)
+            await root.setForeground(scenePhase == .active)
             if scenePhase != .active { await root.receipts.flush() }
         }
     }
