@@ -6,6 +6,7 @@ import FeatureSettings
 import FeatureStickers
 import FeatureTimeline
 import HaloApplication
+import HaloDesignSystem
 import HaloDomain
 import HaloFoundation
 import SwiftUI
@@ -34,6 +35,8 @@ private struct RootView: View {
     @State private var activity: BotActivityViewModel?
     /// The message to scroll to in the room about to open (from Activity); consumed by that room's screen.
     @State private var pendingEvent: EventID?
+    @State private var ownName = ""
+    @State private var ownAvatar: Data?
     @AppStorage(AppPreferences.appearanceKey) private var appearance = Appearance.system.rawValue
 
     private var colorScheme: ColorScheme? {
@@ -42,6 +45,13 @@ private struct RootView: View {
         case .light: .light
         case .dark: .dark
         }
+    }
+
+    /// The user's own name and photo for the avatar button; kept as is when they can't be read.
+    private func refreshOwnProfile() async {
+        let profile = root.profileSettings()
+        if let name = await profile.loadName() { ownName = name }
+        ownAvatar = await profile.loadAvatar()
     }
 
     var body: some View {
@@ -53,7 +63,9 @@ private struct RootView: View {
                         RecoveryBanner(model: root.recovery)
                         RoomListView(model: root.roomList, onRoomInfo: { roomInfo = root.makeRoomDetails(room: $0) }) { path.append($0) }
                     }
-                    .navigationTitle("Halo")
+                    .navigationTitle("")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .task { await refreshOwnProfile() }
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
                             Button {
@@ -108,7 +120,8 @@ private struct RootView: View {
                                         if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
                                     },
                                     onSignOut: { Task { await root.auth.signOut() } })
-                            } label: { Image(systemName: "gearshape") }
+                                .navigationBarTitleDisplayMode(.large)
+                            } label: { AvatarCircle(name: ownName.isEmpty ? (root.signedInUserID ?? "?") : ownName, imageData: ownAvatar, size: 30) }
                                 .accessibilityLabel("Settings")
                                 .accessibilityIdentifier("settings")
                         }

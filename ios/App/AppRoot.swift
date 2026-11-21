@@ -47,6 +47,8 @@ final class AppRoot {
     private let roomCoordinator: RoomListCoordinator
     /// The signed-in account, once the session is ready (kept out of "New chat" results).
     private var signedInUser: UserID?
+    /// The signed-in Matrix ID, for the avatar's initial before the display name is known.
+    var signedInUserID: String? { signedInUser?.rawValue }
     private let log: HaloLog
     private var auditPort: (any AuditEventPort)?
 
