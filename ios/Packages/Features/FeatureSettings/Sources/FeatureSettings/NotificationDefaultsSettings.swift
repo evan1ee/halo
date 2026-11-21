@@ -15,7 +15,18 @@ public enum NotificationDefaultTarget: Sendable, CaseIterable, Identifiable {
     var title: String { self == .directChats ? "Direct chats" : "Group chats" }
 }
 
+public enum NotificationMentionTarget: Sendable, CaseIterable, Identifiable {
+    case user, room
+    public var id: Self { self }
+    var title: String { self == .user ? "Mentions of my name" : "@room mentions" }
+}
+
 public struct NotificationDefaultsActions: Sendable {
+    /// Whether the mention rule is on, or `nil` when it couldn't be read.
+    public let loadMention: @Sendable (NotificationMentionTarget) async -> Bool?
+    /// `false` when the change failed.
+    public let saveMention: @Sendable (NotificationMentionTarget, Bool) async -> Bool
+
     /// The current choice, or `nil` when the server couldn't be read (or the default is something Halo doesn't offer, e.g. muted).
     public let load: @Sendable (NotificationDefaultTarget) async -> NotificationDefaultChoice?
     /// `false` when the change failed.
@@ -23,8 +34,12 @@ public struct NotificationDefaultsActions: Sendable {
 
     public init(
         load: @escaping @Sendable (NotificationDefaultTarget) async -> NotificationDefaultChoice?,
-        save: @escaping @Sendable (NotificationDefaultTarget, NotificationDefaultChoice) async -> Bool
+        save: @escaping @Sendable (NotificationDefaultTarget, NotificationDefaultChoice) async -> Bool,
+        loadMention: @escaping @Sendable (NotificationMentionTarget) async -> Bool? = { _ in nil },
+        saveMention: @escaping @Sendable (NotificationMentionTarget, Bool) async -> Bool = { _, _ in false }
     ) {
+        self.loadMention = loadMention
+        self.saveMention = saveMention
         self.load = load
         self.save = save
     }
@@ -33,6 +48,7 @@ public struct NotificationDefaultsActions: Sendable {
 @MainActor @Observable
 public final class NotificationDefaultsModel {
     public private(set) var choices: [NotificationDefaultTarget: NotificationDefaultChoice] = [:]
+    public private(set) var mentions: [NotificationMentionTarget: Bool] = [:]
     public private(set) var loaded = false
     public private(set) var error: String?
     private let actions: NotificationDefaultsActions
@@ -43,7 +59,21 @@ public final class NotificationDefaultsModel {
         for target in NotificationDefaultTarget.allCases {
             if let choice = await actions.load(target) { choices[target] = choice }
         }
+        for target in NotificationMentionTarget.allCases {
+            if let enabled = await actions.loadMention(target) { mentions[target] = enabled }
+        }
         loaded = true
+    }
+
+    /// Switches a mention rule; on failure the old value stays shown and the error says so.
+    public func setMention(_ target: NotificationMentionTarget, enabled: Bool) async {
+        guard mentions[target] != enabled else { return }
+        error = nil
+        if await actions.saveMention(target, enabled) {
+            mentions[target] = enabled
+        } else {
+            error = "The setting couldn't be saved. Check your connection and try again."
+        }
     }
 
     /// Saves a change; on failure the old choice stays shown and the error says so.
@@ -74,11 +104,16 @@ struct NotificationDefaultsSection: View {
                     ForEach(NotificationDefaultChoice.allCases) { Text($0.title).tag(NotificationDefaultChoice?.some($0)) }
                 }
             }
+            ForEach(NotificationMentionTarget.allCases) { target in
+                if let enabled = model.mentions[target] {
+                    Toggle(target.title, isOn: Binding(get: { enabled }, set: { value in Task { await model.setMention(target, enabled: value) } }))
+                }
+            }
             if let message = model.error { Text(message).font(.footnote).foregroundStyle(.red) }
         } header: {
-            Text("Default for rooms")
+            Text("Rooms and mentions")
         } footer: {
-            Text("Used for rooms where you haven't chosen a setting of your own. Shared with your other apps through your account.")
+            Text("The defaults apply to rooms where you haven't chosen a setting of your own. All of these are kept on your account, so your other apps follow them.")
         }
         .task { await model.load() }
     }

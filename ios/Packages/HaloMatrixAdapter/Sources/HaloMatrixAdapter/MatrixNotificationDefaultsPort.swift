@@ -25,4 +25,18 @@ public final class MatrixNotificationDefaultsPort: NotificationDefaultsPort {
             }
         } catch { throw ErrorMapper.map(error) }
     }
+
+    public func isMentionEnabled(_ kind: NotificationMentionKind) async throws(HaloError) -> Bool {
+        let client = try await session.signedInClient()
+        let settings = await client.getNotificationSettings()
+        do { return kind == .user ? try await settings.isUserMentionEnabled() : try await settings.isRoomMentionEnabled() } catch { throw ErrorMapper.map(error) }
+    }
+
+    public func setMention(_ kind: NotificationMentionKind, enabled: Bool) async throws(HaloError) {
+        let client = try await session.signedInClient()
+        let settings = await client.getNotificationSettings()
+        do {
+            if kind == .user { try await settings.setUserMentionEnabled(enabled: enabled) } else { try await settings.setRoomMentionEnabled(enabled: enabled) }
+        } catch { throw ErrorMapper.map(error) }
+    }
 }

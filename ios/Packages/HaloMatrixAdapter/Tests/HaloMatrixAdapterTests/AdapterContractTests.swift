@@ -531,7 +531,7 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
-    @Test("Notification defaults per chat type round-trip through push rules and are restored (changes the account's defaults while it runs)")
+    @Test("Notification defaults per chat type and the mention rules round-trip through push rules and are restored (changes the account's defaults while it runs)")
     func notificationDefaults() async throws {
         let session = port()
         let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
@@ -556,6 +556,22 @@ struct AdapterContractTests {
             #expect(try await waitFor(other, kind) == other)
             try await defaults.setMode(original, for: kind)
             #expect(try await waitFor(original, kind) == original)
+        }
+        for kind in NotificationMentionKind.allCases {
+            let original = try await defaults.isMentionEnabled(kind)
+            try await defaults.setMention(kind, enabled: !original)
+            var seen = try await defaults.isMentionEnabled(kind)
+            for _ in 0..<20 where seen == original {
+                try await Task.sleep(for: .seconds(1))
+                seen = try await defaults.isMentionEnabled(kind)
+            }
+            #expect(seen == !original)
+            try await defaults.setMention(kind, enabled: original)
+            for _ in 0..<20 where seen != original {
+                try await Task.sleep(for: .seconds(1))
+                seen = try await defaults.isMentionEnabled(kind)
+            }
+            #expect(seen == original)
         }
         try await session.logout()
     }

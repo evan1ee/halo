@@ -6,6 +6,7 @@ import Synchronization
 public final class FakeNotificationDefaultsPort: NotificationDefaultsPort {
     private struct State {
         var modes: [NotificationDefaultKind: RoomNotificationChoice] = [.directChats: .allMessages, .groupChats: .mentionsAndKeywords]
+        var mentions: [NotificationMentionKind: Bool] = [.user: true, .room: true]
         var error: HaloError?
     }
     private let state = Mutex(State())
@@ -24,5 +25,16 @@ public final class FakeNotificationDefaultsPort: NotificationDefaultsPort {
     public func setMode(_ mode: RoomNotificationChoice, for kind: NotificationDefaultKind) async throws(HaloError) {
         if let error = state.withLock({ $0.error }) { throw error }
         state.withLock { $0.modes[kind] = mode }
+    }
+
+    public func isMentionEnabled(_ kind: NotificationMentionKind) async throws(HaloError) -> Bool {
+        let (value, error) = state.withLock { ($0.mentions[kind] ?? true, $0.error) }
+        if let error { throw error }
+        return value
+    }
+
+    public func setMention(_ kind: NotificationMentionKind, enabled: Bool) async throws(HaloError) {
+        if let error = state.withLock({ $0.error }) { throw error }
+        state.withLock { $0.mentions[kind] = enabled }
     }
 }

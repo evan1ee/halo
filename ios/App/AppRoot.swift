@@ -288,6 +288,11 @@ final class AppRoot {
             save: { target, choice in
                 do { try await port.setMode(choice == .allMessages ? .allMessages : .mentionsAndKeywords, for: kind(target)) } catch { return false }
                 return true
+            },
+            loadMention: { target in try? await port.isMentionEnabled(target == .user ? .user : .room) },
+            saveMention: { target, enabled in
+                do { try await port.setMention(target == .user ? .user : .room, enabled: enabled) } catch { return false }
+                return true
             })
     }
 
