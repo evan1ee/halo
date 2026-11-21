@@ -28,6 +28,14 @@ The tab must therefore **label freshness**: each item shows "as of <time of the 
 - FR-4 Item actions: open source message, tick (BOT_MESSAGES FR-3), copy.
 - FR-5 Index lifetime: rebuilt on demand from cached timelines ("Rebuild index"); entries untouched for 90 days are pruned.
 
+### Built so far (M7 slice, 2026-11-21)
+- **FR-1 (partly):** `BotTaskDerivation` (HaloDomain, pure) reads one room's bot messages oldest first and derives the entries (`TaskAddedV1`, `TodoListV1` rows incl. unknown ids without a source, `ReminderSetV1`, completion and deletion by unique title, reused ids restart open); `BotActivityCoordinator` (HaloApplication) receives every snapshot of an open timeline from `TimelineViewModel` and upserts them (`BotTaskPort` → `BotTaskStore`, monotonic by `as_of`, a missing source keeps the stored one). Because the whole list is re-read each time, the same timeline always gives the same entries (AC-A3). Only rooms **opened on this device** are indexed (no sync-time indexing); edits and redactions of the source aren't handled.
+- **FR-3:** sections Open, Reminders, Completed this week (7 days); "Pending" doesn't exist yet (no `BotActionCoordinator`). Filters by room and bot (FR in §2; status filter is the sections).
+- **FR-4 (partly):** tap opens the room (not yet at the event: no event-focused timeline), Copy in the context menu; ticking from the tab is not built.
+- **FR-5 (partly):** "Rebuild list" empties the index; 90-day pruning is not built.
+- **FR-2:** not built (Q-ACT-REFRESH stays at its default: no).
+- Header text says "From messages on this device". Entry point: a checklist button in the room list toolbar, shown once the user has allowlisted a bot (Settings → Bots); the screen is a sheet (`FeatureBotActivity`), not a tab.
+
 ## 5. Non-functional requirements
 The index adds ≤ 1 ms per bot event; the tab opens from the DB in < 200 ms.
 

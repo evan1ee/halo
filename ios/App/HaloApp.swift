@@ -1,4 +1,5 @@
 import FeatureAuth
+import FeatureBotActivity
 import FeatureRoomDetails
 import FeatureRoomList
 import FeatureSettings
@@ -30,6 +31,7 @@ private struct RootView: View {
     @State private var path: [RoomID] = []
     @State private var newChat: NewChatViewModel?
     @State private var roomInfo: RoomDetailsViewModel?
+    @State private var activity: BotActivityViewModel?
     @AppStorage(AppPreferences.appearanceKey) private var appearance = Appearance.system.rawValue
 
     private var colorScheme: ColorScheme? {
@@ -60,6 +62,13 @@ private struct RootView: View {
                             } label: { Image(systemName: "square.and.pencil") }
                                 .accessibilityLabel("New chat")
                                 .accessibilityIdentifier("newChat")
+                        }
+                        if !AppPreferences().botSenders.isEmpty {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button { activity = root.makeBotActivity() } label: { Image(systemName: "checklist") }
+                                    .accessibilityLabel("Activity")
+                                    .accessibilityIdentifier("activity")
+                            }
                         }
                         ToolbarItem(placement: .topBarTrailing) {
                             // Destination-based: the stack's path is typed to `RoomID`, so a value link of another type can't push.
@@ -102,6 +111,12 @@ private struct RootView: View {
                         }
                     }
                     .sheet(item: $newChat) { NewChatView(model: $0) }
+                    .sheet(item: $activity) { model in
+                        BotActivityView(model: model) { room, _ in
+                            activity = nil
+                            path.append(room)
+                        }
+                    }
                     .sheet(item: $roomInfo) {
                         RoomDetailsView(
                             model: $0,

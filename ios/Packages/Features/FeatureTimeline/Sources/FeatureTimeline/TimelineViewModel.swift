@@ -159,6 +159,8 @@ public final class TimelineViewModel {
     public var botSenders: Set<String> = []
     /// Reports a known bot's message whose formatted body no template recognised (by event ID; for the diagnostics count).
     public var unrecognisedBotMessages: UnrecognisedBotMessages?
+    /// Receives every snapshot of this room so the Activity index learns the bots' tasks (BOT_ACTIVITY FR-1).
+    public var botActivity: BotActivityCoordinator?
     /// What the room's bot messages say about tasks (BOT_MESSAGES §6); recomputed with every snapshot.
     public private(set) var botTasks = BotTaskTracker([])
     /// Tasks the user ticked and the bot hasn't confirmed yet, and those that got no answer in time.
@@ -867,6 +869,10 @@ public final class TimelineViewModel {
             }
             eventTimes = times
             botTasks = botTracker(snapshot.items)
+            if let botActivity, let room, !botSenders.isEmpty {
+                let items = snapshot.items, senders = botSenders
+                Task { await botActivity.observe(room: room, items: items, botSenders: senders) }
+            }
             botTapped.subtract(botTasks.completed)
             botUnanswered.subtract(botTasks.completed)
             var profiles: [UserID: (name: String?, avatar: MediaRef?)] = [:]

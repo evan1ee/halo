@@ -1,4 +1,5 @@
 import FeatureAuth
+import FeatureBotActivity
 import FeatureRoomList
 import FeatureRoomDetails
 import FeatureSettings
@@ -33,6 +34,7 @@ final class AppRoot {
     private let matrixSession: MatrixSessionPort
     private let media: MediaLoader
     private let unrecognisedBots = UnrecognisedBotMessages()
+    let botActivity = BotActivityCoordinator()
     private let previewPolicy: any MediaPreviewPolicyPort
     private let roomPort: MatrixRoomPort
     private let chatCreation: MatrixChatCreationPort
@@ -120,6 +122,7 @@ final class AppRoot {
                     let database = try HaloDatabase(path: directory.appendingPathComponent("halo.sqlite").path)
                     await receipts.restore(from: ReadIntentStore(database: database, account: user))
                     await drafts.attach(DraftStore(database: database, account: user))
+                    await botActivity.attach(BotTaskStore(database: database, account: user))
                     #if DEBUG
                     // The read-state auditor runs in debug (and later TestFlight) builds only (LOGGING_AND_DIAGNOSTICS §2).
                     let log = log
@@ -148,6 +151,7 @@ final class AppRoot {
         auditPort = nil
         await badge.reset()
         await drafts.reset()
+        await botActivity.reset()
         await stickers.reset()
         await timelinePort.dropWarm()
         AppPreferences().botSenders = []
@@ -348,6 +352,16 @@ final class AppRoot {
     /// The room info sheet for `room` (ROOM_MANAGEMENT).
     func makeRoomDetails(room: RoomID) -> RoomDetailsViewModel { RoomDetailsViewModel(port: roomPort, room: room, images: ImagePreparer(maximumDimension: 512), media: media) }
 
+    /// The Activity screen's model: names of rooms from the room list.
+    func makeBotActivity() -> BotActivityViewModel {
+        BotActivityViewModel(
+            coordinator: botActivity,
+            roomName: { [roomList] room in
+                guard case .loaded(_, let rows) = roomList.content else { return nil }
+                return rows.first { $0.id == room }?.name
+            })
+    }
+
     /// A view model for the timeline of `room`; each screen gets its own coordinator and session.
     func makeTimeline(room: RoomID) -> TimelineViewModel {
         let model = TimelineViewModel(
@@ -356,6 +370,7 @@ final class AppRoot {
             readThrough: { [roomCoordinator] in await roomCoordinator.rooms.first { $0.id == room }?.ownReadThrough })
         model.botSenders = Set(AppPreferences().botSenders)
         model.unrecognisedBotMessages = unrecognisedBots
+        model.botActivity = botActivity
         model.sendsTypingNotices = { AppPreferences().sendTypingNotices }
         return model
     }

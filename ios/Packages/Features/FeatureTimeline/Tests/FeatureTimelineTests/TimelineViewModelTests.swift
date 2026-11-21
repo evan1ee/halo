@@ -796,6 +796,30 @@ struct TimelineViewModelTests {
         guard case .failed? = vm.editHistory else { Issue.record("expected failure"); return }
     }
 
+    @Test("every snapshot feeds the Activity index with the allowlisted bots' task messages")
+    func feedsBotActivity() async throws {
+        let room = try RoomID("!r:x.org")
+        let bot = try UserID("@bot:x.org")
+        let item = TimelineItem(id: TimelineItemID("t1"), content: .event(TimelineEvent(
+            eventID: try EventID("$t1"), sender: bot, senderName: nil, timestamp: Date(timeIntervalSince1970: 10), isOwn: false,
+            kind: .text("Added Task #7", isEdited: false), formattedBody: "Added Task <b>#7</b> for me: <i>\"Buy milk\"</i>")))
+        let port = FakeTimelinePort()
+        port.addRoom(room, items: [item])
+        let store = FakeBotTaskPort()
+        let activity = BotActivityCoordinator(port: store)
+        let vm = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room), room: room)
+        vm.botSenders = [bot.rawValue]
+        vm.botActivity = activity
+        await vm.start()
+        for _ in 0..<200_000 where vm.lastRowID != "t1" { await Task.yield() }
+        var entries = await activity.snapshot().entries
+        for _ in 0..<200_000 where entries.isEmpty {
+            await Task.yield()
+            entries = await activity.snapshot().entries
+        }
+        #expect(entries.count == 1 && entries[0].title == "Buy milk" && entries[0].key.id == "7")
+    }
+
     @Test("a shared location shows its description with a Maps link; bad geo URIs give no link and never crash")
     func locations() throws {
         let vm = TimelineViewModel(

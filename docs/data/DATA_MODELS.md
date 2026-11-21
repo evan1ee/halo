@@ -72,12 +72,12 @@ CREATE TABLE sticker_pack_draft (                           -- resumable creatio
 );
 
 -- bots (M6–M7) — derived index; truth is the bot backend
-CREATE TABLE bot_task (
+CREATE TABLE bot_task (   -- as built (migration v5-bot-task); entity_id is the bot's number kept as text
   account TEXT NOT NULL, room_id TEXT NOT NULL, bot_sender TEXT NOT NULL,
-  entity_type TEXT NOT NULL CHECK (entity_type IN ('todo','reminder')), entity_id INTEGER NOT NULL,
-  source_event_id TEXT, title TEXT,                         -- 🔒 title
-  status TEXT NOT NULL CHECK (status IN ('open','completed','deleted','unknown')),
-  as_of_ts INTEGER NOT NULL, source_redacted INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL,
+  entity_type TEXT NOT NULL CHECK (entity_type IN ('todo','reminder')), entity_id TEXT NOT NULL,
+  source_event_id TEXT, title TEXT, detail TEXT,            -- title: plain, like draft bodies (file protection, no column encryption yet); detail: reminder time text or task owner
+  status TEXT NOT NULL CHECK (status IN ('open','completed','deleted')),
+  as_of_ts INTEGER NOT NULL, updated_at INTEGER NOT NULL,   -- 'unknown' status and source_redacted are not built
   PRIMARY KEY (account, room_id, bot_sender, entity_type, entity_id)
 );
 CREATE TABLE bot_action (

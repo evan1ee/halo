@@ -89,8 +89,13 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 - [ ] 👤 Push gateway (Sygnal + pushkin) for Beta/Release, APNs keys, TestFlight build.
 - [ ] 👤📱 AC-U8: 7-day soak with zero unexplained auditor findings.
 
-**P2** — M6 Bot cards (AC-B*), M7 Bot Activity (AC-A*), M8 Search + Saved (V-SEARCH-1), M9 Gallery + Export, M10 Threads: break
+**P2** — M6 Bot cards (AC-B*; cards, tick and the template parsers are done under M5 above), M8 Search + Saved (V-SEARCH-1), M9 Gallery + Export, M10 Threads: break
 each into items here when M5 is done.
+
+**M7 Bot Activity** (exit: AC-A1–A3)
+- [x] Slice 1 (branch `feat/m7-bot-activity`): `BotTaskDerivation`, `bot_task` store (migration v5), `BotActivityCoordinator` fed by open timelines, `FeatureBotActivity` sheet with sections and room/bot filters, Rebuild list; unit-tested in every layer, seen in the simulator with the peer account as a bot (`infra/dev/send-sample-events.py`).
+- [ ] Indexing of rooms that aren't open (sync-time events), edit/redaction handling of the source, 90-day pruning.
+- [ ] Event-focused open (jump to the source message: `TimelineFocus.Event`), tick from the tab (needs `BotActionCoordinator`, `bot_action`), "Pending" section.
 
 ## Milestones
 
