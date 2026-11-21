@@ -62,10 +62,14 @@ def ensure_user(name, password):
         input=password.encode(), env=env, check=True, stdout=subprocess.DEVNULL, timeout=120)
 
 
+_SESSIONS = []  # tokens of the logins below; signed out at the end so each run leaves no device behind
+
+
 def login(name, password):
     r = call("POST", "/_matrix/client/v3/login", {
         "type": "m.login.password", "identifier": {"type": "m.id.user", "user": name},
         "password": password, "initial_device_display_name": "fixtures"})
+    _SESSIONS.append(r["access_token"])
     return r["access_token"]
 
 
@@ -150,6 +154,11 @@ def main():
     # the room-list contract expects the number of rooms the account has joined
     values[P + "ROOMS"] = str(len(call("GET", "/_matrix/client/v3/joined_rooms", token=token)["joined_rooms"]))
     write_env(values)
+    for session in _SESSIONS:
+        try:
+            call("POST", "/_matrix/client/v3/logout", {}, session)
+        except SystemExit:
+            pass  # already gone
     print(f"wrote {ENV_PATH}: {len(values)} settings, rooms={values[P + 'ROOMS']} (values not shown)")
 
 
