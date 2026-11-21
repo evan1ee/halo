@@ -42,12 +42,17 @@ public struct NewChatView: View {
                 }
                 Section {
                     TextField("Room name", text: $model.roomName).accessibilityIdentifier("newRoomName")
+                        .submitLabel(.done).onSubmit { if model.canCreateRoom { Task { await model.createRoom() } } }
                     if !model.invited.isEmpty { Text("Inviting " + model.invited.map(\.title).joined(separator: ", ")).font(.footnote).foregroundStyle(.secondary) }
-                    Button("Create room") { Task { await model.createRoom() } }.disabled(!model.canCreateRoom).accessibilityIdentifier("createRoom")
+                    Button { Task { await model.createRoom() } } label: {
+                        // A list row drops the disabled look of a Label: grey it out explicitly until there's a name.
+                        Label("Create room", systemImage: "plus.circle.fill")
+                            .foregroundStyle(model.canCreateRoom ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
+                    }.disabled(!model.canCreateRoom).accessibilityIdentifier("createRoom")
                 } header: {
                     Text("Or create a private room")
                 } footer: {
-                    Text("Give it a name to create it. People you tap \"Add to room\" on above are invited. Messages are encrypted.")
+                    Text("Name the room, then create it. To invite people, find them above and tap \"Add to room\". Messages are encrypted.")
                 }
                 if let error = model.errorText { Section { Text(error).foregroundStyle(.red) } }
             }
