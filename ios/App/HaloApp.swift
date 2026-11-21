@@ -180,10 +180,36 @@ private struct RootView: View {
             }
         }
         // Sync and periodic read-state auditing run only in the foreground (SYNC_ENGINE §2 rule 1, LOGGING_AND_DIAGNOSTICS §2).
+        // Wrap the background receipt flush in a UIKit background task so iOS does not suspend mid-request (R-22).
         .task(id: scenePhase) {
-            await root.setForeground(scenePhase == .active)
-            if scenePhase != .active { await root.receipts.flush() }
+            if scenePhase != .active {
+                let lease = BackgroundTaskLease(name: "halo.receipts.flush")
+                defer { lease.end() }
+                await root.setForeground(false)
+                await root.receipts.flush()
+            } else {
+                await root.setForeground(true)
+            }
         }
+    }
+}
+
+/// Keeps a UIKit background-task assertion alive until `end()` or iOS's expiration handler (R-22).
+@MainActor
+private final class BackgroundTaskLease {
+    private var id: UIBackgroundTaskIdentifier = .invalid
+
+    init(name: String) {
+        id = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+            MainActor.assumeIsolated { self?.end() }
+        }
+    }
+
+    func end() {
+        guard id != .invalid else { return }
+        let ending = id
+        id = .invalid
+        UIApplication.shared.endBackgroundTask(ending)
     }
 }
 
