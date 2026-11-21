@@ -42,6 +42,7 @@ final class AppRoot {
     private let chatCreation: MatrixChatCreationPort
     private let profilePort: MatrixProfilePort
     private let notificationDefaultsPort: MatrixNotificationDefaultsPort
+    private let devicesPort: MatrixDevicesPort
     private let botAllowlistPort: MatrixBotAllowlistPort
     private let roomCoordinator: RoomListCoordinator
     /// The signed-in account, once the session is ready (kept out of "New chat" results).
@@ -64,6 +65,7 @@ final class AppRoot {
         let profilePort = MatrixProfilePort(session: session)
         self.profilePort = profilePort
         self.notificationDefaultsPort = MatrixNotificationDefaultsPort(session: session)
+        self.devicesPort = MatrixDevicesPort(session: session)
         botAllowlistPort = MatrixBotAllowlistPort(session: session)
         let roomCoordinator = RoomListCoordinator(port: MatrixRoomListPort(session: session), loadsAllPages: true, hiddenRooms: MatrixHiddenRoomsPort(session: session), profiles: profilePort)
         self.roomCoordinator = roomCoordinator
@@ -301,6 +303,15 @@ final class AppRoot {
                 do { try await port.setMention(target == .user ? .user : .room, enabled: enabled) } catch { return false }
                 return true
             })
+    }
+
+    /// Settings → Account → Sessions: the account's devices as the homeserver lists them.
+    func deviceSettings() -> DevicesSettingsActions {
+        let port = devicesPort
+        return DevicesSettingsActions(load: {
+            guard let devices = try? await port.devices() else { return nil }
+            return devices.map { .init(id: $0.id, name: $0.displayName ?? $0.id, lastSeen: $0.lastSeen, isCurrent: $0.isCurrent) }
+        })
     }
 
     /// Settings → Stickers → Sticker packs: the packs the user enabled (the only ones that can be removed from the list).

@@ -21,3 +21,4 @@ Format: [TEMPLATE.md](TEMPLATE.md). Numbering is sequential and never reused. An
 | [0015](0015-count-only-pushes.md) | Count-only pushes must not set the app badge | Accepted with conditions (V-PUSH-5) |
 | [0016](0016-nse-budget-gate.md) | Treat the NSE budget as its own gate (G-NSE) | Accepted (AC-NSE-1…6) |
 | [0017](0017-xcodegen-for-the-app-project.md) | XcodeGen generates the app project | Accepted |
+| [0018](0018-devices-list-over-direct-http.md) | List the account's sessions with one direct HTTP call | Accepted |

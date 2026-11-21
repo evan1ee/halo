@@ -576,6 +576,20 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
+    @Test("The sessions list contains this device, named as it signed in, first", .enabled(if: env["HALO_DEV_SERVER"] != nil))
+    func devicesList() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract-devices"),
+            on: details)
+        let devices = try await MatrixDevicesPort(session: session).devices()
+        #expect(devices.first?.isCurrent == true)
+        #expect(devices.first?.displayName == "contract-devices")
+        #expect(devices.filter(\.isCurrent).count == 1)
+        try await session.logout()
+    }
+
     @Test("Bot allowlist syncs via one.mbm.halo.bot_allowlist account data and restores original", .enabled(if: env["HALO_DEV_SERVER"] != nil))
     func botAllowlist() async throws {
         let session = port()

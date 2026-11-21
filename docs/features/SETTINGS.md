@@ -13,7 +13,7 @@ One place for account, notifications, privacy, appearance, storage, diagnostics 
 ## 3. Functional requirements
 | Section | Items |
 |---|---|
-| Account | Profile, sessions/devices, sign out |
+| Account | Profile, sessions (built, read-only list, ADR-0018; signing others out not built), sign out |
 | Security | Verification status, recovery key setup/change, key backup state |
 | Notifications | Permission status, push health, defaults for DMs/groups (built: all messages / mentions and keywords), name and @room mention toggles (built), keyword rules (not built) |
 | Privacy | Read receipts: public / private (D7); typing notices on/off; media previews; URL previews |

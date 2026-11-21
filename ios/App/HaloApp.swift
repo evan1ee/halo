@@ -84,6 +84,7 @@ private struct RootView: View {
                                     saveMediaPreviews: { await root.setMediaPreviewChoice($0) },
                                     profile: root.profileSettings(),
                                     stickerPacks: root.stickerPackSettings(),
+                                    devices: root.deviceSettings(),
                                     diagnostics: { await root.diagnosticsReport() },
                                     reconcile: { await root.reconcileNow() },
                                     unexplainedAuditCount: { await root.unexplainedAuditCount() },

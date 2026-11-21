@@ -23,6 +23,7 @@ public struct SettingsView: View {
     @State private var unexplainedCount: Int?
     private let profile: ProfileSettingsActions?
     private let stickerPacks: StickerPackSettingsActions?
+    private let devices: DevicesSettingsActions?
     private let security: (@MainActor () -> [StorageSize])?
     private let setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)?
     @State private var recoveryFailure: SettingsMessage?
@@ -50,7 +51,7 @@ public struct SettingsView: View {
         saveBotSenders: (@Sendable ([String]) async -> Bool)? = nil,
         loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)? = nil,
         saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)? = nil,
-        profile: ProfileSettingsActions? = nil, stickerPacks: StickerPackSettingsActions? = nil, diagnostics: (@Sendable () async -> String)? = nil,
+        profile: ProfileSettingsActions? = nil, stickerPacks: StickerPackSettingsActions? = nil, devices: DevicesSettingsActions? = nil, diagnostics: (@Sendable () async -> String)? = nil,
         reconcile: (@Sendable () async -> Void)? = nil, unexplainedAuditCount: (@Sendable () async -> Int?)? = nil,
         storageSizes: (@Sendable () async -> [StorageSize])? = nil,
         security: (@MainActor () -> [StorageSize])? = nil, setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil,
@@ -61,6 +62,7 @@ public struct SettingsView: View {
         self.unexplainedAuditCount = unexplainedAuditCount
         self.profile = profile
         self.stickerPacks = stickerPacks
+        self.devices = devices
         self.storageSizes = storageSizes
         self.notificationStatus = notificationStatus
         self.notificationDefaults = notificationDefaults
@@ -86,6 +88,10 @@ public struct SettingsView: View {
                 Section("Account") {
                     NavigationLink { ProfileSettingsView(actions: profile) } label: { Label("Profile", systemImage: "person.crop.circle") }
                         .accessibilityIdentifier("profile")
+                    if let devices {
+                        NavigationLink { DevicesSettingsView(actions: devices) } label: { Label("Sessions", systemImage: "iphone.and.arrow.forward") }
+                            .accessibilityIdentifier("sessions")
+                    }
                 }
             }
             Section {
