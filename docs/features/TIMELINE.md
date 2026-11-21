@@ -16,7 +16,7 @@ Show a room's history correctly and smoothly, and report what the user has actua
 - FR-3 Back pagination on reaching the top (`paginate_backwards(20)`), with a status indicator.
 - FR-4 Read-marker line at `m.fully_read`; "Jump to unread" pill when the line is above the viewport.
 - FR-5 **Visibility tracking** → `ReadStateCoordinator.markRead` per D6 ([../matrix/READ_RECEIPTS.md](../matrix/READ_RECEIPTS.md) §1).
-- FR-6 Read receipts: up to 3 avatars + count under the newest message each user has read.
+- FR-6 Read receipts: up to 3 avatars + count under the newest message each user has read. *Built so far: text "Seen" / "Seen by N" in the footer of own sent messages; avatars not yet.*
 - FR-7 Reactions row; tap toggles (`toggle_reaction`).
 - FR-8 Reply preview (`load_reply_details`), tap to jump (paginate around the event if needed — `timeline_with_configuration` with `TimelineFocus.Event` **[VERIFIED F-FFI-22]**).
 - FR-9 Edits show "(edited)"; long-press → "View edit history" (`edit_revisions`, F-FFI-22) (P2).
