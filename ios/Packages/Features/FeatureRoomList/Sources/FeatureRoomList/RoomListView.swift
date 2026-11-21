@@ -52,7 +52,7 @@ public struct RoomListView: View {
                                     Text(row.name).fontWeight(row.hasUnread ? .bold : .regular)
                                     if row.isMuted { Image(systemName: "bell.slash").foregroundStyle(.secondary).imageScale(.small).accessibilityLabel("Muted") }
                                     Spacer()
-                                    if let when = row.lastActivity { Text(Self.activityText(when)).font(.caption).foregroundStyle(.secondary) }
+                                    if let when = row.lastActivity { Text(ActivityTime.text(when)).font(.caption).foregroundStyle(.secondary) }
                                     indicator(row.display)
                                 }
                                 if let preview = row.preview {
@@ -75,6 +75,7 @@ public struct RoomListView: View {
                         }
                     }
                 }
+                .contentMargins(.top, 8, for: .scrollContent)
                 .accessibilityIdentifier("room-list")
                 .overlay {
                     if rows.isEmpty { ContentUnavailableView(Self.emptyTitle(model.filter), systemImage: "bubble.left.and.bubble.right") }
@@ -117,11 +118,9 @@ public struct RoomListView: View {
             .padding(.horizontal)
             .padding(.vertical, 6)
         }
-    }
-
-    /// Today: the time; otherwise the date.
-    private static func activityText(_ date: Date) -> String {
-        Calendar.current.isDateInToday(date) ? date.formatted(date: .omitted, time: .shortened) : date.formatted(date: .abbreviated, time: .omitted)
+        #if os(iOS)
+        .background(Color(uiColor: .systemGroupedBackground))
+        #endif
     }
 
     @ViewBuilder private func indicator(_ display: DisplayCount) -> some View {
