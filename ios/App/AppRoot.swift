@@ -43,6 +43,7 @@ final class AppRoot {
     private let profilePort: MatrixProfilePort
     private let notificationDefaultsPort: MatrixNotificationDefaultsPort
     private let devicesPort: MatrixDevicesPort
+    private let passwordPort: MatrixAccountPasswordPort
     private let botAllowlistPort: MatrixBotAllowlistPort
     private let roomCoordinator: RoomListCoordinator
     /// The signed-in account, once the session is ready (kept out of "New chat" results).
@@ -68,6 +69,7 @@ final class AppRoot {
         self.profilePort = profilePort
         self.notificationDefaultsPort = MatrixNotificationDefaultsPort(session: session)
         self.devicesPort = MatrixDevicesPort(session: session)
+        self.passwordPort = MatrixAccountPasswordPort(session: session)
         botAllowlistPort = MatrixBotAllowlistPort(session: session)
         let roomCoordinator = RoomListCoordinator(port: MatrixRoomListPort(session: session), loadsAllPages: true, hiddenRooms: MatrixHiddenRoomsPort(session: session), profiles: profilePort)
         self.roomCoordinator = roomCoordinator
@@ -304,6 +306,23 @@ final class AppRoot {
             saveMention: { target, enabled in
                 do { try await port.setMention(target == .user ? .user : .room, enabled: enabled) } catch { return false }
                 return true
+            })
+    }
+
+    /// Settings → Account → Change password (ADR-0019).
+    func changePasswordActions() -> ChangePasswordActions {
+        let port = passwordPort
+        return ChangePasswordActions(
+            isAvailable: { await port.canChangePassword() },
+            submit: { current, new in
+                do throws(HaloError) { try await port.changePassword(current: current, new: new) } catch {
+                    switch error {
+                    case .invalidInput("CURRENT_PASSWORD"): return .wrongCurrent
+                    case .invalidInput("NEW_PASSWORD"): return .refusedNew
+                    default: return .failed
+                    }
+                }
+                return .changed
             })
     }
 

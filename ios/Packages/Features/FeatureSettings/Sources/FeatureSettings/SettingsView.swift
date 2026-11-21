@@ -35,6 +35,9 @@ public struct SettingsView: View {
     private let profile: ProfileSettingsActions?
     private let stickerPacks: StickerPackSettingsActions?
     private let devices: DevicesSettingsActions?
+    private let changePassword: ChangePasswordActions?
+    @State private var canChangePassword = false
+    @State private var confirmingNewRecoveryKey = false
     private let verifyDevice: VerifyDeviceAction?
     @State private var verifying = false
     private let security: (@MainActor () -> [StorageSize])?
@@ -64,7 +67,7 @@ public struct SettingsView: View {
         saveBotSenders: (@Sendable ([String]) async -> Bool)? = nil,
         loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)? = nil,
         saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)? = nil,
-        profile: ProfileSettingsActions? = nil, stickerPacks: StickerPackSettingsActions? = nil, devices: DevicesSettingsActions? = nil, verifyDevice: VerifyDeviceAction? = nil, diagnostics: (@Sendable () async -> String)? = nil,
+        profile: ProfileSettingsActions? = nil, stickerPacks: StickerPackSettingsActions? = nil, devices: DevicesSettingsActions? = nil, changePassword: ChangePasswordActions? = nil, verifyDevice: VerifyDeviceAction? = nil, diagnostics: (@Sendable () async -> String)? = nil,
         reconcile: (@Sendable () async -> Void)? = nil, unexplainedAuditCount: (@Sendable () async -> Int?)? = nil,
         storageSizes: (@Sendable () async -> [StorageSize])? = nil,
         security: (@MainActor () -> [StorageSize])? = nil, setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil,
@@ -76,6 +79,7 @@ public struct SettingsView: View {
         self.profile = profile
         self.stickerPacks = stickerPacks
         self.devices = devices
+        self.changePassword = changePassword
         self.verifyDevice = verifyDevice
         self.storageSizes = storageSizes
         self.notificationStatus = notificationStatus
@@ -105,6 +109,10 @@ public struct SettingsView: View {
                     if let devices {
                         NavigationLink { DevicesSettingsView(actions: devices) } label: { Label("Sessions", systemImage: "iphone.and.arrow.forward") }
                             .accessibilityIdentifier("sessions")
+                    }
+                    if let changePassword, canChangePassword {
+                        NavigationLink { ChangePasswordView(actions: changePassword) } label: { Label("Change password", systemImage: "key") }
+                            .accessibilityIdentifier("change-password")
                     }
                 }
             }
@@ -193,6 +201,10 @@ public struct SettingsView: View {
                         .disabled(settingUpRecovery)
                         .accessibilityIdentifier("set-up-recovery")
                     }
+                    if replaceRecovery != nil, security().contains(where: { $0.name == "Recovery key" && $0.text.hasPrefix("On") }) {
+                        Button("Change recovery key") { confirmingNewRecoveryKey = true }
+                            .accessibilityIdentifier("change-recovery-key")
+                    }
                 } header: {
                     Text("Security")
                 } footer: {
@@ -261,6 +273,7 @@ public struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
+        .task { if let changePassword { canChangePassword = await changePassword.isAvailable() } }
         .sheet(isPresented: $verifying) { verifyDevice?.makeView() }
         .onChange(of: verifyDevice?.isNeeded() ?? false) { _, needed in if !needed { verifying = false } }
         .alert("Recovery key", isPresented: Binding(get: { recoveryFailure != nil }, set: { if !$0 { recoveryFailure = nil } })) {
@@ -278,6 +291,20 @@ public struct SettingsView: View {
         } message: { Text(recoveryFailure?.text ?? "") }
         .sheet(item: Binding(get: { newRecoveryKey.map(RecoveryKeyItem.init) }, set: { if $0 == nil { newRecoveryKey = nil } })) { item in
             RecoveryKeySheet(key: item.key) { newRecoveryKey = nil }
+        }
+        .confirmationDialog("Change the recovery key?", isPresented: $confirmingNewRecoveryKey, titleVisibility: .visible) {
+            Button("Create a new key", role: .destructive) {
+                guard let replaceRecovery else { return }
+                Task {
+                    switch await replaceRecovery() {
+                    case .success(let key): newRecoveryKey = key
+                    case .failure(let message): recoveryFailure = SettingsMessage(message.text)
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The current key stops working. Messages that are only in the old backup can't be restored with the new key. Save the new key as soon as it appears.")
         }
         .confirmationDialog("Sign out of Halo?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
             Button("Sign out", role: .destructive, action: onSignOut)

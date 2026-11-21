@@ -96,6 +96,7 @@ private struct RootView: View {
                                     profile: root.profileSettings(),
                                     stickerPacks: root.stickerPackSettings(),
                                     devices: root.deviceSettings(),
+                                    changePassword: root.changePasswordActions(),
                                     verifyDevice: VerifyDeviceAction(isNeeded: { root.recovery.needsRecovery }, makeView: { AnyView(RecoveryView(model: root.recovery)) }),
                                     diagnostics: { await root.diagnosticsReport() },
                                     reconcile: { await root.reconcileNow() },

@@ -590,6 +590,29 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
+    @Test("Changing the password checks the current one, takes effect for new logins, and is restored (changes the peer account's password while it runs)", .enabled(if: env["HALO_DEV_SERVER"] != nil))
+    func changePassword() async throws {
+        let server = env["HALO_DEV_SERVER"] ?? ""
+        let user = env["HALO_DEV_PEER_USER"] ?? ""
+        let original = env["HALO_DEV_PEER_PASSWORD"] ?? ""
+        let changed = original + "-changed-1"
+        let session = port()
+        let details = try await session.loginDetails(server: server)
+        _ = try await session.loginPassword(PasswordCredentials(username: user, password: original, deviceDisplayName: "contract-password"), on: details)
+        let passwords = MatrixAccountPasswordPort(session: session)
+        #expect(await passwords.canChangePassword())
+        do { try await passwords.changePassword(current: "definitely-wrong", new: changed); Issue.record("accepted a wrong password") } catch {
+            #expect(error == .invalidInput("CURRENT_PASSWORD"))
+        }
+        try await passwords.changePassword(current: original, new: changed)
+        // The session survives (other sessions stay signed in) and the new password logs in.
+        let other = port()
+        _ = try await other.loginPassword(PasswordCredentials(username: user, password: changed, deviceDisplayName: "contract-password"), on: details)
+        try await passwords.changePassword(current: changed, new: original)
+        try await other.logout()
+        try await session.logout()
+    }
+
     @Test("Bot allowlist syncs via one.mbm.halo.bot_allowlist account data and restores original", .enabled(if: env["HALO_DEV_SERVER"] != nil))
     func botAllowlist() async throws {
         let session = port()
