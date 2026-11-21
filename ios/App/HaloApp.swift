@@ -136,6 +136,7 @@ private struct TimelineScreen: View {
     @State private var model: TimelineViewModel
     @State private var stickers: StickerPanelViewModel
     @State private var details: RoomDetailsViewModel?
+    @State private var title = ""
     @Environment(\.dismiss) private var dismiss
     private let root: AppRoot
     private let room: RoomID
@@ -153,6 +154,13 @@ private struct TimelineScreen: View {
     var body: some View {
         TimelineView(model: model, stickerPanel: { AnyView(StickerPanelView(model: stickers)) }).navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // The room's name, so it's clear where you are; tapping it opens the room info, like the button.
+                ToolbarItem(placement: .principal) {
+                    Button { details = root.makeRoomDetails(room: room) } label: {
+                        Text(title).font(.headline).lineLimit(1).foregroundStyle(.primary)
+                    }
+                    .accessibilityIdentifier("roomTitle")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { details = root.makeRoomDetails(room: room) } label: { Image(systemName: "info.circle") }
                         .accessibilityLabel("Room info")
@@ -165,6 +173,7 @@ private struct TimelineScreen: View {
                     profile: { member in root.makeUserProfile(member: member, onOpenRoom: { room in details = nil; openRoom(room) }) },
                     onLeft: { dismiss() })
             }
+            .task { title = await root.roomName(room) ?? "Unnamed room" }
     }
 }
 

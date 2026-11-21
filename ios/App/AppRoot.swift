@@ -244,6 +244,9 @@ final class AppRoot {
             removeAvatar: { (try? await port.removeOwnAvatar()) != nil })
     }
 
+    /// The room's display name for the timeline's title; `nil` while the list doesn't know it.
+    func roomName(_ room: RoomID) async -> String? { await roomCoordinator.rooms.first { $0.id == room }?.name }
+
     /// The room info sheet for `room` (ROOM_MANAGEMENT).
     func makeRoomDetails(room: RoomID) -> RoomDetailsViewModel { RoomDetailsViewModel(port: roomPort, room: room, images: ImagePreparer(maximumDimension: 512), media: media) }
 
