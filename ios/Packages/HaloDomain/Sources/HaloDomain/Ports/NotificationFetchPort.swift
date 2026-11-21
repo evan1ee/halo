@@ -20,8 +20,9 @@ public struct NotificationDisplay: Sendable, Equatable {
 
 public enum NotificationFetchResult: Sendable, Equatable {
     case display(NotificationDisplay)
-    /// The event is encrypted and this device can't read it (yet): "Encrypted message" in `roomName`.
-    case encrypted(roomName: String?)
+    /// The event is encrypted and this device can't read it (yet): "Encrypted message" in `roomName`, stamped with the
+    /// raw event's `origin_server_ts` (R-02).
+    case encrypted(roomName: String?, timestamp: Date?)
     /// The user's push rules or the event's state say nothing should be shown (filtered out, redacted).
     case suppressed
 }

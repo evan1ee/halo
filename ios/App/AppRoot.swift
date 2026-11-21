@@ -12,6 +12,7 @@ import HaloFoundation
 import HaloMatrixAdapter
 import HaloPersistence
 import HaloPlatform
+import Synchronization
 import UserNotifications
 
 /// Builds the object graph once at launch: platform and adapter implementations behind the ports,
@@ -25,7 +26,7 @@ final class AppRoot {
     /// `nil` when no push gateway is configured (Beta/Release until one is deployed).
     let push: PushCoordinator?
     let badge: BadgeCoordinator
-    private let records: NotificationRecordStore
+    private let activeRecords = ActiveRecordsBox()
     private let timelinePort: MatrixTimelinePort
     let receipts: ReadReceiptCoordinator
     let drafts: DraftCoordinator
@@ -71,16 +72,22 @@ final class AppRoot {
         self.devicesPort = MatrixDevicesPort(session: session)
         self.passwordPort = MatrixAccountPasswordPort(session: session)
         botAllowlistPort = MatrixBotAllowlistPort(session: session)
-        let roomCoordinator = RoomListCoordinator(port: MatrixRoomListPort(session: session), loadsAllPages: true, hiddenRooms: MatrixHiddenRoomsPort(session: session), profiles: profilePort)
-        self.roomCoordinator = roomCoordinator
         let suite = "group.\(HaloShared.namespace())"
-        records = NotificationRecordStore(suiteName: suite)
+        let legacyStorageName = "notificationRecords.v1"
+        UserDefaults(suiteName: suite)?.removeObject(forKey: legacyStorageName)
+        let recordsBox = activeRecords
+        let roomCoordinator = RoomListCoordinator(
+            port: MatrixRoomListPort(session: session, hasRecords: { room in
+                recordsBox.current?.all().contains { $0.roomID == room } ?? false
+            }),
+            loadsAllPages: true, hiddenRooms: MatrixHiddenRoomsPort(session: session), profiles: profilePort)
+        self.roomCoordinator = roomCoordinator
         let receipts = ReadReceiptCoordinator(port: MatrixReadMarkerPort(session: session), privateReceipts: AppPreferences().privateReceipts, log: log)
         self.receipts = receipts
         drafts = DraftCoordinator()
         let stickers = StickerLibrary(packs: MatrixStickerPackPort(session: session), prefs: MatrixStickerPrefsPort(session: session))
         self.stickers = stickers
-        badge = BadgeCoordinator(rooms: roomCoordinator, records: records, port: SystemBadge(suiteName: suite), receipts: receipts)
+        badge = BadgeCoordinator(rooms: roomCoordinator, port: SystemBadge(suiteName: suite), receipts: receipts)
 
         timelinePort = MatrixTimelinePort(session: session)
         botActivity = BotActivityCoordinator(timelines: timelinePort)
@@ -129,6 +136,12 @@ final class AppRoot {
                     let directory = HaloShared.storeDirectory().appendingPathComponent("halo", isDirectory: true)
                     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                     let database = try HaloDatabase(path: directory.appendingPathComponent("halo.sqlite").path)
+                    let signal = DarwinSignal()
+                    let recordStore = NotificationRecordStore(
+                        database: database, account: user,
+                        onChange: { signal.post() }, externalChanges: { signal.observe() })
+                    activeRecords.current = recordStore
+                    await badge.attach(records: recordStore)
                     await receipts.restore(from: ReadIntentStore(database: database, account: user))
                     await drafts.attach(DraftStore(database: database, account: user))
                     await botActivity.attach(BotTaskStore(database: database, account: user))
@@ -159,6 +172,8 @@ final class AppRoot {
         await badge.setAudit(nil)
         auditPort = nil
         await badge.reset()
+        await badge.attach(records: nil)
+        activeRecords.current = nil
         await drafts.reset()
         await botActivity.reset()
         await stickers.reset()
@@ -411,7 +426,7 @@ final class AppRoot {
     /// A view model for the timeline of `room`; each screen gets its own coordinator and session.
     func makeTimeline(room: RoomID) -> TimelineViewModel {
         let model = TimelineViewModel(
-            coordinator: TimelineCoordinator(port: timelinePort, room: room, records: records), media: media, previewsAllowed: { [previewPolicy] in await previewPolicy.previewsAllowed(in: room) }, receipts: receipts, room: room, drafts: drafts, images: ImagePreparer(),
+            coordinator: TimelineCoordinator(port: timelinePort, room: room, records: activeRecords.current), media: media, previewsAllowed: { [previewPolicy] in await previewPolicy.previewsAllowed(in: room) }, receipts: receipts, room: room, drafts: drafts, images: ImagePreparer(),
             // Where to land on opening: the user's own read position (a receipt from any device) at that moment.
             readThrough: { [roomCoordinator] in await roomCoordinator.rooms.first { $0.id == room }?.ownReadThrough })
         model.botSenders = Set(AppPreferences().botSenders)
@@ -461,5 +476,13 @@ final class AppRoot {
         let salt = UInt64.random(in: .min ... .max)
         UserDefaults.standard.set(salt, forKey: key)
         return salt
+    }
+}
+
+private final class ActiveRecordsBox: Sendable {
+    private let value = Mutex<(any NotificationRecordPort)?>(nil)
+    var current: (any NotificationRecordPort)? {
+        get { value.withLock { $0 } }
+        set { value.withLock { $0 = newValue } }
     }
 }

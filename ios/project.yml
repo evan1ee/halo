@@ -72,6 +72,7 @@ targets:
       - package: HaloMatrixAdapter
       - package: HaloDomain
       - package: HaloFoundation
+      - package: HaloPersistence
       - package: HaloPlatform
     settings:
       base:

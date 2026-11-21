@@ -304,4 +304,70 @@ struct BadgeCoordinatorTests {
         for _ in 0..<1_000 { await Task.yield() }
         #expect(await ticker.calls.count == 2)
     }
+
+    @Test("R-02: notification records superseded by sync or covered by serverZero are pruned and never leave a ghost badge")
+    func supersededRecordsPruned() async throws {
+        let (rooms, _, records, port, badge) = await make()
+        defer { withExtendedLifetime(badge) {} }
+        let r = try RoomID("!a:x.org")
+        let ts = Date(timeIntervalSince1970: 1_000)
+        // Push arrives before sync (e.g. UTD push stamped with event origin_server_ts).
+        records.add(NotificationRecord(roomID: r, eventID: try EventID("$utd"), timestamp: ts, isMention: false))
+        try rooms.emit(.reset([RoomSummary(id: r, name: "a", isDirect: true, isEncrypted: true, membership: .joined)]))
+        #expect(await eventually { port.badge == 1 })
+
+        // User reads on A2 and sync delivers the decrypted event (serverZero + latestEvent == ts, ownReadThrough nil).
+        try rooms.emit(.reset([RoomSummary(
+            id: r, name: "a", isDirect: true, isEncrypted: true, membership: .joined,
+            read: .none, latestEvent: LatestEventRef(timestamp: ts, senderIsSelf: false))]))
+        #expect(await eventually { port.badge == 0 && records.all().isEmpty })
+    }
+
+    @Test("R-03: records for left, hidden, ignored-inviter rooms and signed-out accounts are pruned and excluded from the badge")
+    func recordsPrunedOnLeaveHideIgnoreAndReset() async throws {
+        let rooms = FakeRoomListPort()
+        let hidden = FakeHiddenRooms()
+        let profiles = FakeProfilePort()
+        let coordinator = RoomListCoordinator(port: rooms, hiddenRooms: hidden, profiles: profiles)
+        let records = FakeNotificationRecords()
+        let port = FakeBadgePort()
+        let badge = BadgeCoordinator(rooms: coordinator, records: records, port: port)
+        await badge.begin()
+        await coordinator.start()
+
+        let leftRoom = try RoomID("!left:x.org")
+        let hiddenRoom = try RoomID("!pack:x.org")
+        let ignoredRoom = try RoomID("!spam:x.org")
+        let keepRoom = try RoomID("!keep:x.org")
+        let spammer = try UserID("@spam:x.org")
+
+        records.add(try record(leftRoom.rawValue, "$1"))
+        records.add(try record(hiddenRoom.rawValue, "$2"))
+        records.add(try record(ignoredRoom.rawValue, "$3"))
+        records.add(try record(keepRoom.rawValue, "$4"))
+
+        hidden.set([hiddenRoom])
+        try await profiles.ignore(spammer)
+        try rooms.emit(.reset([
+            try summary(hiddenRoom.rawValue),
+            RoomSummary(id: ignoredRoom, name: "Spam", isDirect: true, isEncrypted: false, membership: .invited, inviter: "Spam", inviterID: spammer),
+            try summary(keepRoom.rawValue),
+        ]))
+        rooms.emitLeft([leftRoom])
+
+        #expect(await eventually {
+            port.history.last == [keepRoom] && Set(records.all().map(\.roomID)) == [keepRoom]
+        })
+
+        // forget(_:) clears records for a room the user leaves here.
+        await badge.forget(keepRoom)
+        #expect(records.all().isEmpty)
+        #expect(await badge.badge == 0)
+
+        // reset() clears all records on sign-out / account switch.
+        records.add(try record("!old:x.org", "$9"))
+        await badge.reset()
+        #expect(records.all().isEmpty)
+        #expect(port.badge == 0)
+    }
 }

@@ -258,9 +258,10 @@ private struct Rig {
     func state(_ room: RoomID) async -> RoomReadState {
         let input = world.input(room)
         let read = [await receipts.readPosition(of: room), input.localIntent].compactMap { $0 }.max()
-        let notified = records.all()
-            .filter { record in record.roomID == room && (read.map { record.timestamp > $0 } ?? true) }
-            .map { NotifiedRef(timestamp: $0.timestamp, isMention: $0.isMention) }
+        let base = RoomReadInputs(
+            roomID: room, membership: input.membership, isEncrypted: input.isEncrypted, counts: input.counts,
+            latestEvent: input.latestEvent, localIntent: read, receiptReadThrough: input.receiptReadThrough)
+        let notified = ReadStatePolicy.partitionRecords(for: base, records: records.all()).unconfirmed
         return ReadStatePolicy.evaluate(RoomReadInputs(
             roomID: room, membership: input.membership, isEncrypted: input.isEncrypted, counts: input.counts,
             latestEvent: input.latestEvent, localIntent: read, receiptReadThrough: input.receiptReadThrough, unconfirmedNotified: notified))
@@ -281,7 +282,7 @@ private func eventually(_ condition: @Sendable () -> Bool) async -> Bool {
     return false
 }
 
-@Suite("Read-state scenarios S01–S24")
+@Suite("Read-state scenarios S01–S27")
 struct ReadStateScenarioTests {
     @Test("S01: B sends 5, A1 views them: no attention, receipt at the 5th, badge 0")
     func s01() async throws {
@@ -794,6 +795,80 @@ struct ReadStateScenarioTests {
         await ahead.view(r3, m)  // reported here, not yet on the server
         state = await ahead.state(r3)
         #expect(!state.attention && state.reasons == [.intentCovers])
+    }
+
+    @Test("S25: encrypted DM, UTD push stamped with event ts, sync delivers and decrypts, A reads on A2: no attention and record pruned without opening (R-02)")
+    func s25() async throws {
+        var rig = Rig()
+        let r = rig.addRoom(encrypted: true, mode: .allMessages)
+        let id = rig.send(r)
+        // NSE couldn't decrypt the push, but stamped the record with the raw event's origin_server_ts (not Date()).
+        rig.records.add(NotificationRecord(roomID: r, eventID: id, timestamp: rig.world.ts(id), isMention: false))
+        let port = FakeRoomListPort()
+        let list = RoomListCoordinator(port: port)
+        let badgePort = FakeBadgePort()
+        let badge = BadgeCoordinator(rooms: list, records: rig.records, port: badgePort, receipts: rig.receipts)
+        await badge.begin()
+        await list.start()
+        try port.emit(.reset([rig.world.summary(r)]))
+        #expect(await eventually { badgePort.badge == 1 })
+
+        // Sync delivers and decrypts the event (still unread → attention from SDK counts, record superseded and pruned).
+        let records = rig.records
+        rig.sync()
+        try port.emit(.reset([rig.world.summary(r)]))
+        #expect(await eventually { records.all().isEmpty })
+        #expect(badgePort.badge == 1)
+
+        // A reads on A2 and A1 syncs: attention drops to 0 without opening the room on A1.
+        rig.a2Reads(r, id)
+        rig.sync()
+        try port.emit(.reset([rig.world.summary(r)]))
+        #expect(await eventually { badgePort.history.last == [] })
+        #expect(rig.records.all().isEmpty)
+    }
+
+    @Test("S26: room with a notification record is left on A2 while A1 is closed; A1 syncs and badge excludes it (R-03)")
+    func s26() async throws {
+        let port = FakeRoomListPort()
+        let list = RoomListCoordinator(port: port)
+        let records = FakeNotificationRecords()
+        let badgePort = FakeBadgePort()
+        let badge = BadgeCoordinator(rooms: list, records: records, port: badgePort)
+        let left = try RoomID("!left:x.org")
+        records.add(NotificationRecord(roomID: left, eventID: try EventID("$e1"), timestamp: Date(timeIntervalSince1970: 100), isMention: false))
+        await badge.begin()
+        await list.start()
+        try port.emit(.reset([]))
+        #expect(await eventually { badgePort.history.last == [left] })
+
+        // Sync delivers `rooms.left` containing the room left on A2.
+        port.emitLeft([left])
+        #expect(await eventually { badgePort.history.last == [] && records.all().isEmpty })
+    }
+
+    @Test("S27: sign out account X (records exist), sign in account Y: Y's badge has no X rooms (R-03)")
+    func s27() async throws {
+        let port = FakeRoomListPort()
+        let list = RoomListCoordinator(port: port)
+        let recordsX = FakeNotificationRecords()
+        let recordsY = FakeNotificationRecords()
+        let badgePort = FakeBadgePort()
+        let badge = BadgeCoordinator(rooms: list, records: recordsX, port: badgePort)
+        let roomX = try RoomID("!x:x.org")
+        recordsX.add(NotificationRecord(roomID: roomX, eventID: try EventID("$x1"), timestamp: Date(timeIntervalSince1970: 100), isMention: false))
+        await badge.begin()
+        await list.start()
+        try port.emit(.reset([]))
+        #expect(await eventually { badgePort.history.last == [roomX] })
+
+        // Account X signs out, account Y signs in with its own record store.
+        await badge.reset()
+        await badge.attach(records: recordsY)
+        try port.emit(.reset([]))
+        #expect(recordsX.all().isEmpty)
+        #expect(await eventually { badgePort.history.last == [] })
+        #expect(await badge.attentionRooms.isEmpty)
     }
 
 }

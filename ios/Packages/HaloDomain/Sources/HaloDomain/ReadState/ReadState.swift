@@ -148,21 +148,61 @@ public struct RoomReadState: Sendable, Equatable {
     public let hasUnread: Bool
     public let display: DisplayCount
     public let confidence: Confidence
+    /// No notifying event up to this timestamp is unread (UNREAD_STATE §5): drives record pruning and clearing.
+    public let notifiedThroughTs: Date?
     public let reasons: Set<ReasonCode>
 
-    public init(roomID: RoomID, attention: Bool, hasUnread: Bool, display: DisplayCount, confidence: Confidence, reasons: Set<ReasonCode>) {
+    public init(
+        roomID: RoomID, attention: Bool, hasUnread: Bool, display: DisplayCount, confidence: Confidence,
+        notifiedThroughTs: Date? = nil, reasons: Set<ReasonCode>
+    ) {
         self.roomID = roomID
         self.attention = attention
         self.hasUnread = hasUnread
         self.display = display
         self.confidence = confidence
+        self.notifiedThroughTs = notifiedThroughTs
         self.reasons = reasons
     }
 }
 
-/// The pure, total, deterministic read-state policy (UNREAD_STATE §5). Not yet: the clearing/`notifiedThroughTs` outputs
-/// (they need the notification records of M3).
+/// The pure, total, deterministic read-state policy (UNREAD_STATE §5).
 public enum ReadStatePolicy {
+    /// The timestamp up to which no notifying event is unread (UNREAD_STATE §5): the maximum of `localIntent` (read
+    /// position) and, when `serverZero` holds, `latestEvent.timestamp`.
+    public static func notifiedThrough(for input: RoomReadInputs) -> Date? {
+        let serverCanCount = !input.isEncrypted || input.counts.mode == .allMessages
+        let serverZero = input.counts.server == .zero && serverCanCount
+        return [input.localIntent, serverZero ? input.latestEvent?.timestamp : nil].compactMap { $0 }.max()
+    }
+
+    /// Splits `records` for `input.roomID` into those still unconfirmed (feed rule E4) and those covered by the read
+    /// position / `notifiedThroughTs` or superseded by sync (R-02, UNREAD_STATE §2/§5).
+    ///
+    /// A record is superseded when sync has already delivered an event at or after it (`record.timestamp <= latest.timestamp`),
+    /// except for an encrypted mention when the SDK counts zero mentions (a mention sitting inside a timeline gap, S22).
+    public static func partitionRecords(for input: RoomReadInputs, records: [NotificationRecord]) -> (unconfirmed: [NotifiedRef], superseded: Set<EventID>) {
+        let coveredThrough = notifiedThrough(for: input)
+        let latestTs = input.latestEvent?.timestamp
+        var unconfirmed: [NotifiedRef] = []
+        var superseded: Set<EventID> = []
+        for record in records where record.roomID == input.roomID {
+            if let coveredThrough, record.timestamp <= coveredThrough {
+                superseded.insert(record.eventID)
+                continue
+            }
+            if let latestTs, record.timestamp <= latestTs {
+                let encryptedGapMention = input.isEncrypted && record.isMention && input.counts.sdk.unreadMentions == 0
+                if !encryptedGapMention {
+                    superseded.insert(record.eventID)
+                    continue
+                }
+            }
+            unconfirmed.append(NotifiedRef(timestamp: record.timestamp, isMention: record.isMention))
+        }
+        return (unconfirmed, superseded)
+    }
+
     public static func evaluate(_ input: RoomReadInputs) -> RoomReadState {
         let id = input.roomID
         // E0: an invite always needs attention; a room the user isn't in never does.
@@ -176,6 +216,7 @@ public enum ReadStatePolicy {
         let counts = input.counts
         let serverCanCount = !input.isEncrypted || counts.mode == .allMessages
         let serverZero = counts.server == .zero && serverCanCount
+        let notifiedThrough = Self.notifiedThrough(for: input)
         var reasons: Set<ReasonCode> = []
         var notify = 0
         var highlight = 0
@@ -265,7 +306,9 @@ public enum ReadStatePolicy {
         } else {
             display = .dot
         }
-        return RoomReadState(roomID: id, attention: attention, hasUnread: hasUnread, display: display, confidence: confidence, reasons: reasons)
+        return RoomReadState(
+            roomID: id, attention: attention, hasUnread: hasUnread, display: display, confidence: confidence,
+            notifiedThroughTs: notifiedThrough, reasons: reasons)
     }
 }
 

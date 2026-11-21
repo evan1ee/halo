@@ -12,6 +12,7 @@ public struct HaloDatabase: Sendable {
         do {
             var configuration = Configuration()
             configuration.label = "halo.sqlite"
+            configuration.busyMode = .timeout(5)
             pool = try DatabasePool(path: path, configuration: configuration)
             try Self.migrator.migrate(pool)
         } catch {
@@ -92,6 +93,17 @@ public struct HaloDatabase: Sendable {
         }
         migrator.registerMigration("v6-bot-task-source-redacted") { db in
             try db.execute(sql: "ALTER TABLE bot_task ADD COLUMN source_redacted INTEGER NOT NULL DEFAULT 0")
+        }
+        migrator.registerMigration("v7-notification-record") { db in
+            try db.execute(sql: """
+                CREATE TABLE notification_record (
+                  account TEXT NOT NULL, event_id TEXT NOT NULL, room_id TEXT NOT NULL,
+                  event_ts INTEGER NOT NULL, is_mention INTEGER NOT NULL, delivered_at INTEGER NOT NULL,
+                  source TEXT NOT NULL CHECK (source IN ('nse','app')),
+                  PRIMARY KEY (account, event_id)
+                )
+                """)
+            try db.execute(sql: "CREATE INDEX notification_record_room ON notification_record(account, room_id, event_ts)")
         }
         return migrator
     }

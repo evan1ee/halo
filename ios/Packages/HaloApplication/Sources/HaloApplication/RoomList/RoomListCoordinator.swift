@@ -28,6 +28,7 @@ public actor RoomListCoordinator {
     private var allRooms: [RoomSummary] = []
     private var hidden: Set<RoomID> = []
     private var ignored: Set<UserID> = []
+    private var left: Set<RoomID> = []
     public private(set) var status: Status = .idle {
         didSet { if status != oldValue { broadcaster.publish(status) } }
     }
@@ -43,7 +44,10 @@ public actor RoomListCoordinator {
     private var readInputsCache: [RoomReadInputs] = []
     private var summaryBroadcaster = SnapshotBroadcaster<[RoomSummary]>()
     private var summaryCache: [RoomSummary] = []
+    private var excludedBroadcaster = SnapshotBroadcaster<Set<RoomID>>()
+    private var excludedCache: Set<RoomID> = []
     private var subscription: Task<Void, Never>?
+    private var leftSubscription: Task<Void, Never>?
     private var generation = 0
     private var consecutiveFailures = 0
     private var diffsInSubscription = 0
@@ -61,6 +65,7 @@ public actor RoomListCoordinator {
 
     deinit {
         subscription?.cancel()
+        leftSubscription?.cancel()
     }
 
     /// The current status, then its changes; latest value wins (CONCURRENCY §3).
@@ -75,6 +80,10 @@ public actor RoomListCoordinator {
     /// The visible rooms whenever any field of any room changed (a rename, a favourite, a new latest event), not only the read inputs.
     public func summaryChanges() -> AsyncStream<[RoomSummary]> { summaryBroadcaster.subscribe(current: summaryCache) }
 
+    /// Rooms that must not count towards attention and whose notification records should be pruned: left rooms, hidden
+    /// sticker-pack rooms, and pending invitations from ignored users (R-03).
+    public func excludedRoomChanges() -> AsyncStream<Set<RoomID>> { excludedBroadcaster.subscribe(current: excludedCache) }
+
     public func start(filter: RoomListFilter = .all) {
         consecutiveFailures = 0
         requestedAt = 0
@@ -84,9 +93,13 @@ public actor RoomListCoordinator {
     public func stop() {
         subscription?.cancel()
         subscription = nil
+        leftSubscription?.cancel()
+        leftSubscription = nil
         generation += 1
         hidden = []
         ignored = []
+        left = []
+        publishExcluded()
         status = .idle
     }
 
@@ -104,16 +117,29 @@ public actor RoomListCoordinator {
 
     private func subscribe(filter: RoomListFilter) {
         subscription?.cancel()
+        leftSubscription?.cancel()
         generation += 1
         diffsInSubscription = 0
         let current = generation
         status = .loading
         let diffs = port.rooms(filter: filter)
+        let leftStream = port.leftRooms()
         subscription = Task { [weak self] in
             for await diff in diffs {
                 guard let self, await self.apply(diff, generation: current, filter: filter) else { return }
             }
         }
+        leftSubscription = Task { [weak self] in
+            for await rooms in leftStream {
+                await self?.roomsLeft(rooms, generation: current)
+            }
+        }
+    }
+
+    private func roomsLeft(_ rooms: Set<RoomID>, generation: Int) {
+        guard generation == self.generation, !rooms.isEmpty else { return }
+        left.formUnion(rooms)
+        publishExcluded()
     }
 
     /// Reads the hidden set again; when it changed, the list and the read inputs are published anew.
@@ -131,6 +157,7 @@ public actor RoomListCoordinator {
         if case .loaded = status { status = .loaded(roomCount: rooms.count) }
         publishReadInputs()
         publishSummaries()
+        publishExcluded()
     }
 
     /// Reads the ignored-user list when pending invitations exist, so invitations from ignored users stay hidden.
@@ -148,6 +175,19 @@ public actor RoomListCoordinator {
         if case .loaded = status { status = .loaded(roomCount: rooms.count) }
         publishReadInputs()
         publishSummaries()
+        publishExcluded()
+    }
+
+    private func publishExcluded() {
+        var current = hidden.union(left)
+        if !ignored.isEmpty {
+            for room in allRooms where room.membership == .invited {
+                if let inviter = room.inviterID, ignored.contains(inviter) { current.insert(room.id) }
+            }
+        }
+        guard current != excludedCache else { return }
+        excludedCache = current
+        excludedBroadcaster.publish(current)
     }
 
     private func publishSummaries() {
@@ -169,6 +209,10 @@ public actor RoomListCoordinator {
         guard generation == self.generation else { return false }
         do {
             try RoomListReducer.apply(diff, to: &allRooms)
+            // If a previously left room was rejoined or re-invited, it is no longer left.
+            if !left.isEmpty {
+                left.subtract(allRooms.map(\.id))
+            }
             diffsInSubscription += 1
             // The first diff of a subscription is the port's fresh start (.reset), which always
             // applies; only a later diff proves the stream is healthy again.
@@ -176,6 +220,7 @@ public actor RoomListCoordinator {
             status = .loaded(roomCount: rooms.count)
             publishReadInputs()
             publishSummaries()
+            publishExcluded()
             if loadsAllPages, allRooms.count > requestedAt {
                 requestedAt = allRooms.count
                 Task { [port] in try? await port.loadMore() }

@@ -34,13 +34,16 @@ enum NotificationMapper {
         let sender = item.senderInfo.displayName ?? "Someone"
         switch item.event {
         case .invite(let inviter):
-            return .display(NotificationDisplay(title: item.roomInfo.displayName, body: "\(item.senderInfo.displayName ?? inviter) invited you"))
+            return .display(NotificationDisplay(
+                title: item.roomInfo.displayName,
+                body: "\(item.senderInfo.displayName ?? inviter) invited you",
+                timestamp: rawEventTimestamp(item.rawEvent)))
         case .timeline(let event):
             guard let content = try? event.content() else { return .suppressed }
             guard case .messageLike(let like) = content else { return .suppressed }
             switch like {
             case .roomEncrypted:
-                return .encrypted(roomName: item.roomInfo.displayName)
+                return .encrypted(roomName: item.roomInfo.displayName, timestamp: eventTimestamp(event, rawEvent: item.rawEvent))
             case .roomMessage(let type, _):
                 return .display(stamped(shape(sender: sender, room: item.roomInfo.displayName, isDirect: item.roomInfo.isDirect, text: text(of: type)), event: event, item: item))
             case .sticker:
@@ -53,8 +56,23 @@ enum NotificationMapper {
 
     private static func stamped(_ display: NotificationDisplay, event: MatrixRustSDK.TimelineEvent, item: NotificationItem) -> NotificationDisplay {
         NotificationDisplay(
-            title: display.title, body: display.body, timestamp: Date(timeIntervalSince1970: Double(event.timestamp()) / 1000),
+            title: display.title, body: display.body, timestamp: eventTimestamp(event, rawEvent: item.rawEvent),
             isMention: item.hasMention ?? false)
+    }
+
+    /// The event's `origin_server_ts`, from the SDK event or (as a fallback) from `rawEvent` JSON (R-02).
+    static func eventTimestamp(_ event: MatrixRustSDK.TimelineEvent, rawEvent: String) -> Date? {
+        let ms = event.timestamp()
+        if ms > 0 { return Date(timeIntervalSince1970: Double(ms) / 1000) }
+        return rawEventTimestamp(rawEvent)
+    }
+
+    /// Parses `origin_server_ts` (milliseconds since epoch) from a raw Matrix event JSON string (R-02).
+    static func rawEventTimestamp(_ rawEvent: String) -> Date? {
+        guard let data = rawEvent.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let ms = (object["origin_server_ts"] as? NSNumber)?.doubleValue, ms > 0 else { return nil }
+        return Date(timeIntervalSince1970: ms / 1000)
     }
 
     /// A direct chat shows the sender as the title; a group shows the room as the title and "Sender: text" as the body.

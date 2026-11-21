@@ -141,6 +141,39 @@ struct ReadStatePolicyTests {
         #expect(!quiet.attention && quiet.hasUnread)
     }
 
+    @Test("R-02: partitionRecords covers records up to notifiedThroughTs, supersedes synced events, and keeps encrypted gap mentions (S22)")
+    func partitionRecords() throws {
+        let e1 = try EventID("$1"), e2 = try EventID("$2"), e3 = try EventID("$3")
+        let r1 = NotificationRecord(roomID: room, eventID: e1, timestamp: t0, isMention: false)
+        let r2 = NotificationRecord(roomID: room, eventID: e2, timestamp: t0 + 10, isMention: true)
+        let r3 = NotificationRecord(roomID: room, eventID: e3, timestamp: t0 + 20, isMention: false)
+
+        // Covered by serverZero + latestEvent even when localIntent is nil.
+        let readByServerZero = inputs(latest: LatestEventRef(timestamp: t0 + 10, senderIsSelf: false))
+        #expect(ReadStatePolicy.notifiedThrough(for: readByServerZero) == t0 + 10)
+        let p1 = ReadStatePolicy.partitionRecords(for: readByServerZero, records: [r1, r2, r3])
+        #expect(p1.superseded == [e1, e2])
+        #expect(p1.unconfirmed == [NotifiedRef(timestamp: t0 + 20, isMention: false)])
+
+        // Superseded by sync when latestEvent reached the record's timestamp (even while unread).
+        let syncedUnread = inputs(
+            encrypted: true, server: ServerCounts(notification: 1, highlight: 0),
+            sdk: SDKCounts(unreadMessages: 1, unreadNotifications: 1, unreadMentions: 0),
+            latest: LatestEventRef(timestamp: t0, senderIsSelf: false))
+        let p2 = ReadStatePolicy.partitionRecords(for: syncedUnread, records: [r1])
+        #expect(p2.superseded == [e1] && p2.unconfirmed.isEmpty)
+
+        // S22: encrypted mentions-only room with a mention in a timeline gap (sdk.unreadMentions == 0) is NOT superseded by a newer latestEvent.
+        let gapMention = inputs(
+            encrypted: true, mode: .mentionsAndKeywords,
+            sdk: SDKCounts(unreadMessages: 5, unreadNotifications: 0, unreadMentions: 0),
+            latest: LatestEventRef(timestamp: t0 + 30, senderIsSelf: false))
+        #expect(ReadStatePolicy.notifiedThrough(for: gapMention) == nil)
+        let p3 = ReadStatePolicy.partitionRecords(for: gapMention, records: [r1, r2])
+        #expect(p3.superseded == [e1])
+        #expect(p3.unconfirmed == [NotifiedRef(timestamp: t0 + 10, isMention: true)])
+    }
+
     @Test("E5 and modes: marked unread forces attention everywhere; mute and mentions modes suppress counts")
     func modesAndMarkedUnread() {
         let counted = ServerCounts(notification: 3, highlight: 0)

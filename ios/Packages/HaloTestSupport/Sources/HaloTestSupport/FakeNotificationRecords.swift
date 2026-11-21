@@ -28,9 +28,34 @@ public final class FakeNotificationRecords: NotificationRecordPort {
     }
 
     public func clear(room: RoomID) {
+        clear(rooms: [room])
+    }
+
+    public func clear(rooms: Set<RoomID>) {
+        guard !rooms.isEmpty else { return }
         let continuations = state.withLock { state -> [AsyncStream<Void>.Continuation] in
-            state.records.removeAll { $0.roomID == room }
-            return Array(state.continuations.values)
+            let before = state.records.count
+            state.records.removeAll { rooms.contains($0.roomID) }
+            return state.records.count == before ? [] : Array(state.continuations.values)
+        }
+        for continuation in continuations { continuation.yield() }
+    }
+
+    public func remove(events: Set<EventID>) {
+        guard !events.isEmpty else { return }
+        let continuations = state.withLock { state -> [AsyncStream<Void>.Continuation] in
+            let before = state.records.count
+            state.records.removeAll { events.contains($0.eventID) }
+            return state.records.count == before ? [] : Array(state.continuations.values)
+        }
+        for continuation in continuations { continuation.yield() }
+    }
+
+    public func clearAll() {
+        let continuations = state.withLock { state -> [AsyncStream<Void>.Continuation] in
+            let hadAny = !state.records.isEmpty
+            state.records.removeAll()
+            return hadAny ? Array(state.continuations.values) : []
         }
         for continuation in continuations { continuation.yield() }
     }

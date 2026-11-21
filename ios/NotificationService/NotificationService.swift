@@ -1,15 +1,14 @@
 import HaloDomain
 import HaloFoundation
 import HaloMatrixAdapter
+import HaloPersistence
 import HaloPlatform
 import UserNotifications
 
 /// Notification service extension (docs/matrix/PUSH_NOTIFICATIONS.md §3, gate G-NSE, ADR-0016). A push is only a hint
-/// (D65): this fetches the event it points at through the SDK, decrypts it, and rewrites the notification with the
-/// sender and text. It never sets `aps.badge` and never creates attention from a payload (AGENTS.md §17).
-///
-/// Spike scope: fetch + content + metrics. Not yet: de-duplication records, read-state suppression, badge
-/// recomputation, communication-notification intents, timeout injection tests.
+/// (D65): this fetches the event it points at through the SDK, decrypts it, records it in `halo.sqlite`
+/// (`notification_record`, R-13), and rewrites the notification with the sender and text. It never sets `aps.badge`
+/// from a payload and never creates attention from a payload (AGENTS.md §17).
 final class NotificationService: UNNotificationServiceExtension, @unchecked Sendable {
     private var handler: ((UNNotificationContent) -> Void)?
     private var original: UNNotificationContent?
@@ -40,29 +39,38 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
         let content = (request.content.mutableCopy() as? UNMutableNotificationContent) ?? UNMutableNotificationContent()
         content.badge = nil  // the badge is never taken from a push (ADR-0015); it is set below from local state
         let suite = "group.\(HaloShared.namespace())"
-        let records = NotificationRecordStore(suiteName: suite)
         do {
             guard let data = try await HaloShared.keychain().read(.session) else { return deliver(request.content, outcome: "no-session", metrics: metrics) }
             let stored = try JSONDecoder().decode(StoredSession.self, from: data)
             metrics.step("keychain")
+            let directory = HaloShared.storeDirectory().appendingPathComponent("halo", isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let database = try HaloDatabase(path: directory.appendingPathComponent("halo.sqlite").path)
+            let signal = DarwinSignal()
+            let records = NotificationRecordStore(database: database, account: stored.userID, onChange: { signal.post() })
             let session = MatrixSessionPort(baseDirectory: HaloShared.storeDirectory(), holderName: "nse", sendsMessages: false, lightweightRuntime: true)
             try await session.restore(stored)
             metrics.step("restore")
             let result = try await MatrixNotificationPort(session: session).fetch(room: room, event: event)
             metrics.step("fetch")
+            let now = Date()
             switch result {
             case .display(let display):
                 content.title = display.title
                 content.body = display.body
                 content.threadIdentifier = room.rawValue
-                records.add(NotificationRecord(roomID: room, eventID: event, timestamp: display.timestamp ?? Date(), isMention: display.isMention))
+                records.add(NotificationRecord(
+                    roomID: room, eventID: event, timestamp: display.timestamp ?? now,
+                    isMention: display.isMention, deliveredAt: now, source: .nse))
                 content.badge = NSNumber(value: badge(suite: suite, records: records))
                 deliver(content, outcome: "display", metrics: metrics)
-            case .encrypted(let roomName):
+            case .encrypted(let roomName, let timestamp):
                 content.title = roomName ?? "Halo"
                 content.body = "Encrypted message"
                 content.threadIdentifier = room.rawValue
-                records.add(NotificationRecord(roomID: room, eventID: event, timestamp: Date(), isMention: false))
+                records.add(NotificationRecord(
+                    roomID: room, eventID: event, timestamp: timestamp ?? now,
+                    isMention: false, deliveredAt: now, source: .nse))
                 content.badge = NSNumber(value: badge(suite: suite, records: records))
                 deliver(content, outcome: "encrypted", metrics: metrics)
             case .suppressed:

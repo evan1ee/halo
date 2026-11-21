@@ -10,6 +10,7 @@ public final class FakeRoomListPort: RoomListPort {
         var rooms: [RoomSummary] = []
         var filter: RoomListFilter = .all
         var continuations: [UUID: AsyncStream<RoomListDiff>.Continuation] = [:]
+        var leftContinuations: [UUID: AsyncStream<Set<RoomID>>.Continuation] = [:]
         var loadMoreCalls = 0
         var subscriptions = 0
     }
@@ -35,6 +36,13 @@ public final class FakeRoomListPort: RoomListPort {
     /// Ends every open subscription, as when sync stops.
     public func finishSubscriptions() {
         for continuation in state.withLock({ Array($0.continuations.values) }) { continuation.finish() }
+        for continuation in state.withLock({ Array($0.leftContinuations.values) }) { continuation.finish() }
+    }
+
+    /// Reports rooms that were left/kicked/banned in sync (`rooms.left`).
+    public func emitLeft(_ rooms: Set<RoomID>) {
+        guard !rooms.isEmpty else { return }
+        for continuation in state.withLock({ Array($0.leftContinuations.values) }) { continuation.yield(rooms) }
     }
 
     public var currentFilter: RoomListFilter { state.withLock { $0.filter } }
@@ -63,5 +71,13 @@ public final class FakeRoomListPort: RoomListPort {
 
     public func setFilter(_ filter: RoomListFilter) async throws(HaloError) {
         state.withLock { $0.filter = filter }
+    }
+
+    public func leftRooms() -> AsyncStream<Set<RoomID>> {
+        let (stream, continuation) = AsyncStream<Set<RoomID>>.makeStream(bufferingPolicy: .unbounded)
+        let id = UUID()
+        state.withLock { $0.leftContinuations[id] = continuation }
+        continuation.onTermination = { [weak self] _ in self?.state.withLock { _ = $0.leftContinuations.removeValue(forKey: id) } }
+        return stream
     }
 }

@@ -3,10 +3,10 @@ import HaloDomain
 import HaloFoundation
 
 /// Keeps the app badge equal to the number of rooms that need attention, recomputed from the room list's read inputs
-/// and the notification records on every change (D5, D9: never incremented). Because Synapse's native sliding sync
-/// serves no notification counts (V-RS-7), the room list alone can't show unread: a notifying event the extension
-/// fetched is a record (rule E4) that counts until the user reads the room here. The extension doesn't write the
-/// badge from its own counter: it recomputes the same union (UNREAD_STATE §2, C5).
+/// and the notification records on every change (D5, D9: never incremented). A notifying event the extension fetched
+/// through the SDK is a provisional record (rule E4, UNREAD_STATE §2) that counts until sync delivers the event or
+/// the user reads the room; records are pruned when superseded, covered, or when the room is left/hidden/ignored or
+/// the account signs out (R-02, R-03).
 public actor BadgeCoordinator {
     public typealias Sleep = @Sendable (Duration) async throws -> Void
     /// How often the read-state auditor re-runs while the app is in the foreground (LOGGING_AND_DIAGNOSTICS §2).
@@ -17,7 +17,7 @@ public actor BadgeCoordinator {
     private var hasWritten = false
 
     private let rooms: RoomListCoordinator
-    private let records: any NotificationRecordPort
+    private var records: (any NotificationRecordPort)?
     private let port: any BadgePort
     private let receipts: ReadReceiptCoordinator?
     private var audit: Audit?
@@ -28,6 +28,8 @@ public actor BadgeCoordinator {
     private var carried: Set<RoomID> = []
     /// Rooms the list has shown in this run; once shown, a room that disappears from the list is dropped, not carried.
     private var seen: Set<RoomID> = []
+    /// Rooms that must not count towards attention (left, hidden sticker-pack rooms, ignored-inviter invites, R-03).
+    private var excludedRooms: Set<RoomID> = []
 
     /// Where the read-state auditor writes (LOGGING_AND_DIAGNOSTICS §2): debug and TestFlight builds only.
     public struct Audit: Sendable {
@@ -46,13 +48,14 @@ public actor BadgeCoordinator {
     private var positions: [RoomID: Date] = [:]
     private var inputs: [RoomReadInputs] = []
     private var tasks: [Task<Void, Never>] = []
+    private var recordsTask: Task<Void, Never>?
     private let auditInterval: Duration
     private let sleep: Sleep
     private var isForeground = false
     private var periodicAudit: Task<Void, Never>?
 
     public init(
-        rooms: RoomListCoordinator, records: any NotificationRecordPort, port: any BadgePort,
+        rooms: RoomListCoordinator, records: (any NotificationRecordPort)? = nil, port: any BadgePort,
         receipts: ReadReceiptCoordinator? = nil, auditInterval: Duration = BadgeCoordinator.defaultAuditInterval,
         sleep: @escaping Sleep = { try await Task.sleep(for: $0) }
     ) {
@@ -66,6 +69,7 @@ public actor BadgeCoordinator {
 
     deinit {
         for task in tasks { task.cancel() }
+        recordsTask?.cancel()
         periodicAudit?.cancel()
     }
 
@@ -74,7 +78,7 @@ public actor BadgeCoordinator {
         guard tasks.isEmpty else { return }
         carried = await port.lastAttention()
         let roomInputs = await rooms.readInputs()
-        let changes = records.changes()
+        let excluded = await rooms.excludedRoomChanges()
         var follow: [Task<Void, Never>] = []
         if let receipts {
             let positions = await receipts.positions()
@@ -82,8 +86,26 @@ public actor BadgeCoordinator {
         }
         tasks = follow + [
             Task { [weak self] in for await inputs in roomInputs { await self?.roomsChanged(inputs) } },
-            Task { [weak self] in for await _ in changes { await self?.recompute() } },
+            Task { [weak self] in for await rooms in excluded { await self?.excludedChanged(rooms) } },
         ]
+        observeRecords()
+    }
+
+    /// Attaches (or, with `nil`, detaches) the signed-in account's persistent notification record store (R-13).
+    public func attach(records: (any NotificationRecordPort)?) async {
+        self.records = records
+        if !tasks.isEmpty { observeRecords() }
+        if records != nil { await recompute() }
+    }
+
+    private func observeRecords() {
+        recordsTask?.cancel()
+        recordsTask = nil
+        guard let records else { return }
+        let changes = records.changes()
+        recordsTask = Task { [weak self] in
+            for await _ in changes { await self?.recompute() }
+        }
     }
 
     /// Starts (or, with `nil`, stops) the auditor. The audit store belongs to an account, so it is attached once the
@@ -101,10 +123,12 @@ public actor BadgeCoordinator {
         updatePeriodicAudit()
     }
 
-    /// Drops the stored state of `room` (the user left it) so it isn't carried over.
+    /// Drops the stored state and notification records of `room` (the user left it) so it isn't carried over (R-03).
     public func forget(_ room: RoomID) async {
         carried.remove(room)
         seen.insert(room)
+        excludedRooms.insert(room)
+        records?.clear(room: room)
         await recompute()
     }
 
@@ -115,16 +139,18 @@ public actor BadgeCoordinator {
         await recompute()
     }
 
-    /// Account change or sign-out: forgets everything, including the stored set, and clears the badge.
+    /// Account change or sign-out: forgets everything, including the stored set and notification records, and clears the badge (R-03).
     public func reset() async {
         periodicAudit?.cancel()
         periodicAudit = nil
         carried = []
         seen = []
+        excludedRooms = []
         inputs = []
         attentionRooms = []
         hasWritten = false
         audited = [:]
+        records?.clearAll()
         await port.reset()
     }
 
@@ -132,32 +158,42 @@ public actor BadgeCoordinator {
     public var badge: Int { attentionRooms.count }
 
     /// The attention set for `inputs` and `records`: every room whose state needs attention, plus rooms that have
-    /// records but aren't in the loaded list (their only evidence is the push).
-    public static func attention(inputs: [RoomReadInputs], records: [NotificationRecord], positions: [RoomID: Date] = [:]) -> Set<RoomID> {
+    /// records but aren't in the loaded list (excluding left/hidden/ignored rooms, R-03).
+    public static func attention(
+        inputs: [RoomReadInputs], records: [NotificationRecord], positions: [RoomID: Date] = [:], excluded: Set<RoomID> = []
+    ) -> Set<RoomID> {
         let byRoom = Dictionary(grouping: records, by: \.roomID)
         var result = Set(evaluated(inputs: inputs, records: records, positions: positions).filter(\.state.attention).map(\.input.roomID))
         let known = Set(inputs.map(\.roomID))
-        for room in byRoom.keys where !known.contains(room) { result.insert(room) }
+        for room in byRoom.keys where !known.contains(room) && !excluded.contains(room) { result.insert(room) }
         return result
     }
 
     /// The policy's output for each room with the inputs it was given (the read position and the unconfirmed pushes folded in).
     public static func evaluated(inputs: [RoomReadInputs], records: [NotificationRecord], positions: [RoomID: Date] = [:])
         -> [(input: RoomReadInputs, state: RoomReadState)] {
+        evaluatedWithSuperseded(inputs: inputs, records: records, positions: positions).results
+    }
+
+    private static func evaluatedWithSuperseded(inputs: [RoomReadInputs], records: [NotificationRecord], positions: [RoomID: Date] = [:])
+        -> (results: [(input: RoomReadInputs, state: RoomReadState)], superseded: Set<EventID>) {
         let byRoom = Dictionary(grouping: records, by: \.roomID)
-        var result: [(input: RoomReadInputs, state: RoomReadState)] = []
+        var results: [(input: RoomReadInputs, state: RoomReadState)] = []
+        var superseded: Set<EventID> = []
         for input in inputs {
-            // A pushed event the user has read (here, or on another device) is no longer unread.
             let readThrough = [positions[input.roomID], input.localIntent].compactMap { $0 }.max()
-            let notified = (byRoom[input.roomID] ?? [])
-                .filter { record in readThrough.map { record.timestamp > $0 } ?? true }
-                .map { NotifiedRef(timestamp: $0.timestamp, isMention: $0.isMention) }
+            let base = RoomReadInputs(
+                roomID: input.roomID, membership: input.membership, isEncrypted: input.isEncrypted, counts: input.counts,
+                latestEvent: input.latestEvent, localIntent: readThrough, receiptReadThrough: input.receiptReadThrough)
+            let partition = ReadStatePolicy.partitionRecords(for: base, records: byRoom[input.roomID] ?? [])
+            superseded.formUnion(partition.superseded)
             let effective = RoomReadInputs(
                 roomID: input.roomID, membership: input.membership, isEncrypted: input.isEncrypted, counts: input.counts,
-                latestEvent: input.latestEvent, localIntent: readThrough, receiptReadThrough: input.receiptReadThrough, unconfirmedNotified: notified)
-            result.append((effective, ReadStatePolicy.evaluate(effective)))
+                latestEvent: input.latestEvent, localIntent: readThrough, receiptReadThrough: input.receiptReadThrough,
+                unconfirmedNotified: partition.unconfirmed)
+            results.append((effective, ReadStatePolicy.evaluate(effective)))
         }
-        return result
+        return (results, superseded)
     }
 
     private func positionsChanged(_ positions: [RoomID: Date]) async {
@@ -167,6 +203,16 @@ public actor BadgeCoordinator {
 
     private func roomsChanged(_ inputs: [RoomReadInputs]) async {
         self.inputs = inputs
+        await recompute()
+    }
+
+    private func excludedChanged(_ rooms: Set<RoomID>) async {
+        excludedRooms = rooms
+        if !rooms.isEmpty {
+            carried.subtract(rooms)
+            seen.formUnion(rooms)
+            records?.clear(rooms: rooms)
+        }
         await recompute()
     }
 
@@ -205,16 +251,26 @@ public actor BadgeCoordinator {
     }
 
     private func auditCurrentState() async {
-        let stored = records.all()
+        let stored = records?.all() ?? []
         await runAudit(Self.evaluated(inputs: inputs, records: stored, positions: positions))
     }
 
     private func recompute() async {
-        let stored = records.all()
-        await runAudit(Self.evaluated(inputs: inputs, records: stored, positions: positions))
+        if !excludedRooms.isEmpty { records?.clear(rooms: excludedRooms) }
+        let stored = records?.all() ?? []
+        let pass = Self.evaluatedWithSuperseded(inputs: inputs, records: stored, positions: positions)
+        if !pass.superseded.isEmpty {
+            records?.remove(events: pass.superseded)
+        }
+        await runAudit(pass.results)
         seen.formUnion(inputs.map(\.roomID))
-        var attention = Self.attention(inputs: inputs, records: stored, positions: positions)
+        seen.formUnion(excludedRooms)
+        let activeRecords = stored.filter { !pass.superseded.contains($0.eventID) && !excludedRooms.contains($0.roomID) }
+        var attention = Set(pass.results.filter(\.state.attention).map(\.input.roomID))
+        let known = Set(inputs.map(\.roomID))
+        for record in activeRecords where !known.contains(record.roomID) { attention.insert(record.roomID) }
         attention.formUnion(carried.subtracting(seen))
+        attention.subtract(excludedRooms)
         carried = attention
         guard attention != attentionRooms || !hasWritten else { return }
         hasWritten = true

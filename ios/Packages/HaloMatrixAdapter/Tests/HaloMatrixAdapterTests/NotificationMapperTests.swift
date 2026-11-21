@@ -1,3 +1,4 @@
+import Foundation
 import HaloDomain
 import HaloFoundation
 import MatrixRustSDK
@@ -23,5 +24,13 @@ struct NotificationMapperTests {
         #expect(throws: HaloError.notFound) { try NotificationMapper.result(.eventNotFound) }
         #expect(try NotificationMapper.result(.eventFilteredOut) == .suppressed)
         #expect(try NotificationMapper.result(.eventRedacted) == .suppressed)
+    }
+
+    @Test("R-02: rawEventTimestamp extracts origin_server_ts from undecryptable and invite event JSON")
+    func rawEventTimestamp() {
+        let encrypted = #"{"type":"m.room.encrypted","origin_server_ts":1700000000500,"content":{}}"#
+        #expect(NotificationMapper.rawEventTimestamp(encrypted) == Date(timeIntervalSince1970: 1_700_000_000.5))
+        #expect(NotificationMapper.rawEventTimestamp(#"{"type":"m.room.encrypted"}"#) == nil)
+        #expect(NotificationMapper.rawEventTimestamp("not json") == nil)
     }
 }

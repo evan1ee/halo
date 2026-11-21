@@ -139,42 +139,17 @@ with **three different input sets**.
   *row*, and a vote is not a row. Sending the receipt for the latest *event* when the user is at the bottom (as
   `Room.markAsRead` does, verified to clear the vote's count) belongs with R-06.
 
-### R-02 · Undecryptable pushes create records no read position can cover — CONFIRMED
+### R-02 · Undecryptable pushes create records no read position can cover — CONFIRMED, FIXED
 
-- **Where:** `ios/NotificationService/NotificationService.swift:65` (`.encrypted` case:
-  `timestamp: Date()`), also `:58` (`display.timestamp ?? Date()`); consumer
-  `ios/Packages/HaloApplication/Sources/HaloApplication/Badge/BadgeCoordinator.swift:151-153`
-  (a record counts while `record.timestamp > readThrough`).
-- **Current behaviour:** when the NSE can't decrypt, the record's timestamp is the extension's wall clock at processing
-  time, which is always later than the event's `origin_server_ts`. Read positions are event timestamps
-  (`ReadReceiptCoordinator.reportSeen`, `MatrixRoomListPort.ownReadThrough`). The record is therefore never covered.
-- **Impact:** the room keeps attention and a badge unit until the user *opens* it in Halo (the only call to
-  `records.clear(room:)` is `TimelineCoordinator.open`, `TimelineCoordinator.swift:85`), or for up to 7 days. Reading on
-  another device, "Mark as read" from the room list, or reading the message in Halo after it decrypts on sync do **not**
-  clear it. Undecryptable pushes are common (keys arrive after the push).
-- **Fix:** records must be keyed and covered by **event identity and timeline order**, not time: when sync delivers the
-  record's event (the adapter can look it up by event id), the record is superseded (UNREAD_STATE §2 already says so);
-  for the timestamp, use the event's `origin_server_ts` from the raw event, which is available even when it can't be
-  decrypted.
-- **Tests:** scenario "UTD push, then sync delivers and decrypts, user reads on A2 → no attention, record pruned".
+- **Where:** `ios/NotificationService/NotificationService.swift`, `MatrixNotificationPort.swift`, `ReadState.swift`, `BadgeCoordinator.swift`.
+- **Fix (done):** `NotificationFetchResult.encrypted` and invite displays now carry the event's `origin_server_ts` (from `TimelineEvent.timestamp()` or `rawEvent` JSON); `ReadStatePolicy.notifiedThrough` and `partitionRecords` cover records via `notifiedThroughTs` (including `serverZero`) and supersede records once sync delivers the event (preserving S22 encrypted gap mentions); `MatrixRoomListPort.ownReadThrough` resolves receipts for rooms with active records even when counts are zero; `BadgeCoordinator.recompute` prunes superseded records.
+- **Tests:** `ReadStatePolicyTests.partitionRecords`, `NotificationMapperTests.rawEventTimestamp`, `BadgeCoordinatorTests.supersededRecordsPruned`, scenario **S25**.
 
-### R-03 · Notification records outlive their rooms and their account — CONFIRMED
+### R-03 · Notification records outlive their rooms and their account — CONFIRMED, FIXED
 
-- **Where:** `BadgeCoordinator.attention` (`BadgeCoordinator.swift:136-142`) adds **every room that has a record but is
-  not in the list**; `MatrixRoomListPort.swift:42` lists only joined/invited, non-space rooms;
-  `RoomListCoordinator.rooms` drops hidden sticker-pack rooms and invites from ignored users;
-  `AppRoot.resetAccountState` (`ios/App/AppRoot.swift:157-167`) resets the badge port but **never clears
-  `NotificationRecordStore`**.
-- **Impact:** a room left, kicked from, banned from, or tombstoned-away, a hidden pack room, an ignored inviter's invite,
-  or *any room of the previous account after sign-out/sign-in as someone else* keeps one badge unit for up to 7 days, with
-  no row the user could open to clear it. UNREAD_STATE §9 states "Room left / forgotten: … its notification records are
-  cleared" — not implemented.
-- **Fix:** the record port gets `clear(rooms:)` / `clearAll()`; the coordinator prunes records for rooms the SDK reports
-  as left (classic sync gives `rooms.left`, already forwarded in `SyncChange`), hidden, or ignored; sign-out and account
-  change call `clearAll()`. Rooms not in the list should not count at all once the first sync of the run has completed —
-  before that, only rooms that are *unknown to the SDK* may count from records.
-- **Tests:** "left on another device while a record exists → badge 0 after the next sync"; "sign out A, sign in B → B's
-  badge ignores A's records".
+- **Where:** `RoomListPort.leftRooms()`, `RoomListCoordinator.excludedRoomChanges()`, `BadgeCoordinator`, `AppRoot`.
+- **Fix (done):** `NotificationRecordPort` gained `clear(rooms:)`, `remove(events:)`, `clearAll()`; `MatrixRoomListPort` emits `rooms.left` from classic sync; `RoomListCoordinator` publishes excluded rooms (left, hidden sticker-pack rooms, ignored-inviter invitations); `BadgeCoordinator` prunes their records, excludes them from unknown-room counting, clears records in `forget(_:)` and `reset()`, and `NotificationRecordStore` scopes every row by `account` in GRDB.
+- **Tests:** `BadgeCoordinatorTests.recordsPrunedOnLeaveHideIgnoreAndReset`, `NotificationRecordStoreTests.accountIsolation`, scenarios **S26**, **S27**.
 
 ### R-04 · The carried-over attention set never forgets rooms that don't reappear — CONFIRMED
 
@@ -449,16 +424,16 @@ non-messages), and its SDK didn't count undecryptable events, which the real SDK
 | ID | Setup | Expected |
 |---|---|---|
 | PS23 | (done as **S23**: poll vote in an encrypted room without a read position, R-01) | — |
-| PS24 | Encrypted DM. B sends; NSE can't decrypt (record); sync later decrypts; A reads on A2 | Record superseded/pruned; no attention on A1 without opening the room |
-| PS25 | Room with a record; A leaves the room on A2 while A1 is closed; A1 launches and syncs | Badge excludes the room after the first sync |
+| PS24 | (done as **S25**: UTD push stamped with event ts, sync delivers & decrypts, A reads on A2, R-02) | — |
+| PS25 | (done as **S26**: room with a record left on A2, pruned on sync, R-03) | — |
 | PS26 | Carried attention for room R; R left while closed | R dropped after first sync response |
-| PS27 | Sign out account X (records exist), sign in Y | Y's badge has no X rooms |
+| PS27 | (done as **S27** + `NotificationRecordStoreTests.accountIsolation`: sign out X, sign in Y, R-03/R-13) | — |
 | PS28 | Two messages from B with identical `origin_server_ts`; A views both | Receipt targets the second; server count 0 |
 | PS29 | A reads at T; B (slow clock) sends with ts < T | Attention (inverts S18's pinned limitation) |
 | PS30 | (done as **S24**, R-07) | — |
 | PS31 | Room list vs badge: any generated input set | `badge == count(rows with attention)` |
 | PS32 | NSE delivers while the app is foreground and the room is in mentions mode, non-mention push | Badge unchanged |
-| PS33 | Concurrent NSE `add` and app `clear` (interleaved) | Cleared record not resurrected |
+| PS33 | (done: `NotificationRecordStoreTests.concurrentAddAndClearNeverResurrects`, R-13) | — |
 | PS34 | Remote logout during sync | Session ends in `signedOut`/`softLoggedOut`, sync stops |
 | PS35 | Restore times out, then the SDK call completes | Exactly one client; state consistent |
 | PS36 | App killed after `reportSeen`, before persist completes | Intent restored or receipt re-derived on next open (outbox gap check) |
@@ -504,8 +479,8 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 | ID | Severity | Area | Finding | Recommended action |
 |---|---|---|---|---|
 | R-01 | P0 | Unread | Encrypted non-messages (poll votes, encrypted reactions) counted by the server only → E3c ghost dot + badge when no read position covers the latest event | **Fixed (D78):** SDK counts decide in encrypted rooms; server-only → no unread. Latest-event receipt left for R-06 |
-| R-02 | P0 | Unread/NSE | UTD push records stamped `Date()` are never covered | Use the raw event's `origin_server_ts`; supersede records by event id on sync |
-| R-03 | P0 | Unread | Records counted for rooms not in the list; not cleared on leave/hide/sign-out | Prune on `rooms.left`, hidden, ignored, account reset |
+| R-02 | P0 | Unread/NSE | UTD push records stamped `Date()` are never covered | **FIXED:** raw event `origin_server_ts` on `.encrypted`/invites; `partitionRecords` supersedes on sync and covers via `notifiedThroughTs`; S25 |
+| R-03 | P0 | Unread | Records counted for rooms not in the list; not cleared on leave/hide/sign-out | **FIXED:** pruned on `rooms.left`, hidden, ignored, `forget`, `reset`, and account-scoped in GRDB; S26, S27 |
 | R-04 | P0 | Badge | Carried attention never dropped for rooms that don't reappear | End carry-over at the first sync response |
 | R-05 | P0 | Unread | Room list evaluates without records; badge with records | One `ReadStateCoordinator` output for list, badge, auditor |
 | R-06 | P0 | Unread/receipts | Timestamp ordering drops receipts (equal/skewed ts) and hides new messages (S18) | Event ids + timeline order; new ADR revisiting D47 |
@@ -515,7 +490,7 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 | R-10 | P1 | Session | No `ClientDelegate`; remote logout never handled; sync retried forever | Register `Client.setDelegate`, emit `.softLoggedOut`/`.loggedOut` |
 | R-11 | P1 | Security/session | NSE token refresh not persisted; delegate can't retrieve before first save | Persist refresh in the NSE (Keychain write), serve `retrieveSessionFromKeychain` from the Keychain |
 | R-12 | P1 | Session | Restore timeout can leave a late-adopted client and a second client on retry | Make restore single-flight; discard a late result or adopt it explicitly |
-| R-13 | P1 | Persistence | Records in `UserDefaults`, non-atomic cross-process RMW | GRDB `notification_record` per DATA_MODELS §3 |
+| R-13 | P1 | Persistence | Records in `UserDefaults`, non-atomic cross-process RMW | **FIXED:** GRDB `notification_record` (migration v7) + `DarwinSignal` (`one.mbm.halo.db.changed`); PS33 |
 | R-14 | P1 | Notifications | Suppressed/filtered pushes (e.g. encrypted reactions) show "Halo: New message" | Deliver silent content when suppressed; pursue the filtering entitlement (V-PUSH-3) |
 | R-15 | P2 | Unread | Opening a room clears all its records before anything is seen (vs D6) | Clear records covered by the sent receipt |
 | R-16 | P1 | Security | Documented field encryption missing; plaintext drafts/bot text from E2EE rooms | Implement AES-GCM field encryption or record a decision |
@@ -554,7 +529,7 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 | Item | Why | What changes | Modules | Depends on | Done when |
 |---|---|---|---|---|---|
 | 0.1 E3c (R-01) — **done 2026-11-21** | Ghost dot/badge from server-only counts | E3b on any SDK count; E3c → no unread (D78) | HaloDomain | — | S23 green; `encryptedNonMessageEvidence` and server-rules checks pass |
-| 0.2 Record lifecycle (R-02, R-03, R-13) | Ghost badge units | GRDB `notification_record`; event `origin_server_ts`; supersede on sync; prune on left/hidden/ignored/reset | HaloPersistence, HaloPlatform, NSE, HaloApplication | migration v7 | PS24, PS25, PS27, PS33 green |
+| 0.2 Record lifecycle (R-02, R-03, R-13) — **done** | Ghost badge units | GRDB `notification_record`; event `origin_server_ts`; supersede on sync; prune on left/hidden/ignored/reset | HaloPersistence, HaloPlatform, NSE, HaloApplication | migration v7 | S25, S26, S27, PS33 green |
 | 0.3 Carry-over completeness (R-04) | Permanent ghosts | Sync emits "first response of run"; coordinator drops unconfirmed carried rooms | HaloMatrixAdapter, HaloApplication | — | PS26 green |
 | 0.4 `ReadStateCoordinator` (R-05, R-08) | One truth for list, badge, NSE | New actor owns input assembly and output; `RoomListViewModel` consumes states; NSE leaves badge or uses app set + policy delta | HaloApplication, FeatureRoomList, NSE | 0.2 | PS31, PS32 green; `RoomListViewModel` no longer calls `ReadStatePolicy` |
 | 0.5 Identity/order instead of timestamps (R-06; R-07 **done 2026-11-21**, D79) | Missed unreads | Inputs carry event ids/order; E1/E1b rewritten; new ADR revising D47/D72 | HaloDomain, adapter, ReadReceiptCoordinator, FeatureTimeline | ADR | PS28–PS30 green; S18 limitation assertion inverted |

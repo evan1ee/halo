@@ -22,16 +22,21 @@ public final class MatrixRoomListPort: RoomListPort {
     }
 
     private let session: MatrixSessionPort
+    private let hasRecords: @Sendable (RoomID) -> Bool
     private let current = Mutex<Subscription?>(nil)
+    private let leftObservers = Mutex<[UUID: AsyncStream<Set<RoomID>>.Continuation]>([:])
 
-    public init(session: MatrixSessionPort, pageSize: UInt32 = 50) { self.session = session }
+    public init(session: MatrixSessionPort, pageSize: UInt32 = 50, hasRecords: @escaping @Sendable (RoomID) -> Bool = { _ in false }) {
+        self.session = session
+        self.hasRecords = hasRecords
+    }
 
     public func rooms(filter: RoomListFilter) -> AsyncStream<RoomListDiff> {
         let (output, continuation) = AsyncStream<RoomListDiff>.makeStream(bufferingPolicy: .unbounded)
         let id = UUID()
         let (refresh, refreshContinuation) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
         let filterBox = FilterBox(filter)
-        let task = Task { [session] in
+        let task = Task { [session, hasRecords, weak self] in
             do {
                 _ = try Self.kind(for: filter)
                 let client = try await session.signedInClient()
@@ -44,7 +49,10 @@ public final class MatrixRoomListPort: RoomListPort {
                     for room in known {
                         let roomID = room.id()
                         present.insert(roomID)
-                        if summaries[roomID] == nil || changed?.contains(roomID) == true { summaries[roomID] = try await Self.summary(room, settings) }
+                        if summaries[roomID] == nil || changed?.contains(roomID) == true {
+                            let id = try RoomID(roomID)
+                            summaries[roomID] = try await Self.summary(room, settings, hasRecords: hasRecords(id))
+                        }
                     }
                     summaries = summaries.filter { present.contains($0.key) }
                     var list: [RoomSummary] = []
@@ -64,7 +72,13 @@ public final class MatrixRoomListPort: RoomListPort {
                 // Sync responses and filter changes feed one loop, so the list is rebuilt one change at a time.
                 let (events, eventContinuation) = AsyncStream<Set<String>?>.makeStream(bufferingPolicy: .unbounded)
                 let forward = Task {
-                    for await change in changes { eventContinuation.yield(change.joined.union(change.invited).union(change.left)) }
+                    for await change in changes {
+                        if !change.left.isEmpty {
+                            let leftIDs = Set(change.left.compactMap { try? RoomID($0) })
+                            self?.publishLeft(leftIDs)
+                        }
+                        eventContinuation.yield(change.joined.union(change.invited).union(change.left))
+                    }
                 }
                 let refreshes = Task { for await _ in refresh { eventContinuation.yield(nil) } }
                 defer { forward.cancel(); refreshes.cancel(); eventContinuation.finish() }
@@ -91,6 +105,20 @@ public final class MatrixRoomListPort: RoomListPort {
         _ = try Self.kind(for: filter)
         subscription.filter.current = filter
         subscription.refresh.yield()
+    }
+
+    public func leftRooms() -> AsyncStream<Set<RoomID>> {
+        let (stream, continuation) = AsyncStream<Set<RoomID>>.makeStream(bufferingPolicy: .unbounded)
+        let id = UUID()
+        leftObservers.withLock { $0[id] = continuation }
+        continuation.onTermination = { [weak self] _ in self?.leftObservers.withLock { _ = $0.removeValue(forKey: id) } }
+        return stream
+    }
+
+    private func publishLeft(_ rooms: Set<RoomID>) {
+        guard !rooms.isEmpty else { return }
+        let continuations = leftObservers.withLock { Array($0.values) }
+        for continuation in continuations { continuation.yield(rooms) }
     }
 
     // MARK: Mapping
@@ -126,7 +154,7 @@ public final class MatrixRoomListPort: RoomListPort {
         }
     }
 
-    static func summary(_ room: Room, _ settings: NotificationSettings) async throws(HaloError) -> RoomSummary {
+    static func summary(_ room: Room, _ settings: NotificationSettings, hasRecords: Bool = false) async throws(HaloError) -> RoomSummary {
         // An unparseable ID is a contract break with the SDK: fail the subscription instead of dropping a
         // row, which would shift every later index.
         let isDirect = await room.isDirect()
@@ -142,7 +170,7 @@ public final class MatrixRoomListPort: RoomListPort {
             membership: membership(room.membership()),
             read: read,
             latestEvent: latestEvent(latest),
-            ownReadThrough: await ownReadThrough(of: room, counts: read),
+            ownReadThrough: await ownReadThrough(of: room, counts: read, hasRecords: hasRecords),
             isFavourite: (try? await room.roomInfo())?.isFavourite ?? false,
             preview: preview(latest, ownUserID: room.ownUserId()),
             avatar: avatar(room.avatarUrl()),
@@ -167,12 +195,13 @@ public final class MatrixRoomListPort: RoomListPort {
     /// Event id → time for resolved receipt targets; an event's time never changes.
     private static let eventTimes = Mutex<[String: Date]>([:])
 
-    /// The time of the event the user's newest own receipt points at (read from another device). Only rooms that
-    /// look unread are resolved, so quiet rooms cost nothing; a failed lookup leaves the room as unread, the safe error.
-    static func ownReadThrough(of room: Room, counts: RoomReadCounts) async -> Date? {
+    /// The time of the event the user's newest own receipt points at (read from another device). Resolved for rooms that
+    /// look unread or have pending notification records (so a UTD push read on another device is still covered, R-02);
+    /// quiet rooms without records cost nothing. A failed lookup leaves the room as unread, the safe error.
+    static func ownReadThrough(of room: Room, counts: RoomReadCounts, hasRecords: Bool = false) async -> Date? {
         let looksUnread = counts.server.notification > 0 || counts.server.highlight > 0 || counts.sdk.unreadMessages > 0
             || counts.sdk.unreadNotifications > 0 || counts.isMarkedUnread
-        guard looksUnread else { return nil }
+        guard looksUnread || hasRecords else { return nil }
         let me = room.ownUserId()
         var newest: (eventId: String, receipt: UInt64)?
         for type in [ReceiptType.read, .readPrivate] {

@@ -11,4 +11,11 @@ public protocol RoomListPort: Sendable {
     func loadMore() async throws(HaloError)
     /// Changes the filter of the current subscription; the stream then continues with diffs for it.
     func setFilter(_ filter: RoomListFilter) async throws(HaloError)
+    /// Rooms the server reported as left/kicked/banned in sync (`rooms.left`), so dependent state (such as notification
+    /// records) can be pruned (R-03).
+    func leftRooms() -> AsyncStream<Set<RoomID>>
+}
+
+public extension RoomListPort {
+    func leftRooms() -> AsyncStream<Set<RoomID>> { AsyncStream { $0.finish() } }
 }
