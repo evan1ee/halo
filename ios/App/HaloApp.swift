@@ -60,7 +60,6 @@ private struct RootView: View {
             case .signedIn:
                 NavigationStack(path: $path) {
                     VStack(spacing: 0) {
-                        RecoveryBanner(model: root.recovery)
                         RoomListView(model: root.roomList, onRoomInfo: { roomInfo = root.makeRoomDetails(room: $0) }) { path.append($0) }
                     }
                     .navigationTitle("")
@@ -97,6 +96,7 @@ private struct RootView: View {
                                     profile: root.profileSettings(),
                                     stickerPacks: root.stickerPackSettings(),
                                     devices: root.deviceSettings(),
+                                    verifyDevice: VerifyDeviceAction(isNeeded: { root.recovery.needsRecovery }, makeView: { AnyView(RecoveryView(model: root.recovery)) }),
                                     diagnostics: { await root.diagnosticsReport() },
                                     reconcile: { await root.reconcileNow() },
                                     unexplainedAuditCount: { await root.unexplainedAuditCount() },
@@ -121,7 +121,14 @@ private struct RootView: View {
                                     },
                                     onSignOut: { Task { await root.auth.signOut() } })
                                 .navigationBarTitleDisplayMode(.large)
-                            } label: { AvatarCircle(name: ownName.isEmpty ? (root.signedInUserID ?? "?") : ownName, imageData: ownAvatar, size: 30) }
+                            } label: { AvatarCircle(name: ownName.isEmpty ? (root.signedInUserID ?? "?") : ownName, imageData: ownAvatar, size: 30)
+                                .overlay(alignment: .topTrailing) {
+                                    if root.recovery.needsRecovery {
+                                        Circle().fill(.yellow).frame(width: 10, height: 10)
+                                            .overlay(Circle().stroke(.background, lineWidth: 1.5))
+                                            .accessibilityIdentifier("verify-dot")
+                                    }
+                                } }
                                 .accessibilityLabel("Settings")
                                 .accessibilityIdentifier("settings")
                         }

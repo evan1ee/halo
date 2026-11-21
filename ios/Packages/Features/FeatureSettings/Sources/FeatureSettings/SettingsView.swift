@@ -8,6 +8,17 @@ public enum MediaPreviewChoice: String, CaseIterable, Sendable, Identifiable {
 }
 
 /// Settings v1 (docs/features/SETTINGS.md): account, privacy, about and the acknowledgements. The other sections arrive with their features.
+/// "Verify this device" in Settings → Security: shown while the device needs the recovery key; the app supplies the screen.
+public struct VerifyDeviceAction {
+    public let isNeeded: @MainActor () -> Bool
+    public let makeView: @MainActor () -> AnyView
+
+    public init(isNeeded: @escaping @MainActor () -> Bool, makeView: @escaping @MainActor () -> AnyView) {
+        self.isNeeded = isNeeded
+        self.makeView = makeView
+    }
+}
+
 public struct SettingsView: View {
     private let version: String
     private let build: String
@@ -24,6 +35,8 @@ public struct SettingsView: View {
     private let profile: ProfileSettingsActions?
     private let stickerPacks: StickerPackSettingsActions?
     private let devices: DevicesSettingsActions?
+    private let verifyDevice: VerifyDeviceAction?
+    @State private var verifying = false
     private let security: (@MainActor () -> [StorageSize])?
     private let setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)?
     @State private var recoveryFailure: SettingsMessage?
@@ -51,7 +64,7 @@ public struct SettingsView: View {
         saveBotSenders: (@Sendable ([String]) async -> Bool)? = nil,
         loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)? = nil,
         saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)? = nil,
-        profile: ProfileSettingsActions? = nil, stickerPacks: StickerPackSettingsActions? = nil, devices: DevicesSettingsActions? = nil, diagnostics: (@Sendable () async -> String)? = nil,
+        profile: ProfileSettingsActions? = nil, stickerPacks: StickerPackSettingsActions? = nil, devices: DevicesSettingsActions? = nil, verifyDevice: VerifyDeviceAction? = nil, diagnostics: (@Sendable () async -> String)? = nil,
         reconcile: (@Sendable () async -> Void)? = nil, unexplainedAuditCount: (@Sendable () async -> Int?)? = nil,
         storageSizes: (@Sendable () async -> [StorageSize])? = nil,
         security: (@MainActor () -> [StorageSize])? = nil, setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil,
@@ -63,6 +76,7 @@ public struct SettingsView: View {
         self.profile = profile
         self.stickerPacks = stickerPacks
         self.devices = devices
+        self.verifyDevice = verifyDevice
         self.storageSizes = storageSizes
         self.notificationStatus = notificationStatus
         self.notificationDefaults = notificationDefaults
@@ -154,6 +168,16 @@ public struct SettingsView: View {
             }
             if let security {
                 Section {
+                    if let verifyDevice, verifyDevice.isNeeded() {
+                        Button { verifying = true } label: {
+                            HStack {
+                                Label("Verify this device", systemImage: "lock.shield")
+                                Spacer()
+                                Circle().fill(.yellow).frame(width: 10, height: 10)
+                            }
+                        }
+                        .accessibilityIdentifier("verify-device")
+                    }
                     ForEach(security()) { LabeledContent($0.name, value: $0.text) }
                     if let setUpRecovery, security().contains(where: { $0.name == "Recovery key" && $0.text == "Not set up" }) {
                         Button(settingUpRecovery ? "Setting up…" : "Set up recovery key") {
@@ -237,6 +261,8 @@ public struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
+        .sheet(isPresented: $verifying) { verifyDevice?.makeView() }
+        .onChange(of: verifyDevice?.isNeeded() ?? false) { _, needed in if !needed { verifying = false } }
         .alert("Recovery key", isPresented: Binding(get: { recoveryFailure != nil }, set: { if !$0 { recoveryFailure = nil } })) {
             if recoveryFailure?.offersReplace == true, let replaceRecovery {
                 Button("Replace backup", role: .destructive) {
