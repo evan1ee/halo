@@ -605,6 +605,7 @@ public final class TimelineViewModel {
 
     public func reportFileTooLarge() { sendError = "That file is too large to send." }
     public func reportFileUnreadable() { sendError = "That file couldn't be read." }
+    public func dismissSendError() { sendError = nil }
 
     /// Decoding and re-encoding a photo is real work; it runs off the main actor.
     @concurrent private static func prepare(_ preparer: any ImagePreparing, _ data: Data, _ filename: String) async throws(HaloError) -> OutgoingImage {

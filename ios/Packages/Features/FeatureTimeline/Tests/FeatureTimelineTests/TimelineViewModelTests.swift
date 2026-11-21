@@ -874,5 +874,10 @@ struct MediaPreviewPolicyTests {
         #expect(ownText.canEdit)
         vm.beginEdit(ownText)
         #expect(vm.editing == t1 && vm.draft == "literal (edited) inside")
+
+        vm.reportFileTooLarge()
+        #expect(vm.sendError != nil)
+        vm.dismissSendError()
+        #expect(vm.sendError == nil)
     }
 }

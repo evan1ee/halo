@@ -34,7 +34,7 @@ public struct TimelineView: View {
             case .opening:
                 ProgressView()
             case .failed(let message):
-                Text(message).foregroundStyle(.secondary)
+                ContentUnavailableView("Couldn't open room", systemImage: "exclamationmark.triangle", description: Text(message))
             case .live(let rows, let isPaginating, let canLoadEarlier, let paginationError):
                 ScrollViewReader { proxy in
                 List {
@@ -149,7 +149,16 @@ private struct Composer: View {
     var body: some View {
         VStack(spacing: 4) {
             if let typing = model.typingText { Text(typing).font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading) }
-            if let error = model.sendError { Text(error).font(.caption).foregroundStyle(.red) }
+            if let error = model.sendError {
+                HStack(spacing: 8) {
+                    Text(error).font(.caption).foregroundStyle(.red)
+                    Spacer()
+                    Button { model.dismissSendError() } label: { Image(systemName: "xmark").font(.caption2.weight(.semibold)) }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Dismiss")
+                }
+            }
             if model.isSendingImage { ProgressView("Sending photo…").font(.caption) }
             if model.isSendingFile { ProgressView("Sending file…").font(.caption) }
             if model.editing != nil {
@@ -304,7 +313,7 @@ private struct RowView: View {
 
     @ViewBuilder private var reactionBar: some View {
         if !row.reactions.isEmpty {
-            HStack {
+            ReactionFlowLayout(alignment: row.style == .ownMessage ? .trailing : .leading) {
                 ForEach(row.reactions) { chip in
                     Button { Task { await model.toggleReaction(on: row, key: chip.key) } } label: {
                         Text("\(chip.key) \(chip.count)").font(.caption)
@@ -362,6 +371,7 @@ private struct RowView: View {
                         if row.eventID != nil { actions } else if row.failedLocalID != nil { failedActions }
                     }
                 }
+                .padding(row.style == .ownMessage ? .leading : .trailing, 48)
             case .notice:
                 VStack(alignment: .leading, spacing: 2) {
                     if let card = row.card, !showingOriginal {
@@ -664,5 +674,56 @@ private struct SenderAvatar: View {
 private extension Image {
     /// The attachment buttons beside the composer: one size, centred on a one-line field.
     func composerIcon() -> some View { font(.title3).frame(height: 36) }
+}
+
+/// Wraps reaction chips onto multiple lines, aligned to the message's own side (leading for incoming, trailing for own).
+private struct ReactionFlowLayout: Layout {
+    var alignment: HorizontalAlignment = .leading
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        let lines = rows(for: subviews, maxWidth: maxWidth)
+        let width = lines.map(\.width).max() ?? 0
+        let height = lines.reduce(0) { $0 + $1.height } + max(0, CGFloat(lines.count - 1)) * spacing
+        return CGSize(width: min(width, maxWidth), height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let lines = rows(for: subviews, maxWidth: bounds.width)
+        var y = bounds.minY
+        for line in lines {
+            var x = alignment == .trailing ? bounds.maxX - line.width : bounds.minX
+            for (index, size) in line.items {
+                subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+            y += line.height + spacing
+        }
+    }
+
+    private struct Line {
+        var items: [(Int, CGSize)] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+    }
+
+    private func rows(for subviews: Subviews, maxWidth: CGFloat) -> [Line] {
+        var result: [Line] = []
+        var current = Line()
+        for (index, subview) in subviews.enumerated() {
+            let size = subview.sizeThatFits(.unspecified)
+            let nextWidth = current.items.isEmpty ? size.width : current.width + spacing + size.width
+            if !current.items.isEmpty, nextWidth > maxWidth {
+                result.append(current)
+                current = Line()
+            }
+            current.width = current.items.isEmpty ? size.width : current.width + spacing + size.width
+            current.height = max(current.height, size.height)
+            current.items.append((index, size))
+        }
+        if !current.items.isEmpty { result.append(current) }
+        return result
+    }
 }
 #endif
