@@ -1033,8 +1033,23 @@ struct AdapterContractTests {
         try await MatrixSyncPort(session: second).start()
         let unverified = MatrixEncryptionPort(session: second)
         try await within(seconds: 90) { try await EncryptionPortContract.verifyRecovery(unverified, recoveryKey: key) }
+
+        // Changing the key (Settings → Security → Change recovery key): the verified first device replaces it; the new key
+        // unlocks a third device and the old one no longer does.
+        let replaced = try await within(seconds: 90) { try await MatrixEncryptionPort(session: first).resetRecovery() }
+        #expect(replaced != key)
+        let third = port()
+        _ = try await third.loginPassword(PasswordCredentials(username: user, password: password, deviceDisplayName: "e2ee-3"), on: details)
+        try await MatrixSyncPort(session: third).start()
+        let fresh = MatrixEncryptionPort(session: third)
+        do {
+            try await within(seconds: 90) { try await fresh.recover(recoveryKey: key) }
+            Issue.record("the old recovery key still unlocks a new device")
+        } catch {}
+        try await within(seconds: 90) { try await EncryptionPortContract.verifyRecovery(fresh, recoveryKey: replaced) }
         try await first.logout()
         try await second.logout()
+        try await third.logout()
     }
 
     /// The pushers the account has on the server, read with a plain HTTP login of its own (not through the adapter).

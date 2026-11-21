@@ -38,6 +38,7 @@ public struct SettingsView: View {
     private let changePassword: ChangePasswordActions?
     @State private var canChangePassword = false
     @State private var confirmingNewRecoveryKey = false
+    @State private var changingRecoveryKey = false
     private let verifyDevice: VerifyDeviceAction?
     @State private var verifying = false
     private let security: (@MainActor () -> [StorageSize])?
@@ -202,8 +203,18 @@ public struct SettingsView: View {
                         .accessibilityIdentifier("set-up-recovery")
                     }
                     if replaceRecovery != nil, security().contains(where: { $0.name == "Recovery key" && $0.text.hasPrefix("On") }) {
-                        Button("Change recovery key") { confirmingNewRecoveryKey = true }
-                            .accessibilityIdentifier("change-recovery-key")
+                        let deviceHasKey = security().contains(where: { $0.name == "Recovery key" && $0.text == "On" })
+                        Button { confirmingNewRecoveryKey = true } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(changingRecoveryKey ? "Creating a new key…" : "Change recovery key")
+                                if !deviceHasKey {
+                                    Text("Verify this device first: only a verified device can replace the key.")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .disabled(!deviceHasKey || changingRecoveryKey)
+                        .accessibilityIdentifier("change-recovery-key")
                     }
                 } header: {
                     Text("Security")
@@ -295,11 +306,13 @@ public struct SettingsView: View {
         .confirmationDialog("Change the recovery key?", isPresented: $confirmingNewRecoveryKey, titleVisibility: .visible) {
             Button("Create a new key", role: .destructive) {
                 guard let replaceRecovery else { return }
+                changingRecoveryKey = true
                 Task {
                     switch await replaceRecovery() {
                     case .success(let key): newRecoveryKey = key
                     case .failure(let message): recoveryFailure = SettingsMessage(message.text)
                     }
+                    changingRecoveryKey = false
                 }
             }
             Button("Cancel", role: .cancel) {}
