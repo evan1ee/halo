@@ -78,6 +78,18 @@ public struct HaloDatabase: Sendable {
                 )
                 """)
         }
+        migrator.registerMigration("v5-bot-task") { db in
+            try db.execute(sql: """
+                CREATE TABLE bot_task (
+                  account TEXT NOT NULL, room_id TEXT NOT NULL, bot_sender TEXT NOT NULL,
+                  entity_type TEXT NOT NULL CHECK (entity_type IN ('todo','reminder')), entity_id TEXT NOT NULL,
+                  source_event_id TEXT, title TEXT, detail TEXT,
+                  status TEXT NOT NULL CHECK (status IN ('open','completed','deleted')),
+                  as_of_ts INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+                  PRIMARY KEY (account, room_id, bot_sender, entity_type, entity_id)
+                )
+                """)
+        }
         return migrator
     }
 }
