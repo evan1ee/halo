@@ -830,4 +830,49 @@ struct MediaPreviewPolicyTests {
         _ = vm.row(try item("c", sender: "@other:x.org", html: "<b>hi</b>"))
         #expect(counter.count == 1)
     }
+
+    @Test("notice and emote rows keep event ID, reactions, ownership and bot cards; files and stickers can't be edited")
+    func noticeEmoteAndEditGuard() throws {
+        let room = try RoomID("!r:x.org")
+        let vm = TimelineViewModel(coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: room))
+        vm.botSenders = ["@bot:x.org"]
+        let reaction = ReactionSummary(key: "👍", count: 1, reactedByMe: true)
+
+        let n1 = try EventID("$n1"), e1 = try EventID("$e1"), f1 = try EventID("$f1"), t1 = try EventID("$t1")
+        let noticeEvent = TimelineItem(id: TimelineItemID("n1"), content: .event(TimelineEvent(
+            eventID: n1, sender: try UserID("@bot:x.org"), senderName: "Bot",
+            timestamp: Date(timeIntervalSince1970: 10), isOwn: false,
+            kind: .notice("Added Task #4", isEdited: false), reactions: [reaction],
+            formattedBody: "Added Task <b>#4</b> for Ann: <i>\"Buy tea\"</i>")))
+        let notice = vm.row(noticeEvent)
+        #expect(notice.style == .notice)
+        #expect(notice.eventID == n1)
+        #expect(notice.reactions == [.init(key: "👍", count: 1, reactedByMe: true)])
+        #expect(notice.card == .taskAdded(id: "4", owner: "Ann", title: "Buy tea"))
+        #expect(notice.styled != nil && !notice.canEdit)
+
+        let emoteEvent = TimelineItem(id: TimelineItemID("e1"), content: .event(TimelineEvent(
+            eventID: e1, sender: try UserID("@me:x.org"), senderName: "Me",
+            timestamp: Date(timeIntervalSince1970: 20), isOwn: true,
+            kind: .emote("waves", isEdited: true), reactions: [reaction])))
+        let emote = vm.row(emoteEvent)
+        #expect(emote.style == .emote && emote.isOwn && emote.eventID == e1)
+        #expect(emote.text == "Me waves (edited)" && emote.reactions.count == 1 && !emote.canEdit)
+
+        let ownFile = vm.row(TimelineItem(id: TimelineItemID("f1"), content: .event(TimelineEvent(
+            eventID: f1, sender: try UserID("@me:x.org"), senderName: "Me",
+            timestamp: Date(timeIntervalSince1970: 30), isOwn: true,
+            kind: .media(MediaAttachment(kind: .file, body: "notes.pdf", source: MediaRef(token: "m1")))))))
+        #expect(!ownFile.canEdit)
+        vm.beginEdit(ownFile)
+        #expect(vm.editing == nil)
+
+        let ownText = vm.row(TimelineItem(id: TimelineItemID("t1"), content: .event(TimelineEvent(
+            eventID: t1, sender: try UserID("@me:x.org"), senderName: "Me",
+            timestamp: Date(timeIntervalSince1970: 40), isOwn: true,
+            kind: .text("literal (edited) inside", isEdited: true)))))
+        #expect(ownText.canEdit)
+        vm.beginEdit(ownText)
+        #expect(vm.editing == t1 && vm.draft == "literal (edited) inside")
+    }
 }

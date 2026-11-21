@@ -27,8 +27,8 @@ Summary only; details per feature: [docs/development/IMPLEMENTATION_NOTES.md](do
 Full list: docs/DECISION_LOG.md (D1–D75), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-- **FeatureAuth** (`RecoveryView.swift`): `RecoveryBanner` background no longer bleeds into the top navigation bar and status bar (`ignoresSafeAreaEdges: []`) and adds a trailing chevron so it reads as tappable. Seen in the simulator (`iPhone 17`).
-- Earlier today (`git log`): New chat search progress/empty state (`3d8316a`), New chat "Create room" action row (`28e8164`), pill composer (`4207241`), timeline day dividers (`a79c619`), recovery-key sheet polish (`a328133`), Messages-style room list times and filter bar (`b7fb4a0`).
+- **FeatureTimeline** (`TimelineViewModel.swift`, `TimelineView.swift`, `TimelineViewModelTests.swift`): `.notice` and `.emote` rows now keep `eventID`, `isOwn`, `reactions`, edited suffix, formatted body/bot card (for notices), context menu (react, reply, copy, View source, delete), and read-receipt visibility; `TimelineRow.canEdit` blocks editing files/audio/video/stickers and `beginEdit` reads `source.body` directly; bot cards can toggle back from "Show original" via "Show card" (BOT_MESSAGES FR-1/FR-2). Unit-tested (45/45 tests); `Halo-Debug` built and launched on `iPhone 17` simulator (notice/emote context menu not tapped on screen).
+- Earlier today (`git log`): recovery banner safe-area bleed fix + chevron (`ba0f93a`), New chat search progress/empty state (`3d8316a`), New chat "Create room" action row (`28e8164`), pill composer (`4207241`), timeline day dividers (`a79c619`).
 
 ## 5. Outstanding issues
 Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).

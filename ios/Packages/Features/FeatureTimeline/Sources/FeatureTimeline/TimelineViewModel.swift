@@ -66,6 +66,9 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     /// body is just its file name ("photo.jpg", which clients put in `body` when there is no caption); a real caption is shown.
     public var showsText: Bool { !isSticker && file == nil && !(image != nil && Self.looksLikeFilename(text)) }
 
+    /// Whether the user can edit this row's text (own confirmed text message; never photos, files or stickers).
+    public var canEdit: Bool { isOwn && style == .ownMessage && eventID != nil && image == nil && file == nil && !isSticker }
+
     static func looksLikeFilename(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !trimmed.contains(where: \.isWhitespace), let dot = trimmed.lastIndex(of: "."), dot != trimmed.startIndex else { return false }
@@ -654,11 +657,11 @@ public final class TimelineViewModel {
 
     /// Loads an own, confirmed text message into the composer for editing.
     public func beginEdit(_ row: TimelineRow) {
-        guard let id = row.eventID, row.isOwn, row.style == .ownMessage, row.image == nil else { return }
+        guard row.canEdit, let id = row.eventID else { return }
         if editing == nil { stashedDraft = draft }
         editing = id
         replyingTo = nil
-        draft = row.text.replacingOccurrences(of: " (edited)", with: "")
+        draft = row.source?.body ?? row.text.replacingOccurrences(of: " (edited)", with: "")
     }
 
     /// Makes the next send a reply to a confirmed message.
@@ -895,12 +898,17 @@ public final class TimelineViewModel {
                     failedLocalID: Self.failedID(event),
                     source: .init(sender: event.sender?.rawValue, eventID: event.eventID?.rawValue, body: body, formattedBody: event.formattedBody),
                     card: botCard(event))
-            case .notice(let body, _):
+            case .notice(let body, let edited):
                 return TimelineRow(
-                    id: id, style: .notice, sender: name, text: body,
-                    source: .init(sender: event.sender?.rawValue, eventID: event.eventID?.rawValue, body: body, formattedBody: event.formattedBody))
-            case .emote(let body, _):
-                return TimelineRow(id: id, style: .emote, sender: nil, text: "\(name) \(body)", source: plainSource(event, body))
+                    id: id, style: .notice, sender: name, text: edited ? "\(body) (edited)" : body,
+                    eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions),
+                    styled: event.formattedBody.map { HTMLText.attributed($0) + AttributedString(edited ? " (edited)" : "") },
+                    source: plainSource(event, body), card: botCard(event))
+            case .emote(let body, let edited):
+                return TimelineRow(
+                    id: id, style: .emote, sender: nil, text: edited ? "\(name) \(body) (edited)" : "\(name) \(body)",
+                    eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions),
+                    source: plainSource(event, body))
             case .media(let attachment):
                 let style: TimelineRow.Style = event.isOwn ? .ownMessage : .message
                 if attachment.kind == .image, let source = attachment.source {

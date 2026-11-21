@@ -284,7 +284,7 @@ private struct RowView: View {
         #endif
         if row.source != nil { Button("View source", systemImage: "chevron.left.forwardslash.chevron.right") { showingSource = true } }
         if row.isOwn {
-            if row.style == .ownMessage && row.image == nil { Button("Edit", systemImage: "pencil") { model.beginEdit(row) } }
+            if row.canEdit { Button("Edit", systemImage: "pencil") { model.beginEdit(row) } }
             Button("Delete", systemImage: "trash", role: .destructive) { confirmingDelete = true }
         }
     }
@@ -302,84 +302,111 @@ private struct RowView: View {
         return "lock"
     }
 
-    var body: some View {
-        switch row.style {
-        case .message, .ownMessage:
-            HStack(alignment: .top, spacing: 6) {
-            if row.style == .message {
-                if row.continuesRun { Color.clear.frame(width: 28, height: 1) } else { SenderAvatar(name: row.sender ?? "?", ref: row.avatar, model: model) }
-            }
-            VStack(alignment: row.style == .ownMessage ? .trailing : .leading, spacing: 2) {
-                if let sender = row.sender, row.style == .message, !row.continuesRun { Text(sender).font(.caption).foregroundStyle(.secondary) }
-                if let reply = row.reply {
-                    VStack(alignment: .leading, spacing: 0) {
-                        if let name = reply.sender { Text(name).font(.caption2.bold()) }
-                        Text(reply.snippet ?? "Original message unavailable").font(.caption).lineLimit(2)
+    @ViewBuilder private var reactionBar: some View {
+        if !row.reactions.isEmpty {
+            HStack {
+                ForEach(row.reactions) { chip in
+                    Button { Task { await model.toggleReaction(on: row, key: chip.key) } } label: {
+                        Text("\(chip.key) \(chip.count)").font(.caption)
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(chip.reactedByMe ? Color.accentColor.opacity(0.3) : Color.secondary.opacity(0.15), in: .capsule)
                     }
-                    .foregroundStyle(.secondary)
-                    .padding(.leading, 6)
-                    .overlay(alignment: .leading) { Rectangle().fill(.secondary).frame(width: 2) }
-                }
-                if let image = row.image { ThumbnailView(image: image, model: model, isSticker: row.isSticker).accessibilityLabel(row.isSticker ? row.text : "Image") }
-                if let file = row.file { FileTileView(file: file, isOpening: model.openingRow == row.id, model: model) { Task { await model.openFile(row) } } }
-                if let card = row.card, !showingOriginal {
-                    BotCardView(
-                        card: card, state: { model.botRowState(bot: row.source?.sender, id: $0) },
-                        tick: { id in Task { await model.tickBotTask(bot: row.source?.sender, id: id) } })
-                    Button("Show original") { showingOriginal = true }.font(.caption2)
-                } else if row.showsText { Text(row.styled ?? AttributedString(row.text))
-                    .padding(8)
-                    .background(row.style == .ownMessage ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.15), in: .rect(cornerRadius: 12))
-                    .opacity(row.status == nil ? 1 : 0.6) }
-                if let status = row.status {
-                    Text(status).font(.caption2).foregroundStyle(.secondary)
-                } else if row.endsRun, let time = row.time {
-                    Text(time).font(.caption2).foregroundStyle(.secondary)
-                }
-                if !row.reactions.isEmpty {
-                    HStack {
-                        ForEach(row.reactions) { chip in
-                            Button { Task { await model.toggleReaction(on: row, key: chip.key) } } label: {
-                                Text("\(chip.key) \(chip.count)").font(.caption)
-                                    .padding(.horizontal, 8).padding(.vertical, 3)
-                                    .background(chip.reactedByMe ? Color.accentColor.opacity(0.3) : Color.secondary.opacity(0.15), in: .capsule)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: row.style == .ownMessage ? .trailing : .leading)
-            .contextMenu {
-                if row.eventID != nil { actions } else if row.failedLocalID != nil { failedActions }
-            }
-            .sheet(isPresented: $showingSource) { if let source = row.source { MessageSourceView(source: source) } }
-            .confirmationDialog("Delete this message for everyone?", isPresented: $confirmingDelete, titleVisibility: .visible) {
-                Button("Delete", role: .destructive) { Task { await model.delete(row) } }
-                Button("Cancel", role: .cancel) {}
-            } message: { Text("It can't be undone.") }
-            }
-        case .notice:
-            Text(row.text).font(.callout).foregroundStyle(.secondary)
-        case .emote:
-            Text(row.text).italic()
-        case .placeholder:
-            // A deleted, unreadable or unknown message still belongs to its sender: a quiet outlined bubble on their side,
-            // with their name, instead of a full-width line of italics.
-            VStack(alignment: row.isOwn ? .trailing : .leading, spacing: 2) {
-                if !row.isOwn, !row.continuesRun, let sender = row.sender { Text(sender).font(.caption).foregroundStyle(.secondary) }
-                Label(row.text, systemImage: Self.placeholderSymbol(row.text))
-                    .font(.footnote).italic().foregroundStyle(.secondary)
-                    .padding(.horizontal, 10).padding(.vertical, 6)
-                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.secondary.opacity(0.4)))
-            }
-            .frame(maxWidth: .infinity, alignment: row.isOwn ? .trailing : .leading)
-            .padding(row.isOwn ? .leading : .trailing, 48)
-        case .state, .marker:
-            Text(row.text).font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity)
-        case .divider:
-            Text(row.text).font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity)
         }
+    }
+
+    var body: some View {
+        Group {
+            switch row.style {
+            case .message, .ownMessage:
+                HStack(alignment: .top, spacing: 6) {
+                    if row.style == .message {
+                        if row.continuesRun { Color.clear.frame(width: 28, height: 1) } else { SenderAvatar(name: row.sender ?? "?", ref: row.avatar, model: model) }
+                    }
+                    VStack(alignment: row.style == .ownMessage ? .trailing : .leading, spacing: 2) {
+                        if let sender = row.sender, row.style == .message, !row.continuesRun { Text(sender).font(.caption).foregroundStyle(.secondary) }
+                        if let reply = row.reply {
+                            VStack(alignment: .leading, spacing: 0) {
+                                if let name = reply.sender { Text(name).font(.caption2.bold()) }
+                                Text(reply.snippet ?? "Original message unavailable").font(.caption).lineLimit(2)
+                            }
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 6)
+                            .overlay(alignment: .leading) { Rectangle().fill(.secondary).frame(width: 2) }
+                        }
+                        if let image = row.image { ThumbnailView(image: image, model: model, isSticker: row.isSticker).accessibilityLabel(row.isSticker ? row.text : "Image") }
+                        if let file = row.file { FileTileView(file: file, isOpening: model.openingRow == row.id, model: model) { Task { await model.openFile(row) } } }
+                        if let card = row.card, !showingOriginal {
+                            BotCardView(
+                                card: card, state: { model.botRowState(bot: row.source?.sender, id: $0) },
+                                tick: { id in Task { await model.tickBotTask(bot: row.source?.sender, id: id) } })
+                            Button("Show original") { showingOriginal = true }.font(.caption2)
+                        } else if row.showsText {
+                            Text(row.styled ?? AttributedString(row.text))
+                                .padding(8)
+                                .background(row.style == .ownMessage ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.15), in: .rect(cornerRadius: 12))
+                                .opacity(row.status == nil ? 1 : 0.6)
+                            if row.card != nil { Button("Show card") { showingOriginal = false }.font(.caption2) }
+                        }
+                        if let status = row.status {
+                            Text(status).font(.caption2).foregroundStyle(.secondary)
+                        } else if row.endsRun, let time = row.time {
+                            Text(time).font(.caption2).foregroundStyle(.secondary)
+                        }
+                        reactionBar
+                    }
+                    .frame(maxWidth: .infinity, alignment: row.style == .ownMessage ? .trailing : .leading)
+                    .contextMenu {
+                        if row.eventID != nil { actions } else if row.failedLocalID != nil { failedActions }
+                    }
+                }
+            case .notice:
+                VStack(alignment: .leading, spacing: 2) {
+                    if let card = row.card, !showingOriginal {
+                        BotCardView(
+                            card: card, state: { model.botRowState(bot: row.source?.sender, id: $0) },
+                            tick: { id in Task { await model.tickBotTask(bot: row.source?.sender, id: id) } })
+                        Button("Show original") { showingOriginal = true }.font(.caption2)
+                    } else {
+                        Text(row.styled ?? AttributedString(row.text)).font(.callout).foregroundStyle(.secondary)
+                        if row.card != nil { Button("Show card") { showingOriginal = false }.font(.caption2) }
+                    }
+                    reactionBar
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contextMenu { if row.eventID != nil { actions } }
+            case .emote:
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(row.text).italic()
+                    reactionBar
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contextMenu { if row.eventID != nil { actions } }
+            case .placeholder:
+                // A deleted, unreadable or unknown message still belongs to its sender: a quiet outlined bubble on their side,
+                // with their name, instead of a full-width line of italics.
+                VStack(alignment: row.isOwn ? .trailing : .leading, spacing: 2) {
+                    if !row.isOwn, !row.continuesRun, let sender = row.sender { Text(sender).font(.caption).foregroundStyle(.secondary) }
+                    Label(row.text, systemImage: Self.placeholderSymbol(row.text))
+                        .font(.footnote).italic().foregroundStyle(.secondary)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.secondary.opacity(0.4)))
+                }
+                .frame(maxWidth: .infinity, alignment: row.isOwn ? .trailing : .leading)
+                .padding(row.isOwn ? .leading : .trailing, 48)
+            case .state, .marker:
+                Text(row.text).font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity)
+            case .divider:
+                Text(row.text).font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity)
+            }
+        }
+        .sheet(isPresented: $showingSource) { if let source = row.source { MessageSourceView(source: source) } }
+        .confirmationDialog("Delete this message for everyone?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) { Task { await model.delete(row) } }
+            Button("Cancel", role: .cancel) {}
+        } message: { Text("It can't be undone.") }
     }
 }
 
