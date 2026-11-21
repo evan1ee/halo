@@ -20,6 +20,8 @@ public final class NewChatViewModel: Identifiable {
     /// The signed-in user: never offered as someone to chat with.
     private let ownUserID: UserID?
     private var searchTask: Task<Void, Never>?
+    /// The term the current `results` answer, so "no one found" never shows for a search still running.
+    private var answeredTerm: String?
 
     public init(port: any ChatCreationPort, ownUserID: UserID? = nil, onCreated: @escaping @MainActor (RoomID) -> Void) {
         self.ownUserID = ownUserID
@@ -42,14 +44,27 @@ public final class NewChatViewModel: Identifiable {
         return all.filter { $0.id != ownUserID }
     }
 
+    /// True while a search for the typed text hasn't answered yet.
+    public var isSearching: Bool { !trimmedQuery.isEmpty && answeredTerm != query }
+
+    /// The typed text was searched and nobody matched: the view says so instead of showing nothing.
+    public var foundNobody: Bool { !trimmedQuery.isEmpty && answeredTerm == query && candidates.isEmpty }
+
+    private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
+
     func search() async {
         let term = query
         do {
             let found = try await port.searchUsers(term, limit: 20)
             guard !Task.isCancelled, term == query else { return }
             results = found
+            answeredTerm = term
             errorText = nil
-        } catch { if !Task.isCancelled { errorText = Self.text(error) } }
+        } catch {
+            guard !Task.isCancelled else { return }
+            errorText = Self.text(error)
+            answeredTerm = term
+        }
     }
 
     public func startChat(with user: UserSummary) async {

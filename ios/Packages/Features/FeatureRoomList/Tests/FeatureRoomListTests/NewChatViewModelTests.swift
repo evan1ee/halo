@@ -27,6 +27,19 @@ struct NewChatViewModelTests {
         #expect(model.candidates == [ann])
     }
 
+    @Test("'no one found' shows only once the search for the typed text has answered empty")
+    func foundNobody() async throws {
+        let model = NewChatViewModel(port: FakeChatCreationPort(directory: [try user("@ann:x.org", "Ann")]), onCreated: { _ in })
+        #expect(!model.foundNobody && !model.isSearching)
+        model.query = "nobody"
+        #expect(model.isSearching && !model.foundNobody)
+        await model.search()
+        #expect(!model.isSearching && model.foundNobody)
+        model.query = "@zed:x.org"
+        await model.search()
+        #expect(!model.foundNobody)
+    }
+
     @Test("the signed-in user is never offered, whether found in the directory or typed in full")
     func ownUserHidden() async throws {
         let me = try user("@me:x.org", "Me")

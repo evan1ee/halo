@@ -22,6 +22,13 @@ public struct NewChatView: View {
                         .autocorrectionDisabled()
                         .focused($searchFocused)
                         .accessibilityIdentifier("newChatSearch")
+                    if model.isSearching && model.candidates.isEmpty {
+                        HStack(spacing: 8) { ProgressView(); Text("Searching…").foregroundStyle(.secondary) }
+                    } else if model.foundNobody {
+                        Text("No one found. To reach someone the directory doesn't list, type their full ID, like @name:server.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("newChatNoResults")
+                    }
                     ForEach(model.candidates) { user in
                         HStack {
                             Button { Task { await model.startChat(with: user) } } label: {
