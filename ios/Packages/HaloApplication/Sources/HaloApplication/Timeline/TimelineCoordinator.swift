@@ -176,6 +176,13 @@ public actor TimelineCoordinator {
         try await session.toggleReaction(on: event, key: key)
     }
 
+    /// Adds a reaction unless the user already has it; `true` when one was sent.
+    @discardableResult
+    public func addReaction(on event: EventID, key: String) async throws(HaloError) -> Bool {
+        guard let session, case .live = status else { throw .cancelled }
+        return try await session.addReaction(on: event, key: key)
+    }
+
     /// Edits the user's own message.
     public func edit(event: EventID, newText: String) async throws(HaloError) {
         guard let session, case .live = status else { throw .cancelled }

@@ -80,6 +80,7 @@ CREATE TABLE bot_task (   -- as built (migration v5-bot-task); entity_id is the 
   as_of_ts INTEGER NOT NULL, updated_at INTEGER NOT NULL,   -- 'unknown' status and source_redacted are not built
   PRIMARY KEY (account, room_id, bot_sender, entity_type, entity_id)
 );
+-- bot_action is not built: BotActionCoordinator keeps pending ticks in memory (a tick is idempotent, so a restart loses only the spinner)
 CREATE TABLE bot_action (
   account TEXT NOT NULL, room_id TEXT NOT NULL, bot_sender TEXT NOT NULL,
   entity_type TEXT NOT NULL, entity_id INTEGER NOT NULL,

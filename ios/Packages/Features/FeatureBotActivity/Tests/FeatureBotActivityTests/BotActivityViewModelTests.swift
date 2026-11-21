@@ -62,4 +62,51 @@ struct BotActivityViewModelTests {
         await vm.load()
         #expect(vm.phase == .failed)
     }
+
+    @Test("only open tasks with a source message are tickable, and only when ticking is available")
+    func tickable() async throws {
+        let withoutSource = BotTaskEntry(key: .init(room: r1, bot: "@todo:x.org", kind: .todo, id: "9"), title: "x", status: .open, sourceEventID: nil, asOf: now)
+        let (plain, _) = try await model([entry(r1, id: "1", title: "A")])
+        #expect(plain.sections.open.allSatisfy { !$0.canTick })  // no actions coordinator
+        let port = FakeBotTaskPort()
+        try await port.upsert([entry(r1, id: "1", title: "A"), entry(r1, kind: .reminder, id: "2", title: "R"), withoutSource])
+        let activity = BotActivityCoordinator(port: port)
+        let vm = BotActivityViewModel(
+            coordinator: activity,
+            actions: BotActionCoordinator(port: FakeTimelinePort(), activity: activity, botSenders: { [] }), roomName: { _ in "Home" }, now: { self.now })
+        await vm.load()
+        #expect(vm.sections.open.first { $0.key.id == "1" }?.canTick == true)
+        #expect(vm.sections.open.first { $0.key.id == "9" }?.canTick == false)
+        #expect(vm.sections.reminders.allSatisfy { !$0.canTick })
+    }
+
+    @Test("ticking sends the reaction, shows pending, and the list reloads as completed once the bot confirms in the room")
+    func ticking() async throws {
+        let bot = try UserID("@bot:x.org")
+        func message(_ id: String, _ html: String, _ ts: TimeInterval) throws -> TimelineItem {
+            TimelineItem(id: TimelineItemID(id), content: .event(TimelineEvent(
+                eventID: try EventID("$\(id)"), sender: bot, senderName: nil, timestamp: Date(timeIntervalSince1970: ts), isOwn: false,
+                kind: .text("x", isEdited: false), formattedBody: html)))
+        }
+        let timeline = FakeTimelinePort()
+        let added = try message("a", "Added Task <b>#7</b> for me: <i>\"Buy milk\"</i>", 10)
+        timeline.addRoom(r1, items: [added])
+        let activity = BotActivityCoordinator(port: FakeBotTaskPort(), now: { Date(timeIntervalSince1970: 11) })
+        await activity.observe(room: r1, items: [added], botSenders: [bot.rawValue])
+        let vm = BotActivityViewModel(
+            coordinator: activity,
+            actions: BotActionCoordinator(port: timeline, activity: activity, botSenders: { [bot.rawValue] }), roomName: { _ in "Home" },
+            now: { Date(timeIntervalSince1970: 100) })
+        await vm.load()
+        let observing = Task { await vm.observeActions() }
+        let item = try #require(vm.sections.open.first)
+        #expect(item.canTick && item.tickState == nil)
+        let ticking = Task { await vm.tick(item) }
+        for _ in 0..<500_000 where vm.actionStates.isEmpty { await Task.yield() }
+        #expect(vm.actionStates.values.first == .pending && vm.sections.open.first?.tickState == .pending)
+        try timeline.emit(.append([try message("d", "✅ Marked task as done: <i>\"Buy milk\"</i>", 20)]), in: r1)
+        await ticking.value
+        observing.cancel()
+        #expect(vm.sections.open.isEmpty && vm.sections.completed.map(\.title) == ["Buy milk"])
+    }
 }

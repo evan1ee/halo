@@ -35,6 +35,8 @@ final class AppRoot {
     private let media: MediaLoader
     private let unrecognisedBots = UnrecognisedBotMessages()
     let botActivity = BotActivityCoordinator()
+    /// Ticks from Activity; kept for the app's life so a pending tick survives the sheet closing.
+    private lazy var botActions = BotActionCoordinator(port: timelinePort, activity: botActivity, botSenders: { Set(AppPreferences().botSenders) })
     private let previewPolicy: any MediaPreviewPolicyPort
     private let roomPort: MatrixRoomPort
     private let chatCreation: MatrixChatCreationPort
@@ -355,7 +357,7 @@ final class AppRoot {
     /// The Activity screen's model: names of rooms from the room list.
     func makeBotActivity() -> BotActivityViewModel {
         BotActivityViewModel(
-            coordinator: botActivity,
+            coordinator: botActivity, actions: botActions,
             roomName: { [roomList] room in
                 guard case .loaded(_, let rows) = roomList.content else { return nil }
                 return rows.first { $0.id == room }?.name

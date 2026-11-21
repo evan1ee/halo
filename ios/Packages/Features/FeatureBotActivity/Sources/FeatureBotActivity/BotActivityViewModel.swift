@@ -20,6 +20,11 @@ public final class BotActivityViewModel: Identifiable {
         /// When the newest bot message about it was sent ("as of").
         public let asOf: Date
         public let sourceEventID: EventID?
+        /// An open task created in a message Halo has seen, with ticking available: the bot's own number for it isn't enough
+        /// (BOT_MESSAGES FR-3: never the list, never a guess).
+        public let canTick: Bool
+        /// Set while the bot's answer is awaited or the last tick didn't work.
+        public let tickState: BotActionCoordinator.State?
     }
 
     public struct Sections: Equatable, Sendable {
@@ -39,12 +44,17 @@ public final class BotActivityViewModel: Identifiable {
     public var roomFilter: RoomID?
     public var botFilter: String?
 
+    public private(set) var actionStates: [BotTaskEntry.Key: BotActionCoordinator.State] = [:]
+
     private let coordinator: BotActivityCoordinator
+    private let actions: BotActionCoordinator?
     private let roomName: @MainActor (RoomID) -> String?
     private let now: @Sendable () -> Date
 
-    public init(coordinator: BotActivityCoordinator, roomName: @escaping @MainActor (RoomID) -> String?, now: @escaping @Sendable () -> Date = { Date() }) {
+    public init(
+        coordinator: BotActivityCoordinator, actions: BotActionCoordinator? = nil, roomName: @escaping @MainActor (RoomID) -> String?, now: @escaping @Sendable () -> Date = { Date() }) {
         self.coordinator = coordinator
+        self.actions = actions
         self.roomName = roomName
         self.now = now
     }
@@ -57,6 +67,23 @@ public final class BotActivityViewModel: Identifiable {
             entries = snapshot.entries
             phase = .loaded
         }
+    }
+
+    /// Follows the tick states (and reloads the list when a tick ends, since a confirmation changes the index). Runs until cancelled.
+    public func observeActions() async {
+        guard let actions else { return }
+        for await states in await actions.stateChanges() {
+            let ended = actionStates.contains { key, state in state == .pending && states[key] != .pending }
+            actionStates = states
+            if ended { await load() }
+        }
+    }
+
+    /// Ticks an open task: a 👍 on the message that created it; it is done only when the bot confirms.
+    public func tick(_ item: Item) async {
+        guard let actions, item.canTick, let entry = entries.first(where: { $0.key == item.key }) else { return }
+        await actions.tick(entry)
+        await load()
     }
 
     /// "Rebuild index": empties it; rooms fill it again as they are opened.
@@ -81,7 +108,9 @@ public final class BotActivityViewModel: Identifiable {
             guard botFilter == nil || entry.key.bot == botFilter else { continue }
             let item = Item(
                 key: entry.key, title: entry.title ?? "Task #\(entry.key.id)", roomName: name(of: entry.key.room), botName: Self.botName(entry.key.bot),
-                detail: entry.detail, asOf: entry.asOf, sourceEventID: entry.sourceEventID)
+                detail: entry.detail, asOf: entry.asOf, sourceEventID: entry.sourceEventID,
+                canTick: actions != nil && entry.key.kind == .todo && entry.status == .open && entry.sourceEventID != nil,
+                tickState: actionStates[entry.key])
             switch (entry.status, entry.key.kind) {
             case (.open, .todo): result.open.append(item)
             case (.open, .reminder): result.reminders.append(item)

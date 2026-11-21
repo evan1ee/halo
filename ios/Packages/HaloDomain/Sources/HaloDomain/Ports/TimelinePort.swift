@@ -15,6 +15,7 @@ public protocol TimelinePort: Sendable {
 }
 
 extension TimelineSession {
+    public func addReaction(on event: EventID, key: String) async throws(HaloError) -> Bool { throw .unsupported("ADD_REACTION") }
     public func editHistory(of event: EventID) async throws(HaloError) -> [EditRevision] { throw .unsupported("EDIT_HISTORY") }
 }
 
@@ -54,6 +55,11 @@ public protocol TimelineSession: Sendable {
     /// Adds the signed-in user's reaction `key` to a confirmed event, or removes it if already there. Events that
     /// are still sending have no event ID yet and can't be reacted to.
     func toggleReaction(on event: EventID, key: String) async throws(HaloError)
+
+    /// Adds the signed-in user's reaction `key` to a confirmed event only if they haven't reacted with it yet (unlike
+    /// `toggleReaction`, never removes one). Returns `true` when a reaction was sent. Works for events that aren't in the loaded
+    /// window. Sessions that can't tell throw `.unsupported`.
+    func addReaction(on event: EventID, key: String) async throws(HaloError) -> Bool
 
     /// Replaces the text of the user's own message. Blank text throws `.invalidInput("EMPTY_MESSAGE")`; someone
     /// else's message throws `.forbidden`.

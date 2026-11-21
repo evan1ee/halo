@@ -1,4 +1,5 @@
 #if canImport(SwiftUI)
+import HaloApplication
 import HaloDomain
 import HaloFoundation
 import SwiftUI
@@ -44,6 +45,7 @@ public struct BotActivityView: View {
             }
         }
         .task { await model.load() }
+        .task { await model.observeActions() }
     }
 
     @ViewBuilder private var content: some View {
@@ -73,15 +75,33 @@ public struct BotActivityView: View {
         if !items.isEmpty {
             Section(title) {
                 ForEach(items) { item in
-                    Button { open(item.key.room, item.sourceEventID) } label: { row(item) }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            #if canImport(UIKit)
-                            Button("Copy", systemImage: "doc.on.doc") { UIPasteboard.general.string = item.title }
-                            #endif
-                        }
+                    HStack(alignment: .top, spacing: 12) {
+                        if item.canTick || item.tickState != nil { tickControl(item) }
+                        Button { open(item.key.room, item.sourceEventID) } label: { row(item) }
+                            .buttonStyle(.plain)
+                    }
+                    .contextMenu {
+                        #if canImport(UIKit)
+                        Button("Copy", systemImage: "doc.on.doc") { UIPasteboard.general.string = item.title }
+                        #endif
+                    }
                 }
             }
+        }
+    }
+
+    /// The round tick button: a circle to tap, a spinner while the bot's answer is awaited (never a check before the bot confirms).
+    @ViewBuilder private func tickControl(_ item: BotActivityViewModel.Item) -> some View {
+        if item.tickState == .pending {
+            ProgressView().frame(width: 28, height: 28).accessibilityLabel("Waiting for the bot")
+        } else {
+            Button { Task { await model.tick(item) } } label: {
+                Image(systemName: item.tickState == nil ? "circle" : "exclamationmark.circle").font(.title2).foregroundStyle(item.tickState == nil ? Color.accentColor : .orange)
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Mark as done")
+            .accessibilityIdentifier("tick-\(item.key.id)")
         }
     }
 
@@ -91,10 +111,20 @@ public struct BotActivityView: View {
             if let detail = item.detail, !detail.isEmpty { Text(detail).font(.subheadline).foregroundStyle(.secondary) }
             Text("\(item.roomName) · \(item.botName) · as of \(item.asOf.formatted(.relative(presentation: .named)))")
                 .font(.caption).foregroundStyle(.secondary)
+            if let status = tickStatus(item.tickState) { Text(status).font(.caption).foregroundStyle(.orange) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
+    }
+
+    private func tickStatus(_ state: BotActionCoordinator.State?) -> String? {
+        switch state {
+        case .pending: "Waiting for bot…"
+        case .failed: "That didn't work. Tap to try again."
+        case .noResponse: "No response from bot. Tap to try again."
+        case nil: nil
+        }
     }
 
     private var filterMenu: some View {

@@ -197,6 +197,20 @@ public enum TimelinePortContract {
         try await session.toggleReaction(on: id, key: "👍")
         _ = try await wait("the reaction removed", body: text) { $0.reactions.isEmpty }
 
+        // addReaction never removes: the first call reacts, the second finds the reaction and sends nothing.
+        guard try await session.addReaction(on: id, key: "👍") else { throw ContractViolation("addReaction must react when the user hasn't") }
+        _ = try await wait("the added reaction", body: text) { $0.reactions.contains { $0.key == "👍" && $0.count == 1 && $0.reactedByMe } }
+        var second = true
+        for _ in 0..<20 {  // the SDK reads its event cache, which holds our own reaction a moment after the timeline shows it
+            second = try await session.addReaction(on: id, key: "👍")
+            if !second { break }
+            try await session.toggleReaction(on: id, key: "👍")  // undo the duplicate and try again
+            try await Task.sleep(for: .milliseconds(500))
+        }
+        guard !second else { throw ContractViolation("addReaction must not react twice") }
+        try await session.toggleReaction(on: id, key: "👍")
+        _ = try await wait("the added reaction removed", body: text) { $0.reactions.isEmpty }
+
         // Typing notices are accepted (the stream of others typing only fires on change, so nothing is awaited here).
         do { try await session.setTyping(true); try await session.setTyping(false) } catch { throw ContractViolation("setTyping failed with \(error.code)") }
 

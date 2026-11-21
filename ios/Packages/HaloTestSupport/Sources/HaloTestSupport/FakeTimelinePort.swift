@@ -230,6 +230,18 @@ public final class FakeTimelinePort: TimelinePort {
             }
         }
 
+        func addReaction(on event: EventID, key: String) async throws(HaloError) -> Bool {
+            let reacted = port.rooms.withLock { rooms -> Bool in
+                for item in rooms[room]?.items ?? [] {
+                    if case .event(let e) = item.content, e.eventID == event { return e.reactions.contains { $0.key == key && $0.reactedByMe } }
+                }
+                return false
+            }
+            if reacted { return false }
+            try await toggleReaction(on: event, key: key)
+            return true
+        }
+
         func edit(event: EventID, newText: String) async throws(HaloError) {
             let trimmed = newText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { throw .invalidInput("EMPTY_MESSAGE") }

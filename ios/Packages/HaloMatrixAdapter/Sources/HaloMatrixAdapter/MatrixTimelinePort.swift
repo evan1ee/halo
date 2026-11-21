@@ -206,6 +206,16 @@ final class MatrixTimelineSession: TimelineSession {
         } catch { throw ErrorMapper.map(error) }
     }
 
+    func addReaction(on event: EventID, key: String) async throws(HaloError) -> Bool {
+        do {
+            let item = try await timeline.getEventTimelineItemByEventId(eventId: event.rawValue)
+            let reacted = item.reactions.contains { reaction in reaction.key == key && reaction.senders.contains { $0.senderId == ownUserID } }
+            if reacted { return false }
+            _ = try await timeline.toggleReaction(itemId: .eventId(eventId: event.rawValue), key: key)
+            return true
+        } catch { throw ErrorMapper.map(error) }
+    }
+
     func editHistory(of event: EventID) async throws(HaloError) -> [EditRevision] {
         do {
             return try await timeline.editRevisions(eventId: event.rawValue).map { record in
