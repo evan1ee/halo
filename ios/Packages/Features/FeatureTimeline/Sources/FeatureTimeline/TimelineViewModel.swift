@@ -334,6 +334,8 @@ public final class TimelineViewModel {
     public private(set) var unreadMarkerID: String?
     /// Set by `jumpToReplyOriginal`; the view scrolls to this row and clears it with `jumpHandled`.
     public private(set) var jumpRequest: String?
+    /// The row a reply jump just landed on; shown highlighted until `clearHighlight`.
+    public private(set) var highlightedRowID: String?
     /// `true` while the newest row is in view; `false` when the user scrolled up to read history (TIMELINE §6: Detached).
     public private(set) var isAtBottom = true
     /// Number of incoming messages appended while the user is scrolled up (`!isAtBottom`). Cleared on returning to the bottom.
@@ -507,10 +509,13 @@ public final class TimelineViewModel {
         guard let target = row.reply?.eventID, case .live(let rows, _, _, _) = content,
               let original = rows.first(where: { $0.eventID == target }) else { return false }
         jumpRequest = original.id
+        highlightedRowID = original.id
         return true
     }
 
     public func jumpHandled() { jumpRequest = nil }
+
+    public func clearHighlight() { highlightedRowID = nil }
 
     // MARK: Opening files
 

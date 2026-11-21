@@ -64,6 +64,8 @@ public struct TimelineView: View {
                     }
                     ForEach(rows) { row in
                         RowView(row: row, model: model)
+                            .background(model.highlightedRowID == row.id ? Color.accentColor.opacity(0.18) : .clear, in: .rect(cornerRadius: 8))
+                            .animation(.easeOut(duration: 0.4), value: model.highlightedRowID)
                             // The pill's target: whether the first row that was unread at open is on screen.
                             .onScrollVisibilityChange { if row.id == model.unreadMarkerID { markerVisible = $0 } }
                             // D6: a row counts as seen when at least half of it is on screen; the 0.5 s dwell is in the view model.
@@ -121,6 +123,10 @@ public struct TimelineView: View {
                     guard let target else { return }
                     withAnimation { proxy.scrollTo(target, anchor: .center) }
                     model.jumpHandled()
+                    Task {
+                        try? await Task.sleep(for: .seconds(1.5))
+                        model.clearHighlight()
+                    }
                 }
                 // FR-4: the marker is above the viewport once the user is at the bottom and the marker is out of sight.
                 .overlay(alignment: .top) {

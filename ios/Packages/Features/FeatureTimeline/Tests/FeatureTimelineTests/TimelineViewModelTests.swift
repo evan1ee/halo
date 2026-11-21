@@ -802,7 +802,9 @@ struct TimelineViewModelTests {
         await vm.start()
         for _ in 0..<200_000 where vm.lastRowID != "m3" { await Task.yield() }
         guard case .live(let rows, _, _, _) = vm.content else { Issue.record("not live"); return }
-        #expect(vm.jumpToReplyOriginal(from: rows[1]) && vm.jumpRequest == "m1")
+        #expect(vm.jumpToReplyOriginal(from: rows[1]) && vm.jumpRequest == "m1" && vm.highlightedRowID == "m1")
+        vm.clearHighlight()
+        #expect(vm.highlightedRowID == nil)
         vm.jumpHandled()
         #expect(vm.jumpRequest == nil)
         #expect(!vm.jumpToReplyOriginal(from: rows[2]) && vm.jumpRequest == nil)
