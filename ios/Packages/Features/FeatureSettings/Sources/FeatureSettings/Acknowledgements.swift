@@ -28,12 +28,25 @@ public enum Acknowledgements {
         return entries.filter { $0.name.localizedCaseInsensitiveContains(needle) || $0.license.localizedCaseInsensitiveContains(needle) }
     }
 
-    /// The bundled list.
+    /// Halo's direct Swift package dependencies distributed with the app (docs/security/DEPENDENCY_INVENTORY.md §1).
+    public static let swiftPackages: [Acknowledgement] = [
+        Acknowledgement(
+            name: "GRDB.swift", version: "7.12.0", license: "MIT",
+            repository: "https://github.com/groue/GRDB.swift"),
+        Acknowledgement(
+            name: "matrix-rust-components-swift", version: "26.11.17", license: "Apache-2.0",
+            repository: "https://github.com/element-hq/matrix-rust-components-swift"),
+    ]
+
+    /// The bundled Rust crate list from the SDK build.
     public static func bundled() -> [Acknowledgement] {
         guard let url = Bundle.module.url(forResource: "acknowledgements", withExtension: "csv"),
               let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
         return parse(text)
     }
+
+    /// Every open-source component distributed with Halo (direct Swift packages + Rust crates).
+    public static func all() -> [Acknowledgement] { swiftPackages + bundled() }
 
     private static func split(_ line: String) -> [String] {
         var fields: [String] = [], current = "", quoted = false

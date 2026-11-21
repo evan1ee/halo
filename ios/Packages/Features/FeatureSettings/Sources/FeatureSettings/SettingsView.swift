@@ -429,33 +429,44 @@ public struct DiagnosticsView: View {
 /// The open-source components Halo ships and their licences, searchable.
 public struct AcknowledgementsView: View {
     @State private var query = ""
-    @State private var entries: [Acknowledgement] = []
+    @State private var rustCrates: [Acknowledgement] = []
 
     public init() {}
 
     public var body: some View {
-        let filtered = Acknowledgements.filter(entries, query: query)
+        let filteredSwift = Acknowledgements.filter(Acknowledgements.swiftPackages, query: query)
+        let filteredRust = Acknowledgements.filter(rustCrates, query: query)
+        let hasMatches = !filteredSwift.isEmpty || !filteredRust.isEmpty
         List {
-            if !filtered.isEmpty || query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if hasMatches || query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Section {
-                    Text("Halo is built on the Matrix Rust SDK and the open-source components below.").font(.footnote).foregroundStyle(.secondary)
+                    Text("Halo is built on the Matrix Rust SDK, GRDB and the open-source components below.").font(.footnote).foregroundStyle(.secondary)
                 }
-                Section("\(filtered.count) components") {
-                    ForEach(filtered) { entry in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("\(entry.name) \(entry.version)")
-                            Text(entry.license).font(.caption).foregroundStyle(.secondary)
-                        }
+                if !filteredSwift.isEmpty {
+                    Section("Swift packages (\(filteredSwift.count))") {
+                        ForEach(filteredSwift) { row($0) }
+                    }
+                }
+                if !filteredRust.isEmpty || rustCrates.isEmpty {
+                    Section("Rust crates (\(filteredRust.count))") {
+                        ForEach(filteredRust) { row($0) }
                     }
                 }
             }
         }
         .overlay {
-            if !entries.isEmpty, filtered.isEmpty { ContentUnavailableView.search(text: query) }
+            if !rustCrates.isEmpty, !hasMatches { ContentUnavailableView.search(text: query) }
         }
         .navigationTitle("Acknowledgements")
         .searchable(text: $query)
-        .task { if entries.isEmpty { entries = Acknowledgements.bundled() } }
+        .task { if rustCrates.isEmpty { rustCrates = Acknowledgements.bundled() } }
+    }
+
+    private func row(_ entry: Acknowledgement) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("\(entry.name) \(entry.version)")
+            Text(entry.license).font(.caption).foregroundStyle(.secondary)
+        }
     }
 }
 #endif

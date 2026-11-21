@@ -28,4 +28,23 @@ struct AcknowledgementsTests {
         #expect(Acknowledgements.parse(committed) == Acknowledgements.bundled())
         #expect(Acknowledgements.bundled().count > 100)
     }
+
+    @Test("AC-SET-1: direct Swift package acknowledgements match the pinned SDK and GRDB versions")
+    func matchesSwiftPackages() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let sdkVersionFile = try String(contentsOf: root.appendingPathComponent("ios/SDKVERSION.md"), encoding: .utf8)
+        let grdbPackage = try String(contentsOf: root.appendingPathComponent("ios/Packages/HaloPersistence/Package.swift"), encoding: .utf8)
+
+        let sdk = try #require(Acknowledgements.swiftPackages.first { $0.name == "matrix-rust-components-swift" })
+        #expect(sdkVersionFile.contains("package_version: \(sdk.version)"))
+        #expect(sdk.license == "Apache-2.0")
+
+        let grdb = try #require(Acknowledgements.swiftPackages.first { $0.name == "GRDB.swift" })
+        #expect(grdbPackage.contains("exact: \"\(grdb.version)\""))
+        #expect(grdb.license == "MIT")
+
+        #expect(Acknowledgements.all().count == Acknowledgements.swiftPackages.count + Acknowledgements.bundled().count)
+    }
 }
