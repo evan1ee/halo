@@ -56,7 +56,14 @@ public final class RoomListViewModel {
         case failed(String)
     }
 
+    public struct SyncNotice: Equatable, Sendable {
+        public let text: String
+        public let isOffline: Bool
+    }
+
     public private(set) var content: Content = .idle
+    /// Non-nil while sync is offline or retrying after an error (ROOM_LIST FR-7); `nil` while healthy.
+    public private(set) var syncNotice: SyncNotice?
 
     /// The list filter (ROOM_LIST FR-2). Applied here to the rooms the coordinator holds; with classic sync every room is present.
     public var filter: RoomListFilter = .all {
@@ -65,6 +72,7 @@ public final class RoomListViewModel {
 
     private let session: SessionCoordinator
     private let rooms: RoomListCoordinator
+    private let sync: SyncCoordinator?
     private let receipts: ReadReceiptCoordinator?
     private let actions: (any RoomPort)?
     /// Told which rooms are at the top of the list, so their timelines can be prepared before they are opened.
@@ -89,11 +97,15 @@ public final class RoomListViewModel {
     /// Restarts the room-list subscription after a failure (ROOM_LIST §9).
     public func retry() async { await rooms.start() }
 
-    public init(session: SessionCoordinator, rooms: RoomListCoordinator, receipts: ReadReceiptCoordinator? = nil, actions: (any RoomPort)? = nil, media: MediaLoader? = nil) {
+    public init(
+        session: SessionCoordinator, rooms: RoomListCoordinator, sync: SyncCoordinator? = nil,
+        receipts: ReadReceiptCoordinator? = nil, actions: (any RoomPort)? = nil, media: MediaLoader? = nil
+    ) {
         self.media = media
         self.actions = actions
         self.session = session
         self.rooms = rooms
+        self.sync = sync
         self.receipts = receipts
     }
 
@@ -169,6 +181,12 @@ public final class RoomListViewModel {
                 for await positions in positions { await self?.positionsChanged(positions) }
             })
         }
+        if let sync {
+            let syncStatuses = await sync.statuses()
+            follow.append(Task { [weak self] in
+                for await status in syncStatuses { self?.syncChanged(status) }
+            })
+        }
         follow.append(Task { [weak self] in
             for await _ in readInputs { await self?.readInputsChanged() }
         })
@@ -188,6 +206,18 @@ public final class RoomListViewModel {
 
     func sessionChanged(_ state: SessionCoordinator.State) async {
         if case .ready = state { await rooms.start() } else { await rooms.stop() }
+    }
+
+    func syncChanged(_ status: SyncStatus) {
+        syncNotice = Self.syncNotice(for: status)
+    }
+
+    static func syncNotice(for status: SyncStatus) -> SyncNotice? {
+        switch status {
+        case .offline: SyncNotice(text: "Offline — waiting to reconnect", isOffline: true)
+        case .failed: SyncNotice(text: "Sync interrupted — retrying…", isOffline: false)
+        case .idle, .running, .stopped: nil
+        }
     }
 
     func readInputsChanged() async {

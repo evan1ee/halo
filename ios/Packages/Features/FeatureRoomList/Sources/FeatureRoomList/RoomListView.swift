@@ -21,6 +21,7 @@ public struct RoomListView: View {
                 ProgressView()
             case .loaded(_, let rows):
                 VStack(spacing: 0) {
+                syncIndicator
                 filterBar
                 List {
                     Section {
@@ -127,6 +128,26 @@ public struct RoomListView: View {
     }
 
     private static let filters: [(RoomListFilter, String)] = [(.all, "All"), (.unread, "Unread"), (.people, "People"), (.rooms, "Rooms"), (.favourites, "Favourites"), (.invites, "Invites")]
+
+    @ViewBuilder private var syncIndicator: some View {
+        if let notice = model.syncNotice {
+            HStack(spacing: 8) {
+                Image(systemName: notice.isOffline ? "wifi.slash" : "arrow.triangle.2.circlepath")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                Text(notice.text).font(.footnote).foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 6)
+            .padding(.bottom, 2)
+            #if os(iOS)
+            .background(Color(uiColor: .systemGroupedBackground), ignoresSafeAreaEdges: [])
+            #endif
+            .accessibilityIdentifier("sync-indicator")
+        }
+    }
 
     private var filterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {

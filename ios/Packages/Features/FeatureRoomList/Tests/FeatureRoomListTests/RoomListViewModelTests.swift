@@ -271,4 +271,24 @@ struct RoomListWarmTests {
         await model.listChanged(.loaded(roomCount: 1))
         #expect(model.invitePreviews[id] == nil)
     }
+
+    @Test("sync indicator appears only while offline or retrying, and clears once running (ROOM_LIST FR-7)")
+    func syncIndicator() async {
+        let syncPort = FakeSyncPort()
+        let session = SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain())
+        let sync = SyncCoordinator(port: syncPort, session: session, sleep: { _ in })
+        await sync.begin()
+        let model = RoomListViewModel(session: session, rooms: RoomListCoordinator(port: FakeRoomListPort()), sync: sync)
+        await model.start()
+        #expect(model.syncNotice == nil)
+        syncPort.report(.offline)
+        for _ in 0..<200_000 where model.syncNotice?.isOffline != true { await Task.yield() }
+        #expect(model.syncNotice == .init(text: "Offline — waiting to reconnect", isOffline: true))
+        syncPort.report(.failed)
+        for _ in 0..<200_000 where model.syncNotice?.isOffline != false { await Task.yield() }
+        #expect(model.syncNotice == .init(text: "Sync interrupted — retrying…", isOffline: false))
+        syncPort.report(.running)
+        for _ in 0..<200_000 where model.syncNotice != nil { await Task.yield() }
+        #expect(model.syncNotice == nil)
+    }
 }
