@@ -718,6 +718,26 @@ struct TimelineViewModelTests {
         #expect(await vm.avatarData(MediaRef(token: "missing")) == nil)
     }
 
+    @Test("an own sent message shows Seen / Seen by N from other people's receipts; others' and unsent messages do not")
+    func seenLabels() throws {
+        let vm = TimelineViewModel(
+            coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: try RoomID("!r:x.org")),
+            locale: Locale(identifier: "en_US"), timeZone: TimeZone(identifier: "UTC") ?? .gmt)
+        func item(own: Bool, state: SendState = .sent, readers: Int) throws -> TimelineItem {
+            let users = try (0..<readers).map { try UserID("@u\($0):x.org") }
+            return TimelineItem(
+                id: TimelineItemID("id"),
+                content: .event(TimelineEvent(
+                    eventID: nil, sender: try UserID("@alice:x.org"), senderName: "Alice", timestamp: Date(timeIntervalSince1970: 0),
+                    isOwn: own, kind: .text("hi", isEdited: false), sendState: state, readBy: users)))
+        }
+        #expect(vm.row(try item(own: true, readers: 0)).seenLabel == nil)
+        #expect(vm.row(try item(own: true, readers: 1)).seenLabel == "Seen")
+        #expect(vm.row(try item(own: true, readers: 3)).seenLabel == "Seen by 3")
+        #expect(vm.row(try item(own: false, readers: 2)).seenLabel == nil)
+        #expect(vm.row(try item(own: true, state: .sending, readers: 2)).seenLabel == nil)
+    }
+
     @Test("opening a file downloads it into a temporary folder, shows it, and deleting it again on close; big files are refused")
     func openingFiles() async throws {
         let port = FakeMediaPort()

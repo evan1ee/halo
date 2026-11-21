@@ -46,12 +46,15 @@ public struct TimelineEvent: Sendable, Equatable {
     public let localID: String?
     /// The sender's profile picture, if they have one and the SDK has resolved it.
     public let senderAvatar: MediaRef?
+    /// Other people whose newest read receipt is on this event (never the signed-in user); TIMELINE FR-6.
+    public let readBy: [UserID]
 
     public init(
         eventID: EventID?, sender: UserID?, senderName: String?, timestamp: Date, isOwn: Bool, kind: TimelineEventKind,
         sendState: SendState = .sent, reactions: [ReactionSummary] = [], replyTo: ReplyPreview? = nil, formattedBody: String? = nil,
-        localID: String? = nil, senderAvatar: MediaRef? = nil
+        localID: String? = nil, senderAvatar: MediaRef? = nil, readBy: [UserID] = []
     ) {
+        self.readBy = readBy
         self.senderAvatar = senderAvatar
         self.localID = localID
         self.formattedBody = formattedBody

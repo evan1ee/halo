@@ -60,6 +60,10 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     public var endsRun = true
     /// When it was sent, as a short time ("9:41 AM"); set for messages.
     public var time: String?
+    /// How many other people's newest read receipt is on this own message (TIMELINE FR-6); 0 for anything else.
+    public var seenBy = 0
+    /// "Seen" / "Seen by 3" for the footer of an own message someone has read; `nil` otherwise.
+    public var seenLabel: String? { seenBy == 0 ? nil : seenBy == 1 ? "Seen" : "Seen by \(seenBy)" }
 
     public struct FileTile: Equatable, Sendable {
         public let kind: MediaKind
@@ -920,6 +924,7 @@ public final class TimelineViewModel {
         var row = baseRow(item)
         if case .event(let event) = item.content {
             if !event.isOwn { row.avatar = event.senderAvatar }
+            if event.isOwn, row.style == .ownMessage, event.sendState == .sent { row.seenBy = event.readBy.count }
             if row.style == .message || row.style == .ownMessage { row.time = timeFormatter.string(from: event.timestamp) }
         }
         return row

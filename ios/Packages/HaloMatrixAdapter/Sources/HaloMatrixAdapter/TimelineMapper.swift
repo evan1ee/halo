@@ -59,7 +59,8 @@ enum TimelineMapper {
                 ReactionSummary(key: reaction.key, count: reaction.senders.count, reactedByMe: reaction.senders.contains { $0.senderId == ownUserID })
             },
             replyTo: replyPreview(of: event.content), formattedBody: formattedHTML(of: event.content),
-            localID: localID, senderAvatar: senderAvatar)
+            localID: localID, senderAvatar: senderAvatar,
+            readBy: event.readReceipts.keys.filter { $0 != ownUserID }.sorted().compactMap { try? UserID($0) })
     }
 
     /// The HTML body of a text, notice or emote message, if the sender gave one in the standard format.

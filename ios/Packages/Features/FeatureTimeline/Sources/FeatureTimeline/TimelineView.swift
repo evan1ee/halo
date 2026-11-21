@@ -398,7 +398,9 @@ private struct RowView: View {
                         if let status = row.status {
                             Text(status).font(.caption2).foregroundStyle(.secondary)
                         } else if row.endsRun, let time = row.time {
-                            Text(time).font(.caption2).foregroundStyle(.secondary)
+                            Text(row.seenLabel.map { "\(time) · \($0)" } ?? time).font(.caption2).foregroundStyle(.secondary)
+                        } else if let seen = row.seenLabel {
+                            Text(seen).font(.caption2).foregroundStyle(.secondary)
                         }
                         reactionBar
                     }
