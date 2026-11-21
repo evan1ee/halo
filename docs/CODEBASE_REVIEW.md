@@ -400,8 +400,8 @@ non-messages), and its SDK didn't count undecryptable events, which the real SDK
 | PS31 | (done: `RoomListViewModelTests.roomListAndBadgeAlwaysAgree`, R-05) | — |
 | PS32 | (done: `NotificationProcessorTests.foregroundAndModeAwareBadge`, R-08) | — |
 | PS33 | (done: `NotificationRecordStoreTests.concurrentAddAndClearNeverResurrects`, R-13) | — |
-| PS34 | Remote logout during sync | Session ends in `signedOut`/`softLoggedOut`, sync stops |
-| PS35 | Restore times out, then the SDK call completes | Exactly one client; state consistent |
+| PS34 | (done: `SessionCoordinatorTests.remoteLogoutStopsSync` + `AdapterContractTests.remoteLogoutDuringSync`, R-10) | — |
+| PS35 | (done: `SessionCoordinatorTests.singleFlightRestore`, R-12) | — |
 | PS36 | App killed after `reportSeen`, before persist completes | Intent restored or receipt re-derived on next open (outbox gap check) |
 
 Each should be a pure-policy or coordinator test first, then (where marked by the server) a server-rules check.
@@ -453,9 +453,9 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 | R-07 | P0 | Unread | E1/E1b ("covers latest") suppressed positive SDK counts: an undecryptable message after the read position was hidden (confirmed live) | **Fixed (D79):** SDK counts win once its receipt is applied or the own latest event is on the server |
 | R-08 | P1 | Badge/NSE | NSE writes `content.badge` from a different formula after the app's write | **FIXED:** `HaloApplication.NotificationProcessor` leaves `badge = nil` while app is foreground (`AttentionCache.isForeground`), and computes background fallback via `ReadStatePolicy` with room mode; PS32 |
 | R-09 | P1 | NSE | `restore` initialises the SDK with the full runtime in the NSE | Pass `lightweightRuntime` through `restore`/`loginPassword` |
-| R-10 | P1 | Session | No `ClientDelegate`; remote logout never handled; sync retried forever | Register `Client.setDelegate`, emit `.softLoggedOut`/`.loggedOut` |
+| R-10 | P1 | Session | No `ClientDelegate`; remote logout never handled; sync retried forever | **FIXED:** `Client.setDelegate` (`AuthDelegate`) + `runSync` `.unauthorized` stop sync and emit `.softLoggedOut`/`.loggedOut`; PS34 + `AdapterContractTests.remoteLogoutDuringSync` |
 | R-11 | P1 | Security/session | NSE token refresh not persisted; delegate can't retrieve before first save | Persist refresh in the NSE (Keychain write), serve `retrieveSessionFromKeychain` from the Keychain |
-| R-12 | P1 | Session | Restore timeout can leave a late-adopted client and a second client on retry | Make restore single-flight; discard a late result or adopt it explicitly |
+| R-12 | P1 | Session | Restore timeout can leave a late-adopted client and a second client on retry | **FIXED:** single-flight restore + generation guard in `SessionCoordinator` and `MatrixSessionPort`; retry awaits in-flight task, late completion adopts on `.restoreFailed` or discards after `logout`; PS35 |
 | R-13 | P1 | Persistence | Records in `UserDefaults`, non-atomic cross-process RMW | **FIXED:** GRDB `notification_record` (migration v7) + `DarwinSignal` (`one.mbm.halo.db.changed`); PS33 |
 | R-14 | P1 | Notifications | Suppressed/filtered pushes (e.g. encrypted reactions) show "Halo: New message" | Deliver silent content when suppressed; pursue the filtering entitlement (V-PUSH-3) |
 | R-15 | P2 | Unread | Opening a room clears all its records before anything is seen (vs D6) | Clear records covered by the sent receipt |
@@ -499,7 +499,7 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 | 0.3 Carry-over completeness (R-04) — **done** | Permanent ghosts | Sync emits post-sync room set via `RoomListPort.syncCompletions()`; coordinator drops unconfirmed carried rooms | HaloMatrixAdapter, HaloApplication | — | S28 green |
 | 0.4 `ReadStateCoordinator` (R-05, R-08) — **done** | One truth for list, badge, NSE | `ReadStateCoordinator` publishes `[RoomID: RoomReadState]`; `RoomListViewModel` consumes states; `NotificationProcessor` in `HaloApplication` handles NSE badge via `ReadStatePolicy` | HaloApplication, FeatureRoomList, NSE | 0.2 | PS31, PS32 green; boundary check forbids `ReadStatePolicy` in Features |
 | 0.5 Identity/order instead of timestamps (R-06; R-07 **done 2026-11-21**, D79) — **done (D80, ADR-0020)** | Missed unreads | `TimelineReadTracker`, `read_intent.timeline_order` (v8), identity + confirmed E1 (`INTENT_STALE`), tail `latestEventId()`, ADR-0020 | HaloDomain, HaloPersistence, adapter, ReadReceiptCoordinator, ReadStateCoordinator, FeatureTimeline | ADR-0020 | S18 inverted, S29, PS28–PS30 green |
-| 0.6 Session lifecycle (R-10, R-12) | Stuck sessions | `ClientDelegate`; single-flight restore | adapter, HaloApplication | — | PS34, PS35 green |
+| 0.6 Session lifecycle (R-10, R-12) — **done** | Stuck sessions | `ClientDelegate` + `runSync` auth stop; single-flight restore + generation guard | adapter, HaloApplication | — | PS34, PS35, `remoteLogoutDuringSync` green |
 | 0.7 NSE runtime (R-09) | Memory kills | Pass `lightweightRuntime` through | adapter | — | device check AC-NSE memory |
 
 ### Phase 1 — Architectural improvements

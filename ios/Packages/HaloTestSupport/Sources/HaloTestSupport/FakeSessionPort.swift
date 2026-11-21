@@ -25,6 +25,8 @@ public final class FakeSessionPort: SessionPort {
         var continuations: [UUID: AsyncStream<SessionEvent>.Continuation] = [:]
         var calls: [String] = []
         var restoreDelay: Duration?
+        var restoreGates: [CheckedContinuation<Void, Never>] = []
+        var waitForRestoreGate = false
     }
 
     private let state = Mutex(State())
@@ -59,6 +61,17 @@ public final class FakeSessionPort: SessionPort {
     /// `restore` takes this long before it answers (an unreachable homeserver).
     public func delayRestore(by delay: Duration) { state.withLock { $0.restoreDelay = delay } }
 
+    /// Holds `restore` until `releaseRestore()` is called (deterministic testing of late-completing restores, R-12).
+    public func holdRestore() { state.withLock { $0.waitForRestoreGate = true } }
+    public func releaseRestore() {
+        let gates = state.withLock { state -> [CheckedContinuation<Void, Never>] in
+            state.waitForRestoreGate = false
+            defer { state.restoreGates.removeAll() }
+            return state.restoreGates
+        }
+        for gate in gates { gate.resume() }
+    }
+
     public func loginDetails(server: String) async throws(HaloError) -> ServerDetails {
         try begin("loginDetails")
         if let delay = state.withLock({ $0.loginDetailsDelay }) { try? await Task.sleep(for: delay) }
@@ -86,6 +99,18 @@ public final class FakeSessionPort: SessionPort {
     public func restore(_ session: StoredSession) async throws(HaloError) {
         try begin("restore")
         if let delay = state.withLock({ $0.restoreDelay }) { try? await Task.sleep(for: delay) }
+        if state.withLock({ $0.waitForRestoreGate }) {
+            await withCheckedContinuation { continuation in
+                let shouldResumeNow = state.withLock { state -> Bool in
+                    if state.waitForRestoreGate {
+                        state.restoreGates.append(continuation)
+                        return false
+                    }
+                    return true
+                }
+                if shouldResumeNow { continuation.resume() }
+            }
+        }
         let (revoked, soft) = state.withLock { ($0.revokedTokens.contains(session.payload), $0.softLoggedOutTokens.contains(session.payload)) }
         if revoked { throw .unauthorized(soft: false) }
         if soft { throw .unauthorized(soft: true) }

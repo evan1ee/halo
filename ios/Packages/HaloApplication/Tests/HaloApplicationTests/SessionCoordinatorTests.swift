@@ -241,4 +241,79 @@ struct SessionCoordinatorTests {
         await signedInCoordinator.changeServer()
         if case .ready = await signedInCoordinator.state {} else { Issue.record("expected .ready") }
     }
+
+    @Test("PS34 (R-10): remote logout during sync moves session out of ready and stops sync without restarting")
+    func remoteLogoutStopsSync() async throws {
+        let (coordinator, port, keychain) = try await signedIn()
+        let syncPort = FakeSyncPort()
+        let sync = SyncCoordinator(port: syncPort, session: coordinator, sleep: { _ in })
+        await sync.begin()
+        await sync.setForeground(true)
+        for _ in 0..<50_000 where syncPort.startCalls == 0 { await Task.yield() }
+        #expect(syncPort.startCalls == 1)
+
+        // Remote soft logout arrives via ClientDelegate / sessionUpdates.
+        port.send(.softLoggedOut)
+        for _ in 0..<50_000 where syncPort.stopCalls == 0 { await Task.yield() }
+        #expect(await coordinator.state == .softLoggedOut(try UserID("@alice:halo.localhost")))
+        #expect(syncPort.stopCalls == 1)
+        #expect(keychain.stored(.session) != nil)
+
+        // Remote hard logout forgets the session and keeps sync stopped.
+        let (c2, p2, k2) = try await signedIn()
+        let sp2 = FakeSyncPort()
+        let s2 = SyncCoordinator(port: sp2, session: c2, sleep: { _ in })
+        await s2.begin()
+        await s2.setForeground(true)
+        for _ in 0..<50_000 where sp2.startCalls == 0 { await Task.yield() }
+        p2.send(.loggedOut)
+        for _ in 0..<50_000 where sp2.stopCalls == 0 { await Task.yield() }
+        #expect(await c2.state == .signedOut(failure: .unauthorized(soft: false)))
+        #expect(k2.stored(.session) == nil)
+        #expect(sp2.startCalls == 1 && sp2.stopCalls == 1)
+    }
+
+    @Test("PS35 (R-12): restore timeout keeps restore single-flight; retry awaits the same call and late completion after logout is discarded")
+    func singleFlightRestore() async throws {
+        // (a) Timeout followed by retry while still in flight: port.restore called once, ends ready.
+        let (_, port, keychain) = try await signedIn()
+        port.holdRestore()
+        let relaunched = SessionCoordinator(port: port, keychain: keychain, restoreTimeout: .milliseconds(50))
+        await relaunched.start()
+        #expect(await relaunched.state == .restoreFailed(.network(retryable: true)))
+        let restoreCountBeforeRetry = port.calls.filter { $0 == "restore" }.count
+        #expect(restoreCountBeforeRetry == 1)
+
+        let retry = Task { await relaunched.retryRestore() }
+        try await Task.sleep(for: .milliseconds(20))
+        port.releaseRestore()
+        await retry.value
+        #expect(port.calls.filter { $0 == "restore" }.count == 1)
+        #expect(await relaunched.state == .ready(try UserID("@alice:halo.localhost")))
+
+        // (b) Timeout followed by late completion while still on restoreFailed: adopts cleanly into ready.
+        let (_, port2, keychain2) = try await signedIn()
+        port2.holdRestore()
+        let relaunched2 = SessionCoordinator(port: port2, keychain: keychain2, restoreTimeout: .milliseconds(50))
+        await relaunched2.start()
+        #expect(await relaunched2.state == .restoreFailed(.network(retryable: true)))
+        port2.releaseRestore()
+        for _ in 0..<50_000 {
+            if case .ready = await relaunched2.state { break }
+            await Task.yield()
+        }
+        #expect(await relaunched2.state == .ready(try UserID("@alice:halo.localhost")))
+
+        // (c) Timeout followed by user sign-out before late completion: stays signed out.
+        let (_, port3, keychain3) = try await signedIn()
+        port3.holdRestore()
+        let relaunched3 = SessionCoordinator(port: port3, keychain: keychain3, restoreTimeout: .milliseconds(50))
+        await relaunched3.start()
+        #expect(await relaunched3.state == .restoreFailed(.network(retryable: true)))
+        await relaunched3.logout()
+        #expect(await relaunched3.state == .signedOut(failure: nil))
+        port3.releaseRestore()
+        for _ in 0..<5_000 { await Task.yield() }
+        #expect(await relaunched3.state == .signedOut(failure: nil))
+    }
 }

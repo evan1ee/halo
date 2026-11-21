@@ -31,6 +31,13 @@ public actor MatrixSessionPort: SessionPort {
     private var changeObservers: [UUID: AsyncStream<SyncChange>.Continuation] = [:]
     private var storeID: String?
     private var delegate: RefreshDelegate?
+    /// Receives SDK-wide `M_UNKNOWN_TOKEN` notifications and turns them into `.loggedOut` / `.softLoggedOut` (R-10).
+    private var authDelegate: AuthDelegate?
+    private var authDelegateHandle: TaskHandle?
+    private var sessionGeneration: UInt64 = 0
+    private var reportedAuthErrorGeneration: UInt64?
+    /// Single-flight guard for `restore(_:)` so concurrent callers never build two `Client`s on the same store (R-12).
+    private var inFlightRestore: (payload: Data, generation: UInt64, task: Task<Void, any Error>)?
     /// Set when a room's send queue reported an error (which disables that queue); the next successful sync re-enables them.
     private var sendQueueErrors: SendQueueErrors?
     private var sendQueueErrorsHandle: TaskHandle?
@@ -89,7 +96,8 @@ public actor MatrixSessionPort: SessionPort {
                 throw ErrorMapper.mapLogin(error)
             }
             let stored = try Self.stored(from: client.session(), storeID: newStoreID, passphrase: passphrase)
-            await adopt(client, storeID: newStoreID, session: try client.session())
+            sessionGeneration &+= 1
+            await adopt(client, storeID: newStoreID, session: try client.session(), generation: sessionGeneration)
             return stored
         } catch let error as HaloError {
             throw error
@@ -101,32 +109,39 @@ public actor MatrixSessionPort: SessionPort {
 
     public func restore(_ session: StoredSession) async throws(HaloError) {
         try MatrixBootstrap.initialise()
+        if let existing = inFlightRestore, existing.payload == session.payload, existing.generation == sessionGeneration {
+            do { try await existing.task.value; return } catch { throw ErrorMapper.map(error) }
+        }
         let payload: SessionPayload
         do { payload = try JSONDecoder().decode(SessionPayload.self, from: session.payload) } catch {
             throw .storage(.corrupted)
         }
-        do {
-            let client = try await makeClient(
+        sessionGeneration &+= 1
+        let generation = sessionGeneration
+        let task = Task<Void, any Error> {
+            let client = try await self.makeClient(
                 homeserver: payload.homeserverURL, storeID: payload.storeID, passphrase: payload.passphrase)
             let sdkSession = Session(
                 accessToken: payload.accessToken, refreshToken: payload.refreshToken, userId: payload.userID,
                 deviceId: payload.deviceID, homeserverUrl: payload.homeserverURL, oauthData: payload.oauthData,
                 slidingSyncVersion: .none)
             try await client.restoreSession(session: sdkSession)
-            await adopt(client, storeID: payload.storeID, session: sdkSession)
-        } catch { throw ErrorMapper.map(error) }
+            await self.adopt(client, storeID: payload.storeID, session: sdkSession, generation: generation)
+        }
+        inFlightRestore = (session.payload, generation, task)
+        defer {
+            if inFlightRestore?.generation == generation { inFlightRestore = nil }
+        }
+        do { try await task.value } catch { throw ErrorMapper.map(error) }
     }
 
     public func logout() async throws(HaloError) {
+        sessionGeneration &+= 1
+        inFlightRestore = nil
         let client = self.client
         let storeID = self.storeID
         await stopSync()
-        self.client = nil
-        self.storeID = nil
-        delegate = nil
-        sendQueueErrorsHandle?.cancel()
-        sendQueueErrorsHandle = nil
-        sendQueueErrors = nil
+        clearClientState()
         var failure: HaloError?
         if let client {
             do { try await client.logout() } catch { failure = ErrorMapper.map(error) }
@@ -163,10 +178,11 @@ public actor MatrixSessionPort: SessionPort {
         guard syncTask == nil else { return }
         // A loop that was stopped may still be inside its long poll; two loops must never overlap.
         let previous = stoppingTask
+        let generation = sessionGeneration
         syncTask = Task { [weak self] in
             await previous?.value
             guard !Task.isCancelled else { return }
-            await self?.runSync(client)
+            await self?.runSync(client, generation: generation)
         }
     }
 
@@ -190,7 +206,7 @@ public actor MatrixSessionPort: SessionPort {
     /// short poll bounds how long a sign-out or a restart can wait; the cost is one empty request per interval while the app is open.
     static let longPollMilliseconds: UInt64 = 8_000
 
-    private func runSync(_ client: Client) async {
+    private func runSync(_ client: Client, generation: UInt64) async {
         var backoff = Duration.seconds(1)
         var first = true
         var recovering = false
@@ -211,8 +227,15 @@ public actor MatrixSessionPort: SessionPort {
             } catch {
                 if Task.isCancelled { return }
                 let mapped = ErrorMapper.map(error)
+                if case .unauthorized(let soft) = mapped {
+                    // Revoked / soft-logged-out token (R-10): stop sync and notify `SessionCoordinator` instead of
+                    // publishing `.failed` (which `SyncCoordinator` would restart in an endless backoff loop).
+                    syncTask = nil
+                    await handleAuthError(isSoftLogout: soft, generation: generation)
+                    return
+                }
                 // With the server unreachable the SDK's sync fails with a generic error (found by the `offlineSend` contract
-                // test), so that one is retried like a network error; everything else (auth, forbidden, unsupported) ends the loop.
+                // test), so that one is retried like a network error; everything else (forbidden, unsupported) ends the loop.
                 guard mapped.isRetryable || mapped == .internal(code: "SDK_GENERIC") else {
                     publish(status: .failed)
                     syncTask = nil
@@ -293,7 +316,10 @@ public actor MatrixSessionPort: SessionPort {
     private func register(_ continuation: AsyncStream<SessionEvent>.Continuation, id: UUID) { events[id] = continuation }
     private func unregister(_ id: UUID) { events[id] = nil }
 
-    private func adopt(_ client: Client, storeID: String, session: Session) async {
+    private func adopt(_ client: Client, storeID: String, session: Session, generation: UInt64) async {
+        // If `logout()` or a newer login/restore superseded this generation while `restoreSession` was in flight,
+        // discard the client instead of installing it behind the coordinator's back (R-12).
+        guard sessionGeneration == generation else { return }
         // Unsent messages survive an app kill and go out when the network returns (MESSAGING FR-3).
         if sendsMessages {
             await client.enableAllSendQueues(enable: true)
@@ -302,8 +328,40 @@ public actor MatrixSessionPort: SessionPort {
             sendQueueErrorsHandle = client.subscribeToSendQueueStatus(listener: errors)
             sendQueueErrors = errors
         }
+        authDelegateHandle?.cancel()
+        let auth = AuthDelegate { [weak self] isSoftLogout in
+            Task { await self?.handleAuthError(isSoftLogout: isSoftLogout, generation: generation) }
+        }
+        authDelegate = auth
+        authDelegateHandle = try? client.setDelegate(delegate: auth)
+        reportedAuthErrorGeneration = nil
         self.client = client
         self.storeID = storeID
+    }
+
+    private func handleAuthError(isSoftLogout: Bool, generation: UInt64) async {
+        guard sessionGeneration == generation, client != nil else { return }
+        guard reportedAuthErrorGeneration != generation else { return }
+        reportedAuthErrorGeneration = generation
+        let storeID = self.storeID
+        await stopSync()
+        if !isSoftLogout {
+            clearClientState()
+            if let storeID { Self.removeStore(baseDirectory, storeID) }
+        }
+        emit(isSoftLogout ? .softLoggedOut : .loggedOut)
+    }
+
+    private func clearClientState() {
+        client = nil
+        storeID = nil
+        delegate = nil
+        authDelegateHandle?.cancel()
+        authDelegateHandle = nil
+        authDelegate = nil
+        sendQueueErrorsHandle?.cancel()
+        sendQueueErrorsHandle = nil
+        sendQueueErrors = nil
     }
 
     fileprivate func emit(_ event: SessionEvent) {
@@ -362,6 +420,21 @@ private final class SendQueueErrors: SendQueueRoomErrorListener {
     func onError(roomId: String, error: ClientError) { failed.store(true, ordering: .relaxed) }
     /// Whether an error was reported since the last call.
     func take() -> Bool { failed.exchange(false, ordering: .relaxed) }
+}
+
+private final class AuthDelegate: ClientDelegate, Sendable {
+    private let onAuthError: @Sendable (Bool) -> Void
+
+    init(onAuthError: @escaping @Sendable (Bool) -> Void) {
+        self.onAuthError = onAuthError
+    }
+
+    func didReceiveAuthError(isSoftLogout: Bool) {
+        // Never block the callback thread or call back into the FFI synchronously (AGENTS.md §8).
+        onAuthError(isSoftLogout)
+    }
+
+    func onBackgroundTaskErrorReport(taskName: String, error: BackgroundTaskFailureReason) {}
 }
 
 private final class RefreshDelegate: ClientSessionDelegate, Sendable {

@@ -39,6 +39,11 @@ public actor SessionCoordinator {
     private var beforeSignOut: (@Sendable () async -> Void)?
     private var broadcaster = SnapshotBroadcaster<State>()
     private var updatesTask: Task<Void, Never>?
+    private var sessionGeneration: UInt64 = 0
+    /// At most one `port.restore` in flight at a time (R-12): a timeout leaves it tracked so `retryRestore()` awaits
+    /// the same call instead of building a second SDK client on the same store, and a late completion adopts cleanly
+    /// if the user is still on `.restoreFailed` or is discarded if the user signed out.
+    private var inFlightRestore: (generation: UInt64, session: StoredSession, task: Task<Result<Void, HaloError>, Never>)?
 
     /// How long looking up a homeserver may take. Without a limit a host that never answers (for example `localhost:8008` over
     /// HTTPS against a plain-HTTP server) leaves the sign-in screen spinning forever.
@@ -157,6 +162,7 @@ public actor SessionCoordinator {
             state = .choosingMethod(details, failure: error)
             return
         }
+        sessionGeneration &+= 1
         becomeReady(session.userID)
     }
 
@@ -167,6 +173,7 @@ public actor SessionCoordinator {
         case .ready, .softLoggedOut, .restoreFailed: break
         default: return
         }
+        sessionGeneration &+= 1
         state = .signingOut
         stopObservingUpdates()
         var failure: HaloError?
@@ -180,46 +187,86 @@ public actor SessionCoordinator {
 
     private func restoreStoredSession() async {
         state = .restoring
+        let generation: UInt64
         let session: StoredSession
-        do {
-            guard let data = try await keychain.read(.session) else {
-                state = .signedOut(failure: nil)
+        let task: Task<Result<Void, HaloError>, Never>
+        if let existing = inFlightRestore, existing.generation == sessionGeneration {
+            generation = existing.generation
+            session = existing.session
+            task = existing.task
+        } else {
+            do {
+                guard let data = try await keychain.read(.session) else {
+                    state = .signedOut(failure: nil)
+                    return
+                }
+                session = try decode(data)
+            } catch {
+                state = error == .storage(.corrupted) ? .signedOut(failure: error) : .restoreFailed(error)
                 return
             }
-            session = try decode(data)
-        } catch {
-            state = error == .storage(.corrupted) ? .signedOut(failure: error) : .restoreFailed(error)
+            sessionGeneration &+= 1
+            generation = sessionGeneration
+            let port = self.port
+            task = Task<Result<Void, HaloError>, Never> {
+                do throws(HaloError) {
+                    try await port.restore(session)
+                    return .success(())
+                } catch {
+                    return .failure(error)
+                }
+            }
+            inFlightRestore = (generation, session, task)
+            Task { [weak self] in
+                let result = await task.value
+                await self?.applyRestoreResult(generation: generation, session: session, result: result)
+            }
+        }
+        if let result = await awaitRestore(task, timeout: restoreTimeout) {
+            await applyRestoreResult(generation: generation, session: session, result: result)
+        } else if inFlightRestore?.generation == generation, sessionGeneration == generation {
+            state = .restoreFailed(.network(retryable: true))
+        }
+    }
+
+    private func applyRestoreResult(generation: UInt64, session: StoredSession, result: Result<Void, HaloError>) async {
+        guard inFlightRestore?.generation == generation else { return }
+        inFlightRestore = nil
+        guard sessionGeneration == generation else {
+            // The user signed out (or started another session) while the restore was still in flight.
+            if case .success = result { try? await port.logout() }
             return
         }
-        do {
-            try await restoreWithTimeout(session)
+        switch state {
+        case .restoring, .restoreFailed: break
+        default: return
+        }
+        switch result {
+        case .success:
             becomeReady(session.userID)
-        } catch .unauthorized(soft: true) {
+        case .failure(.unauthorized(soft: true)):
             state = .softLoggedOut(session.userID)
-        } catch .unauthorized(soft: false) {
+        case .failure(.unauthorized(soft: false)):
             await forgetSession(reason: .unauthorized(soft: false))
-        } catch {
+        case .failure(let error):
             state = .restoreFailed(error)
         }
     }
 
-    /// Restoring builds the SDK client, which can wait on an unreachable homeserver for minutes. Give up after
-    /// `restoreTimeout` so the app shows "couldn't be restored" with Try again / Sign out instead of loading forever.
-    private func restoreWithTimeout(_ session: StoredSession) async throws(HaloError) {
-        let port = self.port
-        let timeout = restoreTimeout
-        // Unstructured tasks: the SDK call may ignore cancellation, and a task group would wait for it.
-        let result: Result<Void, HaloError> = await withCheckedContinuation { continuation in
+    /// Waits up to `timeout` for `task` to finish; returns `nil` if it is still in flight when the timeout fires.
+    private func awaitRestore(_ task: Task<Result<Void, HaloError>, Never>, timeout: Duration) async -> Result<Void, HaloError>? {
+        await withCheckedContinuation { continuation in
             let once = ResumeOnce(continuation)
-            Task {
-                do throws(HaloError) { try await port.restore(session); once.resume(.success(())) } catch { once.resume(.failure(error)) }
+            let timer = Task {
+                try? await Task.sleep(for: timeout)
+                once.resume(nil)
             }
             Task {
-                try? await Task.sleep(for: timeout)
-                once.resume(.failure(.network(retryable: true)))
+                let result = await task.value
+                timer.cancel()
+                once.resume(result)
             }
         }
-        try result.get()
     }
 
     private func becomeReady(_ user: UserID) {
@@ -276,17 +323,17 @@ public actor SessionCoordinator {
 }
 
 /// Resumes a continuation exactly once; later calls are ignored.
-private final class ResumeOnce: @unchecked Sendable {
+private final class ResumeOnce<Value: Sendable>: @unchecked Sendable {
     private let lock = NSLock()
-    private var continuation: CheckedContinuation<Result<Void, HaloError>, Never>?
+    private var continuation: CheckedContinuation<Value, Never>?
 
-    init(_ continuation: CheckedContinuation<Result<Void, HaloError>, Never>) { self.continuation = continuation }
+    init(_ continuation: CheckedContinuation<Value, Never>) { self.continuation = continuation }
 
-    func resume(_ result: Result<Void, HaloError>) {
+    func resume(_ value: Value) {
         lock.lock()
         let pending = continuation
         continuation = nil
         lock.unlock()
-        pending?.resume(returning: result)
+        pending?.resume(returning: value)
     }
 }

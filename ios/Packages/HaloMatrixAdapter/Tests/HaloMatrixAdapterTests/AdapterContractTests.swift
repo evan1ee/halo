@@ -39,6 +39,41 @@ struct AdapterContractTests {
         try await SessionPortContract.verify(port(), server: env["HALO_DEV_SERVER"] ?? "", account: account)
     }
 
+    @Test("R-10: remote token revocation during sync emits .loggedOut via ClientDelegate / sync and stops sync")
+    func remoteLogoutDuringSync() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        let stored = try await session.loginPassword(
+            PasswordCredentials(
+                username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "",
+                deviceDisplayName: "contract-r10"),
+            on: details)
+        let payload = try JSONDecoder().decode(MatrixSessionPort.SessionPayload.self, from: stored.payload)
+        let updates = session.sessionUpdates()
+        let sync = MatrixSyncPort(session: session)
+        try await sync.start()
+        // Wait for at least one sync cycle so the client is actively syncing.
+        let statuses = sync.statuses()
+        try await within(seconds: 30) {
+            for await status in statuses where status == .running { break }
+        }
+        // Revoke this device's access token out-of-band (same effect as remote device sign-out).
+        let logoutURL = details.homeserverURL.appendingPathComponent("_matrix/client/v3/logout")
+        var request = URLRequest(url: logoutURL)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(payload.accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data("{}".utf8)
+        let (_, response) = try await URLSession.shared.data(for: request)
+        #expect((response as? HTTPURLResponse)?.statusCode == 200)
+
+        let event = try await within(seconds: 30) {
+            for await event in updates { return event }
+            throw ContractViolation("sessionUpdates ended without emitting .loggedOut")
+        }
+        #expect(event == .loggedOut)
+    }
+
     @Test("RoomListPortContract (the account must be in HALO_DEV_ROOMS rooms)")
     func roomList() async throws {
         let session = port()
