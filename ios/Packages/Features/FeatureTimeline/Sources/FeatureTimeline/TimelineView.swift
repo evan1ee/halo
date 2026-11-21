@@ -342,6 +342,9 @@ private struct ThumbnailView: View {
     let model: TimelineViewModel
     var isSticker = false
     @State private var data: Data?
+    /// The download finished without a usable picture (missing on the server, offline, not an image): no endless spinner.
+    @State private var failed = false
+    @State private var attempt = 0
 
     var body: some View {
         Group {
@@ -360,6 +363,19 @@ private struct ThumbnailView: View {
                 .accessibilityIdentifier("show-photo")
             } else if let data, let uiImage = UIImage(data: data) {
                 Image(uiImage: uiImage).resizable().scaledToFit()
+            } else if failed {
+                Button { failed = false; attempt += 1 } label: {
+                    VStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle").font(.title2)
+                        Text(isSticker ? "Sticker couldn't be loaded" : "Photo couldn't be loaded").font(.footnote)
+                        Text("Tap to try again").font(.caption2)
+                    }
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(.secondary.opacity(0.15))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("media-failed")
             } else {
                 Rectangle().fill(.secondary.opacity(0.2)).overlay(ProgressView())
             }
@@ -369,7 +385,20 @@ private struct ThumbnailView: View {
         }
         .modifier(ThumbnailSize(isSticker: isSticker, aspectRatio: image.aspectRatio))
         .clipShape(.rect(cornerRadius: isSticker ? 0 : 12))
-        .task(id: model.showsPreview(of: image)) { if isSticker || model.showsPreview(of: image) { data = await model.thumbnail(for: image) } }
+        .task(id: LoadKey(shown: model.showsPreview(of: image), attempt: attempt)) {
+            guard isSticker || model.showsPreview(of: image) else { return }
+            let loaded = await model.thumbnail(for: image)
+            guard !Task.isCancelled else { return }
+            data = loaded
+            #if canImport(UIKit)
+            failed = loaded.flatMap(UIImage.init(data:)) == nil
+            #endif
+        }
+    }
+
+    private struct LoadKey: Equatable {
+        let shown: Bool
+        let attempt: Int
     }
 }
 
