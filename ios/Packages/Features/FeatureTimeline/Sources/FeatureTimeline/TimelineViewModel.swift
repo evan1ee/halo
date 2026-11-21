@@ -36,6 +36,16 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
         public let eventID: String?
         public let body: String
         public let formattedBody: String?
+
+        /// Plain-text representation for Copy and Share in "View source".
+        public var formattedText: String {
+            var parts: [String] = []
+            if let sender { parts.append("Sender: \(sender)") }
+            if let eventID { parts.append("Event: \(eventID)") }
+            parts.append("Body:\n\(body)")
+            if let formattedBody { parts.append("Formatted body (HTML):\n\(formattedBody)") }
+            return parts.joined(separator: "\n\n")
+        }
     }
 
     /// Set for text messages and notices.
@@ -432,6 +442,12 @@ public final class TimelineViewModel {
         observation = nil
         clearedMarkedUnread = false
         await coordinator.close()
+    }
+
+    /// Retries opening the timeline after a failure.
+    public func retry() async {
+        await stop()
+        await start()
     }
 
     /// The id of the newest row on screen, or `nil` while there are none.

@@ -910,4 +910,25 @@ struct MediaPreviewPolicyTests {
 
         await vm.stop()
     }
+
+    @Test("retry recovers a failed timeline open and Source.formattedText formats all present fields")
+    func retryOpenAndSourceFormat() async throws {
+        let room = try RoomID("!missing:x.org")
+        let port = FakeTimelinePort()
+        let vm = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room))
+        await vm.start()
+        for _ in 0..<200_000 { if case .failed = vm.content { break }; await Task.yield() }
+        if case .failed = vm.content {} else { Issue.record("expected failed open") }
+
+        port.addRoom(room)
+        await vm.retry()
+        for _ in 0..<200_000 { if case .live = vm.content { break }; await Task.yield() }
+        if case .live = vm.content {} else { Issue.record("expected live after retry") }
+        await vm.stop()
+
+        let full = TimelineRow.Source(sender: "@bot:x.org", eventID: "$e1", body: "hi", formattedBody: "<b>hi</b>")
+        #expect(full.formattedText == "Sender: @bot:x.org\n\nEvent: $e1\n\nBody:\nhi\n\nFormatted body (HTML):\n<b>hi</b>")
+        let plain = TimelineRow.Source(sender: nil, eventID: nil, body: "just text", formattedBody: nil)
+        #expect(plain.formattedText == "Body:\njust text")
+    }
 }

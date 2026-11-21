@@ -34,7 +34,13 @@ public struct TimelineView: View {
             case .opening:
                 ProgressView()
             case .failed(let message):
-                ContentUnavailableView("Couldn't open room", systemImage: "exclamationmark.triangle", description: Text(message))
+                ContentUnavailableView {
+                    Label("Couldn't open room", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(message)
+                } actions: {
+                    Button("Try again") { Task { await model.retry() } }.buttonStyle(.borderedProminent)
+                }
             case .live(let rows, let isPaginating, let canLoadEarlier, let paginationError):
                 ScrollViewReader { proxy in
                 List {
@@ -579,6 +585,7 @@ private struct PaginationTrigger: Hashable {
 private struct MessageSourceView: View {
     let source: TimelineRow.Source
     @Environment(\.dismiss) private var dismiss
+    @State private var copied = false
 
     var body: some View {
         NavigationStack {
@@ -589,9 +596,28 @@ private struct MessageSourceView: View {
                 if let formatted = source.formattedBody {
                     Section("Formatted body (HTML)") { Text(formatted).font(.system(.footnote, design: .monospaced)).textSelection(.enabled) }
                 }
+                #if canImport(UIKit)
+                Section {
+                    Button {
+                        UIPasteboard.general.string = source.formattedText
+                        copied = true
+                    } label: {
+                        Label(copied ? "Copied" : "Copy source", systemImage: copied ? "checkmark" : "doc.on.doc")
+                    }
+                    .accessibilityIdentifier("copyMessageSource")
+                }
+                #endif
             }
             .navigationTitle("Message source")
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { ShareLink(item: source.formattedText) }
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+            .task(id: copied) {
+                guard copied else { return }
+                try? await Task.sleep(for: .seconds(1.5))
+                copied = false
+            }
         }
     }
 }
