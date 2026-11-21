@@ -74,6 +74,7 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
                     holderName: "nse",
                     sendsMessages: false,
                     lightweightRuntime: true,
+                    enablesSlidingSync: true,
                     readStoredSession: {
                         (try? keychain.readSync(.session)).flatMap { try? JSONDecoder().decode(StoredSession.self, from: $0) }
                     },

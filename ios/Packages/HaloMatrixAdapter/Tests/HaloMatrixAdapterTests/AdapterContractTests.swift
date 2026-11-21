@@ -74,6 +74,57 @@ struct AdapterContractTests {
         #expect(event == .loggedOut)
     }
 
+    @Test("NSE NotificationClient.getNotification succeeds when MatrixSessionPort enablesSlidingSync is true (post-D74 regression)",
+          .enabled(if: env["HALO_DEV_TIMELINE_ROOM"] != nil && env["HALO_DEV_PEER_USER"] != nil && env["HALO_DEV_PEER_PASSWORD"] != nil))
+    func nseNotificationFetch() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("halo-nse-contract-\(UUID().uuidString)")
+        let appSession = MatrixSessionPort(baseDirectory: dir)
+        let details = try await appSession.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        let stored = try await appSession.loginPassword(
+            PasswordCredentials(
+                username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "",
+                deviceDisplayName: "contract-nse-app"),
+            on: details)
+        // Send a fresh message from the peer account so the NSE has a notifying event to fetch.
+        let peerDir = FileManager.default.temporaryDirectory.appendingPathComponent("halo-nse-peer-\(UUID().uuidString)")
+        let peerSession = MatrixSessionPort(baseDirectory: peerDir)
+        let peerDetails = try await peerSession.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        let peerStored = try await peerSession.loginPassword(
+            PasswordCredentials(
+                username: env["HALO_DEV_PEER_USER"] ?? "", password: env["HALO_DEV_PEER_PASSWORD"] ?? "",
+                deviceDisplayName: "contract-nse-peer"),
+            on: peerDetails)
+        let peerPayload = try JSONDecoder().decode(MatrixSessionPort.SessionPayload.self, from: peerStored.payload)
+        let room = try RoomID(env["HALO_DEV_UNREAD_ROOM"] ?? env["HALO_DEV_TIMELINE_ROOM"] ?? "")
+        let marker = "nse-contract-\(UUID().uuidString.prefix(8))"
+        var req = URLRequest(url: details.homeserverURL.appendingPathComponent("_matrix/client/v3/rooms/\(room.rawValue)/send/m.room.message/\(UUID().uuidString)"))
+        req.httpMethod = "PUT"
+        req.setValue("Bearer \(peerPayload.accessToken)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["msgtype": "m.text", "body": marker])
+        let (respData, _) = try await URLSession.shared.data(for: req)
+        let sentID = try #require((try JSONSerialization.jsonObject(with: respData) as? [String: Any])?["event_id"] as? String)
+
+        // Restore in a separate NSE-configured MatrixSessionPort sharing the same store directory.
+        let nseSession = MatrixSessionPort(
+            baseDirectory: dir, holderName: "nse", sendsMessages: false,
+            lightweightRuntime: true, enablesSlidingSync: true)
+        try await nseSession.restore(stored)
+        let fetched = try await within(seconds: 30) {
+            try await MatrixNotificationPort(session: nseSession).fetch(room: room, event: try EventID(sentID))
+        }
+        guard case .display(let display) = fetched else {
+            Issue.record("expected .display from NSE fetch, got \(fetched)")
+            try? await peerSession.logout()
+            try? await appSession.logout()
+            return
+        }
+        #expect(display.body.contains(marker))
+        #expect(display.timestamp != nil)
+        try await peerSession.logout()
+        try await appSession.logout()
+    }
+
     @Test("RoomListPortContract (the account must be in HALO_DEV_ROOMS rooms)")
     func roomList() async throws {
         let session = port()

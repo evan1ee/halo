@@ -24,6 +24,7 @@ public actor MatrixSessionPort: SessionPort {
     private let holderName: String
     private let sendsMessages: Bool
     private let lightweightRuntime: Bool
+    private let enablesSlidingSync: Bool
     private let readStoredSession: (@Sendable () -> StoredSession?)?
     private let persistRefreshedSession: (@Sendable (StoredSession) -> Void)?
     private let initialisePlatform: @Sendable (Bool) throws(HaloError) -> Void
@@ -51,6 +52,8 @@ public actor MatrixSessionPort: SessionPort {
     ///   - holderName: this process's name for the SDK's cross-process lock ("app" or "nse").
     ///   - sendsMessages: whether this process owns the unsent-message queues (the app does; the extension must not).
     ///   - lightweightRuntime: use the SDK's lightweight runtime (the extension does).
+    ///   - enablesSlidingSync: configure native sliding sync on the SDK client. The app uses classic `/sync` (`.none`,
+    ///     D74), while the NSE calls `NotificationClient.getNotification` which runs a short-lived sliding sync first.
     ///   - readStoredSession: optional synchronous Keychain reader so `ClientSessionDelegate.retrieveSessionFromKeychain`
     ///     sees the current session before the first save in this process and across app/NSE token rotations (R-11).
     ///   - persistRefreshedSession: optional synchronous Keychain writer so processes without a `SessionCoordinator`
@@ -60,12 +63,13 @@ public actor MatrixSessionPort: SessionPort {
         holderName: String = "app",
         sendsMessages: Bool = true,
         lightweightRuntime: Bool = false,
+        enablesSlidingSync: Bool = false,
         readStoredSession: (@Sendable () -> StoredSession?)? = nil,
         persistRefreshedSession: (@Sendable (StoredSession) -> Void)? = nil
     ) {
         self.init(
             baseDirectory: baseDirectory, holderName: holderName, sendsMessages: sendsMessages,
-            lightweightRuntime: lightweightRuntime,
+            lightweightRuntime: lightweightRuntime, enablesSlidingSync: enablesSlidingSync,
             readStoredSession: readStoredSession, persistRefreshedSession: persistRefreshedSession,
             initialisePlatform: MatrixBootstrap.initialise(lightweightRuntime:))
     }
@@ -73,6 +77,7 @@ public actor MatrixSessionPort: SessionPort {
     init(
         baseDirectory: URL, holderName: String = "app", sendsMessages: Bool = true,
         lightweightRuntime: Bool = false,
+        enablesSlidingSync: Bool = false,
         readStoredSession: (@Sendable () -> StoredSession?)? = nil,
         persistRefreshedSession: (@Sendable (StoredSession) -> Void)? = nil,
         initialisePlatform: @escaping @Sendable (Bool) throws(HaloError) -> Void
@@ -81,6 +86,7 @@ public actor MatrixSessionPort: SessionPort {
         self.holderName = holderName
         self.sendsMessages = sendsMessages
         self.lightweightRuntime = lightweightRuntime
+        self.enablesSlidingSync = enablesSlidingSync
         self.readStoredSession = readStoredSession
         self.persistRefreshedSession = persistRefreshedSession
         self.initialisePlatform = initialisePlatform
@@ -148,11 +154,12 @@ public actor MatrixSessionPort: SessionPort {
         }
         sessionGeneration &+= 1
         let generation = sessionGeneration
+        let slidingSyncVersion: SlidingSyncVersion = enablesSlidingSync ? .native : .none
         let task = Task<Void, any Error> {
             let sdkSession = Session(
                 accessToken: payload.accessToken, refreshToken: payload.refreshToken, userId: payload.userID,
                 deviceId: payload.deviceID, homeserverUrl: payload.homeserverURL, oauthData: payload.oauthData,
-                slidingSyncVersion: .none)
+                slidingSyncVersion: slidingSyncVersion)
             let client = try await self.makeClient(
                 homeserver: payload.homeserverURL, storeID: payload.storeID, passphrase: payload.passphrase,
                 initialSession: sdkSession)
@@ -419,11 +426,12 @@ public actor MatrixSessionPort: SessionPort {
             Task { await self.emit(.tokensRefreshed(stored)) }
         }
         self.delegate = delegate
+        let slidingSyncBuilder: SlidingSyncVersionBuilder = enablesSlidingSync ? .native : .none
         return try await ClientBuilder()
             .serverNameOrHomeserverUrl(serverNameOrUrl: homeserver)
             .sessionPaths(dataPath: data.path, cachePath: cache.path)
             .sqliteStore(config: SqliteStoreBuilder(dataPath: data.path, cachePath: cache.path).passphrase(passphrase: passphrase))
-            .slidingSyncVersionBuilder(versionBuilder: .none)
+            .slidingSyncVersionBuilder(versionBuilder: slidingSyncBuilder)
             .autoEnableCrossSigning(autoEnableCrossSigning: true)
             .autoEnableBackups(autoEnableBackups: true)
             .crossProcessLockConfig(crossProcessLockConfig: .multiProcess(holderName: holderName))

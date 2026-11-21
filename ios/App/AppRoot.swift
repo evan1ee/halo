@@ -141,11 +141,15 @@ final class AppRoot {
                 do {
                     let directory = HaloShared.storeDirectory().appendingPathComponent("halo", isDirectory: true)
                     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-                    let database = try HaloDatabase(path: directory.appendingPathComponent("halo.sqlite").path)
+                    let dbPath = directory.appendingPathComponent("halo.sqlite").path
+                    let database = try HaloDatabase(path: dbPath)
                     let signal = DarwinSignal()
                     let recordStore = NotificationRecordStore(
                         database: database, account: user,
                         onChange: { signal.post() }, externalChanges: { signal.observe() })
+                    #if DEBUG
+                    Self.exportDeviceDiagnostics(databasePath: dbPath, database: database, recordCount: recordStore.all().count)
+                    #endif
                     activeRecords.current = recordStore
                     await readState.attach(records: recordStore)
                     await receipts.restore(from: ReadIntentStore(database: database, account: user))
@@ -471,6 +475,29 @@ final class AppRoot {
         let target = URL.documentsDirectory.appendingPathComponent("nse-metrics.jsonl")
         try? fileManager.removeItem(at: target)
         try? fileManager.copyItem(at: source, to: target)
+    }
+
+    /// Debug only: records non-sensitive storage diagnostics (file protection classes, SQLite version, record count)
+    /// into Documents so on-device checks can verify V-SQL-2 / file protection without reading private data.
+    private static func exportDeviceDiagnostics(databasePath: String, database: HaloDatabase, recordCount: Int) {
+        let fm = FileManager.default
+        let dir = (databasePath as NSString).deletingLastPathComponent
+        func protection(_ path: String) -> String {
+            guard fm.fileExists(atPath: path) else { return "missing" }
+            let attrs = try? fm.attributesOfItem(atPath: path)
+            return (attrs?[.protectionKey] as? FileProtectionType)?.rawValue ?? "none"
+        }
+        let lines = [
+            "at=\(ISO8601DateFormatter().string(from: Date()))",
+            "sqliteVersion=\((try? database.sqliteVersion()) ?? "error")",
+            "dirProtection=\(protection(dir))",
+            "dbProtection=\(protection(databasePath))",
+            "walProtection=\(protection(databasePath + "-wal"))",
+            "shmProtection=\(protection(databasePath + "-shm"))",
+            "notificationRecordsAtLaunch=\(recordCount)",
+        ]
+        let out = URL.documentsDirectory.appendingPathComponent("device-diagnostics.txt")
+        try? (lines.joined(separator: "\n") + "\n").write(to: out, atomically: true, encoding: .utf8)
     }
     #endif
 
