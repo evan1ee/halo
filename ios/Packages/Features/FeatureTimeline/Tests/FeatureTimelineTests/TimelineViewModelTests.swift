@@ -880,4 +880,34 @@ struct MediaPreviewPolicyTests {
         vm.dismissSendError()
         #expect(vm.sendError == nil)
     }
+
+    @Test("disabling typing notices suppresses outgoing typing events while still clearing an active one (SETTINGS §3)")
+    func typingNoticesSetting() async throws {
+        let room = try RoomID("!r:x.org")
+        let port = FakeTimelinePort()
+        port.addRoom(room)
+        let vm = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room))
+        vm.sendsTypingNotices = { false }
+        await vm.start()
+        for _ in 0..<200_000 { if case .live = vm.content { break }; await Task.yield() }
+
+        // While disabled, typing does not send a typing notice.
+        vm.draft = "hello"
+        for _ in 0..<100 { await Task.yield() }
+        #expect(port.typingCalls(in: room).isEmpty)
+
+        // Enabling allows outgoing typing notices.
+        vm.sendsTypingNotices = { true }
+        vm.draft = "hello!"
+        for _ in 0..<200_000 where port.typingCalls(in: room) != [true] { await Task.yield() }
+        #expect(port.typingCalls(in: room) == [true])
+
+        // Disabling mid-draft still sends `false` when the draft clears so others aren't left seeing "typing…".
+        vm.sendsTypingNotices = { false }
+        vm.draft = ""
+        for _ in 0..<200_000 where port.typingCalls(in: room) != [true, false] { await Task.yield() }
+        #expect(port.typingCalls(in: room) == [true, false])
+
+        await vm.stop()
+    }
 }

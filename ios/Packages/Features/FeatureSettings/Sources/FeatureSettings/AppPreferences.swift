@@ -7,6 +7,7 @@ public struct AppPreferences: Sendable {
     private let box: Box
 
     public static let privateReceiptsKey = "halo.privateReadReceipts"
+    public static let sendTypingNoticesKey = "halo.sendTypingNotices"
     public static let appearanceKey = "halo.appearance"
     public static let botSendersKey = "halo.botSenders"
 
@@ -16,6 +17,12 @@ public struct AppPreferences: Sendable {
     public var privateReceipts: Bool {
         get { box.defaults.bool(forKey: Self.privateReceiptsKey) }
         nonmutating set { box.defaults.set(newValue, forKey: Self.privateReceiptsKey) }
+    }
+
+    /// `true` (default): tell others in the room when the user is typing (SETTINGS §3). `false`: never send typing notices.
+    public var sendTypingNotices: Bool {
+        get { box.defaults.object(forKey: Self.sendTypingNoticesKey) as? Bool ?? true }
+        nonmutating set { box.defaults.set(newValue, forKey: Self.sendTypingNoticesKey) }
     }
 
     /// User IDs whose messages may render as bot cards (Settings → Bots). Kept on this device for now; the spec's account-data sync

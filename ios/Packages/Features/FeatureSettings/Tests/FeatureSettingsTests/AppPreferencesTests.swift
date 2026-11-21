@@ -37,4 +37,16 @@ struct AppPreferencesTests {
         AppPreferences(defaults: defaults).botSenders = ["@bot:x.org"]
         #expect(AppPreferences(defaults: defaults).botSenders == ["@bot:x.org"])
     }
+
+    @Test("typing notices are on by default and stored immediately (SETTINGS §3)")
+    func sendTypingNotices() throws {
+        let name = "halo.test.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        #expect(AppPreferences(defaults: defaults).sendTypingNotices == true)
+        AppPreferences(defaults: defaults).sendTypingNotices = false
+        #expect(AppPreferences(defaults: defaults).sendTypingNotices == false)
+        AppPreferences(defaults: defaults).sendTypingNotices = true
+        #expect(AppPreferences(defaults: defaults).sendTypingNotices == true)
+    }
 }

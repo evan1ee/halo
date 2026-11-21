@@ -199,6 +199,9 @@ public final class TimelineViewModel {
         botUnanswered.insert(key)
         botTimeouts[key] = nil
     }
+    /// Whether typing notices are sent while the user composes (Settings → Privacy → Typing notices, SETTINGS §3).
+    public var sendsTypingNotices: @MainActor () -> Bool = { true }
+
     /// The message being typed. Cleared only once the send was accepted, so a failure never loses the text.
     public var draft = "" {
         didSet {
@@ -206,7 +209,12 @@ public final class TimelineViewModel {
             saveDraft()
             if mentionQuery != nil { loadMembersIfNeeded() }
             let isTyping = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            Task { [coordinator] in await coordinator.setTyping(isTyping) }
+            if sendsTypingNotices() {
+                Task { [coordinator] in await coordinator.setTyping(isTyping) }
+            } else if !isTyping {
+                // If disabled mid-draft, still clear any typing notice already sent; no-op when none was sent.
+                Task { [coordinator] in await coordinator.setTyping(false) }
+            }
         }
     }
     /// People that can be mentioned in this room; loaded the first time the user types `@`.

@@ -38,6 +38,7 @@ public struct SettingsView: View {
     @State private var mediaPreviewsFailed = false
     @State private var confirmingSignOut = false
     @State private var privateReceipts: Bool
+    @State private var sendTypingNotices: Bool
 
     /// `onPrivateReceiptsChange` applies a changed receipt privacy to the running app (the preference itself is stored here).
     public init(
@@ -69,7 +70,7 @@ public struct SettingsView: View {
         self.onPrivateReceiptsChange = onPrivateReceiptsChange
         self.onSignOut = onSignOut
         _privateReceipts = State(initialValue: preferences.privateReceipts)
-
+        _sendTypingNotices = State(initialValue: preferences.sendTypingNotices)
     }
 
     public var body: some View {
@@ -87,10 +88,15 @@ public struct SettingsView: View {
                         preferences.privateReceipts = value
                         onPrivateReceiptsChange(value)
                     }
+                Toggle("Typing notices", isOn: $sendTypingNotices)
+                    .accessibilityIdentifier("typing-notices")
+                    .onChange(of: sendTypingNotices) { _, value in
+                        preferences.sendTypingNotices = value
+                    }
             } header: {
                 Text("Privacy")
             } footer: {
-                Text("When on, other people in a room can't see that you read their messages. Your own devices still stay in sync. Applies to receipts sent from now on.")
+                Text("Private read receipts hide that you read messages from others while keeping your devices in sync (applies from now on). Typing notices let others see when you're writing.")
             }
             Section("Appearance") {
                 Picker("Theme", selection: $appearance) {

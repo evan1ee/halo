@@ -282,6 +282,7 @@ final class AppRoot {
             readThrough: { [roomCoordinator] in await roomCoordinator.rooms.first { $0.id == room }?.ownReadThrough })
         model.botSenders = Set(AppPreferences().botSenders)
         model.unrecognisedBotMessages = unrecognisedBots
+        model.sendsTypingNotices = { AppPreferences().sendTypingNotices }
         return model
     }
 
