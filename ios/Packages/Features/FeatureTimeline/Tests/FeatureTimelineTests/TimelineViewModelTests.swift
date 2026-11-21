@@ -931,4 +931,54 @@ struct MediaPreviewPolicyTests {
         let plain = TimelineRow.Source(sender: nil, eventID: nil, body: "just text", formattedBody: nil)
         #expect(plain.formattedText == "Body:\njust text")
     }
+
+    @Test("detached state counts new incoming messages appended at the tail, ignores back-pagination/edits/own sends, and clears at bottom (TIMELINE §6)")
+    func detachedNewMessageCount() async throws {
+        let room = try RoomID("!r:x.org")
+        let other = try UserID("@ann:x.org"), me = try UserID("@me:x.org")
+        func msg(_ id: String, isOwn: Bool = false, ts: TimeInterval) throws -> TimelineItem {
+            TimelineItem(id: TimelineItemID(id), content: .event(TimelineEvent(
+                eventID: try EventID("$\(id)"), sender: isOwn ? me : other, senderName: isOwn ? "Me" : "Ann",
+                timestamp: Date(timeIntervalSince1970: ts), isOwn: isOwn, kind: .text(id, isEdited: false))))
+        }
+        let port = FakeTimelinePort()
+        port.addRoom(room, items: [try msg("m1", ts: 10), try msg("m2", ts: 20)], older: [[try msg("m0", ts: 5)]])
+        let vm = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room))
+        await vm.start()
+        for _ in 0..<200_000 { if vm.lastRowID == "m2" { break }; await Task.yield() }
+        #expect(vm.isAtBottom && vm.newSinceDetached == 0)
+
+        // User scrolls up (detached).
+        vm.setAtBottom(false)
+        #expect(!vm.isAtBottom && vm.newSinceDetached == 0)
+
+        // Back-pagination prepends older items: count stays 0.
+        await vm.loadEarlier()
+        for _ in 0..<200_000 {
+            if case .live(let rows, false, _, _) = vm.content, rows.contains(where: { $0.id == "m0" }) { break }
+            await Task.yield()
+        }
+        #expect(vm.newSinceDetached == 0)
+
+        // Two incoming messages arrive while detached.
+        try port.emit(.append([try msg("m3", ts: 30), try msg("m4", ts: 40)]), in: room)
+        for _ in 0..<200_000 where vm.lastRowID != "m4" { await Task.yield() }
+        #expect(vm.newSinceDetached == 2)
+
+        // Own message doesn't increment the incoming count.
+        try port.emit(.append([try msg("m5", isOwn: true, ts: 50)]), in: room)
+        for _ in 0..<200_000 where vm.lastRowID != "m5" { await Task.yield() }
+        #expect(vm.newSinceDetached == 2)
+
+        // Returning to bottom resets the count.
+        vm.setAtBottom(true)
+        #expect(vm.isAtBottom && vm.newSinceDetached == 0)
+
+        // New message while at bottom keeps count 0.
+        try port.emit(.append([try msg("m6", ts: 60)]), in: room)
+        for _ in 0..<200_000 where vm.lastRowID != "m6" { await Task.yield() }
+        #expect(vm.newSinceDetached == 0)
+
+        await vm.stop()
+    }
 }

@@ -326,6 +326,11 @@ public final class TimelineViewModel {
     /// The first message that was unread when the room was opened (TIMELINE FR-4): the "Jump to unread" pill leads back to it for as
     /// long as the room stays open (the SDK's own "New messages" row moves with the fully-read marker). `nil` when nothing was unread or the position is unknown.
     public private(set) var unreadMarkerID: String?
+    /// `true` while the newest row is in view; `false` when the user scrolled up to read history (TIMELINE §6: Detached).
+    public private(set) var isAtBottom = true
+    /// Number of incoming messages appended while the user is scrolled up (`!isAtBottom`). Cleared on returning to the bottom.
+    public private(set) var newSinceDetached = 0
+    private var trackedTailID: String?
 
     /// How long an event must stay visible before it counts as seen (READ_RECEIPTS §1, D6).
     public static let seenDwell: Duration = .milliseconds(500)
@@ -412,6 +417,9 @@ public final class TimelineViewModel {
         landed = false
         landingRow = nil
         unreadMarkerID = nil
+        isAtBottom = true
+        newSinceDetached = 0
+        trackedTailID = nil
         let statuses = await coordinator.statuses()
         observation = Task { [weak self] in
             for await status in statuses { self?.apply(status) }
@@ -458,6 +466,17 @@ public final class TimelineViewModel {
 
     /// The view has scrolled to the landing row.
     public func landingShown() { landingRow = nil }
+
+    /// Reports whether the newest row is currently visible (TIMELINE §6: Detached state and "↓ N new" pill).
+    public func setAtBottom(_ atBottom: Bool) {
+        isAtBottom = atBottom
+        if atBottom {
+            newSinceDetached = 0
+            trackedTailID = lastRowID
+        } else if trackedTailID == nil {
+            trackedTailID = lastRowID
+        }
+    }
 
     /// The first message from someone else newer than `readThrough` (TIMELINE FR "land at the first unread message"); `nil` when
     /// the read position is unknown or nothing is unread, in which case the timeline stays at the bottom.
@@ -760,6 +779,7 @@ public final class TimelineViewModel {
             }
             if !landed, !rows.isEmpty, hasMessage || (snapshot.reachedStart && !snapshot.isPaginating) {
                 landed = true
+                trackedTailID = rows.last?.id
                 if let unread = Self.firstUnreadItemID(snapshot.items, readThrough: readThroughAtOpen) {
                     landingRow = unread
                     landingIsUnread = true
@@ -768,6 +788,8 @@ public final class TimelineViewModel {
                     landingRow = rows.last?.id  // all read, or the position is unknown: the bottom
                     landingIsUnread = false
                 }
+            } else {
+                updateDetachedCount(for: rows)
             }
             visible.formIntersection(times.keys)
             reportOwnMessage(snapshot.items)
@@ -780,6 +802,28 @@ public final class TimelineViewModel {
         case .failed(let error):
             content = .failed(error == .notFound ? "This room isn't available." : "The timeline couldn't be loaded.")
         }
+    }
+
+    /// Counts incoming messages appended after `trackedTailID` while scrolled up; ignores back-pagination and edits.
+    private func updateDetachedCount(for rows: [TimelineRow]) {
+        guard landed else {
+            trackedTailID = rows.last?.id
+            return
+        }
+        guard !isAtBottom else {
+            newSinceDetached = 0
+            trackedTailID = rows.last?.id
+            return
+        }
+        let tail = rows.last?.id
+        guard tail != trackedTailID else { return }
+        if let prev = trackedTailID, let idx = rows.lastIndex(where: { $0.id == prev }) {
+            let added = rows[(idx + 1)...].filter { row in
+                !row.isOwn && [.message, .notice, .emote, .placeholder].contains(row.style)
+            }.count
+            newSinceDetached += added
+        }
+        trackedTailID = tail
     }
 
     /// Sending a message means the user has read up to it (MESSAGING FR-6, rule E1b): once the newest own message has a

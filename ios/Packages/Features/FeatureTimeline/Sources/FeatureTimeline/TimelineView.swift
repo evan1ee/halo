@@ -69,7 +69,10 @@ public struct TimelineView: View {
                             // D6: a row counts as seen when at least half of it is on screen; the 0.5 s dwell is in the view model.
                             .onScrollVisibilityChange(threshold: 0.5) {
                                 model.rowVisibility(row, isVisible: $0)
-                                if row.id == rows.last?.id { bottomVisible = $0 }
+                                if row.id == rows.last?.id {
+                                    bottomVisible = $0
+                                    if landed { model.setAtBottom($0) }
+                                }
                             }
                             .onDisappear { model.rowVisibility(row, isVisible: false) }
                             .listRowSeparator(.hidden, edges: .all)
@@ -103,13 +106,14 @@ public struct TimelineView: View {
                     model.landingShown()
                     try? await Task.sleep(for: .milliseconds(250))  // let the scroll settle before history may load
                     landed = true
+                    model.setAtBottom(bottomVisible)
                 }
                 .task(id: rows.last?.id) {
-                    // A new last row scrolls into view. A tall row (a photo) isn't measured yet at the first jump and would land
-                    // just below the screen (seen in the simulator), so the jump is repeated after the layout settles.
-                    guard landed, let last = rows.last?.id else { return }
+                    // A new last row scrolls into view when already at the bottom or when the user just sent it; when
+                    // scrolled up reading history, stay put so the "↓ N new" pill lets the user jump down on their own (TIMELINE §6).
+                    guard landed, let last = rows.last, model.isAtBottom || last.isOwn else { return }
                     for step in 0..<3 {
-                        withAnimation { proxy.scrollTo(last, anchor: .bottom) }
+                        withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
                         try? await Task.sleep(for: .milliseconds(step == 0 ? 200 : 250))
                     }
                 }
@@ -124,6 +128,32 @@ public struct TimelineView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.top, 8)
                         .accessibilityIdentifier("jump-to-unread")
+                    }
+                }
+                // TIMELINE §6: when scrolled up, offer a floating button (or "↓ N new" pill) to return to the newest row.
+                .overlay(alignment: .bottomTrailing) {
+                    if landed, !model.isAtBottom, let last = rows.last?.id {
+                        Button {
+                            model.setAtBottom(true)
+                            withAnimation { proxy.scrollTo(last, anchor: .bottom) }
+                        } label: {
+                            if model.newSinceDetached > 0 {
+                                Label("\(model.newSinceDetached) new", systemImage: "arrow.down")
+                                    .font(.footnote.bold())
+                                    .padding(.horizontal, 12).padding(.vertical, 8)
+                                    .background(.regularMaterial, in: Capsule())
+                            } else {
+                                Image(systemName: "arrow.down")
+                                    .font(.footnote.bold())
+                                    .frame(width: 34, height: 34)
+                                    .background(.regularMaterial, in: Circle())
+                            }
+                        }
+                        .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
+                        .padding(.trailing, 16)
+                        .padding(.bottom, 12)
+                        .accessibilityLabel(model.newSinceDetached > 0 ? "\(model.newSinceDetached) new messages, jump to bottom" : "Jump to bottom")
+                        .accessibilityIdentifier("jump-to-bottom")
                     }
                 }
                 }
