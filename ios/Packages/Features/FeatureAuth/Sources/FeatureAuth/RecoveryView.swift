@@ -32,6 +32,7 @@ public struct RecoveryBanner: View {
 
 public struct RecoveryView: View {
     @Bindable private var model: RecoveryViewModel
+    @Environment(\.dismiss) private var dismiss
 
     public init(model: RecoveryViewModel) { self.model = model }
 
@@ -41,10 +42,19 @@ public struct RecoveryView: View {
             Text("It unlocks your encrypted message history on this device.")
                 .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
             SecureField("Recovery key", text: $model.key).textFieldStyle(.roundedBorder)
+                .autocorrectionDisabled()
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                #endif
+                .submitLabel(.go).onSubmit { Task { await model.submit() } }
             if model.isWorking {
                 ProgressView()
             } else {
-                Button("Verify") { Task { await model.submit() } }.buttonStyle(.borderedProminent)
+                HStack {
+                    Button("Not now") { dismiss() }.buttonStyle(.bordered)
+                    Button("Verify") { Task { await model.submit() } }.buttonStyle(.borderedProminent)
+                        .disabled(model.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
             }
             if let message = model.errorMessage {
                 Text(message).foregroundStyle(.red).font(.footnote).multilineTextAlignment(.center)

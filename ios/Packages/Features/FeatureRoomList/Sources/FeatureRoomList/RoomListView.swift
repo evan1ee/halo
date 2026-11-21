@@ -19,11 +19,11 @@ public struct RoomListView: View {
             switch model.content {
             case .idle, .loading:
                 ProgressView()
-            case .loaded(let count, let rows):
+            case .loaded(_, let rows):
                 VStack(spacing: 0) {
                 filterBar
                 List {
-                    Section("Rooms: \(count)") {
+                    Section {
                         ForEach(rows) { row in
                             if row.isInvite {
                                 VStack(alignment: .leading, spacing: 6) {
@@ -76,6 +76,9 @@ public struct RoomListView: View {
                     }
                 }
                 .accessibilityIdentifier("room-list")
+                .overlay {
+                    if rows.isEmpty { ContentUnavailableView(Self.emptyTitle(model.filter), systemImage: "bubble.left.and.bubble.right") }
+                }
                 .safeAreaInset(edge: .bottom) {
                     if let message = model.actionError { Text(message).font(.footnote).foregroundStyle(.red).padding() }
                 }
@@ -85,6 +88,18 @@ public struct RoomListView: View {
             }
         }
         .task { await model.start() }
+    }
+
+    /// What an empty list says: no rooms at all, or nothing matching the chosen filter.
+    static func emptyTitle(_ filter: RoomListFilter) -> String {
+        switch filter {
+        case .all: "No rooms yet"
+        case .unread: "All caught up"
+        case .people: "No direct chats"
+        case .rooms: "No group rooms"
+        case .favourites: "No favourites"
+        case .invites: "No invitations"
+        }
     }
 
     private static let filters: [(RoomListFilter, String)] = [(.all, "All"), (.unread, "Unread"), (.people, "People"), (.rooms, "Rooms"), (.favourites, "Favourites"), (.invites, "Invites")]

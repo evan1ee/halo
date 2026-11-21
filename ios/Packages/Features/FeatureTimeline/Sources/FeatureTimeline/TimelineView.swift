@@ -67,9 +67,12 @@ public struct TimelineView: View {
                             }
                             .onDisappear { model.rowVisibility(row, isVisible: false) }
                             .listRowSeparator(.hidden, edges: .all)
+                            // Messages of one group sit close together; a new sender or a gap gets more room above.
+                            .listRowInsets(EdgeInsets(top: row.continuesRun ? 1 : 8, leading: 16, bottom: 1, trailing: 16))
                     }
                 }
                 .listStyle(.plain)
+                .environment(\.defaultMinListRowHeight, 0)  // rows are as tall as their content, so a group reads as one
                 .listSectionSeparator(.hidden)
                 .listRowSeparatorTint(.clear)
                 .defaultScrollAnchor(.bottom)
@@ -265,9 +268,11 @@ private struct RowView: View {
         switch row.style {
         case .message, .ownMessage:
             HStack(alignment: .top, spacing: 6) {
-            if row.style == .message { SenderAvatar(name: row.sender ?? "?", ref: row.avatar, model: model) }
+            if row.style == .message {
+                if row.continuesRun { Color.clear.frame(width: 28, height: 1) } else { SenderAvatar(name: row.sender ?? "?", ref: row.avatar, model: model) }
+            }
             VStack(alignment: row.style == .ownMessage ? .trailing : .leading, spacing: 2) {
-                if let sender = row.sender, row.style == .message { Text(sender).font(.caption).foregroundStyle(.secondary) }
+                if let sender = row.sender, row.style == .message, !row.continuesRun { Text(sender).font(.caption).foregroundStyle(.secondary) }
                 if let reply = row.reply {
                     VStack(alignment: .leading, spacing: 0) {
                         if let name = reply.sender { Text(name).font(.caption2.bold()) }
@@ -330,7 +335,7 @@ private struct ThumbnailSize: ViewModifier {
 
     func body(content: Content) -> some View {
         if isSticker {
-            content.frame(width: 200, height: 200)
+            content.frame(width: 160, height: 160)  // FR-8 allows up to 256 pt; 160 keeps a sticker from filling the screen
         } else {
             content.aspectRatio(aspectRatio ?? 4 / 3, contentMode: .fit).frame(maxWidth: 240)
         }

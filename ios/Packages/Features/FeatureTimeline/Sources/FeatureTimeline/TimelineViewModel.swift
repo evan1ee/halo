@@ -44,6 +44,8 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     public let card: BotCard?
     /// The sender's profile picture, for someone else's message; the view shows their initial until it loads.
     public var avatar: MediaRef?
+    /// Someone else's message that follows their previous one closely: the view leaves out the name and picture (one group).
+    public var continuesRun = false
 
     public struct FileTile: Equatable, Sendable {
         public let kind: MediaKind
@@ -694,7 +696,7 @@ public final class TimelineViewModel {
             botTasks = botTracker(snapshot.items)
             botTapped.subtract(botTasks.completed)
             botUnanswered.subtract(botTasks.completed)
-            let rows = Self.collapsingStateRuns(snapshot.items.map(row), items: snapshot.items)
+            let rows = Self.collapsingStateRuns(Self.groupingRuns(snapshot.items.map(row), items: snapshot.items), items: snapshot.items)
             // Wait until there is something to land on: a message, or the whole (message-less) history. The first snapshots of a
             // freshly opened room hold only the start marker and state events.
             let hasMessage = snapshot.items.contains { item in
@@ -767,6 +769,22 @@ public final class TimelineViewModel {
     }
 
     static let settingsText = "The room was updated"
+
+    /// Messages from the same person within this time of their previous one form a group (one name and picture).
+    static let runGap: TimeInterval = 5 * 60
+
+    /// Marks someone else's message that directly follows their previous message (no divider or other row between, within
+    /// `runGap`), so the view shows the name and picture once per group.
+    static func groupingRuns(_ rows: [TimelineRow], items: [TimelineItem]) -> [TimelineRow] {
+        var result = rows
+        for index in result.indices.dropFirst() where result[index].style == .message && result[index - 1].style == .message {
+            guard case .event(let event) = items[index].content, case .event(let previous) = items[index - 1].content,
+                  let sender = event.sender, sender == previous.sender,
+                  event.timestamp.timeIntervalSince(previous.timestamp) < runGap else { continue }
+            result[index].continuesRun = true
+        }
+        return result
+    }
 
     private func botTracker(_ items: [TimelineItem]) -> BotTaskTracker {
         guard !botSenders.isEmpty else { return BotTaskTracker([]) }

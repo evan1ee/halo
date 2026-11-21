@@ -640,6 +640,25 @@ struct TimelineViewModelTests {
         #expect(vm.row(event(.media(MediaAttachment(kind: .file, body: "a.bin", source: MediaRef(token: "x"), thumbnail: MediaRef(token: "t"))))).file?.thumbnail == nil)
     }
 
+    @Test("consecutive messages from one person within five minutes form a group; another sender, a gap or own messages break it")
+    func groupedRuns() throws {
+        let model = try model()
+        func item(_ id: String, _ who: String, at seconds: Double, own: Bool = false) throws -> TimelineItem {
+            TimelineItem(
+                id: TimelineItemID(id),
+                content: .event(TimelineEvent(
+                    eventID: nil, sender: try UserID(who), senderName: nil, timestamp: Date(timeIntervalSince1970: seconds),
+                    isOwn: own, kind: .text(id, isEdited: false))))
+        }
+        let items = [
+            try item("a1", "@a:x.org", at: 0), try item("a2", "@a:x.org", at: 60), try item("b1", "@b:x.org", at: 90),
+            try item("b2", "@b:x.org", at: 90 + 600), try item("b3", "@b:x.org", at: 700), try item("me", "@me:x.org", at: 710, own: true),
+            try item("me2", "@me:x.org", at: 720, own: true),
+        ]
+        let rows = TimelineViewModel.groupingRuns(items.map(model.row), items: items)
+        #expect(rows.map(\.continuesRun) == [false, true, false, false, true, false, false])
+    }
+
     @Test("someone else's message carries the sender's picture, your own does not, and the bytes load small")
     func senderAvatars() async throws {
         let port = FakeMediaPort()
