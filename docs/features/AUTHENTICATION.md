@@ -15,7 +15,7 @@ Sign in to a Matrix homeserver, keep the session safe and restore it silently.
 - FR-2 Show the login methods the server offers (`homeserver_login_details`).
 - FR-3 OIDC via `url_for_oauth` + `ASWebAuthenticationSession` + `login_with_oauth_callback`; abort with `abort_oauth_auth` **[VERIFIED F-FFI-22]**.
 - FR-4 Password login with `login(username, password, deviceName, deviceId)`.
-- FR-5 Reject servers without native sliding sync with a clear message (`sliding_sync_version_builder(.discoverNative)` failure).
+- FR-5 ~~Reject servers without native sliding sync~~ — **removed by [DECISION D81]** (R-17): since Halo uses classic `/sync` (`D74`), homeservers without native sliding sync are accepted as long as they offer password or OIDC login.
 - FR-6 Persist the session (`Client.session()`) in the Keychain, access group shared with the NSE, accessibility `afterFirstUnlockThisDeviceOnly`.
 - FR-7 Persist token refreshes from the session delegate immediately.
 - FR-8 Logout: `logout()`, delete the pusher, wipe the Keychain items, SDK stores and `halo.sqlite` for this account.

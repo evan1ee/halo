@@ -95,7 +95,7 @@ public actor MatrixSessionPort: SessionPort {
         do {
             let probe = try await ClientBuilder()
                 .serverNameOrHomeserverUrl(serverNameOrUrl: trimmed)
-                .slidingSyncVersionBuilder(versionBuilder: .discoverNative)
+                .slidingSyncVersionBuilder(versionBuilder: .none)
                 .build()
             let details = await probe.homeserverLoginDetails()
             guard let url = URL(string: probe.homeserver()) else { throw HaloError.internal(code: "HOMESERVER_URL") }
@@ -111,7 +111,6 @@ public actor MatrixSessionPort: SessionPort {
     public func loginPassword(
         _ credentials: PasswordCredentials, on server: ServerDetails
     ) async throws(HaloError) -> StoredSession {
-        guard server.supportsNativeSlidingSync else { throw .unsupported("NO_SLIDING_SYNC") }
         try initialisePlatform(lightweightRuntime)
         let newStoreID = UUID().uuidString
         let passphrase = Self.randomPassphrase()

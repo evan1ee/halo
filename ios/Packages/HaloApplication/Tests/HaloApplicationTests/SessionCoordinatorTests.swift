@@ -55,15 +55,16 @@ struct SessionCoordinatorTests {
         #expect(keychain.stored(.session) == nil)
     }
 
-    @Test("servers without native sliding sync are rejected (FR-5)")
-    func noSlidingSync() async {
+    @Test("R-17 (D81): servers without native sliding sync are accepted because Halo uses classic sync (D74)")
+    func classicSyncServerAccepted() async {
         let (port, keychain) = makeSessionFixture()
-        port.addServer("old.example", ServerDetails(homeserverURL: URL(string: "https://old.example")!,
-                                                     supportsPassword: true, supportsOIDC: false, supportsNativeSlidingSync: false))
+        let classicServer = ServerDetails(homeserverURL: URL(string: "https://old.example")!,
+                                          supportsPassword: true, supportsOIDC: false, supportsNativeSlidingSync: false)
+        port.addServer("old.example", classicServer)
         let coordinator = SessionCoordinator(port: port, keychain: keychain)
         await coordinator.start()
         await coordinator.discover(server: "  old.example \n")
-        #expect(await coordinator.state == .signedOut(failure: .unsupported("NO_SLIDING_SYNC")))
+        #expect(await coordinator.state == .choosingMethod(classicServer, failure: nil))
     }
 
     @Test("discovery errors and empty input are reported")

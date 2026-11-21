@@ -102,9 +102,8 @@ public actor SessionCoordinator {
         state = .discovering
         do {
             let details = try await withTimeout { () async throws(HaloError) -> ServerDetails in try await self.port.loginDetails(server: server) }
-            if !details.supportsNativeSlidingSync {
-                state = .signedOut(failure: .unsupported("NO_SLIDING_SYNC"))
-            } else if !details.supportsPassword && !details.supportsOIDC {
+            // Native sliding sync is not required since Halo runs classic /sync (D74, D81, R-17).
+            if !details.supportsPassword && !details.supportsOIDC {
                 state = .signedOut(failure: .unsupported("NO_LOGIN_METHOD"))
             } else {
                 state = .choosingMethod(details, failure: nil)
