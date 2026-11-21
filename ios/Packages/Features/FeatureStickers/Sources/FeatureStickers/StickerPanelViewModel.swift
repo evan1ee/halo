@@ -106,6 +106,15 @@ public final class StickerPanelViewModel {
     }
 
     public func cancelNotice() { pendingNotice = nil }
+    public func dismissSendError() { sendError = nil }
+
+    /// Reloads sticker packs after a failure.
+    public func retryLoad() async { await library.load(currentRoom: room) }
+
+    /// `true` while the first load is in progress and no cached packs are shown yet.
+    public var isLoading: Bool {
+        !isSearching && snapshot.packs.isEmpty && (snapshot.phase == .unloaded || snapshot.phase == .loading)
+    }
 
     @discardableResult
     private func deliver(_ sticker: Sticker) async -> Bool {

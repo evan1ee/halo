@@ -14,10 +14,22 @@ public struct StickerPanelView: View {
     public var body: some View {
         @Bindable var model = model
         VStack(spacing: 0) {
-            HStack {
-                TextField("Search stickers", text: $model.query)
-                    .textFieldStyle(.roundedBorder)
-                    .accessibilityIdentifier("sticker-search")
+            HStack(spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary).accessibilityHidden(true)
+                    TextField("Search stickers", text: $model.query)
+                        .textFieldStyle(.plain)
+                        .accessibilityIdentifier("sticker-search")
+                    if !model.query.isEmpty {
+                        Button { model.query = "" } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Clear search")
+                    }
+                }
+                .padding(.horizontal, 10).padding(.vertical, 7)
+                .background(.secondary.opacity(0.12), in: .rect(cornerRadius: 10))
                 if model.canCreatePack {
                     Button { newPack = model.beginNewPack() } label: { Image(systemName: "plus.circle").font(.title2) }
                         .accessibilityLabel("New sticker pack")
@@ -26,7 +38,17 @@ public struct StickerPanelView: View {
             }
             // Room for the sheet's drag indicator above the search field.
             .padding(.horizontal, 12).padding(.top, 28).padding(.bottom, 8)
-            if let error = model.sendError { Text(error).font(.caption).foregroundStyle(.red) }
+            if let error = model.sendError {
+                HStack(spacing: 8) {
+                    Text(error).font(.caption).foregroundStyle(.red)
+                    Spacer()
+                    Button { model.dismissSendError() } label: { Image(systemName: "xmark").font(.caption2.weight(.semibold)) }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Dismiss")
+                }
+                .padding(.horizontal, 12).padding(.bottom, 6)
+            }
             if let notice = model.unavailableNotice {
                 HStack(spacing: 8) {
                     Text(notice).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("unavailable-packs")
@@ -34,12 +56,36 @@ public struct StickerPanelView: View {
                         .font(.caption.bold())
                         .accessibilityIdentifier("remove-unavailable-packs")
                 }
+                .padding(.horizontal, 12).padding(.bottom, 6)
             }
-            if model.isIncomplete { Text("Some packs couldn't be loaded.").font(.caption).foregroundStyle(.secondary) }
-            if let message = model.emptyMessage {
+            if model.isIncomplete {
+                Text("Some packs couldn't be loaded.").font(.caption).foregroundStyle(.secondary)
+                    .padding(.horizontal, 12).padding(.bottom, 6)
+            }
+            if model.isLoading {
                 Spacer()
-                Text(message).foregroundStyle(.secondary)
+                ProgressView("Loading stickers…")
                 Spacer()
+            } else if model.emptyMessage != nil {
+                if model.isSearching {
+                    ContentUnavailableView.search(text: model.query)
+                } else if model.snapshot.phase == .failed {
+                    ContentUnavailableView {
+                        Label("Couldn't load stickers", systemImage: "exclamationmark.triangle")
+                    } actions: {
+                        Button("Try again") { Task { await model.retryLoad() } }.buttonStyle(.borderedProminent)
+                    }
+                } else {
+                    ContentUnavailableView {
+                        Label("No sticker packs yet", systemImage: "face.smiling")
+                    } description: {
+                        Text("Create a pack to send stickers here.")
+                    } actions: {
+                        if model.canCreatePack {
+                            Button("New sticker pack") { newPack = model.beginNewPack() }.buttonStyle(.borderedProminent)
+                        }
+                    }
+                }
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {

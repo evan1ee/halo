@@ -29,15 +29,15 @@ struct StickerPanelViewModelTests {
     @Test("the panel loads, shows the packs, and says when there is nothing")
     func loads() async {
         let (model, _) = make()
-        #expect(model.emptyMessage == "Loading stickers…")
+        #expect(model.isLoading && model.emptyMessage == "Loading stickers…")
         await model.start()
         await settle { !model.snapshot.packs.isEmpty }
-        #expect(model.snapshot.packs.map(\.displayName) == ["Cats"] && model.emptyMessage == nil)
+        #expect(!model.isLoading && model.snapshot.packs.map(\.displayName) == ["Cats"] && model.emptyMessage == nil)
         await model.stop()
         let empty = StickerPanelViewModel(library: StickerLibrary(packs: FakeStickerPacks(), prefs: FakeStickerPrefs()), room: nil, send: { _ in })
         await empty.start()
         await settle { empty.snapshot.phase == .ready }
-        #expect(empty.emptyMessage == "No sticker packs yet.")
+        #expect(!empty.isLoading && empty.emptyMessage == "No sticker packs yet.")
     }
 
     @Test("packs the user added that can't be read are announced, with the right count")
@@ -73,6 +73,8 @@ struct StickerPanelViewModelTests {
         await settle { !model.snapshot.packs.isEmpty }
         await model.tap(sticker("dog"))
         #expect(model.sendError == "Can't reach the server. The sticker wasn't sent.")
+        model.dismissSendError()
+        #expect(model.sendError == nil)
         await model.stop()
         #expect(prefs.saves.isEmpty && model.snapshot.recents.isEmpty)
     }
