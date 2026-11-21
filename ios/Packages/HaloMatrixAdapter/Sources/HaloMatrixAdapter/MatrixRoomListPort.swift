@@ -222,8 +222,18 @@ public final class MatrixRoomListPort: RoomListPort {
         // membership change: say it as a sentence (no "Name:" prefix) rather than leave the line empty.
         case .remote(_, _, let isOwn, _, .roomMembership(_, let name, let change, _)):
             return membershipLine(who: isOwn ? "You" : (name ?? "Someone"), change).map { LatestMessagePreview(text: $0, senderName: nil, isOwn: false) }
-        case .remote(_, _, let isOwn, let profile, let content): return previewText(content).map { LatestMessagePreview(text: $0, senderName: displayName(profile), isOwn: isOwn) }
-        case .local(_, _, let profile, let content, _): return previewText(content).map { LatestMessagePreview(text: $0, senderName: displayName(profile), isOwn: true) }
+        case .remote(_, let sender, let isOwn, let profile, let content):
+            return previewText(content).map {
+                LatestMessagePreview(
+                    text: $0, senderName: displayName(profile), isOwn: isOwn,
+                    senderID: try? UserID(sender), formattedBody: TimelineMapper.formattedHTML(of: content))
+            }
+        case .local(_, let sender, let profile, let content, _):
+            return previewText(content).map {
+                LatestMessagePreview(
+                    text: $0, senderName: displayName(profile), isOwn: true,
+                    senderID: try? UserID(sender), formattedBody: TimelineMapper.formattedHTML(of: content))
+            }
         }
     }
 

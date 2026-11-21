@@ -291,4 +291,34 @@ struct RoomListWarmTests {
         for _ in 0..<200_000 where model.syncNotice != nil { await Task.yield() }
         #expect(model.syncNotice == nil)
     }
+
+    @Test("allowlisted bot messages show a concise card preview and update on refresh (ROOM_LIST FR-3)")
+    func botCardPreview() async throws {
+        let roomID = try RoomID("!bot:x.org")
+        let botID = try UserID("@bot:x.org")
+        let summary = RoomSummary(
+            id: roomID, name: "Tasks", isDirect: false, isEncrypted: false, membership: .joined,
+            preview: LatestMessagePreview(
+                text: "📋 Work:", senderName: "TodoBot", isOwn: false, senderID: botID,
+                formattedBody: "📋 <b>Work:</b><br/>• [<b>#1</b>] Ship<br/>• [<b>#2</b>] <del>Plan</del> ✅"))
+        let coordinator = RoomListCoordinator(port: FakeRoomListPort(rooms: [summary]))
+        let model = RoomListViewModel(session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()), rooms: coordinator)
+        await coordinator.start()
+        for await status in await coordinator.statuses() {
+            if case .loaded = status { await model.listChanged(status); break }
+        }
+        if case .loaded(_, let rows) = model.content {
+            #expect(rows.first?.preview == "TodoBot: 📋 Work:")
+        } else {
+            Issue.record("expected loaded room list")
+        }
+
+        model.botSenders = { [botID.rawValue] }
+        await model.refresh()
+        if case .loaded(_, let rows) = model.content {
+            #expect(rows.first?.preview == "TodoBot: Work · 1 open")
+        } else {
+            Issue.record("expected loaded room list")
+        }
+    }
 }

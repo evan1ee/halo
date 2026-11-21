@@ -90,6 +90,7 @@ final class AppRoot {
         auth = AuthViewModel(coordinator: sessionCoordinator)
         roomList = RoomListViewModel(session: sessionCoordinator, rooms: roomCoordinator, sync: sync, receipts: receipts, actions: roomPort, media: media)
         roomList.warm = { [timelinePort] rooms in await timelinePort.warm(rooms) }
+        roomList.botSenders = { Set(AppPreferences().botSenders) }
         #if DEBUG
         Self.exportNSEMetrics(namespace: namespace)
         #endif

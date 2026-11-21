@@ -77,6 +77,8 @@ public final class RoomListViewModel {
     private let actions: (any RoomPort)?
     /// Told which rooms are at the top of the list, so their timelines can be prepared before they are opened.
     public var warm: (@Sendable ([RoomID]) async -> Void)?
+    /// User IDs whose recognised bot messages render concise card previews in the room list (Settings → Bots, ROOM_LIST FR-3).
+    public var botSenders: @MainActor () -> Set<String> = { [] }
     private var warmedTop: [RoomID] = []
     private let media: MediaLoader?
 
@@ -96,6 +98,11 @@ public final class RoomListViewModel {
 
     /// Restarts the room-list subscription after a failure (ROOM_LIST §9).
     public func retry() async { await rooms.start() }
+
+    /// Re-renders loaded rows (for example after returning from Settings → Bots so bot-card previews update).
+    public func refresh() async {
+        if case .loaded = lastStatus { await listChanged(lastStatus) }
+    }
 
     public init(
         session: SessionCoordinator, rooms: RoomListCoordinator, sync: SyncCoordinator? = nil,
@@ -247,6 +254,7 @@ public final class RoomListViewModel {
         case .idle: content = .idle
         case .loading: content = .loading
         case .loaded(let count):
+            let bots = botSenders()
             let rows = await rooms.rooms.map { room in
                 let state = ReadStatePolicy.evaluate(RoomReadInputs(
                     roomID: room.id, membership: room.membership, isEncrypted: room.isEncrypted, counts: room.read,
@@ -255,7 +263,7 @@ public final class RoomListViewModel {
                 return Row(
                     id: room.id, name: room.name ?? "Unnamed room", display: state.display, hasUnread: state.hasUnread, isInvite: room.membership == .invited,
                     isFavourite: room.isFavourite, isMuted: room.read.mode == .mute, lastActivity: room.latestEvent?.timestamp,
-                    preview: room.preview?.line(isDirect: room.isDirect), avatar: room.avatar, inviter: room.inviter)
+                    preview: room.preview?.line(isDirect: room.isDirect, botSenders: bots), avatar: room.avatar, inviter: room.inviter)
             }
             let matching = zip(await rooms.rooms, rows).filter { Self.includes(filter, room: $0.0, row: $0.1) }.map(\.1)
             content = .loaded(count: filter == .all ? count : matching.count, rows: matching)

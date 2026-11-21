@@ -62,10 +62,16 @@ enum TimelineMapper {
             localID: localID, senderAvatar: senderAvatar)
     }
 
-    /// The HTML body of a text message, if the sender gave one in the standard format.
+    /// The HTML body of a text, notice or emote message, if the sender gave one in the standard format.
     static func formattedHTML(of content: TimelineItemContent) -> String? {
-        guard case .msgLike(let msgLike) = content, case .message(let message) = msgLike.kind, case .text(let text) = message.msgType,
-              let formatted = text.formatted, case .html = formatted.format else { return nil }
+        guard case .msgLike(let msgLike) = content, case .message(let message) = msgLike.kind else { return nil }
+        let formatted: FormattedBody? = switch message.msgType {
+        case .text(let c): c.formatted
+        case .notice(let c): c.formatted
+        case .emote(let c): c.formatted
+        default: nil
+        }
+        guard let formatted, case .html = formatted.format else { return nil }
         return formatted.body
     }
 

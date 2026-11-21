@@ -1,5 +1,6 @@
 import Foundation
 import HaloDomain
+import HaloFoundation
 import MatrixRustSDK
 import Testing
 @testable import HaloMatrixAdapter
@@ -55,11 +56,12 @@ struct LatestEventMappingTests {
         }
     }
 
-    @Test("the preview carries the sender's display name and whether it is the user's own; invites and empty rooms have none")
-    func previewSender() {
+    @Test("the preview carries the sender's display name, user ID, HTML body and whether it is the user's own; invites and empty rooms have none")
+    func previewSender() throws {
         let content = message(.text(content: TextMessageContent(body: "hi", formatted: nil)))
         let ready = ProfileDetails.ready(displayName: "Ann", displayNameAmbiguous: false, avatarUrl: nil, status: nil, call: nil)
-        #expect(MatrixRoomListPort.preview(.remote(timestamp: 1, sender: "@a:x", isOwn: false, profile: ready, content: content)) == LatestMessagePreview(text: "hi", senderName: "Ann", isOwn: false))
+        let annID = try UserID("@a:x")
+        #expect(MatrixRoomListPort.preview(.remote(timestamp: 1, sender: "@a:x", isOwn: false, profile: ready, content: content)) == LatestMessagePreview(text: "hi", senderName: "Ann", isOwn: false, senderID: annID))
         #expect(MatrixRoomListPort.preview(.remote(timestamp: 1, sender: "@a:x", isOwn: false, profile: .pending, content: content))?.senderName == nil)
         #expect(MatrixRoomListPort.preview(.local(timestamp: 1, sender: "@a:x", profile: .pending, content: content, state: .isSending))?.isOwn == true)
         #expect(MatrixRoomListPort.preview(.none) == nil)
@@ -69,5 +71,13 @@ struct LatestEventMappingTests {
         let other = TimelineItemContent.roomMembership(userId: "@a:x", userDisplayName: "Ann", change: .notImplemented, reason: nil)
         #expect(MatrixRoomListPort.preview(.remote(timestamp: 1, sender: "@a:x", isOwn: false, profile: ready, content: other)) == nil)
         #expect(MatrixRoomListPort.preview(.remoteInvite(timestamp: 1, inviter: nil, inviterProfile: .pending)) == nil)
+
+        // HTML formatted bodies are extracted on text, notice and emote events (for bots and styled text).
+        let html = FormattedBody(format: .html, body: "<b>hi</b>")
+        let notice = message(.notice(content: NoticeMessageContent(body: "hi", formatted: html)))
+        let emote = message(.emote(content: EmoteMessageContent(body: "hi", formatted: html)))
+        #expect(TimelineMapper.formattedHTML(of: notice) == "<b>hi</b>")
+        #expect(TimelineMapper.formattedHTML(of: emote) == "<b>hi</b>")
+        #expect(MatrixRoomListPort.preview(.remote(timestamp: 1, sender: "@bot:x", isOwn: false, profile: ready, content: notice)) == LatestMessagePreview(text: "hi", senderName: "Ann", isOwn: false, senderID: try UserID("@bot:x"), formattedBody: "<b>hi</b>"))
     }
 }

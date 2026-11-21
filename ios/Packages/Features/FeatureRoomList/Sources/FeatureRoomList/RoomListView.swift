@@ -113,6 +113,7 @@ public struct RoomListView: View {
             }
         }
         .task { await model.start() }
+        .onAppear { Task { await model.refresh() } }
     }
 
     /// What an empty list says: no rooms at all, or nothing matching the chosen filter.

@@ -54,19 +54,33 @@ public struct LatestMessagePreview: Sendable, Equatable {
     /// The sender's display name; `nil` when unknown.
     public let senderName: String?
     public let isOwn: Bool
+    /// The sender's Matrix user ID, when known (used to apply allowlisted bot card summaries).
+    public let senderID: UserID?
+    /// The HTML formatted body, when present (used for bot-card-aware previews).
+    public let formattedBody: String?
 
-    public init(text: String, senderName: String?, isOwn: Bool) {
+    public init(text: String, senderName: String?, isOwn: Bool, senderID: UserID? = nil, formattedBody: String? = nil) {
         self.text = text
         self.senderName = senderName
         self.isOwn = isOwn
+        self.senderID = senderID
+        self.formattedBody = formattedBody
     }
 
     /// The line a row shows: "You: …" for the user's own messages, "Name: …" in a group, the bare text in a direct chat.
-    public func line(isDirect: Bool) -> String {
-        if isOwn { return "You: " + text }
-        if isDirect { return text }
-        if let senderName, !senderName.isEmpty { return senderName + ": " + text }
-        return text
+    /// For messages from an allowlisted bot whose HTML matches a template card, uses the card's summary instead of raw body text.
+    public func line(isDirect: Bool, botSenders: Set<String> = []) -> String {
+        let body: String
+        if !isOwn, let senderID, botSenders.contains(senderID.rawValue),
+           let html = formattedBody, let card = BotTemplates.parse(html) {
+            body = card.previewSummary
+        } else {
+            body = text
+        }
+        if isOwn { return "You: " + body }
+        if isDirect { return body }
+        if let senderName, !senderName.isEmpty { return senderName + ": " + body }
+        return body
     }
 }
 

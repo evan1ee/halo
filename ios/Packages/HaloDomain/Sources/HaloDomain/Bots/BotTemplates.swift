@@ -13,6 +13,24 @@ public enum BotCard: Sendable, Equatable {
         public let text: String
         public let isDone: Bool
     }
+
+    /// Concise one-line summary for room list previews (ROOM_LIST FR-3).
+    public var previewSummary: String {
+        switch self {
+        case .todoList(let title, let rows):
+            let open = rows.filter { !$0.isDone }.count
+            return open == 0 ? "\(title) · all done" : "\(title) · \(open) open"
+        case .taskAdded(let id, _, let title):
+            return "Task #\(id): \(title)"
+        case .reminderSet(let id, let when, let title):
+            if let when, !when.isEmpty { return "Reminder #\(id) (\(when)): \(title)" }
+            return "Reminder #\(id): \(title)"
+        case .taskDone(let title):
+            return "Done: \(title)"
+        case .taskDeleted(let title):
+            return "Deleted: \(title)"
+        }
+    }
 }
 
 /// Strict, versioned parsers over a bot's `formatted_body` (BOT_MESSAGES §3). Pure functions: every one fails closed with `nil`
