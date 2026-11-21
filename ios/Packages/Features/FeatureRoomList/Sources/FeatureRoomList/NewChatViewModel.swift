@@ -10,7 +10,20 @@ public final class NewChatViewModel: Identifiable {
     public private(set) var isWorking = false
     public private(set) var errorText: String?
     /// Matrix IDs the user typed in full are offered even when the directory doesn't list them.
-    public var query = "" { didSet { if query != oldValue { searchTask?.cancel(); searchTask = Task { await search() } } } }
+    public var query = "" {
+        didSet {
+            guard query != oldValue else { return }
+            searchTask?.cancel()
+            searchFailed = false
+            if trimmedQuery.isEmpty {
+                results = []
+                answeredTerm = nil
+                errorText = nil
+                return
+            }
+            searchTask = Task { await search() }
+        }
+    }
     public var roomName = ""
     /// Users picked for the new room.
     public private(set) var invited: [UserSummary] = []
@@ -22,6 +35,8 @@ public final class NewChatViewModel: Identifiable {
     private var searchTask: Task<Void, Never>?
     /// The term the current `results` answer, so "no one found" never shows for a search still running.
     private var answeredTerm: String?
+    /// `true` when the latest search failed, so neither "Searching…" nor "No one found" shows alongside the error.
+    private var searchFailed = false
 
     public init(port: any ChatCreationPort, ownUserID: UserID? = nil, onCreated: @escaping @MainActor (RoomID) -> Void) {
         self.ownUserID = ownUserID
@@ -45,25 +60,33 @@ public final class NewChatViewModel: Identifiable {
     }
 
     /// True while a search for the typed text hasn't answered yet.
-    public var isSearching: Bool { !trimmedQuery.isEmpty && answeredTerm != query }
+    public var isSearching: Bool { !trimmedQuery.isEmpty && answeredTerm != query && !searchFailed }
 
     /// The typed text was searched and nobody matched: the view says so instead of showing nothing.
-    public var foundNobody: Bool { !trimmedQuery.isEmpty && answeredTerm == query && candidates.isEmpty }
+    public var foundNobody: Bool { !trimmedQuery.isEmpty && answeredTerm == query && !searchFailed && candidates.isEmpty }
 
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     func search() async {
         let term = query
+        guard !term.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            results = []
+            answeredTerm = nil
+            searchFailed = false
+            return
+        }
         do {
             let found = try await port.searchUsers(term, limit: 20)
             guard !Task.isCancelled, term == query else { return }
             results = found
             answeredTerm = term
+            searchFailed = false
             errorText = nil
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, term == query else { return }
+            results = []
+            searchFailed = true
             errorText = Self.text(error)
-            answeredTerm = term
         }
     }
 

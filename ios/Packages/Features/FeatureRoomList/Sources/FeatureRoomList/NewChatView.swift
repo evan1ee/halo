@@ -15,13 +15,20 @@ public struct NewChatView: View {
         NavigationStack {
             List {
                 Section("Find a person") {
-                    TextField("Name or @user:server", text: $model.query)
-                        #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                        #endif
-                        .autocorrectionDisabled()
-                        .focused($searchFocused)
-                        .accessibilityIdentifier("newChatSearch")
+                    HStack(spacing: 8) {
+                        TextField("Name or @user:server", text: $model.query)
+                            #if os(iOS)
+                            .textInputAutocapitalization(.never)
+                            #endif
+                            .autocorrectionDisabled()
+                            .focused($searchFocused)
+                            .accessibilityIdentifier("newChatSearch")
+                        if !model.query.isEmpty {
+                            Button { model.query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Clear search")
+                        }
+                    }
                     if model.isSearching && model.candidates.isEmpty {
                         HStack(spacing: 8) { ProgressView(); Text("Searching…").foregroundStyle(.secondary) }
                     } else if model.foundNobody {
@@ -64,10 +71,11 @@ public struct NewChatView: View {
                 if let error = model.errorText { Section { Text(error).foregroundStyle(.red) } }
             }
             .navigationTitle("New chat")
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(model.isWorking) } }
             .overlay { if model.isWorking { ProgressView() } }
             .onAppear { searchFocused = true }  // the sheet is opened to type a name: the keyboard is up at once
         }
+        .interactiveDismissDisabled(model.isWorking)
     }
 }
 #endif

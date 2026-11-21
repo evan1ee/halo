@@ -83,4 +83,22 @@ struct NewChatViewModelTests {
         model.toggleInvite(ann)
         #expect(model.invited.isEmpty)
     }
+
+    @Test("a failed search shows the error without claiming nobody was found, and clearing the query resets state")
+    func failedSearchAndClear() async throws {
+        let port = FakeChatCreationPort(directory: [try user("@ann:x.org", "Ann")])
+        let model = NewChatViewModel(port: port, onCreated: { _ in })
+        model.query = "ann"
+        await model.search()
+        #expect(model.candidates.count == 1)
+
+        port.fail(with: .network(retryable: true))
+        model.query = "bob"
+        await model.search()
+        #expect(model.errorText == "You appear to be offline. Try again.")
+        #expect(!model.isSearching && !model.foundNobody && model.candidates.isEmpty)
+
+        model.query = ""
+        #expect(!model.isSearching && !model.foundNobody && model.candidates.isEmpty && model.errorText == nil)
+    }
 }
