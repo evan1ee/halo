@@ -110,7 +110,7 @@ This avoids depending on receipt timestamps, which record *when* something was r
 | Rule | Condition | Effect | Reason code |
 |---|---|---|---|
 | **E0 Invite** | `membership == invited` | attention = true, display = .dot | `INVITE` |
-| **E1 Local intent covers latest** | `localIntent` exists and `latestEvent.ts ≤ localIntent.eventTs` — **unless** the SDK has applied that position (`receiptReadThrough ≥ localIntent`: the receipt the SDK holds is at least the read position) and still counts something (any SDK count > 0): the SDK's latest event leaves out events it can't decrypt, so its counts know better **[DECISION D79, VERIFIED F-SDK-3]** | notify = highlight = 0, hasUnread = false; when overridden, evaluation continues with E2/E3 | `INTENT_COVERS` (overridden: `SDK_UNREAD_AFTER_READ`) |
+| **E1 Local intent covers latest** | `localIntent` exists and covers `latestEvent` — by **event identity** (`localIntentEventID == latestEvent.eventID`) when both IDs are known, otherwise `latestEvent.ts ≤ localIntent.eventTs` **[DECISION D80, ADR-0020]** — **unless**: (a) the SDK has applied that position (`receiptReadThrough ≥ localIntent`) and still counts something (any SDK count > 0, `SDK_UNREAD_AFTER_READ`) **[DECISION D79, VERIFIED F-SDK-3]**, or (b) the sent intent is confirmed (`localIntentConfirmed`: echoed in `ownReceiptEventID` or followed by a sync response) yet the server (when countable) or SDK still counts unread (`INTENT_STALE`) **[DECISION D80, ADR-0020]** | notify = highlight = 0, hasUnread = false; when overridden, evaluation continues with E2/E3 | `INTENT_COVERS` (overridden: `SDK_UNREAD_AFTER_READ`, `INTENT_STALE`) |
 | **E1b Own latest** | `latestEvent.senderIsSelf` and no newer `unconfirmedNotified` — **unless** the own event is on the server (not a local echo) and the SDK still counts something: the SDK takes an own event as a receipt (implicit receipt), so what it counts came after it **[DECISION D79, VERIFIED F-SDK-3]** | same as E1 (sending implies reading; an intent is created at the own event) | `OWN_LATEST` (overridden: `SDK_UNREAD_AFTER_READ`) |
 | **E2 Server zero** | `serverZero` (both server counts 0 **and** the server could have counted) | notify = highlight = 0 regardless of SDK counts; if SDK counts > 0 → audit (explained) | `SERVER_ZERO` (+`SDK_STALE`) |
 | **E2x Server blind** | server counts are 0 but `!serverCanCount` (encrypted room in mentions/keywords or mute mode: the server can't see mentions in encrypted content and room rules suppress counting) | E2 does **not** apply; continue with E3b/E3c using SDK counts; confidence approximate if `sdk.unreadMentions > 0` and no intent covers the latest event | `SERVER_BLIND` |
@@ -187,33 +187,34 @@ stateDiagram-v2
 ```
 
 ## 7. Coordinator responsibilities (`ReadStateCoordinator`)
-1. Subscribe to room snapshots (port `RoomReadStatePort.updates()`: one lossless stream carrying a full `RoomReadInputsPart` per room change, [PORTS_CONTRACT.md](PORTS_CONTRACT.md) §2), local intents and notification records.
-2. Keep the latest `RoomReadInputs` per room (dropping snapshots with a lower `sequence` for that room). Coalescing happens **per room id** only, never across rooms ([../architecture/CONCURRENCY.md](../architecture/CONCURRENCY.md) §3).
-3. On any input change: `evaluate` → publish `RoomReadState`; recompute the badge; if `notifiedThroughTs` moved forward → clear covered notifications ([PUSH_NOTIFICATIONS.md](PUSH_NOTIFICATIONS.md) §5).
-4. `markRead(room, event)` from the timeline: write the intent (monotonic upsert) → evaluate → enqueue the receipt.
-5. `markUnread(room, flag)`: call the port; the state comes back through the snapshot (no optimistic flag).
-6. `reconcileAll()`: re-evaluate every room from fresh snapshots; prune confirmed intents and notification records with `event_ts ≤ notifiedThroughTs`.
-7. Audit: compare each state with the raw inputs and record disagreements with reason codes.
+Implemented in `HaloApplication/ReadState/ReadStateCoordinator.swift` (single evaluator for room list, app badge, and auditor, R-05; `Feature*` never calls `ReadStatePolicy`, enforced by `scripts/check-boundaries.sh`):
+1. Subscribe to `RoomListCoordinator` read inputs, `excludedRoomChanges()` (left/hidden/ignored, R-03), `syncCompletions()` (end carry-over, R-04), `ReadReceiptCoordinator.readPositions()` (with `eventID` and `isSent`), and `NotificationRecordStore.changes()` (including Darwin signal `one.mbm.halo.db.changed`, R-13).
+2. On any input change: fold local read positions, partition notification records via `ReadStatePolicy.partitionRecords` (pruning records covered by `notifiedThroughTs` / `localIntentEventID` or superseded by sync while preserving S22 encrypted gap mentions, R-02/R-15), evaluate `ReadStatePolicy.evaluate`, and publish `[RoomID: RoomReadState]` to `RoomListViewModel` and the badge port (`BadgeCalculator`).
+3. Carry-over across launch (D73): stored attention rooms are kept only until the first sync response (`syncCompletions()`), when unconfirmed carried rooms and absent records are dropped (R-04).
+4. `reconcile()`: force a fresh evaluation and badge write without dropping unconfirmed carried rooms.
+5. `forget(room)` / `reset()`: prune left/forgotten rooms and clear all account state/records on sign-out (R-03).
+6. Audit: compare each state with raw inputs (`ReadStateAuditor`) and record disagreements with hashed room IDs and counts only.
 
 ## 8. Persistence
-Tables `read_intent` (at most one row per room; upsert only if `event_ts` is newer), `notification_record` (primary key
-(account, event_id) → de-duplication, AC-U7), `audit_event` and `badge_cache`. The schema is defined only in
-[../data/DATA_MODELS.md](../data/DATA_MODELS.md) §3; multi-process rules in [../data/PERSISTENCE.md](../data/PERSISTENCE.md) §4.
-No counts and no attention are persisted. The NSE's last computed badge is cached only as a fallback value for timeouts.
+In `halo.sqlite` (schema in [../data/DATA_MODELS.md](../data/DATA_MODELS.md) §3; multi-process rules in [../data/PERSISTENCE.md](../data/PERSISTENCE.md) §4):
+- `read_intent` (migrations v1, v8): at most one row per room, ordered monotonically by `timeline_order` + `event_ts` (D80, ADR-0020).
+- `notification_record` (migration v7, R-13): account-scoped, PK `(account, event_id)` (de-duplication AC-U7), atomic `INSERT OR IGNORE` / `DELETE`, 7-day retention on `delivered_at`, Darwin notification `one.mbm.halo.db.changed`.
+- `audit_event` (migration v2): read-state auditor findings (counts and reason codes only).
+- `AttentionCache` (`HaloPlatform`, App Group `UserDefaults`): stores the app's last attention room-ID set and `isForeground` flag as the NSE's fallback / foreground guard (R-08). No counts are persisted.
 
 ## 9. Ordering, races and limitations
 
 | Race / edge | Handling |
 |---|---|
-| Snapshot arrives after the intent but carries an older receipt | E1 still applies (intent covers latest); the intent stays until confirmed ([READ_RECEIPTS.md](READ_RECEIPTS.md) §1 "Confirmation") |
-| App and NSE write simultaneously | Monotonic upserts; PK de-duplication; Darwin notify → the app reloads |
+| Snapshot arrives after the intent but carries an older receipt | E1 still applies (intent covers latest) while unconfirmed; once confirmed (`ownReceiptEventID` echo or next sync epoch), positive countable server or SDK counts override E1 with `INTENT_STALE` (D80, ADR-0020) |
+| App and NSE write simultaneously | GRDB `notification_record` atomic `INSERT OR IGNORE` / `DELETE` + `busyMode = .timeout(5)` + Darwin notify `one.mbm.halo.db.changed` (R-13) |
 | Receipt for an event in the gap | Doesn't matter for E2 (server counts already reflect it) |
-| Clock skew: `originServerTs` comparisons across servers (federation) | Since D79 a skewed new message shows once the SDK has applied the read position (it counts the message; S18). **Limitation** while the local position is ahead of the SDK's receipt: ordering by timestamp can misorder federated events with skewed clocks. Mitigation: when both events are present in the timeline, the adapter supplies a timeline order index ([ASSUMPTION V-RS-3]); otherwise timestamps. Covered by tests with skewed timestamps |
+| Equal timestamps & clock skew across federated servers | `TimelineReadTracker` selects receipt candidates by timeline index (not `origin_server_ts`), `read_intent.timeline_order` keeps outbox monotonic under skew, and E1 uses event identity + `INTENT_STALE` (D80, ADR-0020; S18 inverted, S29) |
 | Redaction of the only unread event | SDK/server counts drop → E2/E3 rules |
 | Push rules change on another device | Account data → snapshot → re-evaluate |
-| Room left / forgotten | Removed from states; its notification records are cleared |
-| User opens a room but scrolls nothing | Only visible events create intents (D6); the latest event may be visible at once |
-| Mention inside a timeline gap of an **encrypted** room | **Limitation.** The server can't see mentions in ciphertext and the SDK hasn't seen the event, so only a push (E4) reveals it. In all-messages mode the room still gets attention once the SDK has seen any later message (E3b); a server count the SDK doesn't share gives none (E3c, D78); in mentions/keywords mode (E2x) nothing reveals it until the SDK catches up. Covered by S22 |
+| Room left / hidden / ignored / sign-out | Removed from states; its notification records are pruned and carried attention dropped on first sync (R-03, R-04; S26, S27, S28) |
+| User opens a room but scrolls nothing | Only visible events create intents (D6); opening a room does not clear notification records until covered by a receipt (R-15) |
+| Mention inside a timeline gap of an **encrypted** room | **Limitation.** The server can't see mentions in ciphertext and the SDK hasn't seen the event, so only a push (E4) reveals it. `partitionRecords` preserves encrypted mention records when SDK counts 0 mentions (S22). In all-messages mode the room still gets attention once the SDK has seen any later message (E3b); a server count the SDK doesn't share gives none (E3c, D78); in mentions/keywords mode (E2x) nothing reveals it until the SDK catches up |
 | Default mode for group rooms is mentions/keywords (NOTIFICATIONS FR-8) | **Trade-off.** Most encrypted group rooms therefore run on E2x — SDK counts only, no server cross-check, approximate confidence for mentions. This is the weakest path of the policy and the one most rooms use; the auditor reports `SERVER_BLIND` for it, and G-UNREAD must be judged with this default in place (S07, S21, S22) |
 
 ## 10. Acceptance criteria

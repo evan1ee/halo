@@ -424,19 +424,18 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 
 ## 12. Documentation inconsistencies
 
-| Document | Says | Code | Action |
+| Document | Says | Code | Status |
 |---|---|---|---|
-| UNREAD_STATE §4, §7; PORTS_CONTRACT §2; DATA_FLOW; SYSTEM_DESIGN; SYNC_ENGINE; ROOM_LIST; NOTIFICATIONS; TIMELINE; PERSISTENCE; GLOSSARY | A `ReadStateCoordinator` over a `RoomReadStatePort` with per-room `sequence`, `notifiedThroughTs`, clearing on read-position advance | None of these exist; `BadgeCoordinator` + `RoomListViewModel` evaluate separately; `ReadState.swift:149` says "Not yet" | Build it (roadmap Phase 0) or mark the docs [OPEN] until then |
-| UNREAD_STATE §8, DATA_MODELS §3, PERSISTENCE §4 | `notification_record` and `badge_cache` GRDB tables, monotonic upserts, Darwin `one.mbm.halo.db.changed` | Records and attention in App Group `UserDefaults` (`NotificationRecordStore`, `AttentionCache`) | Implement the table (R-13) |
-| UNREAD_STATE §9 | Left/forgotten rooms: records cleared; clock skew mitigated by an order index (V-RS-3) | Neither implemented (R-03, R-06) | Fix code; until then mark [OPEN] |
-| PERSISTENCE §3, SECURITY §3 | Field encryption with `halo-db-key.v1` | Not implemented (R-16) | Implement or record the decision |
-| SYNC_ENGINE §1 ("orchestrates upstream `SyncService` (sliding sync)"), SDK_INTEGRATION §3 (`discoverNative`) | Sliding sync | Classic sync since D74; `slidingSyncVersionBuilder(.none)` | Rewrite for D74 |
-| `BadgeCoordinator.swift:6-9` header, `NotificationRecordPort.swift:6` | "native sliding sync serves no notification counts" as the reason for records | Outdated since D74 | Update comments |
-| `NotificationService.swift:11-12` header | "Spike scope… Not yet: de-duplication records, … badge recomputation" | Both exist (in a divergent form) | Update |
-| ADR-0015, AGENTS.md §3 | A Halo pushkin in `infra/sygnal/` strips `aps.badge` | No `infra/sygnal/`; stock Sygnal in `infra/dev` | Mark ADR-0015 partially implemented; track as a release blocker |
-| HANDOFF §2 "Read state (M3): policy-driven badge" / gate G-UNREAD | Implies the read-state engine is close to done | R-01…R-07 | G-UNREAD must stay open (the HANDOFF already recommends that) |
-| D47 | "Read state never needs to order receipts against each other" | True for receipts, but the implementation orders *events* by timestamp everywhere (R-06) | New ADR revisiting D47 |
-| D72 | Sent intents kept 7 days | Interacts with R-06 to prolong divergence | Revisit with R-06 |
+| UNREAD_STATE §4, §7; PORTS_CONTRACT §2; DATA_FLOW; SYSTEM_DESIGN; ROOM_LIST; NOTIFICATIONS; TIMELINE; PERSISTENCE; GLOSSARY | `ReadStateCoordinator`, `notifiedThroughTs`, clearing on read-position advance | Built in Phase 0 (`ReadStateCoordinator`, `notifiedThroughTs`, `partitionRecords`, R-05/R-08/R-15) | **Realigned** (UNREAD_STATE §7 updated) |
+| UNREAD_STATE §8, DATA_MODELS §3, PERSISTENCE §4 | `notification_record` GRDB table, Darwin `one.mbm.halo.db.changed` | Implemented in migration v7 + `DarwinSignal` (R-13); `AttentionCache` remains in App Group `UserDefaults` | **Realigned** (UNREAD_STATE §8 updated) |
+| UNREAD_STATE §9 | Left/forgotten rooms clear records; clock skew mitigated by timeline order | Implemented (R-03, R-06 / D80 / ADR-0020) | **Realigned** (UNREAD_STATE §9, READ_RECEIPTS §1 updated) |
+| PERSISTENCE §3, SECURITY §3 | Field encryption with `halo-db-key.v1` | Not implemented (R-16) | **Needs founder** (R-16) |
+| SYNC_ENGINE §1, SDK_INTEGRATION §3 | Sliding sync (`SyncService`, `discoverNative`) | Classic sync since D74 (`syncOnceV2`, `slidingSyncVersionBuilder(.none)`) | **Realigned** (SYNC_ENGINE, SDK_INTEGRATION, READ_RECEIPTS §3 updated) |
+| `ReadStateCoordinator.swift`, `NotificationRecordPort.swift` headers | Stale "native sliding sync serves no notification counts" | Updated in Phase 0 | **Realigned** |
+| `NotificationService.swift` header | Stale "Spike scope… Not yet…" | Updated in PR #50 | **Realigned** |
+| ADR-0015, AGENTS.md §3 | Halo pushkin in `infra/sygnal/` strips `aps.badge` | No `infra/sygnal/`; stock Sygnal in `infra/dev` | **Marked partially implemented** in ADR-0015; tracked under R-24 (Needs founder) |
+| HANDOFF §2 "Read state (M3)" / gate G-UNREAD | G-UNREAD awaits real-server scenario driver | Phase 0 fixes landed; G-UNREAD remains open for real-server scenarios | **Tracked** |
+| D47, D72 | Timestamp/intent rules before R-06 | Revisited by **D80 / ADR-0020** | **Realigned** (ADR-0020, DECISION_LOG, UNREAD_STATE, READ_RECEIPTS) |
 
 ---
 
@@ -507,8 +506,7 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 - **1.1 NSE logic into HaloApplication** — **done** (in PR #50: `NotificationProcessor` in `HaloApplication`, tested over `FakeNotificationFetchPort`).
 - **1.2 Token persistence in the NSE** (R-11) — **done** (`RefreshDelegate` seeded + shared Keychain read/write; `RefreshDelegateTests`; OIDC/MAS refresh contract waits for M5).
 - **1.3 Field encryption** (R-16) — **needs founder** (AES-GCM field encryption vs ADR accepting plaintext; recorded in HANDOFF §5).
-- **1.4 Docs realignment** (§12): SYNC_ENGINE/SDK_INTEGRATION for D74, UNREAD_STATE for what is built, ADR-0015 status.
-  Verify: `scripts/validate-docs.sh` plus a reviewer read.
+- **1.4 Docs realignment** (§12) — **done**: SYNC_ENGINE, SDK_INTEGRATION, UNREAD_STATE, READ_RECEIPTS realigned with D74/D80/Phase 0; ADR-0015 marked partially implemented.
 - **1.5 Suppressed notifications** (R-14) — **needs founder (entitlement)**: silent empty passive delivery implemented in NSE; Apple filtering entitlement request (`com.apple.developer.usernotifications.filtering`, V-PUSH-3) recorded in HANDOFF §5.
 
 ### Phase 2 — Performance and scalability

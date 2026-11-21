@@ -5,14 +5,14 @@
 | Step | Rule |
 |---|---|
 | Trigger | The timeline reports the newest event that has been ≥ 50 % visible for ≥ 0.5 s while `scenePhase == .active` and the room is the top-most screen (D6) |
-| Candidate | Only events that may carry receipts: not local echoes (no event id yet), not state events hidden from the user **[ASSUMPTION V-RS-4: receipts on hidden events are accepted by Synapse but may confuse counting; target the latest *visible* event]** |
-| Monotonic | Ignore a candidate whose `originServerTs` ≤ the current `readPosTs` (the true read position — local intent or own receipt; server zero never advances it, [UNREAD_STATE.md](UNREAD_STATE.md) §5) |
-| Intent | Upsert `read_intent` in the same call → the policy updates immediately |
+| Candidate | `TimelineReadTracker` selects the furthest visible event by **timeline index** (not `origin_server_ts`, **[DECISION D80, ADR-0020]**): never local echoes (no server event id yet), never hidden state events. When the user is viewing the tail row, targets `Timeline.latestEventId()` so trailing non-row events (e.g. encrypted poll votes, R-01 leftover) are covered |
+| Monotonic | Ordered monotonically by `read_intent.timeline_order` (migration v8) when supplied by the open timeline, falling back to `originServerTs` across restarts (**[DECISION D80, ADR-0020]**; server zero never advances `readPosTs`) |
+| Intent | Upsert `read_intent` in the same call → `ReadStateCoordinator` updates immediately |
 | Send | `Room.send_single_receipt(.read or .readPrivate, .unthreaded, eventId)` **[VERIFIED F-FFI-6]**, then `Room.mark_as_fully_read_unchecked(eventId)` **[VERIFIED F-FFI-6]** |
 | Receipt type | `.read` unless the privacy setting is "private receipts" → `.readPrivate` (D7) |
 | Debounce | At most one send per room per 2 s; always the newest intent |
 | Retry | Exponential backoff (1 s → 5 min), on reconnect, on foreground and on background flush |
-| Confirmation | After the server acknowledged the send (state `sent`), the intent is deleted when **(a)** `ownReceipt.eventId == intent.eventId`, or **(b)** a snapshot shows server counts = 0 and `latestEvent.ts ≤ intent.eventTs`, or **(c)** a newer intent replaces it. A `sent` intent older than 7 days is deleted (expiry). Unsent intents never expire. **[DECISION D72: (a) and (b) are not implemented. Deleting a sent intent early would drop the local read position that quiet-unread rooms depend on (S07b), and the room list carries the own receipt as a time, not an event ID. Sent intents stay until expiry; (c) holds because the store only moves forward.]** Each failed send increments `attempts` and keeps `last_error` (the `HaloError` code); both reset when a newer event replaces the intent |
+| Confirmation | Sent intents stay in `read_intent` up to 7-day expiry so quiet-unread rooms keep their local read position (D72), **but** once confirmed (`ownReceiptEventID == intent.eventID` or after a sync epoch following send), E1 yields (`INTENT_STALE`) whenever countable server counts or SDK counts remain non-zero (**[DECISION D80, ADR-0020]**, revisiting D47/D72). Unsent intents never expire. Each failed send increments `attempts` and keeps `last_error` (the `HaloError` code); both reset when a newer event replaces the intent |
 
 Why not `Timeline.mark_as_read(receiptType)` **[VERIFIED F-FFI-8]**? It picks "the latest visible event" from the
 SDK's point of view, not what the user actually looked at; Halo needs D6 semantics. It can be used for an explicit
@@ -30,12 +30,8 @@ SDK's point of view, not what the user actually looked at; Halo needs D6 semanti
 - Other users' receipts → timeline read-receipt avatars (provided by the timeline items; display only).
 - The adapter refreshes `ownReceipt` when `RoomInfo` changes for that room (`subscribe_to_room_info_updates`) **[ASSUMPTION V-RS-1: RoomInfo updates fire when own receipts change]**.
 
-## 3. Sliding-sync coverage
-The receipts and account-data extensions must cover **all rooms in the room list**, not just open ones, or
-own receipts from other devices are missed (cause C3). The room-list configuration is owned by
-`matrix-sdk-ui`'s `RoomListService`; Halo can't currently configure extensions through the FFI.
-**[OPEN V-RS-5]**: verify on the dev Synapse which extensions `RoomListService` enables for which rooms. The server-zero
-rule (E2) is the safety net either way.
+## 3. Sync coverage
+Since **[DECISION D74]** Halo uses classic `/sync` (`syncOnceV2`) rather than sliding sync, so receipts and account data arrive for **all joined rooms** without sliding-sync extension configuration (resolving the C3 sliding-sync extension gap; `V-RS-5` is superseded by D74). The server-zero rule (E2) remains the safety net.
 
 ## 4. Threads (until M10)
 Send unthreaded receipts only. They cover all threads per spec v1.4 **[VERIFIED F-SPEC-1]**, so thread events are

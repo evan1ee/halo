@@ -18,22 +18,23 @@ in `ios/SDKVERSION.md` at each bump: the components repo's release commit names 
 
 | Object | Owner (Swift) | Created | Dropped |
 |---|---|---|---|
-| Platform/tracing init | `HaloMatrixAdapter.Bootstrap` | First call in each process: `init_platform(...)` (F-FFI-13) | Never (process-wide) |
-| `ClientBuilder` → `Client` | `MatrixClientService` (actor) | Login or restore | Logout / sign-out |
-| `SyncService` | `MatrixSyncService` | After the client is ready: `client.sync_service()` → builder → `finish()` | Logout |
-| `RoomListService`, `RoomList` | `MatrixRoomListService` | `sync_service.room_list_service()`, `.all_rooms()` | With `SyncService` |
-| `Room` handles | Adapter caches by id | `client.get_room(id)` | Room left / memory pressure |
-| `Timeline` | `MatrixTimelineService` per open room | `room.timeline()` / `timeline_with_configuration(...)` | When the screen closes |
-| `NotificationClient` | NSE pipeline | `client.notification_client(NotificationProcessSetup.MultipleProcesses)` | After each push |
-| `TaskHandle`s | Wrapped in `SubscriptionToken` | Each `add_listener` / `subscribe_*` | `deinit` / stream end → `cancel()` |
+| Platform/tracing init | `HaloMatrixAdapter.MatrixBootstrap` | First call in each process: `initPlatform(config:useLightweightTokioRuntime:)` (F-FFI-13, R-09) | Never (process-wide) |
+| `ClientBuilder` → `Client` | `MatrixSessionPort` (actor) | Login or single-flight restore (R-12) | Logout / hard auth error (R-10) |
+| Classic `/sync` loop | `MatrixSessionPort.runSync` / `MatrixSyncPort` | After the client is ready: `client.syncOnceV2(...)` (D74) | Background / logout / auth error |
+| Room list projection | `MatrixRoomListPort` | Reads `client.rooms()` + `roomInfo()` per `SyncChange` (D74) | Logout |
+| `Room` handles | Resolved on demand via `client.getRoom(roomId:)` | Per operation | ARC release |
+| `Timeline` | `MatrixTimelinePort` (warm cache up to 6) | `room.timeline()` | Cache eviction / room close / logout |
+| `NotificationClient` | `MatrixNotificationPort` (NSE) | `client.notificationClient(processSetup: .multipleProcesses)` | After each push |
+| `TaskHandle`s | Owned by port actors / `SubscriptionToken` | `setDelegate`, `subscribeToSendQueueStatus`, `addListener`, etc. | Tear-down / stream end → `cancel()` |
 
 ## 3. Client initialisation
-`ClientBuilder()` → `.server_name_or_homeserver_url(...)` → `.session_paths(dataPath, cachePath)` (App Group
-container; `data` and `caches` subfolders) → `.sqlite_store(SqliteStoreBuilder(dataPath, cachePath).passphrase(<from Keychain>))` **[VERIFIED F-FFI-17]** →
-`.sliding_sync_version_builder(.discoverNative)` (fails clearly on servers without native sliding sync; `.native` once
-discovery is confirmed) **[VERIFIED F-FFI-17]** →
-`.cross_process_lock_config(.multiProcess(holderName: "app"|"nse"))` → `.set_session_delegate(...)` (token
-refresh persistence) → `.build()`.
+`ClientBuilder()` → `.serverNameOrHomeserverUrl(...)` → `.sessionPaths(dataPath, cachePath)` (App Group
+container; `data` and `caches` subfolders) → `.sqliteStore(config: SqliteStoreBuilder(dataPath, cachePath).passphrase(passphrase:))` **[VERIFIED F-FFI-17]** →
+`.slidingSyncVersionBuilder(versionBuilder: .none)` (classic sync since **[DECISION D74]**) →
+`.autoEnableCrossSigning(autoEnableCrossSigning: true)` → `.autoEnableBackups(autoEnableBackups: true)` →
+`.crossProcessLockConfig(crossProcessLockConfig: .multiProcess(holderName: "app"|"nse"))` →
+`.setSessionDelegate(sessionDelegate:)` (token refresh persistence across app and NSE, R-11) → `.build()`.
+After login/restore, `adopt` registers `Client.setDelegate` (`AuthDelegate`, R-10) so remote token revocation stops sync and emits `.loggedOut` / `.softLoggedOut`.
 
 ## 4. Authentication and session restoration
 - Discovery: `client.homeserver_login_details()` → supports OIDC? password?
@@ -47,15 +48,12 @@ Detailed flows: [../features/AUTHENTICATION.md](../features/AUTHENTICATION.md).
 See [SYNC_ENGINE.md](SYNC_ENGINE.md).
 
 ## 6. Rooms and timelines
-- Room list: `RoomList.entries_with_dynamic_adapters(pageSize, listener)` → `RoomListEntriesUpdate` diffs + a
-  `RoomListDynamicEntriesController` (`set_filter`, `add_one_page`). The adapter turns diffs into
-  `[RoomSummary]` updates (values).
-- Room info: `room.subscribe_to_room_info_updates(listener)` → `RoomInfo` → `RoomReadInputs` (unread fields F-FFI-7).
-- Timeline: `timeline.add_listener(listener)` → `[TimelineDiff]` → domain `TimelineItem` diffs;
-  `paginate_backwards(n)`; `subscribe_to_back_pagination_status`.
-- Sending: `send`, `send_reply`, `edit`, `redact_event`, `toggle_reaction`, `send_image`; local echo and
-  retry via the timeline and the send queue (`client.enable_all_send_queues`, `room.subscribe_to_send_queue_updates`).
-- Stickers: `room.send_raw("m.sticker", json)` (F-FFI-9). Rendering: `MsgLikeKind.Sticker{body, info, source}` (F-FFI-8).
+- Room list (D74): `MatrixRoomListPort` projects `client.rooms()` on each classic `/sync` response (`SyncChange`), emits `.reset` diffs of `[RoomSummary]` (carrying `RoomReadCounts` from `Room.roomInfo()`), `leftRooms()` for pruning (R-03), and `syncCompletions()` for ending carry-over (R-04).
+- Timeline: `timeline.addListener(listener:)` → `[TimelineDiff]` → domain `TimelineItem` diffs;
+  `paginateBackwards(numEvents:)`; `latestEventId()` (used by `TimelineReadTracker` at the tail row, R-06).
+- Sending: `send`, `sendReply`, `edit`, `redactEvent`, `toggleReaction`, `sendImage`; local echo and
+  retry via the timeline and the send queue (`client.enableAllSendQueues`, `client.subscribeToSendQueueStatus`).
+- Stickers: `room.sendRaw("m.sticker", json)` (F-FFI-9; R-21 tracks moving to send queue if supported). Rendering: `MsgLikeKind.sticker(body:info:source:)` (F-FFI-8).
 
 ## 7. Read state
 [READ_RECEIPTS.md](READ_RECEIPTS.md) and [UNREAD_STATE.md](UNREAD_STATE.md).

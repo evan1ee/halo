@@ -1,6 +1,6 @@
 # ADR-0015: Count-only pushes must not set the app badge
 
-- **Status:** Accepted (with conditions, founder decision 2026-11-19) · **Date:** 2026-11-19 · **Decision IDs:** D5, D9, D11, D65 (amends ADR-0010) · **Validation:** V-PUSH-5
+- **Status:** Accepted — **partially implemented** (app and NSE strip/ignore `aps.badge` and server counts; `infra/sygnal/` Halo pushkin not yet built, tracked under R-24 in [../CODEBASE_REVIEW.md](../CODEBASE_REVIEW.md) as a pre-TestFlight release blocker) · **Date:** 2026-11-19 · **Decision IDs:** D5, D9, D11, D65 (amends ADR-0010) · **Validation:** V-PUSH-5
 
 ## Context
 ADR-0010 sends event pushes as `event_id_only` through Sygnal to the NSE, which recomputes the badge with `BadgeCalculator` (D9).
