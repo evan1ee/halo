@@ -15,11 +15,16 @@ public struct RecoveryBanner: View {
                 Button {
                     isPresented = true
                 } label: {
-                    Label("Verify this device to read older encrypted messages", systemImage: "lock.shield")
-                        .font(.footnote)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(10)
-                        .background(.yellow.opacity(0.25))
+                    HStack(spacing: 8) {
+                        Label("Verify this device to read older encrypted messages", systemImage: "lock.shield")
+                        Spacer(minLength: 4)
+                        Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                    }
+                    .font(.footnote)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(.yellow.opacity(0.22), ignoresSafeAreaEdges: [])
                 }
                 .buttonStyle(.plain)
                 .transition(.move(edge: .top).combined(with: .opacity))
