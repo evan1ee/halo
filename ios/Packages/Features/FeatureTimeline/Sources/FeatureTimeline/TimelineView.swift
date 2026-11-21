@@ -67,8 +67,9 @@ public struct TimelineView: View {
                             }
                             .onDisappear { model.rowVisibility(row, isVisible: false) }
                             .listRowSeparator(.hidden, edges: .all)
-                            // Messages of one group sit close together; a new sender or a gap gets more room above.
-                            .listRowInsets(EdgeInsets(top: row.continuesRun ? 1 : 8, leading: 16, bottom: 1, trailing: 16))
+                            // Messages of one group sit close together; a new sender or a gap gets more room above. Stickers and
+                            // photos have no bubble to separate them, so they keep a small gap even inside a group.
+                            .listRowInsets(EdgeInsets(top: row.continuesRun ? (row.isSticker || row.image != nil ? 4 : 1) : 8, leading: 16, bottom: 1, trailing: 16))
                     }
                 }
                 .listStyle(.plain)
