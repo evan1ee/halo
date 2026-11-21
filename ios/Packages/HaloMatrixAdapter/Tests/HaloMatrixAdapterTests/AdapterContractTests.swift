@@ -992,13 +992,13 @@ struct AdapterContractTests {
         // Find the image through the timeline, like the UI does.
         let timeline = try await MatrixTimelinePort(session: session).open(room: try RoomID(env["HALO_DEV_TIMELINE_ROOM"] ?? ""))
         let attachment: MediaAttachment? = try await within(seconds: 60) {
-            let pagination = Task { for _ in 0..<5 { if (try? await timeline.paginateBackwards(count: 20)) == true { break } } }
+            let pagination = Task { for _ in 0..<20 { if (try? await timeline.paginateBackwards(count: 20)) == true { break } } }
             defer { pagination.cancel() }
             var items: [HaloDomain.TimelineItem] = []
             for await diff in timeline.items() {
                 try ListReducer.apply(diff, to: &items)
                 for item in items {
-                    if case .event(let event) = item.content, case .media(let media) = event.kind, media.kind == .image { return media }
+                    if case .event(let event) = item.content, case .media(let media) = event.kind, media.kind == .image, media.body == "blue.png" { return media }
                 }
             }
             return nil

@@ -1,82 +1,73 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-21 · Branch: `main` · PRs #1–#48 merged
+Last updated: 2026-11-21 · Branch: `main` · PRs #1–#51 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
-- **Milestone:** M0 done; M1 largely done; M2 done (offline-send test and kill-and-relaunch resend verified); **M3 (read-state engine) in progress**. Dev Mac: Xcode 27.2, Swift 6.4.2, iPhone 16.
-- **Checks:** `scripts/prepush.sh` passes (SwiftLint not configured, skipped); `scripts/prepush.sh` now also builds `Halo-Debug` for the simulator. All 17 contract tests (`infra/dev`) pass, none skipped (`scripts/contract-test.sh` after `infra/dev/create-fixtures.py`).
-- **CI:** PRs #1–#15 merged. CI runs only the Linux-portable packages (Foundation, Domain, TestSupport, Application): adapter, persistence, platform, features and the app are tested only by `prepush.sh` on a Mac. `licenses` runs only on SDK/inventory changes.
+- **Milestone:** M0–M2 done; **M3 (read-state engine)** hardened across all 27 findings of [docs/CODEBASE_REVIEW.md](docs/CODEBASE_REVIEW.md) (22 **FIXED**, 5 **Needs founder** in §5). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`).
+- **Codebase review (2026-11-21):** **Complete.** All 7 P0s FIXED (R-01 D78, R-02/R-03/R-13, R-04, R-05/R-08 PR #50, R-06 D80/ADR-0020 PR #51, R-07 D79); Phase 0.6–0.7 FIXED (R-10, R-12, R-09); Phase 1 FIXED (R-11, R-15, §12 docs realignment; R-14 silent delivery done, entitlement Needs founder; R-16 Needs founder); Phase 2 FIXED (R-17 D81, R-19, R-20, R-22, R-23, R-25; R-18/R-21 Needs founder upstream SDK); Phase 3 & hygiene FIXED (R-26 deterministic suite + `MediaPortContract` fixture fix, R-27; R-24 Needs founder).
+- **Checks:** `HALO_SIM="iPhone Air" scripts/prepush.sh` passes (SwiftLint skipped: not installed/configured); `python3 -I tools/server-rules/check_server_rules.py` 16/16 `ok`; touched `infra/dev` contracts (`session`, `remoteLogoutDuringSync`, `roomList`, `policyOverRealInputs`, `readMarkers`, `timeline`, `mentionsAndEchoes`, `media`) all pass.
+- **CI:** PRs #1–#51 merged. Linux CI covers Foundation, Domain, TestSupport, Application; adapter, persistence, platform, features and the app are validated on Mac via `scripts/prepush.sh` (D71).
 
-- **Codebase review (2026-11-21):** [docs/CODEBASE_REVIEW.md](docs/CODEBASE_REVIEW.md), 27 findings (7 P0, all unread/badge), Top 10 risks, Phase 0–3 roadmap. **All 7 P0s FIXED:** R-01 (D78), R-07 (D79), R-02/R-03/R-13 (record lifecycle + GRDB), R-04 (carry-over completeness), R-05/R-08 (`ReadStateCoordinator` + `NotificationProcessor`, PR #50), R-06 (identity/timeline read order, D80/ADR-0020). Next in Phase 0: R-10/R-12, R-09.
-- **Loop state (2026-11-21, paused):** the small unblocked items are done (this session: timeline receipts/location/polls/calls/reply jump, Sticker packs, notification defaults and mention toggles, room info refresh; all but a few taps seen in the simulator). What is left is large or needs a decision: see §6 "Candidates". Restart with `/loop` once the founder picks one.
-- **Earlier loop state (2026-11-20):** what is left that needs no device, signing, gate decision or product decision is small polish: the bot reaction menu (FR-4, product detail), V-ST-2 (needs an expiring token the dev Synapse can't give). The loop paused here; restart it to take those.
-
-## 2. Completed work (what exists now)
-Summary only; details per feature: [docs/development/IMPLEMENTATION_NOTES.md](docs/development/IMPLEMENTATION_NOTES.md).
-- Architecture: HaloFoundation, HaloDomain, HaloApplication, HaloPersistence (GRDB), HaloMatrixAdapter (only MatrixRustSDK importer), HaloPlatform, HaloTestSupport, Features/{Auth,RoomList,Timeline,Stickers,Settings}; composition root `ios/App/AppRoot.swift`; XcodeGen project (`Halo-Debug`).
-- Read state (M3): policy-driven badge, outbound receipts, unread indicators, jump-to-unread, classic-sync adapter, auditor, scenarios S01–S24 as model tests.
-- Messaging (M2): send/retry/abort, drafts, mentions, photo send with caption, offline resend; media previews (hide/reveal, video thumbnails).
-- Stickers (M4): packs, panel, recents, create pack, remove unavailable packs.
-- Room info (M5): info button in the timeline → sheet with details, members, notification mode, leave (PR 45).
-- Settings (M5): Account, Privacy (private receipts), Media (show photos), Appearance (theme), Security (status), Notifications (status), Storage (sizes), Diagnostics (report), About, Acknowledgements.
+## 2. Completed work (last 3 sessions)
+Summary only; details in `git log` and [docs/CODEBASE_REVIEW.md](docs/CODEBASE_REVIEW.md) §13.
+- **Codebase review Phases 0.6–3 (this push on `main`):**
+  - **R-10 + R-12:** `Client.setDelegate` (`AuthDelegate`) + `runSync` `.unauthorized` stop sync and emit `.loggedOut`/`.softLoggedOut` (PS34 + `AdapterContractTests/remoteLogoutDuringSync`); single-flight restore + generation guard in `SessionCoordinator` and `MatrixSessionPort` (PS35).
+  - **R-09:** forwarded `lightweightRuntime` through `MatrixSessionPort.restore` and `loginPassword`; added `MatrixBootstrapTests` (verifies `sentryConfig == nil`).
+  - **R-11:** synchronous `KeychainStore.readSync`/`writeSync`; seeded `RefreshDelegate` + shared Keychain read/write so NSE persists rotated refresh tokens immediately (`RefreshDelegateTests`).
+  - **R-14 + R-15:** NSE delivers silent empty passive content for `.suppressed`/`no-event` (ready for filtering entitlement); removed blanket `records.clear(room:)` from `TimelineCoordinator.open()` and added identity record pruning (`BadgeCoordinatorTests.openKeepsUntilSeen`).
+  - **§12 docs realignment:** updated `SYNC_ENGINE.md`, `SDK_INTEGRATION.md`, `UNREAD_STATE.md`, `READ_RECEIPTS.md`, `ADR-0015` status.
+  - **R-17, R-19, R-20, R-22, R-23, R-25:** removed stale sliding-sync login gate (D81); single `roomInfo()` + bounded parallel rebuilds (max 8) in `MatrixRoomListPort`; `MatrixReadMarkerPort.markRoomRead` uses `Room.markAsRead`; wrapped background receipt flush in `BackgroundTaskLease` (`beginBackgroundTask`); cached one restored NSE `Client` + DB per `(userID, deviceID)` via `SingleFlightCache`; enabled GRDB `observesSuspensionNotifications` + `HaloDatabase.suspendAll()`/`resumeAll()` on background/active (`HaloDatabaseTests.suspendsAndResumes`).
+  - **R-26 + R-27:** awaited `ReadReceiptCoordinator.persist` before `reportSeen` returns (PS36); fixed pre-existing `MediaPortContract` (`blue.png` lookup); rotated `nse-metrics.jsonl` at 128 KB; bounded instance-scoped `EventTimeCache`; `ErrorMapper.mapLocalEcho`; locked `RoomListCoordinator.start()` to `.all`.
+- **PR #51 (R-06, D80 / ADR-0020):** `TimelineReadTracker` index-ordered receipts + tail `latestEventId()`, `read_intent.timeline_order` (v8), identity E1 + `INTENT_STALE`, S18 inverted & S29.
+- **PR #50 + earlier Phase 0 (R-02, R-03, R-04, R-05, R-08, R-13):** GRDB `notification_record` (v7) + `DarwinSignal`, raw event timestamps, left/hidden/ignored/sign-out pruning, `syncCompletions()` carry-over termination, unified `ReadStateCoordinator`, `NotificationProcessor` in `HaloApplication`, S25–S28, PS31–PS33.
 
 ## 3. Key decisions
-**D73 (founder): V-RS-7 closed.** Classic Matrix sync is the authoritative unread evidence on the production path; push records supplement it; server zero never marks read by itself; a partial or empty evaluation never overwrites the stored attention set; badge from reconciled state; no SDK/Synapse change unless proven necessary; unread correctness and badge persistence are **P0**. Verified: the SDK exposes per-room evidence over `syncV2` (`ClassicSyncEvidenceTests`); classic sync does not solve the NSE's background state (records + cached set stay its inputs). **Implemented by D74:** the adapter runs classic sync (own `syncOnceV2` loop, 8 s long poll), room list from `client.rooms()` plus the rooms each response changed; verified live in the simulator (unread `@1` and bold within seconds).
-
-**D78 (founder approved the R-01 fix):** in an encrypted room the SDK's counts decide whenever any is non-zero (E3b); server counts with all SDK counts at zero are no unread (E3c, `ENC_SERVER_ONLY`). Evidence F-SDK-3.
-**D79 (founder approved the R-07 fix):** E1/E1b give way to positive SDK counts once the SDK has applied the read position (its receipt ≥ the local one, or the own latest event is on the server); a local position ahead of the receipt and a pending echo still clear at once.
-
-**D80 (ADR-0020, R-06):** open timelines pick receipt candidates by timeline index (`TimelineReadTracker`) and target `Timeline.latestEventId()` at the tail (clearing trailing poll votes); `read_intent` adds monotonic `timeline_order` (v8); E1 compares event IDs when both are known and yields (`INTENT_STALE`) once a sent receipt is confirmed by the server/sync (revises D47, D72).
-
-Full list: docs/DECISION_LOG.md (D1–D80), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
+Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D81), [docs/adr/README.md](docs/adr/README.md).
+- **D73 / D74:** classic Matrix sync (`syncOnceV2`, `slidingSyncVersionBuilder(.none)`) is the authoritative unread source.
+- **D78 (R-01) / D79 (R-07):** SDK counts decide in encrypted rooms (`ENC_SERVER_ONLY` → no unread); E1/E1b yield to positive SDK counts once the SDK applied the read position.
+- **D80 / ADR-0020 (R-06):** identity and timeline-index read ordering, `read_intent.timeline_order` (v8), `INTENT_STALE` on confirmed intents (revises D47, D72).
+- **D81 (R-17):** removed native sliding-sync gate at server discovery and password login (amends AUTHENTICATION FR-5).
 
 ## 4. Modified files (this push)
-Earlier pushes: `git log`.
-- **R-06 (identity/timeline read order, D80 / ADR-0020):** `HaloDomain` (`ReadState.swift` `LocalReadPosition`, `LatestEventRef.eventID`, `RoomReadInputs` identity/confirmation fields, `ReasonCode.intentStale`; `RoomList.swift` `ownReceiptEventID`; `ReadIntentPort.swift` `sequence`; `TimelinePort.swift` `latestEventID()`), `HaloPersistence` (`HaloDatabase.swift` migration v8, `ReadIntentStore.swift` monotonic `timeline_order`), `HaloApplication` (`ReadReceiptCoordinator.swift` `advancesOrder`/`readPositions()`, `RoomListCoordinator.swift`, `ReadStateCoordinator.swift` sync-epoch confirmation, `TimelineCoordinator.swift`), `FeatureTimeline` (`TimelineReadTracker.swift`, `TimelineViewModel.swift`), `HaloMatrixAdapter` (`MatrixRoomListPort.swift`, `MatrixTimelinePort.swift`), `HaloTestSupport` (`FakeReadIntents.swift`, `FakeTimelinePort.swift`).
-- **Tests:** `ReadStatePolicyTests.identityAndConfirmedIntent`, `ReadIntentStoreTests.timelineOrderAdvancesAcrossEqualAndSkewedTimestamps`, `ReadReceiptCoordinatorTests`, `TimelineReadTrackerTests` (PS28, PS29, tail poll-vote), scenarios S18 (inverted) and S29.
-- **Docs:** `docs/adr/0020-identity-read-order.md` (new), `docs/adr/README.md`, `docs/DECISION_LOG.md` (D80), `docs/testing/UNREAD_REGRESSION_TESTS.md` (S18, S29), `docs/CODEBASE_REVIEW.md`, `docs/ROADMAP.md`, `HANDOFF.md`.
+- **Session & NSE (`R-09, R-10, R-11, R-12, R-14, R-17, R-23`):** `HaloApplication` (`SessionCoordinator.swift`, `NotificationProcessor.swift`), `HaloMatrixAdapter` (`Bootstrap.swift`, `MatrixSessionPort.swift`, `ErrorMapper.swift`), `HaloPlatform` (`KeychainStore.swift`), `ios/App/AppRoot.swift`, `ios/NotificationService/NotificationService.swift`, `ios/NotificationService/NSEMetrics.swift`.
+- **Read state, room list, persistence & lifecycle (`R-15, R-19, R-20, R-22, R-25, R-26, R-27`):** `HaloDomain` (`ReadState.swift`), `HaloApplication` (`TimelineCoordinator.swift`, `RoomListCoordinator.swift`, `ReadReceiptCoordinator.swift`), `HaloMatrixAdapter` (`MatrixRoomListPort.swift`, `MatrixReadMarkerPort.swift`, `MatrixTimelinePort.swift`), `HaloPersistence` (`HaloDatabase.swift`), `ios/App/HaloApp.swift`.
+- **Tests:** `FakeSessionPort.swift`, `SessionCoordinatorTests.swift` (PS34, PS35, R-17), `BadgeCoordinatorTests.swift` (R-15), `NotificationProcessorTests.swift` (R-23), `ReadReceiptCoordinatorTests.swift` (PS36), `AdapterSmokeTests.swift` (R-09, R-11, R-27), `AdapterContractTests.swift` (`remoteLogoutDuringSync`, `media` fix), `HaloDatabaseTests.swift` (R-25) + store test helpers.
+- **Docs:** `docs/CODEBASE_REVIEW.md`, `docs/DECISION_LOG.md` (D81), `docs/SOURCES.md` (F-FFI-23), `docs/features/AUTHENTICATION.md`, `docs/matrix/SYNC_ENGINE.md`, `docs/matrix/SDK_INTEGRATION.md`, `docs/matrix/UNREAD_STATE.md`, `docs/matrix/READ_RECEIPTS.md`, `docs/adr/0015-count-only-pushes.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
-Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
+Unverified items and known limits: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
+- **Prepush on this Mac:** default simulator `iPhone 17` is not installed; run `HALO_SIM="iPhone Air" scripts/prepush.sh`.
 
-**Contract suite (2026-11-21):** 29/30 pass against `infra/dev`; `MediaPortContract` fails (the first image it finds in `HALO_DEV_TIMELINE_ROOM` isn't `blue.png`). It fails the same way without this push's changes (checked with the changes stashed): fixture state, probably a later image posted into that room. Fix the fixture or make the test look for `blue.png` by name.
-**Prepush on this Mac:** the default simulator `iPhone 17` (and `iPhone 16`) isn't installed; run `HALO_SIM="iPhone Air" scripts/prepush.sh`.
-
-**Needs the founder** (the loop records these and moves on; AUTONOMOUS_LOOP §5)
-- 📱 Device checks: G-NSE AC-NSE-1…6, V-RS-1, file protection on `halo.sqlite`, NSE database access, background push delivery.
-- 👤 Gate outcomes G-UNREAD / G-FFI: evaluation written ([testing/GATE_EVALUATION_M3.md](docs/testing/GATE_EVALUATION_M3.md)); agent recommends G-FFI **pass** (stay upstream, two conditions) and G-UNREAD **stay open** until the classic-sync adapter and the S01–S22 re-run are done (V-RS-7 decided: D73) and the 📱 checks are done; push gateway, APNs keys, TestFlight.
-
-**Deferred (not blocking):** Q-CI-MAC (D71, founder): no macOS CI job for now; `scripts/prepush.sh` stays the only Mac validation gate. Revisit once the build pipeline is stable and a hosted runner is confirmed to have the required Xcode.
+**Needs the founder** (all codebase review decisions & physical-device checks)
+- 👤 **R-14 (filtering entitlement):** NSE now delivers silent empty passive content for suppressed/no-event pushes; request Apple's `com.apple.developer.usernotifications.filtering` entitlement (V-PUSH-3) for complete suppression.
+- 👤 **R-16 (DB field encryption):** decide whether to implement AES-GCM field encryption using `KeychainItem.haloDatabaseKey` for `draft.body` and `bot_task.title/detail`, or accept plaintext under `completeUntilFirstUserAuthentication` with a new ADR.
+- 👤 **R-18 (classic-sync filter / lazy-load members):** pinned `matrix_sdk_ffi.swift` (`26.11.17`, F-FFI-23) `SyncSettingsV2` exposes only `timeoutMs` and `fullState`; requires an upstream `matrix-rust-sdk` PR + SDK pin bump.
+- 👤 **R-21 (queued sticker sending):** pinned `matrix_sdk_ffi.swift` (`26.11.17`, F-FFI-23) `Timeline` has no `sendRaw`/`sendSticker` API (`Room.sendRaw` is the only option); requires an upstream `matrix-rust-sdk` PR + SDK pin bump.
+- 👤 **R-24 (pushkin & Beta/Release push gateway):** decide whether to build the `infra/sygnal/` Halo pushkin or amend ADR-0015, and configure the Beta/Release push gateway before TestFlight.
+- 📱 **Physical device checks:** G-NSE memory budget (AC-NSE-1…6, R-09), GRDB shared-container `0xdead10cc` verification (V-SQL-2, R-25), NSE p95 latency with cached client (R-23), `halo.sqlite` file protection class, background push delivery, V-RS-1.
+- 👤 **Gate outcomes:** G-FFI / G-UNREAD ([docs/testing/GATE_EVALUATION_M3.md](docs/testing/GATE_EVALUATION_M3.md)); real-server scenario driver for S01–S29 remains on ROADMAP M3; Mac CI deferred (D71).
 
 ## 6. Next steps
-The queue is docs/ROADMAP.md §"Remaining work", worked by the loop in docs/development/AUTONOMOUS_LOOP.md.
-0. **Review Phase 0 (remaining):** docs/CODEBASE_REVIEW.md §14, in order: R-10/R-12 (`ClientDelegate`, single-flight restore), R-09 (NSE lightweight runtime); then Phase 1–3.
-
-**Candidates for the founder to pick** after Phase 0 (each is a PR-sized feature or needs a decision):
-1. **M7 Bot Activity** slices 1–3 are merged/pushed (founder picked it); the rest is ROADMAP "M7 Bot Activity": nothing in M7 except `bot_action` persistence and the 👎 😝 🎉 menu (BOT_MESSAGES FR-4, product detail).
-2. ~~Settings → Account → sessions/devices~~ list built (ADR-0018); remaining: sign out other sessions (needs UIA).
-3. **Storage → clear cache** (forces a full resync; needs the sync loop stopped and restarted) and **Security → disable recovery** (destructive; needs its confirmation copy).
-4. **TIMELINE** leftovers (founder picked these; **all three done**, remaining: tap-for-all-readers, receipts under others' messages, `TimelineFocus.Event` beyond ~200 events): ~~read-receipt avatars (FR-6)~~ done, ~~loading older history for a reply original~~ done (bounded), edit history (P2).
-5. **M5**: MAS in `infra/dev` and OIDC login (V-AUTH-1), QR/emoji verification, the performance pass (needs a large account/device).
-Device and gate items stay in §5 "Needs the founder".
+Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §"Remaining work".
+1. Founder resolves §5 decisions (R-16 field encryption vs ADR; R-24 pushkin + push gateway; R-14 filtering entitlement; R-18/R-21 upstream SDK priorities) and runs 📱 checks.
+2. **Real-server scenario driver (M3 / G-UNREAD):** build `tools/scenario-driver` to run S01–S29 against Synapse with two real SDK clients (closes the remaining structural part of R-26).
+3. **Product & M5/M7 candidates:** notification tap routing (`UNUserNotificationCenterDelegate`), M5 MAS + OIDC login (enables live refresh-token contract test for R-11), SAS/QR verification, opt-in diagnostics export, M7 Bot Activity reaction menu (FR-4).
 
 ## 7. Next Session Prompt
 ```text
-/loop Continuously execute the roadmap in a loop: **Plan → Implement → Verify**. Once a milestone is completed and verified, immediately proceed to the next milestone. Continue autonomously until roadmap finished.
+Read AGENTS.md, HANDOFF.md, and docs/CODEBASE_REVIEW.md §13. All 27 review
+findings are now resolved (22 FIXED, 5 Needs founder in HANDOFF §5).
 
-Context for the loop (Halo, repository evan1ee/halo):
-1. Read AGENTS.md, HANDOFF.md, then docs/development/AUTONOMOUS_LOOP.md. Trust HANDOFF for project state.
-   Run scripts/install-hooks.sh once per clone.
-2. The work queue is docs/ROADMAP.md §"Remaining work"; HANDOFF §6 is its head. Small items: commit to main; PR only for milestones and big features (D75). Wait ~2 min between loop iterations.
-3. Verify every SDK API in the pinned source (ios/SDKVERSION.md); never invent names.
-4. Verify each item: scripts/prepush.sh, the Halo-Debug app build, touched contract tests against infra/dev,
-   a simulator check for UI. Report real output; say what you couldn't run.
-5. Review the diff; fix high/medium findings. Merge your own PR only under AUTONOMOUS_LOOP §3 (all CI checks
-   passed, `gh pr merge --merge --delete-branch`), then branch again from main.
-6. Device, signing, gate-outcome, dependency and product decisions go to HANDOFF §5 "Needs the founder";
-   move on to the next item instead of stopping. Do not ask whether to continue.
-7. Before every git push (AGENTS.md §18): HANDOFF.md rewritten as state and next steps, ROADMAP ticked,
-   specs/OPEN_QUESTIONS/DECISION_LOG updated, HANDOFF.md in the last commit of the push.
+If the founder answered any of R-14, R-16, R-18, R-21, or R-24, implement the
+chosen decision first (with tests, ADR/Dnn where applicable, and updated docs).
+Otherwise, pick up the next unblocked milestone item from HANDOFF §6 /
+docs/ROADMAP.md (e.g., M3 real-server scenario driver for G-UNREAD or M5/M7).
+
+Verification on this Mac:
+- HALO_SIM="iPhone Air" scripts/prepush.sh
+- HALO_SIM="iPhone Air" scripts/contract-test.sh <Suite/test> (infra/dev up)
+- python3 -I tools/server-rules/check_server_rules.py
+- Update HANDOFF.md in the last commit before every git push (AGENTS.md §18).
 ```

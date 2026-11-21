@@ -402,7 +402,7 @@ non-messages), and its SDK didn't count undecryptable events, which the real SDK
 | PS33 | (done: `NotificationRecordStoreTests.concurrentAddAndClearNeverResurrects`, R-13) | — |
 | PS34 | (done: `SessionCoordinatorTests.remoteLogoutStopsSync` + `AdapterContractTests.remoteLogoutDuringSync`, R-10) | — |
 | PS35 | (done: `SessionCoordinatorTests.singleFlightRestore`, R-12) | — |
-| PS36 | App killed after `reportSeen`, before persist completes | Intent restored or receipt re-derived on next open (outbox gap check) |
+| PS36 | (done: `ReadReceiptCoordinatorTests.crashRightAfterReportSeen`, R-26) | — |
 
 Each should be a pure-policy or coordinator test first, then (where marked by the server) a server-rules check.
 
@@ -466,9 +466,9 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 | R-21 | P2 | Messaging | Stickers bypass the send queue | **Needs founder (upstream SDK limitation):** verified in pinned `matrix_sdk_ffi.swift` (`26.11.17`, F-FFI-23) that `Timeline` has no `sendRaw`/`sendSticker` API (`send` accepts only `RoomMessageEventContentWithoutRelation`, `AttachmentKind` has no `.sticker`); `Room.sendRaw` is the only API for `m.sticker` until an upstream SDK PR adds queued custom/sticker sending |
 | R-22 | P2 | Lifecycle | Background flush without a background task | **FIXED:** `HaloApp` wraps background `setForeground(false)` + `receipts.flush()` in `BackgroundTaskLease` (`UIApplication.shared.beginBackgroundTask(withName: "halo.receipts.flush")`) |
 | R-23 | P2 | NSE | New `Client` per push | **FIXED:** `SingleFlightCache` caches one restored `MatrixSessionPort` + `HaloDatabase` per `(userID, deviceID)` across the NSE process lifetime, coalescing concurrent pushes; `NotificationProcessorTests.singleFlightClientCache` |
-| R-24 | P2 | Push/docs | ADR-0015 pushkin missing; no gateway in Beta/Release | Build the pushkin or amend ADR-0015; configure a gateway before TestFlight |
+| R-24 | P2 | Push/docs | ADR-0015 pushkin missing; no gateway in Beta/Release | **Needs founder:** decide whether to build the `infra/sygnal/` Halo pushkin or amend ADR-0015, and configure the Beta/Release push gateway before TestFlight |
 | R-25 | P2 | Persistence | No GRDB suspension handling in the shared container (V-SQL-2) | **FIXED (📱 device 0xdead10cc check open):** enabled `Configuration.observesSuspensionNotifications = true` in `HaloDatabase`, added `HaloDatabase.suspendAll()` / `resumeAll()` wired to `HaloApp` background/active lifecycle + background-task expiration; `HaloDatabaseTests.suspendsAndResumes` |
-| R-26 | P2 | Testing | Scenarios run against a model; NSE untested; no Mac CI | §11 scenarios; server-rules parity; scenario driver |
+| R-26 | P2 | Testing | Scenarios run against a model; NSE untested; no Mac CI | **FIXED (for deterministic suite; M3 driver & D71 Mac CI remain tracked):** all proposed scenarios PS23–PS36 implemented (S23–S29 + unit/contract tests); `NotificationProcessor` unit-tested in `HaloApplication`; `tools/server-rules/check_server_rules.py` 16/16 green; `MediaPortContract` fixture lookup fixed. Real-server scenario driver remains on ROADMAP M3 (gate G-UNREAD); Mac CI deferred per D71 |
 | R-27 | P3 | Hygiene | Unbounded `nse-metrics.jsonl`; global `eventTimes` cache; `retrySend` error flattening; port-level filter hazard | **FIXED:** rotated `nse-metrics.jsonl` at 128 KB (`.prev`, ≤ 256 KB); scoped `MatrixRoomListPort.eventTimes` per instance (capped at 2,000, cleared on teardown); mapped `retrySend`/`abortSend` errors via `ErrorMapper`; locked `RoomListCoordinator.start()` to `.all` so port-level filters cannot shrink read-state inputs |
 
 ---
@@ -511,17 +511,17 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 
 ### Phase 2 — Performance and scalability
 
-- **2.1 Room list fan-out** (R-19); measure launch-to-list on a 500-room account. Verify: signpost timings before/after.
-- **2.2 Sync filter / lazy loading** (R-18) via an upstream SDK PR. Verify: initial sync bytes and time on a large account.
-- **2.3 NSE client reuse** (R-23) and GRDB suspension (R-25). Verify: device runs with 0 `0xdead10cc` and NSE p95.
-- **2.4 Mac CI** for adapter and app build once a runner exists (revisit D71).
+- **2.1 Room list fan-out** (R-19) — **done**: one `roomInfo()` per room, bounded `TaskGroup` (max 8); `RoomListPortContract` + `policyOverRealInputs` green. (500-room signpost timings remain a device/large-account check.)
+- **2.2 Sync filter / lazy loading** (R-18) — **needs founder (upstream SDK change)**: `SyncSettingsV2` has no filter in pinned `26.11.17` (F-FFI-23).
+- **2.3 NSE client reuse** (R-23) and **GRDB suspension** (R-25) — **done (📱 device checks open)**: `SingleFlightCache` in NSE + `Configuration.observesSuspensionNotifications = true` / `suspendAll`/`resumeAll` in `HaloApp`. Verify on device for 0 `0xdead10cc` and NSE p95.
+- **2.4 Mac CI** — deferred per D71.
 
 ### Phase 3 — Product and feature readiness
 
-- **3.1 Push gateway for Beta/Release** and the Halo pushkin (or amended ADR-0015) — prerequisite for TestFlight.
-- **3.2 Notification tap routing** (`UNUserNotificationCenterDelegate`), foreground presentation rules.
-- **3.3 Sticker sending through the send queue** (R-21); remove-other-sessions (UIA), OIDC login (M5).
-- **3.4 Opt-in, privacy-reviewed diagnostics export** (SDK logs + auditor trace) so field unread bugs become fixtures.
+- **3.1 Push gateway for Beta/Release** and the Halo pushkin (R-24) — **needs founder** (prerequisite for TestFlight).
+- **3.2 Notification tap routing** (`UNUserNotificationCenterDelegate`), foreground presentation rules — product feature (unblocked for roadmap).
+- **3.3 Sticker sending through the send queue** (R-21) — **needs founder (upstream SDK limitation, F-FFI-23)**; remove-other-sessions (UIA), OIDC login (M5).
+- **3.4 Opt-in, privacy-reviewed diagnostics export** — product feature.
 
 ---
 

@@ -145,7 +145,7 @@ public actor ReadReceiptCoordinator {
     /// The newest event the user has seen in `room`. Local echoes have no event ID and must not be reported.
     /// - Parameter advancesOrder: pass `true` when the open timeline proves `event` is strictly after the previously
     ///   seen event in timeline order; equal or clock-skewed timestamps then still advance the intent (R-06, ADR-0020).
-    public func reportSeen(room: RoomID, event: EventID, timestamp: Date, advancesOrder: Bool = false) {
+    public func reportSeen(room: RoomID, event: EventID, timestamp: Date, advancesOrder: Bool = false) async {
         if let current = intents[room] {
             if current.event == event { return }
             if !advancesOrder && timestamp <= current.timestamp { return }
@@ -155,7 +155,8 @@ public actor ReadReceiptCoordinator {
         created[room] = wallClock()
         publishPositions()
         failures[room] = nil
-        persist(room)
+        // Persist synchronously before returning so an immediate app kill never leaves an outbox gap (PS36).
+        await persist(room)
         schedule(room, after: dueIn(room))
     }
 
@@ -169,7 +170,7 @@ public actor ReadReceiptCoordinator {
         if let current = intents[room], current.event == event {
             intents[room]?.sent = true
             publishPositions()
-            persist(room)
+            await persist(room)
             return
         }
         let nextSequence = (intents[room]?.sequence ?? 0) + 1
@@ -178,7 +179,7 @@ public actor ReadReceiptCoordinator {
         scheduled[room]?.cancel()
         scheduled[room] = nil
         publishPositions()
-        persist(room)
+        await persist(room)
     }
 
     /// The user opened `room` and it is visible: clears `m.marked_unread` (READ_RECEIPTS §1). Best effort; the flag stays
@@ -203,12 +204,14 @@ public actor ReadReceiptCoordinator {
 
     // MARK: -
 
-    /// Writes the room's intent without blocking the caller; writes are ordered by the store's own monotonic rules.
-    private func persist(_ room: RoomID) {
+    /// Persists the room's intent before returning so an immediate app kill never loses an accepted intent (PS36).
+    private func persist(_ room: RoomID) async {
         guard let store, let intent = intents[room], let createdAt = created[room] else { return }
         let record = ReadIntent(room: room, event: intent.event, timestamp: intent.timestamp, isSent: intent.sent, createdAt: createdAt, sequence: intent.sequence)
-        Task { [weak self] in
-            do throws(HaloError) { try await store.save(record) } catch { await self?.storageFailed(error) }
+        do throws(HaloError) {
+            try await store.save(record)
+        } catch {
+            storageFailed(error)
         }
     }
 
@@ -252,7 +255,7 @@ public actor ReadReceiptCoordinator {
             if intents[room]?.event == intent.event {
                 intents[room]?.sent = true
                 publishPositions()
-                persist(room)
+                await persist(room)
             }
             failures[room] = nil
             do { try await port.setFullyRead(room: room, event: intent.event) } catch {

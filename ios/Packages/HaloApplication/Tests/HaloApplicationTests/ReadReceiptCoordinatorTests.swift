@@ -232,4 +232,23 @@ struct ReadReceiptCoordinatorTests {
         #expect(port.unreadFlags[room] == false)
         #expect(await c.readPosition(of: room) == nil)
     }
+
+    @Test("PS36 (R-26): intent is durable in the outbox before reportSeen returns, so an immediate kill restores and sends on relaunch")
+    func crashRightAfterReportSeen() async throws {
+        let store = FakeReadIntents()
+        // Fail network sends so the receipt stays pending; verify persistence completes before reportSeen returns.
+        let (first, port1, _) = make(store: store)
+        port1.failNextReceipts(with: [.network(retryable: true)])
+        await first.reportSeen(room: room, event: event(9), timestamp: at(90))
+        // Immediately after reportSeen returns (no yield/sleep), the outbox already holds the unsent intent.
+        #expect(store.intents.count == 1)
+        #expect(store.intents.first?.event == event(9))
+        #expect(store.intents.first?.isSent == false)
+
+        // Simulate app kill + relaunch with a fresh coordinator and working network: restore sends the receipt.
+        let (relaunched, port2, _) = make(store: store)
+        await relaunched.restore()
+        #expect(await eventually { port2.receipts.map(\.event) == [event(9)] })
+        #expect(await eventually { store.intents.first?.isSent == true })
+    }
 }
