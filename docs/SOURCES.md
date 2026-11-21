@@ -60,6 +60,7 @@ Re-verify at every SDK bump (see [development/BUILD_AND_RELEASE.md](development/
   (`timeline/msg_like.rs`); `TimelineFocus = Live{…} | Event{event_id, num_context_events, thread_mode} | Thread{…} | PinnedEvents`
   (`timeline/configuration.rs`).
 - F-FFI-12 The doc comment of `Client::mark_all_rooms_as_read` refers to wrong iOS badges caused by the backend: https://github.com/element-hq/element-x-ios/issues/3151.
+- F-FFI-23 Verified gaps in pinned `matrix-rust-components-swift` `26.11.17` (`matrix_sdk_ffi.swift`, 2026-11-21): (a) `SyncSettingsV2` exposes only `timeoutMs: UInt64?` and `fullState: Bool` — no classic-sync filter / `lazy_load_members` parameter (R-18); (b) `Timeline` exposes no `sendRaw` / `sendSticker` / custom event method (`send` accepts only `RoomMessageEventContentWithoutRelation`, `AttachmentKind` has only `.image/.video/.audio/.voice/.file`), so `Room.sendRaw` is the only API for `m.sticker` (R-21).
 
 ### F-SDK — SDK internals
 - F-SDK-1 `matrix-sdk-base/src/read_receipts.rs`: `ReadReceipts { num_unread, num_notifications, num_mentions, latest_active, pending }`; `pending` is a ring buffer of **10** receipts whose target event isn't known locally. The counts are updated by the event cache in `matrix-sdk`.
