@@ -136,6 +136,7 @@ private struct StickerCell: View {
     @State private var data: Data?
     /// The full file of an animated sticker while its cell is on screen (FR-9); `nil` otherwise, so memory is freed on scroll.
     @State private var animated: Data?
+    @State private var animationCell = UUID()
 
     var body: some View {
         Button { Task { await model.tap(sticker) } } label: {
@@ -161,11 +162,16 @@ private struct StickerCell: View {
         .task { data = await model.thumbnail(for: sticker) }
         #if canImport(UIKit)
         .task(id: sticker.id) {
-            // Autoplay only the visible cells, only when motion is allowed, and only small files (FR-9).
-            guard StickerImage.motionAllowed, let full = await model.animatedContent(for: sticker) else { return }
+            model.releaseAnimation(for: animationCell)
+            animated = nil
+            // Autoplay only the visible cells, only when motion is allowed, only small files, and at most 12 at once (FR-9, §5).
+            guard StickerImage.motionAllowed, let full = await model.animatedContent(for: sticker, cell: animationCell) else { return }
             animated = full
         }
-        .onDisappear { animated = nil }
+        .onDisappear {
+            animated = nil
+            model.releaseAnimation(for: animationCell)
+        }
         #endif
     }
 

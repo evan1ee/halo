@@ -1,4 +1,8 @@
 import Foundation
+#if canImport(ImageIO) && canImport(CoreGraphics)
+import CoreGraphics
+import ImageIO
+#endif
 import HaloApplication
 import HaloDomain
 import HaloFoundation
@@ -11,12 +15,14 @@ import Testing
 struct StickerPanelViewModelTests {
     private let room = try! RoomID("!r:x.org")
     private var ref: PackRef { PackRef(room: try! RoomID("!pack:x.org"), stateKey: "cats") }
-    private func sticker(_ code: String) -> Sticker { Sticker(pack: ref, shortcode: code, body: nil, url: "mxc://x.org/\(code)", info: nil) }
+    private func sticker(_ code: String, image: MediaRef? = nil) -> Sticker {
+        Sticker(pack: ref, shortcode: code, body: nil, url: "mxc://x.org/\(code)", info: nil, image: image)
+    }
 
     private func make(
         send: @escaping @MainActor (Sticker) async throws(HaloError) -> Void = { _ in }
     ) -> (StickerPanelViewModel, FakeStickerPrefs) {
-        let pack = StickerPack(ref: ref, displayName: "Cats", avatarURL: nil, usage: [.sticker], attribution: nil, stickers: ["cat_wave", "dog"].map(sticker), source: .userEnabled)
+        let pack = StickerPack(ref: ref, displayName: "Cats", avatarURL: nil, usage: [.sticker], attribution: nil, stickers: ["cat_wave", "dog"].map { sticker($0) }, source: .userEnabled)
         let prefs = FakeStickerPrefs()
         let library = StickerLibrary(packs: FakeStickerPacks(StickerPackLoad(packs: [pack])), prefs: prefs)
         return (StickerPanelViewModel(library: library, room: room, send: send), prefs)
@@ -226,6 +232,72 @@ struct StickerPanelViewModelTests {
         }
         #expect(sent == 2 && seen)
     }
+
+    #if canImport(ImageIO) && canImport(CoreGraphics)
+    @Test("at most 12 grid stickers animate at once; static stickers don't use a slot; disappearing cells free their slot (STICKERS §5)")
+    func animationCap() async throws {
+        let animatedGIF = try Self.makeGIF(frames: 2)
+        let staticGIF = try Self.makeGIF(frames: 1)
+        let port = FakeMediaPort()
+        let staticSticker = sticker("still", image: MediaRef(token: "still"))
+        port.add(try #require(staticSticker.image), data: staticGIF)
+        let animatedStickers = (0..<16).map { sticker("anim_\($0)", image: MediaRef(token: "anim_\($0)")) }
+        for item in animatedStickers { port.add(try #require(item.image), data: animatedGIF) }
+
+        let library = StickerLibrary(packs: FakeStickerPacks(), prefs: FakeStickerPrefs())
+        let model = StickerPanelViewModel(library: library, media: MediaLoader(port: port), room: room, send: { _ in })
+
+        // Static stickers never consume an animation slot.
+        let staticResult = await model.animatedContent(for: staticSticker, cell: UUID())
+        #expect(staticResult == nil && model.activeAnimationCount == 0)
+
+        // 15 concurrent animated cells: at most 12 win slots.
+        let cells = (0..<15).map { _ in UUID() }
+        let tasks = (0..<15).map { i in
+            let item = animatedStickers[i]
+            let cell = cells[i]
+            return Task { (cell, await model.animatedContent(for: item, cell: cell) != nil) }
+        }
+        var granted: [UUID] = []
+        for task in tasks {
+            let (cell, ok) = await task.value
+            if ok { granted.append(cell) }
+        }
+        #expect(granted.count == StickerPanelViewModel.maxSimultaneousAnimations)
+        #expect(model.activeAnimationCount == StickerPanelViewModel.maxSimultaneousAnimations)
+
+        // While at cap, a 16th cell is rejected before fetching full media bytes.
+        let callsBefore = port.contentCalls
+        let rejected = await model.animatedContent(for: animatedStickers[15], cell: UUID())
+        #expect(rejected == nil && port.contentCalls == callsBefore)
+
+        // Releasing one cell frees a slot for the 16th cell.
+        let released = try #require(granted.first)
+        model.releaseAnimation(for: released)
+        #expect(model.activeAnimationCount == StickerPanelViewModel.maxSimultaneousAnimations - 1)
+        let nextCell = UUID()
+        let admitted = await model.animatedContent(for: animatedStickers[15], cell: nextCell)
+        #expect(admitted != nil && model.activeAnimationCount == StickerPanelViewModel.maxSimultaneousAnimations)
+
+        // Closing the panel frees all slots.
+        await model.stop()
+        #expect(model.activeAnimationCount == 0)
+    }
+
+    private static func makeGIF(frames: Int) throws -> Data {
+        let data = NSMutableData()
+        let dest = try #require(CGImageDestinationCreateWithData(data, "com.compuserve.gif" as CFString, frames, nil))
+        let space = CGColorSpaceCreateDeviceRGB()
+        var pixel: [UInt8] = [255, 0, 0, 255]
+        let ctx = try #require(CGContext(data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4, space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        let frame = try #require(ctx.makeImage())
+        for _ in 0..<frames {
+            CGImageDestinationAddImage(dest, frame, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 0.1]] as CFDictionary)
+        }
+        #expect(CGImageDestinationFinalize(dest))
+        return data as Data
+    }
+    #endif
 }
 
 @MainActor private final class Flag {

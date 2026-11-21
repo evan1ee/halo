@@ -79,10 +79,11 @@ public final class StickerPanelViewModel {
         await library.load(currentRoom: room)
     }
 
-    /// Call when the panel closes: sends a pending recents write.
+    /// Call when the panel closes: sends a pending recents write and frees any held animation slots.
     public func stop() async {
         observation?.cancel()
         observation = nil
+        activeAnimations.removeAll()
         await library.flush()
     }
 
@@ -149,12 +150,31 @@ public final class StickerPanelViewModel {
 
     /// Largest file the grid plays by itself.
     static let autoplayLimit = 1_000_000
+    /// Maximum number of stickers animating at once in the grid (STICKERS §5).
+    public static let maxSimultaneousAnimations = 12
 
-    /// The full file of a sticker that is animated and small enough to autoplay in the grid; `nil` otherwise.
-    public func animatedContent(for sticker: Sticker) async -> Data? {
+    /// Cells currently playing an animation; keyed per cell instance so the same sticker in two sections
+    /// (for example Favourites and its pack) tracks its slots independently.
+    @ObservationIgnored private var activeAnimations: Set<UUID> = []
+
+    /// Number of visible cells currently holding an animation slot (for tests).
+    var activeAnimationCount: Int { activeAnimations.count }
+
+    /// The full file of a sticker that is animated, small enough to autoplay, and within `maxSimultaneousAnimations`; `nil` otherwise.
+    /// Call `releaseAnimation(for:)` when the cell disappears or switches to another sticker.
+    public func animatedContent(for sticker: Sticker, cell: UUID = UUID()) async -> Data? {
+        guard activeAnimations.contains(cell) || activeAnimations.count < Self.maxSimultaneousAnimations else { return nil }
         guard let media, let image = sticker.image, (sticker.info?.size ?? 0) <= Self.autoplayLimit else { return nil }
-        guard let full = try? await media.content(image), full.count <= Self.autoplayLimit, Self.isAnimated(full) else { return nil }
+        guard let full = try? await media.content(image), !Task.isCancelled,
+              full.count <= Self.autoplayLimit, Self.isAnimated(full) else { return nil }
+        guard activeAnimations.contains(cell) || activeAnimations.count < Self.maxSimultaneousAnimations else { return nil }
+        activeAnimations.insert(cell)
         return full
+    }
+
+    /// Frees a cell's animation slot when it scrolls off screen or changes sticker (STICKERS §5).
+    public func releaseAnimation(for cell: UUID) {
+        activeAnimations.remove(cell)
     }
 
     /// `true` for a GIF, APNG or WebP with more than one frame.
