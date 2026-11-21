@@ -63,6 +63,11 @@ struct LatestEventMappingTests {
         #expect(MatrixRoomListPort.preview(.remote(timestamp: 1, sender: "@a:x", isOwn: false, profile: .pending, content: content))?.senderName == nil)
         #expect(MatrixRoomListPort.preview(.local(timestamp: 1, sender: "@a:x", profile: .pending, content: content, state: .isSending))?.isOwn == true)
         #expect(MatrixRoomListPort.preview(.none) == nil)
+        let joined = TimelineItemContent.roomMembership(userId: "@a:x", userDisplayName: "Ann", change: .joined, reason: nil)
+        #expect(MatrixRoomListPort.preview(.remote(timestamp: 1, sender: "@a:x", isOwn: false, profile: ready, content: joined)) == LatestMessagePreview(text: "Ann joined", senderName: nil, isOwn: false))
+        #expect(MatrixRoomListPort.preview(.remote(timestamp: 1, sender: "@a:x", isOwn: true, profile: ready, content: joined))?.text == "You joined")
+        let other = TimelineItemContent.roomMembership(userId: "@a:x", userDisplayName: "Ann", change: .notImplemented, reason: nil)
+        #expect(MatrixRoomListPort.preview(.remote(timestamp: 1, sender: "@a:x", isOwn: false, profile: ready, content: other)) == nil)
         #expect(MatrixRoomListPort.preview(.remoteInvite(timestamp: 1, inviter: nil, inviterProfile: .pending)) == nil)
     }
 }

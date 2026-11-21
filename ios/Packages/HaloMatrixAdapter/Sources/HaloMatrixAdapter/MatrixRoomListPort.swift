@@ -216,8 +216,24 @@ public final class MatrixRoomListPort: RoomListPort {
     static func preview(_ value: LatestEventValue) -> LatestMessagePreview? {
         switch value {
         case .none, .remoteInvite: return nil
+        // The SDK skips messages it can't decrypt when it picks the latest event, so an encrypted room often ends on a
+        // membership change: say it as a sentence (no "Name:" prefix) rather than leave the line empty.
+        case .remote(_, _, let isOwn, _, .roomMembership(_, let name, let change, _)):
+            return membershipLine(who: isOwn ? "You" : (name ?? "Someone"), change).map { LatestMessagePreview(text: $0, senderName: nil, isOwn: false) }
         case .remote(_, _, let isOwn, let profile, let content): return previewText(content).map { LatestMessagePreview(text: $0, senderName: displayName(profile), isOwn: isOwn) }
         case .local(_, _, let profile, let content, _): return previewText(content).map { LatestMessagePreview(text: $0, senderName: displayName(profile), isOwn: true) }
+        }
+    }
+
+    /// "Ann joined", "You left"; `nil` for changes not worth a preview line.
+    static func membershipLine(who: String, _ change: MatrixRustSDK.MembershipChange?) -> String? {
+        switch change {
+        case .joined, .invitationAccepted: "\(who) joined"
+        case .left: "\(who) left"
+        case .invited: "\(who) was invited"
+        case .kicked, .kickedAndBanned: "\(who) was removed"
+        case .banned: "\(who) was banned"
+        default: nil
         }
     }
 
