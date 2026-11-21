@@ -245,19 +245,30 @@ private struct RowView: View {
     let row: TimelineRow
     let model: TimelineViewModel
     @State private var showingSource = false
+    /// A sent message is removed for everyone and can't be brought back: ask first.
+    @State private var confirmingDelete = false
     @State private var showingOriginal = false
 
     /// Long-press menu for confirmed messages: quick reactions, and edit/delete for own messages.
     @ViewBuilder private var actions: some View {
-        ForEach(TimelineViewModel.quickReactions, id: \.self) { key in
-            Button(key) { Task { await model.toggleReaction(on: row, key: key) } }
+        // One row of quick reactions, as in Messages, rather than a full-width row each.
+        ControlGroup {
+            ForEach(TimelineViewModel.quickReactions, id: \.self) { key in
+                Button(key) { Task { await model.toggleReaction(on: row, key: key) } }
+            }
+            Button("More reactions", systemImage: "face.smiling") { model.beginReactionPicker(row) }
         }
-        Button("More reactions…", systemImage: "face.smiling") { model.beginReactionPicker(row) }
+        .controlGroupStyle(.compactMenu)
         Button("Reply", systemImage: "arrowshape.turn.up.left") { model.beginReply(row) }
+        #if canImport(UIKit)
+        if row.file == nil, !row.isSticker, let text = row.source?.body ?? (row.showsText ? row.text : nil) {
+            Button("Copy", systemImage: "doc.on.doc") { UIPasteboard.general.string = text }
+        }
+        #endif
         if row.source != nil { Button("View source", systemImage: "chevron.left.forwardslash.chevron.right") { showingSource = true } }
         if row.isOwn {
             if row.style == .ownMessage && row.image == nil { Button("Edit", systemImage: "pencil") { model.beginEdit(row) } }
-            Button("Delete", systemImage: "trash", role: .destructive) { Task { await model.delete(row) } }
+            Button("Delete", systemImage: "trash", role: .destructive) { confirmingDelete = true }
         }
     }
 
@@ -319,6 +330,10 @@ private struct RowView: View {
                 if row.eventID != nil { actions } else if row.failedLocalID != nil { failedActions }
             }
             .sheet(isPresented: $showingSource) { if let source = row.source { MessageSourceView(source: source) } }
+            .confirmationDialog("Delete this message for everyone?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+                Button("Delete", role: .destructive) { Task { await model.delete(row) } }
+                Button("Cancel", role: .cancel) {}
+            } message: { Text("It can't be undone.") }
             }
         case .notice:
             Text(row.text).font(.callout).foregroundStyle(.secondary)
