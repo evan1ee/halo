@@ -113,3 +113,47 @@ struct MatrixBootstrapTests {
         #expect(recorded.withLock { $0 } == [true, true])
     }
 }
+
+@Suite("RefreshDelegate (R-11)")
+struct RefreshDelegateTests {
+    @Test("retrieveSessionFromKeychain returns the initial restored session before any save and reads shared Keychain updates")
+    func retrieveAndPersist() throws {
+        let initial = Session(
+            accessToken: "tok-1", refreshToken: "ref-1", userId: "@alice:x",
+            deviceId: "DEV1", homeserverUrl: "https://x", oauthData: nil, slidingSyncVersion: .none)
+        let persisted = Mutex<StoredSession?>(nil)
+        let delegate = RefreshDelegate(
+            storeID: "store-1",
+            passphrase: "pass",
+            initialSession: initial,
+            readStoredSession: { persisted.withLock { $0 } },
+            onRefresh: { stored in persisted.withLock { $0 = stored } })
+
+        // Before the first save in this process, retrieveSessionFromKeychain returns the restored session.
+        let beforeSave = try delegate.retrieveSessionFromKeychain(userId: "@alice:x")
+        #expect(beforeSave.accessToken == "tok-1")
+        #expect(beforeSave.refreshToken == "ref-1")
+
+        // Mismatched user ID is rejected.
+        #expect(throws: HaloError.notFound) { _ = try delegate.retrieveSessionFromKeychain(userId: "@bob:x") }
+
+        // A token refresh persists synchronously via onRefresh (NSE path) and is visible to subsequent retrieves.
+        let rotated = Session(
+            accessToken: "tok-2", refreshToken: "ref-2", userId: "@alice:x",
+            deviceId: "DEV1", homeserverUrl: "https://x", oauthData: nil, slidingSyncVersion: .none)
+        delegate.saveSessionInKeychain(session: rotated)
+        let stored = try #require(persisted.withLock { $0 })
+        #expect(stored.userID == (try UserID("@alice:x")))
+
+        // A second delegate (simulating the other process) reads the rotated tokens from the shared Keychain.
+        let otherProcess = RefreshDelegate(
+            storeID: "store-1",
+            passphrase: "pass",
+            initialSession: initial,
+            readStoredSession: { persisted.withLock { $0 } },
+            onRefresh: { _ in })
+        let crossProcess = try otherProcess.retrieveSessionFromKeychain(userId: "@alice:x")
+        #expect(crossProcess.accessToken == "tok-2")
+        #expect(crossProcess.refreshToken == "ref-2")
+    }
+}

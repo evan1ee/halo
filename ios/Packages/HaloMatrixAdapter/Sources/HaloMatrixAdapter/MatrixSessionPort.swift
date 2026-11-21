@@ -24,6 +24,8 @@ public actor MatrixSessionPort: SessionPort {
     private let holderName: String
     private let sendsMessages: Bool
     private let lightweightRuntime: Bool
+    private let readStoredSession: (@Sendable () -> StoredSession?)?
+    private let persistRefreshedSession: (@Sendable (StoredSession) -> Void)?
     private let initialisePlatform: @Sendable (Bool) throws(HaloError) -> Void
     private var client: Client?
     private var syncTask: Task<Void, Never>?
@@ -44,25 +46,43 @@ public actor MatrixSessionPort: SessionPort {
     private var sendQueueErrorsHandle: TaskHandle?
     private var events: [UUID: AsyncStream<SessionEvent>.Continuation] = [:]
 
-    /// - Parameter baseDirectory: where per-login SDK stores live (the App Group container in the app).
     /// - Parameters:
+    ///   - baseDirectory: where per-login SDK stores live (the App Group container in the app).
     ///   - holderName: this process's name for the SDK's cross-process lock ("app" or "nse").
     ///   - sendsMessages: whether this process owns the unsent-message queues (the app does; the extension must not).
     ///   - lightweightRuntime: use the SDK's lightweight runtime (the extension does).
-    public init(baseDirectory: URL, holderName: String = "app", sendsMessages: Bool = true, lightweightRuntime: Bool = false) {
+    ///   - readStoredSession: optional synchronous Keychain reader so `ClientSessionDelegate.retrieveSessionFromKeychain`
+    ///     sees the current session before the first save in this process and across app/NSE token rotations (R-11).
+    ///   - persistRefreshedSession: optional synchronous Keychain writer so processes without a `SessionCoordinator`
+    ///     subscriber (the NSE) persist rotated refresh tokens immediately before exiting (R-11).
+    public init(
+        baseDirectory: URL,
+        holderName: String = "app",
+        sendsMessages: Bool = true,
+        lightweightRuntime: Bool = false,
+        readStoredSession: (@Sendable () -> StoredSession?)? = nil,
+        persistRefreshedSession: (@Sendable (StoredSession) -> Void)? = nil
+    ) {
         self.init(
             baseDirectory: baseDirectory, holderName: holderName, sendsMessages: sendsMessages,
-            lightweightRuntime: lightweightRuntime, initialisePlatform: MatrixBootstrap.initialise(lightweightRuntime:))
+            lightweightRuntime: lightweightRuntime,
+            readStoredSession: readStoredSession, persistRefreshedSession: persistRefreshedSession,
+            initialisePlatform: MatrixBootstrap.initialise(lightweightRuntime:))
     }
 
     init(
         baseDirectory: URL, holderName: String = "app", sendsMessages: Bool = true,
-        lightweightRuntime: Bool = false, initialisePlatform: @escaping @Sendable (Bool) throws(HaloError) -> Void
+        lightweightRuntime: Bool = false,
+        readStoredSession: (@Sendable () -> StoredSession?)? = nil,
+        persistRefreshedSession: (@Sendable (StoredSession) -> Void)? = nil,
+        initialisePlatform: @escaping @Sendable (Bool) throws(HaloError) -> Void
     ) {
         self.baseDirectory = baseDirectory
         self.holderName = holderName
         self.sendsMessages = sendsMessages
         self.lightweightRuntime = lightweightRuntime
+        self.readStoredSession = readStoredSession
+        self.persistRefreshedSession = persistRefreshedSession
         self.initialisePlatform = initialisePlatform
     }
 
@@ -130,12 +150,13 @@ public actor MatrixSessionPort: SessionPort {
         sessionGeneration &+= 1
         let generation = sessionGeneration
         let task = Task<Void, any Error> {
-            let client = try await self.makeClient(
-                homeserver: payload.homeserverURL, storeID: payload.storeID, passphrase: payload.passphrase)
             let sdkSession = Session(
                 accessToken: payload.accessToken, refreshToken: payload.refreshToken, userId: payload.userID,
                 deviceId: payload.deviceID, homeserverUrl: payload.homeserverURL, oauthData: payload.oauthData,
                 slidingSyncVersion: .none)
+            let client = try await self.makeClient(
+                homeserver: payload.homeserverURL, storeID: payload.storeID, passphrase: payload.passphrase,
+                initialSession: sdkSession)
             try await client.restoreSession(session: sdkSession)
             await self.adopt(client, storeID: payload.storeID, session: sdkSession, generation: generation)
         }
@@ -346,6 +367,7 @@ public actor MatrixSessionPort: SessionPort {
         authDelegate = auth
         authDelegateHandle = try? client.setDelegate(delegate: auth)
         reportedAuthErrorGeneration = nil
+        delegate?.seed(session)
         self.client = client
         self.storeID = storeID
     }
@@ -379,12 +401,21 @@ public actor MatrixSessionPort: SessionPort {
         for continuation in events.values { continuation.yield(event) }
     }
 
-    private func makeClient(homeserver: String, storeID: String, passphrase: String) async throws -> Client {
+    private func makeClient(
+        homeserver: String, storeID: String, passphrase: String, initialSession: Session? = nil
+    ) async throws -> Client {
         let data = baseDirectory.appendingPathComponent(storeID, isDirectory: true).appendingPathComponent("data")
         let cache = baseDirectory.appendingPathComponent(storeID, isDirectory: true).appendingPathComponent("caches")
         try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
-        let delegate = RefreshDelegate(storeID: storeID, passphrase: passphrase) { [weak self] stored in
+        let persist = self.persistRefreshedSession
+        let delegate = RefreshDelegate(
+            storeID: storeID,
+            passphrase: passphrase,
+            initialSession: initialSession,
+            readStoredSession: readStoredSession
+        ) { [weak self] stored in
+            persist?(stored)
             guard let self else { return }
             Task { await self.emit(.tokensRefreshed(stored)) }
         }
@@ -399,6 +430,17 @@ public actor MatrixSessionPort: SessionPort {
             .crossProcessLockConfig(crossProcessLockConfig: .multiProcess(holderName: holderName))
             .setSessionDelegate(sessionDelegate: delegate)
             .build()
+    }
+
+    static func sdkSession(from stored: StoredSession) throws(HaloError) -> Session {
+        let payload: SessionPayload
+        do { payload = try JSONDecoder().decode(SessionPayload.self, from: stored.payload) } catch {
+            throw .storage(.corrupted)
+        }
+        return Session(
+            accessToken: payload.accessToken, refreshToken: payload.refreshToken, userId: payload.userID,
+            deviceId: payload.deviceID, homeserverUrl: payload.homeserverURL, oauthData: payload.oauthData,
+            slidingSyncVersion: .none)
     }
 
     static func stored(from session: Session, storeID: String, passphrase: String) throws(HaloError) -> StoredSession {
@@ -448,20 +490,42 @@ private final class AuthDelegate: ClientDelegate, Sendable {
     func onBackgroundTaskErrorReport(taskName: String, error: BackgroundTaskFailureReason) {}
 }
 
-private final class RefreshDelegate: ClientSessionDelegate, Sendable {
+final class RefreshDelegate: ClientSessionDelegate, Sendable {
     private let storeID: String
     private let passphrase: String
+    private let readStoredSession: (@Sendable () -> StoredSession?)?
     private let onRefresh: @Sendable (StoredSession) -> Void
-    private let latest = Mutex<Session?>(nil)
+    private let latest: Mutex<Session?>
 
-    init(storeID: String, passphrase: String, onRefresh: @escaping @Sendable (StoredSession) -> Void) {
+    init(
+        storeID: String,
+        passphrase: String,
+        initialSession: Session? = nil,
+        readStoredSession: (@Sendable () -> StoredSession?)? = nil,
+        onRefresh: @escaping @Sendable (StoredSession) -> Void
+    ) {
         self.storeID = storeID
         self.passphrase = passphrase
+        self.readStoredSession = readStoredSession
         self.onRefresh = onRefresh
+        self.latest = Mutex(initialSession)
+    }
+
+    func seed(_ session: Session) {
+        latest.withLock { current in
+            if current == nil { current = session }
+        }
     }
 
     func retrieveSessionFromKeychain(userId: String) throws -> Session {
-        guard let session = latest.withLock({ $0 }) else { throw HaloError.notFound }
+        // Prefer the shared Keychain when wired so cross-process token rotations (app ↔ NSE) are visible immediately (R-11).
+        if let stored = readStoredSession?(),
+           let session = try? MatrixSessionPort.sdkSession(from: stored),
+           session.userId == userId {
+            latest.withLock { $0 = session }
+            return session
+        }
+        guard let session = latest.withLock({ $0 }), session.userId == userId else { throw HaloError.notFound }
         return session
     }
 

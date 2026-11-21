@@ -454,7 +454,7 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 | R-08 | P1 | Badge/NSE | NSE writes `content.badge` from a different formula after the app's write | **FIXED:** `HaloApplication.NotificationProcessor` leaves `badge = nil` while app is foreground (`AttentionCache.isForeground`), and computes background fallback via `ReadStatePolicy` with room mode; PS32 |
 | R-09 | P1 | NSE | `restore` initialises the SDK with the full runtime in the NSE | **FIXED:** `MatrixSessionPort` forwards `lightweightRuntime` through `restore` and `loginPassword`; `MatrixBootstrapTests` verifies forwarding and `sentryConfig == nil` (physical-device AC-NSE memory check remains 📱) |
 | R-10 | P1 | Session | No `ClientDelegate`; remote logout never handled; sync retried forever | **FIXED:** `Client.setDelegate` (`AuthDelegate`) + `runSync` `.unauthorized` stop sync and emit `.softLoggedOut`/`.loggedOut`; PS34 + `AdapterContractTests.remoteLogoutDuringSync` |
-| R-11 | P1 | Security/session | NSE token refresh not persisted; delegate can't retrieve before first save | Persist refresh in the NSE (Keychain write), serve `retrieveSessionFromKeychain` from the Keychain |
+| R-11 | P1 | Security/session | NSE token refresh not persisted; delegate can't retrieve before first save | **FIXED:** `RefreshDelegate` seeded on restore/adopt and reads shared Keychain (`KeychainStore.readSync`); NSE persists refreshed tokens synchronously via `persistRefreshedSession` (`KeychainStore.writeSync`); `RefreshDelegateTests` (OIDC/MAS refresh contract waits for MAS in M5) |
 | R-12 | P1 | Session | Restore timeout can leave a late-adopted client and a second client on retry | **FIXED:** single-flight restore + generation guard in `SessionCoordinator` and `MatrixSessionPort`; retry awaits in-flight task, late completion adopts on `.restoreFailed` or discards after `logout`; PS35 |
 | R-13 | P1 | Persistence | Records in `UserDefaults`, non-atomic cross-process RMW | **FIXED:** GRDB `notification_record` (migration v7) + `DarwinSignal` (`one.mbm.halo.db.changed`); PS33 |
 | R-14 | P1 | Notifications | Suppressed/filtered pushes (e.g. encrypted reactions) show "Halo: New message" | Deliver silent content when suppressed; pursue the filtering entitlement (V-PUSH-3) |
@@ -504,9 +504,8 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 
 ### Phase 1 — Architectural improvements
 
-- **1.1 NSE logic into HaloApplication** (testable `NotificationProcessing` type; NSE target stays wiring). Verify: unit
-  tests over fakes for display/encrypted/suppressed/timeout.
-- **1.2 Token persistence in the NSE** (R-11) before OIDC (M5). Verify: contract test with refresh tokens against MAS.
+- **1.1 NSE logic into HaloApplication** — **done** (in PR #50: `NotificationProcessor` in `HaloApplication`, tested over `FakeNotificationFetchPort`).
+- **1.2 Token persistence in the NSE** (R-11) — **done** (`RefreshDelegate` seeded + shared Keychain read/write; `RefreshDelegateTests`; OIDC/MAS refresh contract waits for M5).
 - **1.3 Field encryption** (R-16) or an ADR accepting plaintext with rationale. Verify: DB inspection test.
 - **1.4 Docs realignment** (§12): SYNC_ENGINE/SDK_INTEGRATION for D74, UNREAD_STATE for what is built, ADR-0015 status.
   Verify: `scripts/validate-docs.sh` plus a reviewer read.

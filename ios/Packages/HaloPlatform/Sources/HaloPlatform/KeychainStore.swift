@@ -22,6 +22,12 @@ public struct KeychainStore: KeychainPort {
     }
 
     public func read(_ item: KeychainItem) async throws(HaloError) -> Data? {
+        try readSync(item)
+    }
+
+    /// Synchronous read over the Security framework, used by SDK session-delegate callbacks
+    /// (`ClientSessionDelegate.retrieveSessionFromKeychain`, R-11) which are synchronous.
+    public func readSync(_ item: KeychainItem) throws(HaloError) -> Data? {
         var query = baseQuery(item)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -37,6 +43,12 @@ public struct KeychainStore: KeychainPort {
     }
 
     public func write(_ data: Data, for item: KeychainItem) async throws(HaloError) {
+        try writeSync(data, for: item)
+    }
+
+    /// Synchronous write over the Security framework, used by the NSE's token-refresh delegate (R-11)
+    /// so rotated refresh tokens are persisted before the extension exits.
+    public func writeSync(_ data: Data, for item: KeychainItem) throws(HaloError) {
         let update = SecItemUpdate(baseQuery(item) as CFDictionary, [kSecValueData as String: data] as CFDictionary)
         switch update {
         case errSecSuccess: return

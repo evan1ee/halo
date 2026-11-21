@@ -41,7 +41,8 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
         let suite = "group.\(HaloShared.namespace())"
         let attention = AttentionCache(suiteName: suite)
         do {
-            guard let data = try await HaloShared.keychain().read(.session) else {
+            let keychain = HaloShared.keychain()
+            guard let data = try await keychain.read(.session) else {
                 return deliver(content, outcome: "no-session", metrics: metrics)
             }
             let stored = try JSONDecoder().decode(StoredSession.self, from: data)
@@ -51,7 +52,19 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
             let database = try HaloDatabase(path: directory.appendingPathComponent("halo.sqlite").path)
             let signal = DarwinSignal()
             let records = NotificationRecordStore(database: database, account: stored.userID, onChange: { signal.post() })
-            let session = MatrixSessionPort(baseDirectory: HaloShared.storeDirectory(), holderName: "nse", sendsMessages: false, lightweightRuntime: true)
+            let session = MatrixSessionPort(
+                baseDirectory: HaloShared.storeDirectory(),
+                holderName: "nse",
+                sendsMessages: false,
+                lightweightRuntime: true,
+                readStoredSession: {
+                    (try? keychain.readSync(.session)).flatMap { try? JSONDecoder().decode(StoredSession.self, from: $0) }
+                },
+                persistRefreshedSession: { refreshed in
+                    if let encoded = try? JSONEncoder().encode(refreshed) {
+                        try? keychain.writeSync(encoded, for: .session)
+                    }
+                })
             try await session.restore(stored)
             metrics.step("restore")
             let processor = NotificationProcessor(

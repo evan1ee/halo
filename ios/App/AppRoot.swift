@@ -63,7 +63,11 @@ final class AppRoot {
 
         // Shared with the notification extension: the Keychain access group and the App Group container.
         let keychain = HaloShared.keychain()
-        let session = MatrixSessionPort(baseDirectory: HaloShared.storeDirectory())
+        let session = MatrixSessionPort(
+            baseDirectory: HaloShared.storeDirectory(),
+            readStoredSession: {
+                (try? keychain.readSync(.session)).flatMap { try? JSONDecoder().decode(StoredSession.self, from: $0) }
+            })
         matrixSession = session
         let sessionCoordinator = SessionCoordinator(port: session, keychain: keychain)
         self.sessionCoordinator = sessionCoordinator
