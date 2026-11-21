@@ -27,13 +27,8 @@ Summary only; details per feature: [docs/development/IMPLEMENTATION_NOTES.md](do
 Full list: docs/DECISION_LOG.md (D1–D75), docs/adr/. Most relevant now: D70 autonomous loop with self-merge (docs/development/AUTONOMOUS_LOOP.md); D5/D9 badge = rooms needing attention; D47 `readPosTs` vs `notifiedThroughTs`; D6 visibility rule; D7 private receipts; D17 unthreaded receipts; D65/ADR-0015 pushes never set the badge.
 
 ## 4. Modified files (this push)
-- **FeatureSettings** (`SettingsView.swift`, `ProfileSettings.swift`, `ProfileSettingsView.swift`, `ProfileSettingsTests.swift`):
-  - `BotsSection` disables "Add" for duplicates and supports Return-to-add.
-  - `RecoveryKeySheet` adds a `"Copy key"` button with `"Copied"` feedback next to `Share` and a full-width `.large` `"I've saved it"` CTA.
-  - `AcknowledgementsView` filters once per render and shows `ContentUnavailableView.search(text:)` when no components match.
-  - `ProfileSettingsModel.choosePhoto` keeps the uploaded photo bytes visible if `loadAvatar()` hasn't synced the new URL yet; `ProfileSettingsView` supports Return-to-save on display name and fixes a Swift 6 Sendable capture warning in `PhotosPicker`.
-  - Unit-tested (10/10 tests, zero warnings); `Halo-Debug` built and launched on `iPhone 17` simulator (settings sub-screens not opened interactively).
-- Earlier today (`git log`): timeline wrapping reactions, bubble margin & dismissible send error (`9f7757d`), room list sync indicator FR-7 (`06e3bf5`), sign-in polish + Change server + soft-logout action (`82e337f`), new-pack sticker thumbnails & immediate retry (`5f0c5c0`), room-list honest retry/single-line names/invite avatar (`0f99110`), room info & user profile polish (`0ea5231`), notice/emote menus & edit guard (`6daa0fe`), recovery banner bleed fix (`ba0f93a`).
+- **HaloDesignSystem** (`AvatarCircle.swift`, `AvatarTests.swift`): gave photo-less `AvatarCircle` initials a deterministic soft-tinted 8-color system palette (`avatarColorIndex` via stable FNV-1a hash, rounded semibold letter, neutral fallback for empty/`"?"`, neutral backing for real images). Unit-tested (2/2 tests); seen live on `iPhone 17` simulator (distinct calm mint/green/purple/blue avatars across the room list).
+- Earlier today (`git log`): settings polish + Swift 6 warning fix (`ba3aff3`), timeline wrapping reactions/bubble margin/dismissible send error (`9f7757d`), room list sync indicator FR-7 (`06e3bf5`), sign-in polish + Change server (`82e337f`), new-pack thumbnails & immediate retry (`5f0c5c0`), room-list honest retry/single-line names/invite avatar (`0f99110`), room info & user profile polish (`0ea5231`), notice/emote menus & edit guard (`6daa0fe`), recovery banner bleed fix (`ba0f93a`).
 
 ## 5. Outstanding issues
 Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
