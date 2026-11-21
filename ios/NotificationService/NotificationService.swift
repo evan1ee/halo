@@ -22,7 +22,7 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
         let info = request.content.userInfo
         guard let roomRaw = info["room_id"] as? String, let eventRaw = info["event_id"] as? String,
               let room = try? RoomID(roomRaw), let event = try? EventID(eventRaw) else {
-            deliver(genericWithoutBadge(request.content), outcome: "no-event", metrics: NSEMetrics())  // PUSH_NO_EVENT
+            deliver(silentSuppressedContent(), outcome: "no-event", metrics: NSEMetrics())  // PUSH_NO_EVENT
             return
         }
         // UserNotifications types aren't Sendable; the request is only read by `run`, which delivers exactly once.
@@ -82,8 +82,9 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
                 content.badge = badge.map(NSNumber.init(value:))
                 deliver(content, outcome: outcome, metrics: metrics)
             case .suppressed(let outcome):
-                // Full suppression needs Apple's filtering entitlement (V-PUSH-3 / R-14); deliver generic without badge.
-                deliver(content, outcome: outcome, metrics: metrics)
+                // Empty, silent, passive content (R-14): suppresses delivery completely once Apple's
+                // com.apple.developer.usernotifications.filtering entitlement (V-PUSH-3) is granted.
+                deliver(silentSuppressedContent(), outcome: outcome, metrics: metrics)
             case .fallback(let outcome):
                 deliver(content, outcome: outcome, metrics: metrics)
             }
@@ -96,6 +97,18 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
         let copy = (base.mutableCopy() as? UNMutableNotificationContent) ?? UNMutableNotificationContent()
         copy.badge = nil  // the badge is never taken from a push payload (ADR-0015)
         return copy
+    }
+
+    private func silentSuppressedContent() -> UNMutableNotificationContent {
+        let content = UNMutableNotificationContent()
+        content.title = ""
+        content.subtitle = ""
+        content.body = ""
+        content.sound = nil
+        content.badge = nil
+        content.interruptionLevel = .passive
+        content.relevanceScore = 0
+        return content
     }
 
     private func deliver(_ content: UNNotificationContent, outcome: String, metrics: NSEMetrics) {

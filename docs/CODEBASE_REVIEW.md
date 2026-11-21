@@ -457,9 +457,9 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 | R-11 | P1 | Security/session | NSE token refresh not persisted; delegate can't retrieve before first save | **FIXED:** `RefreshDelegate` seeded on restore/adopt and reads shared Keychain (`KeychainStore.readSync`); NSE persists refreshed tokens synchronously via `persistRefreshedSession` (`KeychainStore.writeSync`); `RefreshDelegateTests` (OIDC/MAS refresh contract waits for MAS in M5) |
 | R-12 | P1 | Session | Restore timeout can leave a late-adopted client and a second client on retry | **FIXED:** single-flight restore + generation guard in `SessionCoordinator` and `MatrixSessionPort`; retry awaits in-flight task, late completion adopts on `.restoreFailed` or discards after `logout`; PS35 |
 | R-13 | P1 | Persistence | Records in `UserDefaults`, non-atomic cross-process RMW | **FIXED:** GRDB `notification_record` (migration v7) + `DarwinSignal` (`one.mbm.halo.db.changed`); PS33 |
-| R-14 | P1 | Notifications | Suppressed/filtered pushes (e.g. encrypted reactions) show "Halo: New message" | Deliver silent content when suppressed; pursue the filtering entitlement (V-PUSH-3) |
+| R-14 | P1 | Notifications | Suppressed/filtered pushes (e.g. encrypted reactions) show "Halo: New message" | **Needs founder (filtering entitlement):** NSE now delivers silent empty passive content (`sound = nil`, `badge = nil`, `.passive`, `relevanceScore = 0`) for `.suppressed` / `no-event`; full suppression on iOS requires founder request for Apple's `com.apple.developer.usernotifications.filtering` entitlement (V-PUSH-3) |
 | R-15 | P2 | Unread | Opening a room clears all its records before anything is seen (vs D6) | **FIXED:** removed blanket `records.clear(room:)` from `TimelineCoordinator.open()`; `ReadStateCoordinator` prunes only records covered by the read position (`notifiedThroughTs` / `localIntentEventID`) once visible; `BadgeCoordinatorTests.openKeepsUntilSeen` |
-| R-16 | P1 | Security | Documented field encryption missing; plaintext drafts/bot text from E2EE rooms | Implement AES-GCM field encryption or record a decision |
+| R-16 | P1 | Security | Documented field encryption missing; plaintext drafts/bot text from E2EE rooms | **Needs founder:** decide whether to implement AES-GCM field encryption using `KeychainItem.haloDatabaseKey` for `draft.body` and `bot_task.title/detail`, or accept plaintext under `completeUntilFirstUserAuthentication` with an ADR |
 | R-17 | P2 | Auth | Login requires native sliding sync though the app uses classic sync | Remove the stale gate (or document why it stays) |
 | R-18 | P2 | Performance | Unfiltered classic sync; 8 s poll | Upstream a filter option in `SyncSettingsV2`; lazy-load members |
 | R-19 | P2 | Performance | Serial per-room FFI fan-out per sync response | One `roomInfo()` per room; bounded parallelism |
@@ -506,10 +506,10 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 
 - **1.1 NSE logic into HaloApplication** — **done** (in PR #50: `NotificationProcessor` in `HaloApplication`, tested over `FakeNotificationFetchPort`).
 - **1.2 Token persistence in the NSE** (R-11) — **done** (`RefreshDelegate` seeded + shared Keychain read/write; `RefreshDelegateTests`; OIDC/MAS refresh contract waits for M5).
-- **1.3 Field encryption** (R-16) or an ADR accepting plaintext with rationale. Verify: DB inspection test.
+- **1.3 Field encryption** (R-16) — **needs founder** (AES-GCM field encryption vs ADR accepting plaintext; recorded in HANDOFF §5).
 - **1.4 Docs realignment** (§12): SYNC_ENGINE/SDK_INTEGRATION for D74, UNREAD_STATE for what is built, ADR-0015 status.
   Verify: `scripts/validate-docs.sh` plus a reviewer read.
-- **1.5 Suppressed notifications** (R-14): silent delivery; request the filtering entitlement.
+- **1.5 Suppressed notifications** (R-14) — **needs founder (entitlement)**: silent empty passive delivery implemented in NSE; Apple filtering entitlement request (`com.apple.developer.usernotifications.filtering`, V-PUSH-3) recorded in HANDOFF §5.
 
 ### Phase 2 — Performance and scalability
 
