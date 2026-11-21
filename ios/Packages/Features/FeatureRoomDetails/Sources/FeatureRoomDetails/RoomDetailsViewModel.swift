@@ -66,6 +66,18 @@ public final class RoomDetailsViewModel: Identifiable {
         } catch { content = .failed(Self.text(error)) }
     }
 
+    /// Reads the details and members again without the loading screen (pull to refresh), so permissions that reached the SDK
+    /// after the sheet opened show up (a just-created room). A failure keeps what is shown and reports it.
+    public func refresh() async {
+        guard case .loaded = content else { return await load() }
+        do throws(HaloError) {
+            let details = try await port.details(room)
+            let members = try await port.members(room, limit: requestedMembers)
+            content = .loaded(details, members: members)
+            actionError = nil
+        } catch { actionError = Self.text(error) }
+    }
+
     /// `true` when the last load returned as many members as asked for, so there may be more.
     public var hasMoreMembers: Bool {
         guard case .loaded(_, let members) = content else { return false }

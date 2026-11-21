@@ -64,6 +64,11 @@ public struct RoomDetailsView: View {
     }
 
     private func list(_ details: RoomDetails, _ members: [RoomMemberInfo]) -> some View {
+        listBody(details, members)
+            .refreshable { await model.refresh() }
+    }
+
+    private func listBody(_ details: RoomDetails, _ members: [RoomMemberInfo]) -> some View {
         List {
             Section {
                 VStack(spacing: 8) {

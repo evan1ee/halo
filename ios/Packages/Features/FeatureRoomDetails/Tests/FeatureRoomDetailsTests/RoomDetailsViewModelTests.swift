@@ -30,6 +30,20 @@ struct RoomDetailsViewModelTests {
         #expect(members[1].title == "@b:x.org")
     }
 
+    @Test("refresh re-reads quietly: new data shows without a loading state, a failure keeps what is shown and reports it")
+    func refreshing() async throws {
+        let (port, model, id) = try fixture()
+        await model.load()
+        try await port.setNotificationMode(.mute, in: id)
+        await model.refresh()
+        guard case .loaded(let details, _) = model.content else { Issue.record("not loaded"); return }
+        #expect(details.notificationMode == .mute && model.actionError == nil)
+        port.fail(with: .network(retryable: true))
+        await model.refresh()
+        guard case .loaded = model.content else { Issue.record("lost the content"); return }
+        #expect(model.actionError != nil)
+    }
+
     @Test("a failing load shows a message")
     func failedLoad() async throws {
         let (port, model, _) = try fixture()
