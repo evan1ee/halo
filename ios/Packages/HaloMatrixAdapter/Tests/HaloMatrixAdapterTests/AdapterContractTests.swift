@@ -128,13 +128,18 @@ struct AdapterContractTests {
         let timeline = try await MatrixTimelinePort(session: session).open(room: room)
         let stream = timeline.items()
         try await timeline.sendSticker(pack.stickers[1])
+        // A pack entry without `info` (allowed by MSC2545) must still arrive as a sticker, not as an unsupported event.
+        let bare = pack.stickers[1]
+        try await timeline.sendSticker(Sticker(pack: bare.pack, shortcode: bare.shortcode, body: "Bare wave", url: bare.url, info: nil))
         let seen: Bool = try await within(seconds: 60) {
             var items: [HaloDomain.TimelineItem] = []
+            var found: Set<String> = []
             for await diff in stream {
                 try ListReducer.apply(diff, to: &items)
                 for item in items {
-                    if case .event(let event) = item.content, case .sticker(let body, _) = event.kind, body == "Waving" { return true }
+                    if case .event(let event) = item.content, case .sticker(let body, _) = event.kind { found.insert(body) }
                 }
+                if found.isSuperset(of: ["Waving", "Bare wave"]) { return true }
             }
             return false
         }

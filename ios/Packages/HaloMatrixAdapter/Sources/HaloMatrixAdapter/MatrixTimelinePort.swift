@@ -211,7 +211,15 @@ final class MatrixTimelineSession: TimelineSession {
     }
 
     func sendSticker(_ sticker: Sticker) async throws(HaloError) {
-        var content: [String: Any] = ["body": sticker.eventBody, "url": sticker.url]
+        do {
+            // Not through the send queue: `send_raw` sends at once and fails when offline.
+            _ = try await room.sendRaw(eventType: "m.sticker", content: try Self.stickerContent(sticker), requestConfigOverride: nil)
+        } catch { throw ErrorMapper.map(error) }
+    }
+
+    /// The `m.sticker` content as JSON. `info` is always present, empty when the pack gives no details: the spec requires it, and
+    /// the SDK (Ruma) refuses a sticker without it, which then shows as an unsupported event for everyone using it.
+    static func stickerContent(_ sticker: Sticker) throws -> String {
         var info: [String: Any] = [:]
         if let i = sticker.info {
             if let w = i.width { info["w"] = w }
@@ -219,12 +227,8 @@ final class MatrixTimelineSession: TimelineSession {
             if let m = i.mimeType { info["mimetype"] = m }
             if let size = i.size { info["size"] = size }
         }
-        if !info.isEmpty { content["info"] = info }
-        do {
-            let data = try JSONSerialization.data(withJSONObject: content, options: [.sortedKeys])
-            // Not through the send queue: `send_raw` sends at once and fails when offline.
-            _ = try await room.sendRaw(eventType: "m.sticker", content: String(decoding: data, as: UTF8.self), requestConfigOverride: nil)
-        } catch { throw ErrorMapper.map(error) }
+        let content: [String: Any] = ["body": sticker.eventBody, "url": sticker.url, "info": info]
+        return String(decoding: try JSONSerialization.data(withJSONObject: content, options: [.sortedKeys]), as: UTF8.self)
     }
 
     func sendImage(_ image: OutgoingImage) async throws(HaloError) {
