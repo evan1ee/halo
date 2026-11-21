@@ -853,11 +853,32 @@ public final class TimelineViewModel {
         return row
     }
 
+    /// The day divider, the way Messages titles days: "Today", "Yesterday", the weekday for the past week,
+    /// then the day and month this year and the full date before that.
+    static func dayTitle(_ date: Date, now: Date, formatter: DateFormatter) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = formatter.timeZone
+        calendar.locale = formatter.locale
+        if calendar.isDate(date, inSameDayAs: now) { return "Today" }
+        let startOfToday = calendar.startOfDay(for: now)
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: startOfToday), calendar.isDate(date, inSameDayAs: yesterday) {
+            return "Yesterday"
+        }
+        let style = Date.FormatStyle(locale: formatter.locale, calendar: calendar, timeZone: formatter.timeZone)
+        if let weekAgo = calendar.date(byAdding: .day, value: -6, to: startOfToday), date >= weekAgo, date < startOfToday {
+            return date.formatted(style.weekday(.wide))
+        }
+        if calendar.isDate(date, equalTo: now, toGranularity: .year) {
+            return date.formatted(style.weekday(.abbreviated).day().month(.abbreviated))
+        }
+        return formatter.string(from: date)
+    }
+
     private func baseRow(_ item: TimelineItem) -> TimelineRow {
         let id = item.id.rawValue
         switch item.content {
         case .virtual(.dateDivider(let date)):
-            return TimelineRow(id: id, style: .divider, sender: nil, text: dateFormatter.string(from: date))
+            return TimelineRow(id: id, style: .divider, sender: nil, text: Self.dayTitle(date, now: Date(), formatter: dateFormatter))
         case .virtual(.readMarker):
             return TimelineRow(id: id, style: .marker, sender: nil, text: "New messages")
         case .virtual(.timelineStart):

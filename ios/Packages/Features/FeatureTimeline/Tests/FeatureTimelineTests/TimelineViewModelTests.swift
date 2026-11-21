@@ -126,6 +126,21 @@ struct TimelineViewModelTests {
         #expect(model.row(divider).text == "Jan 1, 1970")
     }
 
+    @Test("day dividers read Today, Yesterday, a weekday, then the date")
+    func dayTitles() {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.timeZone = TimeZone(identifier: "UTC")!
+        formatter.dateStyle = .medium
+        let now = Date(timeIntervalSince1970: 1_795_255_200) // Saturday 21 Nov 2026, 10:00 UTC
+        func title(daysAgo: Double) -> String { TimelineViewModel.dayTitle(now.addingTimeInterval(-daysAgo * 86_400), now: now, formatter: formatter) }
+        #expect(title(daysAgo: 0) == "Today")
+        #expect(title(daysAgo: 1) == "Yesterday")
+        #expect(title(daysAgo: 3) == "Wednesday")
+        #expect(title(daysAgo: 10) == "Wed, Nov 11")
+        #expect(title(daysAgo: 400) == "Oct 17, 2025")
+    }
+
     @Test("statuses map to opening, live and failed content")
     func statuses() throws {
         let model = try model()
