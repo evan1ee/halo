@@ -43,9 +43,11 @@ public actor SessionCoordinator {
     /// How long looking up a homeserver may take. Without a limit a host that never answers (for example `localhost:8008` over
     /// HTTPS against a plain-HTTP server) leaves the sign-in screen spinning forever.
     private let discoveryTimeout: Duration
+    private let restoreTimeout: Duration
 
-    public init(port: any SessionPort, keychain: any KeychainPort, deviceDisplayName: String = "Halo (iPhone)", discoveryTimeout: Duration = .seconds(20)) {
+    public init(port: any SessionPort, keychain: any KeychainPort, deviceDisplayName: String = "Halo (iPhone)", discoveryTimeout: Duration = .seconds(20), restoreTimeout: Duration = .seconds(30)) {
         self.discoveryTimeout = discoveryTimeout
+        self.restoreTimeout = restoreTimeout
         self.port = port
         self.keychain = keychain
         self.deviceDisplayName = deviceDisplayName
@@ -190,7 +192,7 @@ public actor SessionCoordinator {
             return
         }
         do {
-            try await port.restore(session)
+            try await restoreWithTimeout(session)
             becomeReady(session.userID)
         } catch .unauthorized(soft: true) {
             state = .softLoggedOut(session.userID)
@@ -199,6 +201,25 @@ public actor SessionCoordinator {
         } catch {
             state = .restoreFailed(error)
         }
+    }
+
+    /// Restoring builds the SDK client, which can wait on an unreachable homeserver for minutes. Give up after
+    /// `restoreTimeout` so the app shows "couldn't be restored" with Try again / Sign out instead of loading forever.
+    private func restoreWithTimeout(_ session: StoredSession) async throws(HaloError) {
+        let port = self.port
+        let timeout = restoreTimeout
+        // Unstructured tasks: the SDK call may ignore cancellation, and a task group would wait for it.
+        let result: Result<Void, HaloError> = await withCheckedContinuation { continuation in
+            let once = ResumeOnce(continuation)
+            Task {
+                do throws(HaloError) { try await port.restore(session); once.resume(.success(())) } catch { once.resume(.failure(error)) }
+            }
+            Task {
+                try? await Task.sleep(for: timeout)
+                once.resume(.failure(.network(retryable: true)))
+            }
+        }
+        try result.get()
     }
 
     private func becomeReady(_ user: UserID) {
@@ -251,5 +272,21 @@ public actor SessionCoordinator {
 
     private func decode(_ data: Data) throws(HaloError) -> StoredSession {
         do { return try JSONDecoder().decode(StoredSession.self, from: data) } catch { throw .storage(.corrupted) }
+    }
+}
+
+/// Resumes a continuation exactly once; later calls are ignored.
+private final class ResumeOnce: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Result<Void, HaloError>, Never>?
+
+    init(_ continuation: CheckedContinuation<Result<Void, HaloError>, Never>) { self.continuation = continuation }
+
+    func resume(_ result: Result<Void, HaloError>) {
+        lock.lock()
+        let pending = continuation
+        continuation = nil
+        lock.unlock()
+        pending?.resume(returning: result)
     }
 }

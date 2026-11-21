@@ -169,6 +169,16 @@ struct SessionCoordinatorTests {
         #expect(keychain.stored(.session) != nil)
     }
 
+    @Test("a homeserver that never answers ends the restore with a retryable error instead of loading forever, and keeps the session")
+    func restoreTimesOut() async throws {
+        let (_, port, keychain) = try await signedIn()
+        port.delayRestore(by: .seconds(30))
+        let relaunched = SessionCoordinator(port: port, keychain: keychain, restoreTimeout: .milliseconds(100))
+        await relaunched.start()
+        #expect(await relaunched.state == .restoreFailed(.network(retryable: true)))
+        #expect(keychain.stored(.session) != nil)
+    }
+
     @Test("refreshed tokens are persisted at once (FR-7)")
     func tokenRefresh() async throws {
         let (coordinator, port, keychain) = try await signedIn()

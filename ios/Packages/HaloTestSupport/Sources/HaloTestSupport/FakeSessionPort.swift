@@ -24,6 +24,7 @@ public final class FakeSessionPort: SessionPort {
         var loginDetailsDelay: Duration?
         var continuations: [UUID: AsyncStream<SessionEvent>.Continuation] = [:]
         var calls: [String] = []
+        var restoreDelay: Duration?
     }
 
     private let state = Mutex(State())
@@ -55,6 +56,9 @@ public final class FakeSessionPort: SessionPort {
     /// `loginDetails` takes this long before it answers (a host that is slow or never answers).
     public func delayLoginDetails(by delay: Duration) { state.withLock { $0.loginDetailsDelay = delay } }
 
+    /// `restore` takes this long before it answers (an unreachable homeserver).
+    public func delayRestore(by delay: Duration) { state.withLock { $0.restoreDelay = delay } }
+
     public func loginDetails(server: String) async throws(HaloError) -> ServerDetails {
         try begin("loginDetails")
         if let delay = state.withLock({ $0.loginDetailsDelay }) { try? await Task.sleep(for: delay) }
@@ -81,6 +85,7 @@ public final class FakeSessionPort: SessionPort {
 
     public func restore(_ session: StoredSession) async throws(HaloError) {
         try begin("restore")
+        if let delay = state.withLock({ $0.restoreDelay }) { try? await Task.sleep(for: delay) }
         let (revoked, soft) = state.withLock { ($0.revokedTokens.contains(session.payload), $0.softLoggedOutTokens.contains(session.payload)) }
         if revoked { throw .unauthorized(soft: false) }
         if soft { throw .unauthorized(soft: true) }
