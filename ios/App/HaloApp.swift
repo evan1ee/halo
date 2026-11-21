@@ -68,6 +68,7 @@ private struct RootView: View {
                                     version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?",
                                     build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?",
                                     onPrivateReceiptsChange: { value in Task { await root.receipts.setPrivateReceipts(value) } },
+                                    saveBotSenders: { await root.saveBotSenders($0) },
                                     loadMediaPreviews: { await root.mediaPreviewChoice() },
                                     saveMediaPreviews: { await root.setMediaPreviewChoice($0) },
                                     profile: root.profileSettings(),

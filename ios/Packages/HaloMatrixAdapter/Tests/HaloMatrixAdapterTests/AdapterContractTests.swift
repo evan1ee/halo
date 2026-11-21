@@ -531,6 +531,29 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
+    @Test("Bot allowlist syncs via one.mbm.halo.bot_allowlist account data and restores original", .enabled(if: env["HALO_DEV_SERVER"] != nil))
+    func botAllowlist() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
+            on: details)
+        try await MatrixSyncPort(session: session).start()
+        let allowlist = MatrixBotAllowlistPort(session: session)
+        let original = (try? await allowlist.load()) ?? BotAllowlist()
+        let testBot = try UserID("@contract-bot:halo.localhost")
+        let updated = BotAllowlist(bots: [testBot])
+        try await allowlist.save(updated)
+        var seen = try? await allowlist.load()
+        for _ in 0..<30 where seen != updated {
+            try await Task.sleep(for: .seconds(1))
+            seen = try? await allowlist.load()
+        }
+        #expect(seen == updated)
+        try await allowlist.save(original)
+        try await session.logout()
+    }
+
     @Test("Mentions, members and unknown local echoes (uses HALO_DEV_STICKER_ROOM as a scratch room)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
     func mentionsAndEchoes() async throws {
         let session = port()

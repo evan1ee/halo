@@ -25,8 +25,7 @@ public struct AppPreferences: Sendable {
         nonmutating set { box.defaults.set(newValue, forKey: Self.sendTypingNoticesKey) }
     }
 
-    /// User IDs whose messages may render as bot cards (Settings → Bots). Kept on this device for now; the spec's account-data sync
-    /// (`one.mbm.halo.bot_allowlist`) is not built.
+    /// Local cache of user IDs whose recognised messages render as bot cards (Settings → Bots; synced via `one.mbm.halo.bot_allowlist`).
     public var botSenders: [String] {
         get { box.defaults.stringArray(forKey: Self.botSendersKey) ?? [] }
         nonmutating set { box.defaults.set(newValue, forKey: Self.botSendersKey) }

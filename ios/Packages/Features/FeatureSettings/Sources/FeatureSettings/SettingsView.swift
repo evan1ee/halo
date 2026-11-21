@@ -14,6 +14,7 @@ public struct SettingsView: View {
     private let onSignOut: () -> Void
     private let preferences: AppPreferences
     private let onPrivateReceiptsChange: (Bool) -> Void
+    private let saveBotSenders: (@Sendable ([String]) async -> Bool)?
     private let loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)?
     private let saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)?
     private let diagnostics: (@Sendable () async -> String)?
@@ -44,6 +45,7 @@ public struct SettingsView: View {
     public init(
         version: String, build: String, preferences: AppPreferences = AppPreferences(),
         onPrivateReceiptsChange: @escaping (Bool) -> Void = { _ in },
+        saveBotSenders: (@Sendable ([String]) async -> Bool)? = nil,
         loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)? = nil,
         saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)? = nil,
         profile: ProfileSettingsActions? = nil, diagnostics: (@Sendable () async -> String)? = nil,
@@ -68,6 +70,7 @@ public struct SettingsView: View {
         self.build = build
         self.preferences = preferences
         self.onPrivateReceiptsChange = onPrivateReceiptsChange
+        self.saveBotSenders = saveBotSenders
         self.onSignOut = onSignOut
         _privateReceipts = State(initialValue: preferences.privateReceipts)
         _sendTypingNotices = State(initialValue: preferences.sendTypingNotices)
@@ -104,7 +107,7 @@ public struct SettingsView: View {
                 }
                 .accessibilityIdentifier("appearance")
             }
-            BotsSection(preferences: preferences)
+            BotsSection(preferences: preferences, sync: saveBotSenders)
             if loadMediaPreviews != nil, saveMediaPreviews != nil {
                 Section {
                     Picker("Show photos", selection: $mediaPreviews) {
@@ -241,14 +244,17 @@ public struct SettingsView: View {
     }
 }
 
-/// Settings → Bots: the accounts whose recognised messages show as cards.
+/// Settings → Bots: the accounts whose recognised messages show as cards (synced via `one.mbm.halo.bot_allowlist`).
 private struct BotsSection: View {
     let preferences: AppPreferences
+    let sync: (@Sendable ([String]) async -> Bool)?
     @State private var senders: [String]
     @State private var newBot = ""
+    @State private var syncFailed = false
 
-    init(preferences: AppPreferences) {
+    init(preferences: AppPreferences, sync: (@Sendable ([String]) async -> Bool)? = nil) {
         self.preferences = preferences
+        self.sync = sync
         _senders = State(initialValue: preferences.botSenders)
     }
 
@@ -261,7 +267,7 @@ private struct BotsSection: View {
             ForEach(senders, id: \.self) { Text($0).font(.callout) }
                 .onDelete { offsets in
                     senders.remove(atOffsets: offsets)
-                    preferences.botSenders = senders
+                    persist(senders)
                 }
             HStack {
                 field
@@ -270,7 +276,9 @@ private struct BotsSection: View {
         } header: {
             Text("Bots")
         } footer: {
-            Text("Messages from these accounts that Halo recognises are shown as cards, with the original one tap away. Applies to rooms you open from now on.")
+            Text(syncFailed
+                ? "Saved on this device, but couldn't sync to your account. Check your connection and try again."
+                : "Messages from these accounts that Halo recognises are shown as cards, with the original one tap away. Synced across your Halo devices.")
         }
     }
 
@@ -292,8 +300,14 @@ private struct BotsSection: View {
     private func add() {
         guard canAdd else { return }
         senders.append(trimmed)
-        preferences.botSenders = senders
+        persist(senders)
         newBot = ""
+    }
+
+    private func persist(_ list: [String]) {
+        preferences.botSenders = list
+        guard let sync else { return }
+        Task { syncFailed = !(await sync(list)) }
     }
 }
 

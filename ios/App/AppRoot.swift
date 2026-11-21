@@ -37,6 +37,7 @@ final class AppRoot {
     private let roomPort: MatrixRoomPort
     private let chatCreation: MatrixChatCreationPort
     private let profilePort: MatrixProfilePort
+    private let botAllowlistPort: MatrixBotAllowlistPort
     private let roomCoordinator: RoomListCoordinator
     /// The signed-in account, once the session is ready (kept out of "New chat" results).
     private var signedInUser: UserID?
@@ -57,6 +58,7 @@ final class AppRoot {
         self.sessionCoordinator = sessionCoordinator
         let profilePort = MatrixProfilePort(session: session)
         self.profilePort = profilePort
+        botAllowlistPort = MatrixBotAllowlistPort(session: session)
         let roomCoordinator = RoomListCoordinator(port: MatrixRoomListPort(session: session), loadsAllPages: true, hiddenRooms: MatrixHiddenRoomsPort(session: session), profiles: profilePort)
         self.roomCoordinator = roomCoordinator
         let suite = "group.\(HaloShared.namespace())"
@@ -126,6 +128,7 @@ final class AppRoot {
                 } catch {
                     // Without a database, receipts and drafts still work from memory; there is nothing to restore.
                 }
+                await syncBotAllowlist()
             case .signedOut:
                 guard current != nil else { continue }
                 current = nil
@@ -145,6 +148,30 @@ final class AppRoot {
         await drafts.reset()
         await stickers.reset()
         await timelinePort.dropWarm()
+        AppPreferences().botSenders = []
+    }
+
+    /// Loads `one.mbm.halo.bot_allowlist` from account data into `AppPreferences`; if the server has none yet and
+    /// this device already had entries, seeds the server once.
+    private func syncBotAllowlist() async {
+        do {
+            if let remote = try await botAllowlistPort.load() {
+                AppPreferences().botSenders = remote.bots.map(\.rawValue)
+                await roomList.refresh()
+            } else {
+                let local = AppPreferences().botSenders.compactMap { try? UserID($0) }
+                if !local.isEmpty { try? await botAllowlistPort.save(BotAllowlist(bots: local)) }
+            }
+        } catch {
+            // Keep the local cache until the next launch or edit.
+        }
+    }
+
+    /// Syncs an updated bot allowlist to `one.mbm.halo.bot_allowlist` account data and refreshes room previews.
+    func saveBotSenders(_ rawIDs: [String]) async -> Bool {
+        let allowlist = BotAllowlist(bots: rawIDs.compactMap { try? UserID($0) })
+        await roomList.refresh()
+        do { try await botAllowlistPort.save(allowlist); return true } catch { return false }
     }
 
     private static func pushConfiguration() -> (appID: String, gateway: URL)? {
