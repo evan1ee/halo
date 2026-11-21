@@ -90,6 +90,9 @@ public struct HaloDatabase: Sendable {
                 )
                 """)
         }
+        migrator.registerMigration("v6-bot-task-source-redacted") { db in
+            try db.execute(sql: "ALTER TABLE bot_task ADD COLUMN source_redacted INTEGER NOT NULL DEFAULT 0")
+        }
         return migrator
     }
 }

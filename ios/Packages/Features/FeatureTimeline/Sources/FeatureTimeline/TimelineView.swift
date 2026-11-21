@@ -321,6 +321,7 @@ private struct RowView: View {
     let row: TimelineRow
     let model: TimelineViewModel
     @State private var showingSource = false
+    @State private var showingReaders = false
     /// A sent message is removed for everyone and can't be brought back: ask first.
     @State private var confirmingDelete = false
     @State private var showingOriginal = false
@@ -418,7 +419,7 @@ private struct RowView: View {
                         } else if row.endsRun, let time = row.time {
                             Text(time).font(.caption2).foregroundStyle(.secondary)
                         }
-                        if row.status == nil, !row.readers.isEmpty { ReceiptAvatars(row: row, model: model) }
+                        if row.status == nil, !row.readers.isEmpty { Button { showingReaders = true } label: { ReceiptAvatars(row: row, model: model) }.buttonStyle(.plain) }
                         reactionBar
                     }
                     .frame(maxWidth: .infinity, alignment: row.style == .ownMessage ? .trailing : .leading)
@@ -467,6 +468,7 @@ private struct RowView: View {
                 Text(row.text).font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity)
             }
         }
+        .sheet(isPresented: $showingReaders) { ReadersView(row: row, model: model) }
         .sheet(isPresented: $showingSource) { if let source = row.source { MessageSourceView(source: source) } }
         .confirmationDialog("Delete this message for everyone?", isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button("Delete", role: .destructive) { Task { await model.delete(row) } }
@@ -774,6 +776,28 @@ private struct SenderAvatar: View {
             }
     }
 }
+/// Everyone who has read up to a message (TIMELINE FR-6), behind a tap on the avatars.
+private struct ReadersView: View {
+    let row: TimelineRow
+    let model: TimelineViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List(row.allReaders) { reader in
+                HStack(spacing: 12) {
+                    SenderAvatar(name: reader.name, ref: reader.avatar, model: model, size: 32)
+                    Text(reader.name)
+                }
+                .accessibilityElement(children: .combine)
+            }
+            .navigationTitle("Seen by")
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+        .presentationDetents([.medium])
+    }
+}
+
 /// Up to three small pictures of the people who have read up to this message, and "+N" for the rest (TIMELINE FR-6).
 private struct ReceiptAvatars: View {
     let row: TimelineRow

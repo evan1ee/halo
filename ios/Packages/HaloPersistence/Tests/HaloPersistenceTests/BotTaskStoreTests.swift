@@ -63,4 +63,21 @@ struct BotTaskStoreTests {
         #expect(try await a.entries().map(\.key.id) == ["new"])
         #expect(try await b.entries().count == 1)
     }
+
+    @Test("a deleted source stays marked across later updates, and a new task under the same number (new source message) clears it")
+    func redactedSource() async throws {
+        let store = BotTaskStore(database: try database(), account: try UserID("@a:x.org"))
+        var e = try entry("1", source: "$old", at: 10)
+        try await store.upsert([e])
+        e.sourceRedacted = true
+        try await store.upsert([e])
+        // A later list-only update (no source, flag not set) keeps the mark.
+        try await store.upsert([try entry("1", title: "later", source: nil, at: 20)])
+        var stored = try await store.entries()
+        #expect(stored[0].sourceRedacted && stored[0].sourceEventID?.rawValue == "$old" && stored[0].title == "later")
+        // The bot reuses the number for a new task with a new source message.
+        try await store.upsert([try entry("1", title: "again", source: "$new", at: 30)])
+        stored = try await store.entries()
+        #expect(!stored[0].sourceRedacted && stored[0].sourceEventID?.rawValue == "$new")
+    }
 }

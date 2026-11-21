@@ -111,6 +111,7 @@ public struct BotActivityView: View {
             if let detail = item.detail, !detail.isEmpty { Text(detail).font(.subheadline).foregroundStyle(.secondary) }
             Text("\(item.roomName) · \(item.botName) · as of \(item.asOf.formatted(.relative(presentation: .named)))")
                 .font(.caption).foregroundStyle(.secondary)
+            if item.sourceDeleted { Text("Its message was deleted").font(.caption).foregroundStyle(.secondary) }
             if let status = tickStatus(item.tickState) { Text(status).font(.caption).foregroundStyle(.orange) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

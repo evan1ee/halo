@@ -95,7 +95,8 @@ each into items here when M5 is done.
 **M7 Bot Activity** (exit: AC-A1–A3)
 - [x] Slice 1 (branch `feat/m7-bot-activity`): `BotTaskDerivation`, `bot_task` store (migration v5), `BotActivityCoordinator` fed by open timelines, `FeatureBotActivity` sheet with sections and room/bot filters, Rebuild list; unit-tested in every layer, seen in the simulator with the peer account as a bot (`infra/dev/send-sample-events.py`).
 - [x] Slice 2 (on `main`): 90-day pruning when an account is attached (`BotTaskPort.prune`), open at the source message (`TimelineViewModel.initialEvent`/`jump(toEvent:)`: back-paginates up to 10 pages, then scrolls and tints; seen in the simulator: Activity → "Pay rent" → the `Task #7 added` card), confirmations by title prefer the task created in the room (found on screen: two tasks named alike made `Marked task as done` ambiguous).
-- [ ] Indexing of rooms that aren't open (sync-time events), edit/redaction handling of the source.
+- [x] Slice 4 (on `main`): a deleted source message — `BotTaskEntry.sourceRedacted` (migration v6, sticky until the bot creates a new task under the number), set by `BotActivityCoordinator` when the open timeline shows the creating event as redacted; Activity says "Its message was deleted", offers no tick and no jump. Seen in the simulator. Edits need no work (the index reads the current body).
+- [ ] Indexing of rooms that aren't open (sync-time events).
 - [x] Slice 3 (on `main`): tick from the tab — `TimelineSession.addReaction` (idempotent 👍, contract-checked against the fake and `infra/dev`), `BotActionCoordinator` (short-lived timeline, confirmation through the index, 2-minute timeout, honest failed/no-response states), tick circle in Activity; seen in the simulator with a scripted bot (👍 on the server, spinner, completed only after the bot's `Marked task as done`). Not built: `bot_action` table (pending survives no restart), other reactions (👎 😝 🎉).
 
 ## Milestones

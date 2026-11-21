@@ -20,6 +20,8 @@ public final class BotActivityViewModel: Identifiable {
         /// When the newest bot message about it was sent ("as of").
         public let asOf: Date
         public let sourceEventID: EventID?
+        /// The message that created it was deleted, so there is nothing to tick or to open at.
+        public let sourceDeleted: Bool
         /// An open task created in a message Halo has seen, with ticking available: the bot's own number for it isn't enough
         /// (BOT_MESSAGES FR-3: never the list, never a guess).
         public let canTick: Bool
@@ -108,8 +110,8 @@ public final class BotActivityViewModel: Identifiable {
             guard botFilter == nil || entry.key.bot == botFilter else { continue }
             let item = Item(
                 key: entry.key, title: entry.title ?? "Task #\(entry.key.id)", roomName: name(of: entry.key.room), botName: Self.botName(entry.key.bot),
-                detail: entry.detail, asOf: entry.asOf, sourceEventID: entry.sourceEventID,
-                canTick: actions != nil && entry.key.kind == .todo && entry.status == .open && entry.sourceEventID != nil,
+                detail: entry.detail, asOf: entry.asOf, sourceEventID: entry.sourceRedacted ? nil : entry.sourceEventID, sourceDeleted: entry.sourceRedacted,
+                canTick: actions != nil && entry.key.kind == .todo && entry.status == .open && entry.sourceEventID != nil && !entry.sourceRedacted,
                 tickState: actionStates[entry.key])
             switch (entry.status, entry.key.kind) {
             case (.open, .todo): result.open.append(item)

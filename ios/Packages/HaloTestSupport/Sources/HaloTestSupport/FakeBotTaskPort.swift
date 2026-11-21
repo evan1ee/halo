@@ -23,6 +23,9 @@ public final class FakeBotTaskPort: BotTaskPort {
                     guard entry.asOf >= stored.asOf else { continue }
                     var merged = entry
                     if merged.sourceEventID == nil { merged.sourceEventID = stored.sourceEventID }
+                    // Sticky, unless the bot created a new task under the same number (a different source message).
+                    if let source = entry.sourceEventID, source != stored.sourceEventID { merged.sourceRedacted = entry.sourceRedacted }
+                    else { merged.sourceRedacted = entry.sourceRedacted || stored.sourceRedacted }
                     state.entries[entry.key] = merged
                 } else {
                     state.entries[entry.key] = entry

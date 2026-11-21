@@ -64,8 +64,10 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     public var isEdited = false
     /// How many other people's newest read receipt is on this own message (TIMELINE FR-6); 0 for anything else.
     public var seenBy = 0
-    /// The first three of them, for the avatars under the message; the name is theirs if they wrote in this timeline, else their Matrix ID's name part.
-    public var readers: [Reader] = []
+    /// All of them, for the list behind the avatars; the name is theirs if they wrote in this timeline, else their Matrix ID's name part.
+    public var allReaders: [Reader] = []
+    /// The first three, for the avatars under the message.
+    public var readers: [Reader] { Array(allReaders.prefix(3)) }
     /// "Seen" / "Seen by 3" for the footer of an own message someone has read; `nil` otherwise.
     public var seenLabel: String? { seenBy == 0 ? nil : seenBy == 1 ? "Seen" : "Seen by \(seenBy)" }
 
@@ -1044,8 +1046,6 @@ public final class TimelineViewModel {
         .init(sender: event.sender?.rawValue, eventID: event.eventID?.rawValue, body: body, formattedBody: event.formattedBody)
     }
 
-    static let maxReaderAvatars = 3
-
     /// People seen in this timeline (their latest display name and picture), so receipts can show them.
     private var readerProfiles: [UserID: (name: String?, avatar: MediaRef?)] = [:]
 
@@ -1064,7 +1064,7 @@ public final class TimelineViewModel {
             }
             if event.isOwn, row.style == .ownMessage, event.sendState == .sent {
                 row.seenBy = event.readBy.count
-                row.readers = event.readBy.prefix(Self.maxReaderAvatars).map { user in
+                row.allReaders = event.readBy.map { user in
                     let known = readerProfiles[user]
                     return TimelineRow.Reader(id: user.rawValue, name: known?.name ?? Self.localpart(user), avatar: known?.avatar)
                 }

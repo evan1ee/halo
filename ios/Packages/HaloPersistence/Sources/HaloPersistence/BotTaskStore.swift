@@ -28,17 +28,21 @@ public struct BotTaskStore: BotTaskPort {
                     // Newer-or-equal `as_of` wins (so a rebuilt entry replaces its own old copy); a missing source keeps the stored one.
                     try db.execute(
                         sql: """
-                            INSERT INTO bot_task (account, room_id, bot_sender, entity_type, entity_id, source_event_id, title, detail, status, as_of_ts, updated_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            INSERT INTO bot_task (account, room_id, bot_sender, entity_type, entity_id, source_event_id, title, detail, status, as_of_ts, updated_at, source_redacted)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             ON CONFLICT (account, room_id, bot_sender, entity_type, entity_id) DO UPDATE SET
                               source_event_id = COALESCE(excluded.source_event_id, bot_task.source_event_id),
                               title = excluded.title, detail = excluded.detail, status = excluded.status,
-                              as_of_ts = excluded.as_of_ts, updated_at = excluded.updated_at
+                              as_of_ts = excluded.as_of_ts, updated_at = excluded.updated_at,
+                              -- sticky, unless the bot created a new task under the same number (a different source message)
+                              source_redacted = CASE
+                                WHEN excluded.source_event_id IS NOT NULL AND excluded.source_event_id != COALESCE(bot_task.source_event_id, '') THEN 0
+                                ELSE MAX(excluded.source_redacted, bot_task.source_redacted) END
                             WHERE excluded.as_of_ts >= bot_task.as_of_ts
                             """,
                         arguments: [
                             account, entry.key.room.rawValue, entry.key.bot, entry.key.kind.rawValue, entry.key.id,
-                            entry.sourceEventID?.rawValue, entry.title, entry.detail, entry.status.rawValue, Self.millis(entry.asOf), stamp,
+                            entry.sourceEventID?.rawValue, entry.title, entry.detail, entry.status.rawValue, Self.millis(entry.asOf), stamp, entry.sourceRedacted ? 1 : 0,
                         ])
                 }
             }
@@ -58,7 +62,8 @@ public struct BotTaskStore: BotTaskPort {
                         return BotTaskEntry(
                             key: .init(room: room, bot: row["bot_sender"], kind: kind, id: row["entity_id"]), title: row["title"], status: status,
                             sourceEventID: source.flatMap { try? EventID($0) },
-                            asOf: Date(timeIntervalSince1970: Double(row["as_of_ts"] as Int64) / 1000), detail: row["detail"])
+                            asOf: Date(timeIntervalSince1970: Double(row["as_of_ts"] as Int64) / 1000), detail: row["detail"],
+                            sourceRedacted: (row["source_redacted"] as Int64) != 0)
                     }
             }
         } catch { throw .storage(.corrupted) }

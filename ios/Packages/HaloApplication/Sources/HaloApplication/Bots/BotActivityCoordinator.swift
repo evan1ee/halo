@@ -35,6 +35,7 @@ public actor BotActivityCoordinator {
     /// nothing changed.
     public func observe(room: RoomID, items: [TimelineItem], botSenders: Set<String>) async {
         guard let port, !botSenders.isEmpty else { return }
+        await markDeletedSources(room: room, items: items, port: port)
         var observations: [BotObservation] = []
         for item in items {
             guard case .event(let event) = item.content, let sender = event.sender?.rawValue, botSenders.contains(sender),
@@ -51,6 +52,19 @@ public actor BotActivityCoordinator {
             // The index is derived: a failed write is retried by the next snapshot of the same timeline.
             log?.warning("bot task index write failed", error: error)
         }
+    }
+
+    /// A task whose creating message was deleted keeps its entry but can't be ticked or opened at (BOT_ACTIVITY FR-1, redaction).
+    private func markDeletedSources(room: RoomID, items: [TimelineItem], port: any BotTaskPort) async {
+        var redacted: Set<EventID> = []
+        for item in items {
+            if case .event(let event) = item.content, case .redacted = event.kind, let id = event.eventID { redacted.insert(id) }
+        }
+        guard !redacted.isEmpty, let stored = try? await port.entries() else { return }
+        var changed = stored.filter { $0.key.room == room && !$0.sourceRedacted && $0.sourceEventID.map(redacted.contains) == true }
+        guard !changed.isEmpty else { return }
+        for index in changed.indices { changed[index].sourceRedacted = true }
+        do { try await port.upsert(changed) } catch { log?.warning("bot task redaction write failed", error: error) }
     }
 
     public func snapshot() async -> Snapshot {

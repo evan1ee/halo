@@ -19,7 +19,7 @@ struct HaloDatabaseTests {
         #expect(tables == ["halo_meta"])
         let second = try HaloDatabase(path: file)
         let applied = try second.pool.read { try String.fetchAll($0, sql: "SELECT identifier FROM grdb_migrations") }
-        #expect(applied == ["v1-meta", "v2-read-intent", "v3-draft", "v4-audit-event", "v5-bot-task"])
+        #expect(applied == ["v1-meta", "v2-read-intent", "v3-draft", "v4-audit-event", "v5-bot-task", "v6-bot-task-source-redacted"])
     }
 
     @Test("opening with file protection succeeds (the simulator and macOS don't report protection classes, so the class itself is checked on a device)")

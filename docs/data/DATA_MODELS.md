@@ -77,7 +77,7 @@ CREATE TABLE bot_task (   -- as built (migration v5-bot-task); entity_id is the 
   entity_type TEXT NOT NULL CHECK (entity_type IN ('todo','reminder')), entity_id TEXT NOT NULL,
   source_event_id TEXT, title TEXT, detail TEXT,            -- title: plain, like draft bodies (file protection, no column encryption yet); detail: reminder time text or task owner
   status TEXT NOT NULL CHECK (status IN ('open','completed','deleted')),
-  as_of_ts INTEGER NOT NULL, updated_at INTEGER NOT NULL,   -- 'unknown' status and source_redacted are not built
+  as_of_ts INTEGER NOT NULL, updated_at INTEGER NOT NULL,   -- 'unknown' status is not built; source_redacted INTEGER NOT NULL DEFAULT 0 was added by migration v6
   PRIMARY KEY (account, room_id, bot_sender, entity_type, entity_id)
 );
 -- bot_action is not built: BotActionCoordinator keeps pending ticks in memory (a tick is idempotent, so a restart loses only the spinner)

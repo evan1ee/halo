@@ -37,8 +37,11 @@ public struct BotTaskEntry: Sendable, Equatable, Identifiable {
     public var asOf: Date
     /// A reminder's time text as the bot wrote it, or a task's owner.
     public var detail: String?
+    /// The source message was deleted: it can't be reacted to, and there is nothing to open at.
+    public var sourceRedacted: Bool
 
-    public init(key: Key, title: String?, status: Status, sourceEventID: EventID?, asOf: Date, detail: String? = nil) {
+    public init(key: Key, title: String?, status: Status, sourceEventID: EventID?, asOf: Date, detail: String? = nil, sourceRedacted: Bool = false) {
+        self.sourceRedacted = sourceRedacted
         self.key = key
         self.title = title
         self.status = status

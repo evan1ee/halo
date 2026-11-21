@@ -78,6 +78,12 @@ struct BotActivityViewModelTests {
         #expect(vm.sections.open.first { $0.key.id == "1" }?.canTick == true)
         #expect(vm.sections.open.first { $0.key.id == "9" }?.canTick == false)
         #expect(vm.sections.reminders.allSatisfy { !$0.canTick })
+        var deleted = entry(r1, id: "5", title: "Deleted source")
+        deleted.sourceRedacted = true
+        try await port.upsert([deleted])
+        await vm.load()
+        let item = try #require(vm.sections.open.first { $0.key.id == "5" })
+        #expect(!item.canTick && item.sourceDeleted && item.sourceEventID == nil)
     }
 
     @Test("ticking sends the reaction, shows pending, and the list reloads as completed once the bot confirms in the room")

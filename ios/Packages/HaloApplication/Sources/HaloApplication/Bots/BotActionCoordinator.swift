@@ -48,7 +48,7 @@ public actor BotActionCoordinator {
     /// Ticks `entry` and returns when the bot confirmed, the timeout passed or sending failed. Ignored unless it is an open task
     /// with a source message (a reminder or a task seen only in a list has nothing to react to) and not already pending.
     public func tick(_ entry: BotTaskEntry) async {
-        guard entry.key.kind == .todo, entry.status == .open, let source = entry.sourceEventID, states[entry.key] != .pending else { return }
+        guard entry.key.kind == .todo, entry.status == .open, let source = entry.sourceEventID, !entry.sourceRedacted, states[entry.key] != .pending else { return }
         set(entry.key, .pending)
         let room = entry.key.room
         let coordinator = TimelineCoordinator(port: port, room: room)

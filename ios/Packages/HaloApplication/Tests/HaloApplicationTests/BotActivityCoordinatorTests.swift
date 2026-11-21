@@ -77,4 +77,20 @@ struct BotActivityCoordinatorTests {
         await coordinator.attach(port)
         #expect(await coordinator.snapshot().entries.map(\.key.id) == ["fresh"])
     }
+
+    @Test("when the creating message is deleted, the task is kept but marked, and can't be ticked")
+    func deletedSource() async throws {
+        let port = FakeBotTaskPort()
+        let coordinator = BotActivityCoordinator(port: port)
+        let item = try message("a", sender: bot, html: added, at: 1)
+        await coordinator.observe(room: room, items: [item], botSenders: [bot])
+        let redacted = TimelineItem(id: TimelineItemID("a"), content: .event(TimelineEvent(
+            eventID: try EventID("$a"), sender: try UserID(bot), senderName: nil, timestamp: Date(timeIntervalSince1970: 1), isOwn: false, kind: .redacted)))
+        await coordinator.observe(room: room, items: [redacted], botSenders: [bot])
+        let entry = try #require(await coordinator.snapshot().entries.first)
+        #expect(entry.sourceRedacted && entry.sourceEventID?.rawValue == "$a" && entry.status == .open)
+        let ticker = BotActionCoordinator(port: FakeTimelinePort(), activity: coordinator, botSenders: { [bot] })
+        await ticker.tick(entry)
+        for await state in await ticker.stateChanges() { #expect(state.isEmpty); break }
+    }
 }

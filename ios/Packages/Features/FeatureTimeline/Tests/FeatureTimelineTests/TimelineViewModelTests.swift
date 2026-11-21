@@ -759,6 +759,7 @@ struct TimelineViewModelTests {
         guard case .live(let rows, _, _, _) = vm.content, let mine = rows.first(where: { $0.id == "m1" }) else { Issue.record("no row"); return }
         #expect(mine.seenBy == 4 && mine.seenLabel == "Seen by 4")
         #expect(mine.readers.map(\.name) == ["Ann", "bob", "cy"] && mine.readers.first?.avatar == avatar)
+        #expect(mine.allReaders.map(\.name) == ["Ann", "bob", "cy", "di"])
     }
 
     @Test("edit history lists every version newest first with the current one marked; unedited rows offer none; failures are explained (FR-9)")
