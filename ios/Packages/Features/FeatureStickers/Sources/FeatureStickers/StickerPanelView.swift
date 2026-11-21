@@ -94,12 +94,14 @@ private struct StickerCell: View {
         Button { Task { await model.tap(sticker) } } label: {
             Group {
                 #if canImport(UIKit)
-                if let animated { AnimatedStickerView(data: animated) } else if let data, let image = UIImage(data: data) { Image(uiImage: image).resizable().scaledToFit() } else { placeholder }
+                // A UIKit view inside a button label takes the touch for itself, so the button never fired for animated stickers.
+                if let animated { AnimatedStickerView(data: animated).allowsHitTesting(false) } else if let data, let image = UIImage(data: data) { Image(uiImage: image).resizable().scaledToFit() } else { placeholder }
                 #else
                 placeholder
                 #endif
             }
             .frame(width: 72, height: 72)
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(sticker.body ?? sticker.shortcode)
