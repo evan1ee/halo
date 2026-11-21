@@ -9,7 +9,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 - **Checks:** `scripts/prepush.sh` passes (SwiftLint not configured, skipped); `scripts/prepush.sh` now also builds `Halo-Debug` for the simulator. All 17 contract tests (`infra/dev`) pass, none skipped (`scripts/contract-test.sh` after `infra/dev/create-fixtures.py`).
 - **CI:** PRs #1–#15 merged. CI runs only the Linux-portable packages (Foundation, Domain, TestSupport, Application): adapter, persistence, platform, features and the app are tested only by `prepush.sh` on a Mac. `licenses` runs only on SDK/inventory changes.
 
-- **Loop state (2026-11-21):** loop running again on bugs and UI/UX polish (user request).
+- **Loop state (2026-11-21, paused):** the small unblocked items are done (this session: timeline receipts/location/polls/calls/reply jump, Sticker packs, notification defaults and mention toggles, room info refresh; all but a few taps seen in the simulator). What is left is large or needs a decision: see §6 "Candidates". Restart with `/loop` once the founder picks one.
 - **Earlier loop state (2026-11-20):** what is left that needs no device, signing, gate decision or product decision is small polish: the bot reaction menu (FR-4, product detail), V-ST-2 (needs an expiring token the dev Synapse can't give). The loop paused here; restart it to take those.
 
 ## 2. Completed work (what exists now)
@@ -48,9 +48,13 @@ Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISS
 **Deferred (not blocking):** Q-CI-MAC (D71, founder): no macOS CI job for now; `scripts/prepush.sh` stays the only Mac validation gate. Revisit once the build pipeline is stable and a hosted runner is confirmed to have the required Xcode.
 
 ## 6. Next steps
-The queue is docs/ROADMAP.md §"Remaining work", worked by the loop in docs/development/AUTONOMOUS_LOOP.md. Its head:
-1. **M5** rest of ROOM_MANAGEMENT (nothing left that is unblocked); then the P0 item below.
-2. **P0** the remaining client-side scenarios on the real stack (S03, S11, S12, S16–S20: restarts, outbox, NSE; most need a device), then re-evaluate G-UNREAD with the founder; measure the first-sync cost on a large account; M4 items after.
+The queue is docs/ROADMAP.md §"Remaining work", worked by the loop in docs/development/AUTONOMOUS_LOOP.md. Nothing small and unblocked is left. **Candidates for the founder to pick** (each is a PR-sized feature or needs a decision):
+1. **M7 Bot Activity tab** (BOT_ACTIVITY.md: `BotTaskIndexer`, `bot_task` store, new tab; open question Q-ACT-REFRESH) — largest P2 item, would take a branch and PR (D75).
+2. **Settings → Account → sessions/devices** (SETTINGS §3): the SDK has no device-list API, so it needs direct HTTP calls to `/devices` (AGENTS.md §14 allows direct HTTP only where documented: needs a decision/ADR).
+3. **Storage → clear cache** (forces a full resync; needs the sync loop stopped and restarted) and **Security → disable recovery** (destructive; needs its confirmation copy).
+4. **TIMELINE** leftovers: read-receipt avatars (FR-6), loading around a reply original older than the loaded page (`TimelineFocus.Event`, F-FFI-22), edit history (P2).
+5. **M5**: MAS in `infra/dev` and OIDC login (V-AUTH-1), QR/emoji verification, the performance pass (needs a large account/device).
+Device and gate items stay in §5 "Needs the founder".
 
 ## 7. Next Session Prompt
 ```text
