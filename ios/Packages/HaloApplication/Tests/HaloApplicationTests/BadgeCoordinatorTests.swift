@@ -254,4 +254,54 @@ struct BadgeCoordinatorTests {
         #expect(port.history.last == [try RoomID("!a:x.org")])
         #expect(await badge.attentionRooms == [try RoomID("!a:x.org")])
     }
+
+    @Test("the periodic auditor runs only in the foreground with an audit attached and stops on background (LOGGING_AND_DIAGNOSTICS §2)")
+    func periodicForegroundAudit() async throws {
+        #expect(BadgeCoordinator.defaultAuditInterval == .seconds(600))
+        actor Ticker {
+            var calls: [Duration] = []
+            var waiting: CheckedContinuation<Void, Error>?
+            func wait(_ duration: Duration) async throws {
+                calls.append(duration)
+                try await withTaskCancellationHandler {
+                    try await withCheckedThrowingContinuation { waiting = $0 }
+                } onCancel: {
+                    Task { await self.cancel() }
+                }
+            }
+            func tick() { waiting?.resume(); waiting = nil }
+            func cancel() { waiting?.resume(throwing: CancellationError()); waiting = nil }
+        }
+        let ticker = Ticker()
+        let rooms = FakeRoomListPort()
+        let coordinator = RoomListCoordinator(port: rooms)
+        let records = FakeNotificationRecords()
+        let badge = BadgeCoordinator(rooms: coordinator, records: records, port: FakeBadgePort(), auditInterval: .seconds(600), sleep: { try await ticker.wait($0) })
+        await badge.begin()
+        await coordinator.start()
+
+        // Without an audit attached, going foreground starts no timer.
+        await badge.setForeground(true)
+        for _ in 0..<1_000 { await Task.yield() }
+        #expect(await ticker.calls.isEmpty)
+
+        // Attaching an audit while foregrounded starts the 10-minute cadence.
+        let store = FakeAuditEvents()
+        await badge.setAudit(.init(port: store, roomHash: { _ in "!h" }, appVersion: "1.0", now: { Date(timeIntervalSince1970: 100) }))
+        for _ in 0..<200_000 where await ticker.calls != [.seconds(600)] { await Task.yield() }
+        #expect(await ticker.calls == [.seconds(600)])
+        // Put a stale room in place, tick once, verify the periodic pass ran and scheduled the next tick.
+        try rooms.emit(.reset([RoomSummary(
+            id: try RoomID("!a:x.org"), name: "a", isDirect: false, isEncrypted: false, membership: .joined,
+            read: RoomReadCounts(mode: .allMessages, server: .zero, sdk: SDKCounts(unreadMessages: 2, unreadNotifications: 2, unreadMentions: 0), isMarkedUnread: false))]))
+        #expect(await eventually { store.events.count == 1 })
+        await ticker.tick()
+        for _ in 0..<200_000 where await ticker.calls.count < 2 { await Task.yield() }
+        #expect(await ticker.calls.count == 2)
+
+        // Backgrounding cancels the periodic task; no further ticks occur.
+        await badge.setForeground(false)
+        for _ in 0..<1_000 { await Task.yield() }
+        #expect(await ticker.calls.count == 2)
+    }
 }

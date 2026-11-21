@@ -172,6 +172,12 @@ final class AppRoot {
         return lines.joined(separator: "\n")
     }
 
+    /// Settings → Diagnostics row counter (AC-U8): unexplained read-state audit events, or `nil` when the auditor is off.
+    func unexplainedAuditCount() async -> Int? {
+        guard let auditPort else { return nil }
+        return try? await auditPort.unexplainedCount()
+    }
+
     /// Settings → Diagnostics → "Reconcile now" (ROOM_LIST FR-8, SETTINGS §3): flushes pending read receipts
     /// and re-evaluates the attention set and app badge from current state.
     func reconcileNow() async {

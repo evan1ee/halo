@@ -72,6 +72,7 @@ private struct RootView: View {
                                     profile: root.profileSettings(),
                                     diagnostics: { await root.diagnosticsReport() },
                                     reconcile: { await root.reconcileNow() },
+                                    unexplainedAuditCount: { await root.unexplainedAuditCount() },
                                     storageSizes: { await root.storageSizes() },
                                     security: { [StorageSize(name: "This device", text: root.recovery.deviceStatus), StorageSize(name: "Recovery key", text: root.recovery.recoveryStatus)] },
                                     setUpRecovery: {
@@ -122,9 +123,10 @@ private struct RootView: View {
                 UIApplication.shared.registerForRemoteNotifications()
             }
         }
-        // Sync runs only in the foreground (SYNC_ENGINE §2 rule 1).
+        // Sync and periodic read-state auditing run only in the foreground (SYNC_ENGINE §2 rule 1, LOGGING_AND_DIAGNOSTICS §2).
         .task(id: scenePhase) {
             await root.sync.setForeground(scenePhase == .active)
+            await root.badge.setForeground(scenePhase == .active)
             if scenePhase != .active { await root.receipts.flush() }
         }
     }

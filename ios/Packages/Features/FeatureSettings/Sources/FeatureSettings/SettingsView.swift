@@ -18,6 +18,8 @@ public struct SettingsView: View {
     private let saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)?
     private let diagnostics: (@Sendable () async -> String)?
     private let reconcile: (@Sendable () async -> Void)?
+    private let unexplainedAuditCount: (@Sendable () async -> Int?)?
+    @State private var unexplainedCount: Int?
     private let profile: ProfileSettingsActions?
     private let security: (@MainActor () -> [StorageSize])?
     private let setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)?
@@ -44,12 +46,14 @@ public struct SettingsView: View {
         loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)? = nil,
         saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)? = nil,
         profile: ProfileSettingsActions? = nil, diagnostics: (@Sendable () async -> String)? = nil,
-        reconcile: (@Sendable () async -> Void)? = nil, storageSizes: (@Sendable () async -> [StorageSize])? = nil,
+        reconcile: (@Sendable () async -> Void)? = nil, unexplainedAuditCount: (@Sendable () async -> Int?)? = nil,
+        storageSizes: (@Sendable () async -> [StorageSize])? = nil,
         security: (@MainActor () -> [StorageSize])? = nil, setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil,
         replaceRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil, notificationStatus: (@Sendable () async -> String)? = nil, openSystemSettings: (() -> Void)? = nil, onSignOut: @escaping () -> Void
     ) {
         self.diagnostics = diagnostics
         self.reconcile = reconcile
+        self.unexplainedAuditCount = unexplainedAuditCount
         self.profile = profile
         self.storageSizes = storageSizes
         self.notificationStatus = notificationStatus
@@ -170,10 +174,29 @@ public struct SettingsView: View {
             }
             if let diagnostics {
                 Section {
-                    NavigationLink { DiagnosticsView(report: diagnostics, reconcile: reconcile) } label: { Label("Diagnostics", systemImage: "stethoscope") }
-                        .accessibilityIdentifier("diagnostics")
+                    NavigationLink { DiagnosticsView(report: diagnostics, reconcile: reconcile) } label: {
+                        HStack {
+                            Label("Diagnostics", systemImage: "stethoscope")
+                            Spacer()
+                            if let count = unexplainedCount {
+                                if count > 0 {
+                                    Text("\(count) unexplained")
+                                        .font(.caption.bold())
+                                        .padding(.horizontal, 7).padding(.vertical, 2)
+                                        .background(.orange, in: Capsule())
+                                        .foregroundStyle(.white)
+                                } else {
+                                    Text("0 unexplained").font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                    .accessibilityIdentifier("diagnostics")
                 } footer: {
                     Text("A short report you can share when something looks wrong. It holds no messages, names or account IDs.")
+                }
+                .task {
+                    if let unexplainedAuditCount { unexplainedCount = await unexplainedAuditCount() }
                 }
             }
             Section("About") {

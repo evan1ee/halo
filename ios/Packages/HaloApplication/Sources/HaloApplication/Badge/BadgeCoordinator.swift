@@ -8,6 +8,10 @@ import HaloFoundation
 /// fetched is a record (rule E4) that counts until the user reads the room here. The extension doesn't write the
 /// badge from its own counter: it recomputes the same union (UNREAD_STATE §2, C5).
 public actor BadgeCoordinator {
+    public typealias Sleep = @Sendable (Duration) async throws -> Void
+    /// How often the read-state auditor re-runs while the app is in the foreground (LOGGING_AND_DIAGNOSTICS §2).
+    public static let defaultAuditInterval: Duration = .seconds(600)
+
     public private(set) var attentionRooms: Set<RoomID> = []
     /// The first evaluation always writes, even an empty set, so a stale badge can be cleared.
     private var hasWritten = false
@@ -42,15 +46,28 @@ public actor BadgeCoordinator {
     private var positions: [RoomID: Date] = [:]
     private var inputs: [RoomReadInputs] = []
     private var tasks: [Task<Void, Never>] = []
+    private let auditInterval: Duration
+    private let sleep: Sleep
+    private var isForeground = false
+    private var periodicAudit: Task<Void, Never>?
 
-    public init(rooms: RoomListCoordinator, records: any NotificationRecordPort, port: any BadgePort, receipts: ReadReceiptCoordinator? = nil) {
+    public init(
+        rooms: RoomListCoordinator, records: any NotificationRecordPort, port: any BadgePort,
+        receipts: ReadReceiptCoordinator? = nil, auditInterval: Duration = BadgeCoordinator.defaultAuditInterval,
+        sleep: @escaping Sleep = { try await Task.sleep(for: $0) }
+    ) {
         self.receipts = receipts
         self.rooms = rooms
         self.records = records
         self.port = port
+        self.auditInterval = auditInterval
+        self.sleep = sleep
     }
 
-    deinit { for task in tasks { task.cancel() } }
+    deinit {
+        for task in tasks { task.cancel() }
+        periodicAudit?.cancel()
+    }
 
     /// Starts following the room list and the records. Call once at launch.
     public func begin() async {
@@ -74,6 +91,14 @@ public actor BadgeCoordinator {
     public func setAudit(_ audit: Audit?) {
         self.audit = audit
         audited = [:]
+        updatePeriodicAudit()
+    }
+
+    /// Runs the read-state auditor every 10 minutes while the app is in the foreground (LOGGING_AND_DIAGNOSTICS §2).
+    public func setForeground(_ foreground: Bool) {
+        guard foreground != isForeground else { return }
+        isForeground = foreground
+        updatePeriodicAudit()
     }
 
     /// Drops the stored state of `room` (the user left it) so it isn't carried over.
@@ -92,6 +117,8 @@ public actor BadgeCoordinator {
 
     /// Account change or sign-out: forgets everything, including the stored set, and clears the badge.
     public func reset() async {
+        periodicAudit?.cancel()
+        periodicAudit = nil
         carried = []
         seen = []
         inputs = []
@@ -160,6 +187,26 @@ public actor BadgeCoordinator {
         }
         audited = next
         if !events.isEmpty { try? await audit.port.append(events) }
+    }
+
+    private func updatePeriodicAudit() {
+        periodicAudit?.cancel()
+        periodicAudit = nil
+        guard isForeground, audit != nil else { return }
+        let interval = auditInterval
+        let sleep = sleep
+        periodicAudit = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await sleep(interval) } catch { return }
+                guard !Task.isCancelled, let self else { return }
+                await self.auditCurrentState()
+            }
+        }
+    }
+
+    private func auditCurrentState() async {
+        let stored = records.all()
+        await runAudit(Self.evaluated(inputs: inputs, records: stored, positions: positions))
     }
 
     private func recompute() async {
