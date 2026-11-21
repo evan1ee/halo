@@ -91,6 +91,9 @@ enum TimelineMapper {
         case .roomMembership(let userID, let displayName, let change, _):
             .membership(user: try? UserID(userID), displayName: displayName, change: map(change))
         case .profileChange, .state: .otherState
+        // A sticker the SDK can't parse (usually one sent without `info`, which other clients did and Halo did before
+        // 2026-11-21) is still a sticker to the reader: shown as one that can't be displayed, not as an unknown event.
+        case .failedToParseMessageLike(let type, _) where type == "m.sticker": .sticker(body: "", source: nil)
         default: .unsupported
         }
     }

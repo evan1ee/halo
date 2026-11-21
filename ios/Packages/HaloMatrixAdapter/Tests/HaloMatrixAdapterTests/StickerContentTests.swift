@@ -1,6 +1,7 @@
 import Foundation
 import HaloDomain
 import HaloFoundation
+import MatrixRustSDK
 import Testing
 @testable import HaloMatrixAdapter
 
@@ -20,5 +21,11 @@ struct StickerContentTests {
         let full = try object(Sticker(pack: pack, shortcode: "wave", body: "Waving", url: "mxc://x.org/b", info: StickerInfo(width: 128, height: 96, mimeType: "image/png", size: 70)))
         let info = try #require(full["info"] as? [String: Any])
         #expect(info["w"] as? Int == 128 && info["h"] as? Int == 96 && info["mimetype"] as? String == "image/png" && info["size"] as? Int == 70)
+    }
+
+    @Test("a sticker the SDK can't parse maps to a sticker without a picture, other unparsable events stay unsupported")
+    func unparsableSticker() {
+        #expect(TimelineMapper.kind(of: .failedToParseMessageLike(eventType: "m.sticker", error: "missing field `info`")) == .sticker(body: "", source: nil))
+        #expect(TimelineMapper.kind(of: .failedToParseMessageLike(eventType: "m.room.message", error: "x")) == .unsupported)
     }
 }

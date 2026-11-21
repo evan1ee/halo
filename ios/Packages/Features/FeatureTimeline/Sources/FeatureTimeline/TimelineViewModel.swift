@@ -838,7 +838,11 @@ public final class TimelineViewModel {
                     file: .init(kind: attachment.kind, name: attachment.body, detail: Self.fileDetail(attachment), ref: source, size: attachment.size,
                         thumbnail: attachment.kind == .video ? attachment.thumbnail.map { .init(ref: $0, aspectRatio: Self.aspectRatio(width: attachment.width, height: attachment.height)) } : nil), source: plainSource(event, attachment.body))
             case .sticker(let body, let source):
-                guard let source else { return TimelineRow(id: id, style: .message, sender: name, text: "[Sticker] \(body)") }
+                guard let source else {
+                    return TimelineRow(
+                        id: id, style: event.isOwn ? .ownMessage : .message, sender: name,
+                        text: body.isEmpty ? "Sticker (can't be shown)" : "[Sticker] \(body)", eventID: event.eventID, isOwn: event.isOwn)
+                }
                 return TimelineRow(
                     id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: body, image: .init(ref: source, aspectRatio: 1),
                     eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions), isSticker: true, source: plainSource(event, body))
