@@ -112,6 +112,7 @@ private struct RootView: View {
                                 .accessibilityIdentifier("settings")
                         }
                     }
+                    .onChange(of: root.roomList.content) { Task { await root.scanBotRooms() } }
                     .sheet(item: $newChat) { NewChatView(model: $0) }
                     .sheet(item: $activity) { model in
                         BotActivityView(model: model) { room, event in

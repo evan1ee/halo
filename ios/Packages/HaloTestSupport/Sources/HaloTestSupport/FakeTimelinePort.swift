@@ -11,6 +11,7 @@ public final class FakeTimelinePort: TimelinePort {
         var older: [[TimelineItem]] = []
         var continuations: [UUID: AsyncStream<TimelineDiff>.Continuation] = [:]
         var openSessions = 0
+        var totalOpens = 0
         var sent: [String] = []
         var paginateCalls = 0
         var histories: [EventID: [EditRevision]] = [:]
@@ -76,6 +77,8 @@ public final class FakeTimelinePort: TimelinePort {
     /// The users mentioned (and still in the text) in each sent message, in order.
     public func sentMentions(in id: RoomID) -> [[UserID]] { rooms.withLock { $0[id]?.sentMentions ?? [] } }
     public func sentTexts(in id: RoomID) -> [String] { rooms.withLock { $0[id]?.sent ?? [] } }
+    /// How many times `open(room:)` succeeded for `id` (closed sessions included).
+    public func totalOpens(in id: RoomID) -> Int { rooms.withLock { $0[id]?.totalOpens ?? 0 } }
     public func openSessions(in id: RoomID) -> Int { rooms.withLock { $0[id]?.openSessions ?? 0 } }
     /// What `editHistory(of:)` returns for `event`.
     public func setEditHistory(_ revisions: [EditRevision], for event: EventID, in id: RoomID) { rooms.withLock { $0[id]?.histories[event] = revisions } }
@@ -87,6 +90,7 @@ public final class FakeTimelinePort: TimelinePort {
         try rooms.withLock { (rooms) throws(HaloError) in
             guard rooms[id] != nil else { throw .notFound }
             rooms[id]?.openSessions += 1
+            rooms[id]?.totalOpens += 1
         }
         return Session(port: self, room: id)
     }

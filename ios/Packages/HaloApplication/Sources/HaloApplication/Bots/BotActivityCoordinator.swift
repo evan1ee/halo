@@ -18,6 +18,14 @@ public actor BotActivityCoordinator {
     }
 
     private var port: (any BotTaskPort)?
+    private let timelines: (any TimelinePort)?
+    private let settle: Duration
+    private let sleep: @Sendable (Duration) async throws -> Void
+    /// The newest-event time of each room as of its last background scan, so a room is read again only when something new arrived.
+    private var scanned: [RoomID: Date] = [:]
+    private var scanning = false
+    /// At most this many rooms are read per `scan`, newest first.
+    public static let scanLimit = 8
     private let log: HaloLog?
     private let now: @Sendable () -> Date
     /// Entries whose newest bot message is older than this are dropped when an account is attached (BOT_ACTIVITY FR-5).
@@ -25,8 +33,15 @@ public actor BotActivityCoordinator {
     /// The last entries stored per room, so an unchanged timeline snapshot writes nothing.
     private var lastWritten: [RoomID: [BotTaskEntry]] = [:]
 
-    public init(port: (any BotTaskPort)? = nil, log: HaloLog? = nil, now: @escaping @Sendable () -> Date = { Date() }) {
+    /// - Parameter timelines: when given, `scan` can read rooms that aren't open by briefly opening their timelines.
+    public init(
+        port: (any BotTaskPort)? = nil, timelines: (any TimelinePort)? = nil, log: HaloLog? = nil, now: @escaping @Sendable () -> Date = { Date() },
+        settle: Duration = .seconds(2), sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    ) {
         self.now = now
+        self.timelines = timelines
+        self.settle = settle
+        self.sleep = sleep
         self.port = port
         self.log = log?.with(category: .bot)
     }
@@ -54,6 +69,68 @@ public actor BotActivityCoordinator {
         }
     }
 
+    /// A room as the room list knows it, for deciding which rooms to read in the background.
+    public struct RoomHint: Sendable, Equatable {
+        public let room: RoomID
+        /// Who wrote the room's newest message, when known.
+        public let latestSender: String?
+        public let latestAt: Date?
+        public init(room: RoomID, latestSender: String?, latestAt: Date?) {
+            self.room = room
+            self.latestSender = latestSender
+            self.latestAt = latestAt
+        }
+    }
+
+    /// Reads rooms that aren't open (BOT_ACTIVITY FR-1, "from rooms as they are synced"): for rooms whose newest message is from an
+    /// allowlisted bot and that changed since the last scan, a timeline is opened just long enough to take its first snapshot, which
+    /// goes through `observe`. Newest rooms first, at most `scanLimit` per call, one at a time; a room that can't be opened is
+    /// tried again at its next change.
+    public func scan(_ rooms: [RoomHint], botSenders: Set<String>) async {
+        guard let timelines, port != nil, !botSenders.isEmpty, !scanning else { return }
+        scanning = true
+        defer { scanning = false }
+        let due = rooms
+            .filter { hint in hint.latestSender.map(botSenders.contains) == true && scanned[hint.room] != hint.latestAt }
+            .sorted { ($0.latestAt ?? .distantPast) > ($1.latestAt ?? .distantPast) }
+            .prefix(Self.scanLimit)
+        for hint in due {
+            let coordinator = TimelineCoordinator(port: timelines, room: hint.room)
+            await coordinator.open()
+            let items = await firstItems(of: coordinator)
+            await coordinator.close()
+            guard let items else { continue }
+            scanned[hint.room] = hint.latestAt
+            await observe(room: hint.room, items: items, botSenders: botSenders)
+        }
+    }
+
+    /// The items of the first live snapshot that has any (or of the last one seen when none has by `settle`); `nil` when the
+    /// timeline couldn't be opened.
+    private func firstItems(of coordinator: TimelineCoordinator) async -> [TimelineItem]? {
+        let watcher = Task<[TimelineItem]?, Never> {
+            var latest: [TimelineItem]?
+            for await status in await coordinator.statuses() {
+                switch status {
+                case .live(let snapshot):
+                    latest = snapshot.items
+                    if !snapshot.items.isEmpty { return latest }
+                case .failed: return nil
+                case .idle, .opening: continue
+                }
+            }
+            return latest
+        }
+        let sleep = sleep, settle = settle
+        let timer = Task {
+            try? await sleep(settle)
+            watcher.cancel()
+        }
+        let items = await watcher.value
+        timer.cancel()
+        return items
+    }
+
     /// A task whose creating message was deleted keeps its entry but can't be ticked or opened at (BOT_ACTIVITY FR-1, redaction).
     private func markDeletedSources(room: RoomID, items: [TimelineItem], port: any BotTaskPort) async {
         var redacted: Set<EventID> = []
@@ -75,6 +152,7 @@ public actor BotActivityCoordinator {
     /// "Rebuild index": empties it; it fills again from timelines as they are opened.
     public func rebuild() async {
         lastWritten = [:]
+        scanned = [:]
         try? await port?.removeAll()
     }
 
@@ -82,6 +160,7 @@ public actor BotActivityCoordinator {
     public func attach(_ port: any BotTaskPort) async {
         self.port = port
         lastWritten = [:]
+        scanned = [:]
         do { try await port.prune(before: now().addingTimeInterval(-Self.retention)) } catch { log?.warning("bot task prune failed", error: error) }
     }
 
@@ -89,5 +168,6 @@ public actor BotActivityCoordinator {
     public func reset() {
         port = nil
         lastWritten = [:]
+        scanned = [:]
     }
 }

@@ -34,7 +34,7 @@ final class AppRoot {
     private let matrixSession: MatrixSessionPort
     private let media: MediaLoader
     private let unrecognisedBots = UnrecognisedBotMessages()
-    let botActivity = BotActivityCoordinator()
+    let botActivity: BotActivityCoordinator
     /// Ticks from Activity; kept for the app's life so a pending tick survives the sheet closing.
     private lazy var botActions = BotActionCoordinator(port: timelinePort, activity: botActivity, botSenders: { Set(AppPreferences().botSenders) })
     private let previewPolicy: any MediaPreviewPolicyPort
@@ -77,6 +77,7 @@ final class AppRoot {
         badge = BadgeCoordinator(rooms: roomCoordinator, records: records, port: SystemBadge(suiteName: suite), receipts: receipts)
 
         timelinePort = MatrixTimelinePort(session: session)
+        botActivity = BotActivityCoordinator(timelines: timelinePort)
         media = MediaLoader(port: MatrixMediaPort(session: session))
         previewPolicy = MatrixMediaPreviewPolicyPort(session: session)
         roomPort = MatrixRoomPort(session: session)
@@ -353,6 +354,17 @@ final class AppRoot {
 
     /// The room info sheet for `room` (ROOM_MANAGEMENT).
     func makeRoomDetails(room: RoomID) -> RoomDetailsViewModel { RoomDetailsViewModel(port: roomPort, room: room, images: ImagePreparer(maximumDimension: 512), media: media) }
+
+    /// Reads rooms whose newest message is from an allowlisted bot and that changed since the last scan, so Activity knows their tasks
+    /// without the user opening each room (BOT_ACTIVITY FR-1). Cheap when nothing changed.
+    func scanBotRooms() async {
+        let senders = Set(AppPreferences().botSenders)
+        guard !senders.isEmpty else { return }
+        let hints = await roomCoordinator.rooms.filter { $0.membership == .joined }.map {
+            BotActivityCoordinator.RoomHint(room: $0.id, latestSender: $0.preview?.senderID?.rawValue, latestAt: $0.latestEvent?.timestamp)
+        }
+        await botActivity.scan(hints, botSenders: senders)
+    }
 
     /// The Activity screen's model: names of rooms from the room list.
     func makeBotActivity() -> BotActivityViewModel {

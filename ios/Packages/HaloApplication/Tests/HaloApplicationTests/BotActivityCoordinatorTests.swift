@@ -93,4 +93,48 @@ struct BotActivityCoordinatorTests {
         await ticker.tick(entry)
         for await state in await ticker.stateChanges() { #expect(state.isEmpty); break }
     }
+
+    @Test("scan reads rooms whose newest message is a bot's, once per change, and indexes them without the room being open")
+    func scanning() async throws {
+        let other = try RoomID("!other:x.org")
+        let timelines = FakeTimelinePort()
+        timelines.addRoom(room, items: [try message("a", sender: bot, html: added, at: 10)])
+        timelines.addRoom(other, items: [try message("b", sender: "@human:x.org", html: added, at: 10)])
+        let port = FakeBotTaskPort()
+        let coordinator = BotActivityCoordinator(port: port, timelines: timelines, settle: .seconds(3600))
+        let hints = [
+            BotActivityCoordinator.RoomHint(room: room, latestSender: bot, latestAt: Date(timeIntervalSince1970: 10)),
+            BotActivityCoordinator.RoomHint(room: other, latestSender: "@human:x.org", latestAt: Date(timeIntervalSince1970: 10)),
+        ]
+        await coordinator.scan(hints, botSenders: [bot])
+        #expect(await coordinator.snapshot().entries.map(\.key.room) == [room])
+        #expect(timelines.totalOpens(in: room) == 1 && timelines.totalOpens(in: other) == 0)
+        await coordinator.scan(hints, botSenders: [bot])  // nothing changed: not opened again
+        #expect(timelines.totalOpens(in: room) == 1)
+        await coordinator.scan(
+            [BotActivityCoordinator.RoomHint(room: room, latestSender: bot, latestAt: Date(timeIntervalSince1970: 20))], botSenders: [bot])
+        #expect(timelines.totalOpens(in: room) == 2)  // a newer message: read again
+        await coordinator.scan(hints, botSenders: [])  // no allowlist: nothing
+        #expect(timelines.totalOpens(in: room) == 2)
+    }
+
+    @Test("a scan reads at most the newest few rooms, and a room that can't be opened is retried at its next change")
+    func scanLimitAndFailure() async throws {
+        let timelines = FakeTimelinePort()
+        var hints: [BotActivityCoordinator.RoomHint] = []
+        for index in 0..<12 {
+            let id = try RoomID("!r\(index):x.org")
+            timelines.addRoom(id, items: [try message("m\(index)", sender: bot, html: added.replacingOccurrences(of: "#7", with: "#\(index)"), at: Double(index))])
+            hints.append(.init(room: id, latestSender: bot, latestAt: Date(timeIntervalSince1970: Double(index))))
+        }
+        let coordinator = BotActivityCoordinator(port: FakeBotTaskPort(), timelines: timelines, settle: .seconds(3600))
+        await coordinator.scan(hints, botSenders: [bot])
+        let opened = hints.filter { timelines.totalOpens(in: $0.room) > 0 }.map(\.room.rawValue)
+        #expect(opened.count == BotActivityCoordinator.scanLimit && !opened.contains("!r0:x.org") && opened.contains("!r11:x.org"))
+        // A room the client doesn't know can't be opened: skipped now, tried again later.
+        let unknown = BotActivityCoordinator.RoomHint(room: try RoomID("!gone:x.org"), latestSender: bot, latestAt: Date(timeIntervalSince1970: 99))
+        await coordinator.scan([unknown], botSenders: [bot])
+        await coordinator.scan([unknown], botSenders: [bot])
+        #expect(timelines.totalOpens(in: unknown.room) == 0)
+    }
 }

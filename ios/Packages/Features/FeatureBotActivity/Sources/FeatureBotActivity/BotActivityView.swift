@@ -41,7 +41,7 @@ public struct BotActivityView: View {
             .confirmationDialog("Rebuild the list?", isPresented: $confirmingRebuild, titleVisibility: .visible) {
                 Button("Rebuild", role: .destructive) { Task { await model.rebuild() } }
             } message: {
-                Text("This empties the list. It fills again as you open rooms with your bots.")
+                Text("This empties the list. It fills again as you open rooms with your bots and as they write.")
             }
         }
         .task { await model.load() }
@@ -53,7 +53,7 @@ public struct BotActivityView: View {
         List {
             Section {
             } footer: {
-                Text("From messages on this device. Halo only knows what your bots said in rooms you have opened here; the bot's own list is the truth.")
+                Text("From messages on this device. Halo only knows what your bots said in rooms you have opened here, or whose newest message is from a bot; the bot's own list is the truth.")
             }
             if sections.isEmpty {
                 ContentUnavailableView(
