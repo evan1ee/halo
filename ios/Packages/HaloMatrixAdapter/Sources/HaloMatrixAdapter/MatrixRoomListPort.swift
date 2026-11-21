@@ -133,6 +133,7 @@ public final class MatrixRoomListPort: RoomListPort {
         let isEncrypted = await room.isEncrypted()
         let read = await readCounts(of: room, settings: settings, isEncrypted: isEncrypted, isOneToOne: isDirect)
         let inviter = await inviterInfo(room)
+        let latest = await room.latestEvent()
         return try RoomSummary(
             id: RoomID(room.id()),
             name: room.displayName(),
@@ -140,10 +141,10 @@ public final class MatrixRoomListPort: RoomListPort {
             isEncrypted: isEncrypted,
             membership: membership(room.membership()),
             read: read,
-            latestEvent: latestEvent(await room.latestEvent()),
+            latestEvent: latestEvent(latest),
             ownReadThrough: await ownReadThrough(of: room, counts: read),
             isFavourite: (try? await room.roomInfo())?.isFavourite ?? false,
-            preview: preview(await room.latestEvent()),
+            preview: preview(latest, ownUserID: room.ownUserId()),
             avatar: avatar(room.avatarUrl()),
             inviter: inviter?.name,
             inviterID: inviter?.id
@@ -215,7 +216,7 @@ public final class MatrixRoomListPort: RoomListPort {
     }
 
     /// One line of the newest message. Messages show their text, media a label; a state change, call or unknown event has none.
-    static func preview(_ value: LatestEventValue) -> LatestMessagePreview? {
+    static func preview(_ value: LatestEventValue, ownUserID: String? = nil) -> LatestMessagePreview? {
         switch value {
         case .none, .remoteInvite: return nil
         // The SDK skips messages it can't decrypt when it picks the latest event, so an encrypted room often ends on a
@@ -226,15 +227,28 @@ public final class MatrixRoomListPort: RoomListPort {
             return previewText(content).map {
                 LatestMessagePreview(
                     text: $0, senderName: displayName(profile), isOwn: isOwn,
-                    senderID: try? UserID(sender), formattedBody: TimelineMapper.formattedHTML(of: content))
+                    senderID: try? UserID(sender), formattedBody: TimelineMapper.formattedHTML(of: content),
+                    isReply: isReply(content), mentionsMe: !isOwn && mentions(content, userID: ownUserID))
             }
         case .local(_, let sender, let profile, let content, _):
             return previewText(content).map {
                 LatestMessagePreview(
                     text: $0, senderName: displayName(profile), isOwn: true,
-                    senderID: try? UserID(sender), formattedBody: TimelineMapper.formattedHTML(of: content))
+                    senderID: try? UserID(sender), formattedBody: TimelineMapper.formattedHTML(of: content),
+                    isReply: isReply(content), mentionsMe: false)
             }
         }
+    }
+
+    static func isReply(_ content: TimelineItemContent) -> Bool {
+        guard case .msgLike(let like) = content else { return false }
+        return like.inReplyTo != nil
+    }
+
+    static func mentions(_ content: TimelineItemContent, userID: String?) -> Bool {
+        guard let userID, case .msgLike(let like) = content, case .message(let message) = like.kind,
+              let mentions = message.mentions else { return false }
+        return mentions.room || mentions.userIds.contains(userID)
     }
 
     /// "Ann joined", "You left"; `nil` for changes not worth a preview line.

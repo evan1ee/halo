@@ -48,4 +48,17 @@ struct LatestMessagePreviewTests {
             formattedBody: "🗑️ Deleted task: <i>\"Old\"</i>")
         #expect(deleted.line(isDirect: true, botSenders: allowlist) == "Deleted: Old")
     }
+
+    @Test("reply and mention markers format naturally across own, direct and group previews (ROOM_LIST FR-3)")
+    func replyAndMentionMarkers() {
+        #expect(LatestMessagePreview(text: "ok", senderName: "Me", isOwn: true, isReply: true).line(isDirect: true) == "You replied: ok")
+        #expect(LatestMessagePreview(text: "ok", senderName: "Ann", isOwn: false, isReply: true).line(isDirect: true) == "Replied: ok")
+        #expect(LatestMessagePreview(text: "ok", senderName: "Ann", isOwn: false, isReply: true).line(isDirect: false) == "Ann replied: ok")
+        #expect(LatestMessagePreview(text: "ok", senderName: nil, isOwn: false, isReply: true).line(isDirect: false) == "Replied: ok")
+        #expect(LatestMessagePreview(text: "look", senderName: "Ann", isOwn: false, mentionsMe: true).line(isDirect: true) == "Mentioned you: look")
+        #expect(LatestMessagePreview(text: "look", senderName: "Ann", isOwn: false, mentionsMe: true).line(isDirect: false) == "Ann mentioned you: look")
+        #expect(LatestMessagePreview(text: "look", senderName: "", isOwn: false, mentionsMe: true).line(isDirect: false) == "Mentioned you: look")
+        // When a message both replies and mentions you, the mention takes precedence.
+        #expect(LatestMessagePreview(text: "look", senderName: "Ann", isOwn: false, isReply: true, mentionsMe: true).line(isDirect: false) == "Ann mentioned you: look")
+    }
 }

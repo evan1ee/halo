@@ -58,16 +58,26 @@ public struct LatestMessagePreview: Sendable, Equatable {
     public let senderID: UserID?
     /// The HTML formatted body, when present (used for bot-card-aware previews).
     public let formattedBody: String?
+    /// The message replies to an earlier message.
+    public let isReply: Bool
+    /// The message explicitly mentions the signed-in user or the whole room via `m.mentions`.
+    public let mentionsMe: Bool
 
-    public init(text: String, senderName: String?, isOwn: Bool, senderID: UserID? = nil, formattedBody: String? = nil) {
+    public init(
+        text: String, senderName: String?, isOwn: Bool, senderID: UserID? = nil, formattedBody: String? = nil,
+        isReply: Bool = false, mentionsMe: Bool = false
+    ) {
         self.text = text
         self.senderName = senderName
         self.isOwn = isOwn
         self.senderID = senderID
         self.formattedBody = formattedBody
+        self.isReply = isReply
+        self.mentionsMe = mentionsMe
     }
 
-    /// The line a row shows: "You: …" for the user's own messages, "Name: …" in a group, the bare text in a direct chat.
+    /// The line a row shows: "You: …" / "You replied: …" for own messages, "Name: …" / "Name replied: …" / "Name mentioned you: …" in a group,
+    /// and bare text (or "Replied: …" / "Mentioned you: …") in a direct chat.
     /// For messages from an allowlisted bot whose HTML matches a template card, uses the card's summary instead of raw body text.
     public func line(isDirect: Bool, botSenders: Set<String> = []) -> String {
         let body: String
@@ -77,9 +87,11 @@ public struct LatestMessagePreview: Sendable, Equatable {
         } else {
             body = text
         }
-        if isOwn { return "You: " + body }
-        if isDirect { return body }
-        if let senderName, !senderName.isEmpty { return senderName + ": " + body }
+        if isOwn { return (isReply ? "You replied: " : "You: ") + body }
+        let named = !isDirect ? senderName.flatMap { $0.isEmpty ? nil : $0 } : nil
+        if mentionsMe { return (named.map { "\($0) mentioned you: " } ?? "Mentioned you: ") + body }
+        if isReply { return (named.map { "\($0) replied: " } ?? "Replied: ") + body }
+        if let named { return "\(named): \(body)" }
         return body
     }
 }

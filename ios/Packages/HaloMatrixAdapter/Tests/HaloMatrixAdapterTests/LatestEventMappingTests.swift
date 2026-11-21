@@ -79,5 +79,23 @@ struct LatestEventMappingTests {
         #expect(TimelineMapper.formattedHTML(of: notice) == "<b>hi</b>")
         #expect(TimelineMapper.formattedHTML(of: emote) == "<b>hi</b>")
         #expect(MatrixRoomListPort.preview(.remote(timestamp: 1, sender: "@bot:x", isOwn: false, profile: ready, content: notice)) == LatestMessagePreview(text: "hi", senderName: "Ann", isOwn: false, senderID: try UserID("@bot:x"), formattedBody: "<b>hi</b>"))
+
+        // Reply and mention flags map from MsgLikeContent.inReplyTo and MessageContent.mentions.
+        let replyWithMention = TimelineItemContent.msgLike(content: MsgLikeContent(
+            kind: .message(content: MessageContent(
+                msgType: .text(content: TextMessageContent(body: "ping", formatted: nil)),
+                body: "ping", isEdited: false, mentions: Mentions(userIds: ["@me:x"], room: false))),
+            inReplyTo: InReplyToDetails(noHandle: .init()), threadRoot: nil, threadSummary: nil))
+        let mapped = MatrixRoomListPort.preview(.remote(timestamp: 1, sender: "@a:x", isOwn: false, profile: ready, content: replyWithMention), ownUserID: "@me:x")
+        #expect(mapped?.isReply == true && mapped?.mentionsMe == true)
+        let otherUser = MatrixRoomListPort.preview(.remote(timestamp: 1, sender: "@a:x", isOwn: false, profile: ready, content: replyWithMention), ownUserID: "@someoneelse:x")
+        #expect(otherUser?.isReply == true && otherUser?.mentionsMe == false)
+        let roomMention = TimelineItemContent.msgLike(content: MsgLikeContent(
+            kind: .message(content: MessageContent(
+                msgType: .text(content: TextMessageContent(body: "all", formatted: nil)),
+                body: "all", isEdited: false, mentions: Mentions(userIds: [], room: true))),
+            inReplyTo: nil, threadRoot: nil, threadSummary: nil))
+        #expect(MatrixRoomListPort.preview(.remote(timestamp: 1, sender: "@a:x", isOwn: false, profile: ready, content: roomMention), ownUserID: "@me:x")?.mentionsMe == true)
+        #expect(MatrixRoomListPort.preview(.remote(timestamp: 1, sender: "@me:x", isOwn: true, profile: ready, content: roomMention), ownUserID: "@me:x")?.mentionsMe == false)
     }
 }
