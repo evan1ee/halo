@@ -27,6 +27,55 @@ public struct EncryptionStatus: Sendable, Equatable {
 
     public static let unknown = EncryptionStatus(verification: .unknown, recovery: .unknown)
 
-    /// The user should be offered recovery-key entry (banner until verified, ENCRYPTION FR-4).
+    /// The user should be offered recovery-key entry or SAS verification (banner until verified, ENCRYPTION FR-2, FR-4).
     public var needsRecovery: Bool { verification == .unverified && recovery == .incomplete }
+}
+
+/// One emoji shown during SAS (short authentication string) device verification (ENCRYPTION_AND_DEVICES FR-2).
+public struct VerificationEmoji: Sendable, Equatable, Hashable {
+    public let symbol: String
+    public let description: String
+
+    public init(symbol: String, description: String) {
+        self.symbol = symbol
+        self.description = description
+    }
+}
+
+/// Details of an incoming SAS verification request from another session (ENCRYPTION_AND_DEVICES FR-2).
+public struct VerificationRequest: Sendable, Equatable {
+    public let senderID: String
+    public let flowID: String
+    public let deviceID: String
+    public let deviceDisplayName: String?
+
+    public init(senderID: String, flowID: String, deviceID: String, deviceDisplayName: String?) {
+        self.senderID = senderID
+        self.flowID = flowID
+        self.deviceID = deviceID
+        self.deviceDisplayName = deviceDisplayName
+    }
+}
+
+/// Interactive SAS (emoji / decimal) device verification state machine (ENCRYPTION_AND_DEVICES FR-2, §6).
+public enum SessionVerificationPhase: Sendable, Equatable {
+    case idle
+    /// Another session requested verification with this device.
+    case incomingRequest(VerificationRequest)
+    /// This device requested verification and is waiting for another signed-in session to accept.
+    case waitingForOtherDevice
+    /// The verification request was accepted; negotiating SAS (emoji / decimal) comparison data.
+    case startingSAS
+    /// SAS emojis are ready for the user to compare across both screens.
+    case comparingEmojis([VerificationEmoji])
+    /// SAS decimal numbers are ready for the user to compare across both screens.
+    case comparingDecimals([UInt16])
+    /// This device approved the match and is waiting for the other session to confirm.
+    case waitingForPartnerConfirmation
+    /// Both sessions confirmed the match; cross-signing keys and backup secrets are exchanged.
+    case verified
+    /// Verification was cancelled by either side, with an optional human-readable reason.
+    case cancelled(reason: String?)
+    /// Verification failed.
+    case failed(String)
 }

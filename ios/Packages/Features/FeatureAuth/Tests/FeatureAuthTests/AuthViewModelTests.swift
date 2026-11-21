@@ -148,4 +148,29 @@ struct RecoveryViewModelTests {
         for _ in 0..<500_000 where !model.isVerified { await Task.yield() }
         #expect(model.isVerified && !model.needsRecovery && model.deviceStatus == "Verified" && model.recoveryStatus == "On")
     }
+
+    @Test("interactive SAS emoji verification updates verificationPhase and marks the device verified")
+    func sasEmojiVerification() async throws {
+        let port = FakeEncryptionPort(recoveryKey: "k", verified: false)
+        let model = try await model(port)
+        for _ in 0..<500_000 where !model.needsRecovery { await Task.yield() }
+        #expect(model.verificationPhase == .idle)
+
+        await model.requestDeviceVerification()
+        for _ in 0..<500_000 where model.verificationPhase != .waitingForOtherDevice { await Task.yield() }
+        #expect(model.verificationPhase == .waitingForOtherDevice)
+
+        let emojis = [VerificationEmoji(symbol: "🔑", description: "Key"), VerificationEmoji(symbol: "🛡", description: "Shield")]
+        port.simulateVerificationPhase(.comparingEmojis(emojis))
+        for _ in 0..<500_000 where model.verificationPhase != .comparingEmojis(emojis) { await Task.yield() }
+        #expect(model.verificationPhase == .comparingEmojis(emojis))
+
+        await model.approveVerification()
+        for _ in 0..<500_000 where model.verificationPhase != .waitingForPartnerConfirmation { await Task.yield() }
+        #expect(model.verificationPhase == .waitingForPartnerConfirmation)
+
+        port.simulateVerificationPhase(.verified)
+        for _ in 0..<500_000 where !model.isVerified { await Task.yield() }
+        #expect(model.isVerified && !model.needsRecovery && model.verificationPhase == .verified)
+    }
 }

@@ -48,3 +48,32 @@ struct AcknowledgementsTests {
         #expect(Acknowledgements.all().count == Acknowledgements.swiftPackages.count + Acknowledgements.bundled().count)
     }
 }
+
+@Suite("DiagnosticsZipArchive")
+struct DiagnosticsZipArchiveTests {
+    @Test("IEEE 802.3 CRC-32 matches the standard test vector")
+    func crc32StandardVector() {
+        #expect(DiagnosticsZipArchive.crc32(Data("123456789".utf8)) == 0xcbf4_3926)
+        #expect(DiagnosticsZipArchive.crc32(Data()) == 0x0000_0000)
+    }
+
+    @Test("builds a valid ZIP archive with local headers, central directory and EOCD")
+    func buildsValidZip() throws {
+        let entries = [
+            DiagnosticsZipArchive.Entry(filename: "report.txt", text: "Halo 1.0 (1)\n"),
+            DiagnosticsZipArchive.Entry(filename: "audit-events.jsonl", text: "{\"kind\":\"explained\"}\n"),
+        ]
+        let zip = DiagnosticsZipArchive.build(entries)
+        // Local file header signature 0x04034b50 ("PK\x03\x04") at offset 0
+        #expect(zip.count > 64)
+        #expect(zip[0] == 0x50 && zip[1] == 0x4b && zip[2] == 0x03 && zip[3] == 0x04)
+        // End of central directory signature 0x06054b50 ("PK\x05\x06") 22 bytes from the end
+        let eocd = zip.count - 22
+        #expect(zip[eocd] == 0x50 && zip[eocd + 1] == 0x4b && zip[eocd + 2] == 0x05 && zip[eocd + 3] == 0x06)
+        // Entry count in EOCD (offset +8 and +10) == 2
+        #expect(zip[eocd + 8] == 2 && zip[eocd + 10] == 2)
+        // Stored payload bytes appear intact in the archive
+        #expect(zip.range(of: Data("Halo 1.0 (1)\n".utf8)) != nil)
+        #expect(zip.range(of: Data("{\"kind\":\"explained\"}\n".utf8)) != nil)
+    }
+}

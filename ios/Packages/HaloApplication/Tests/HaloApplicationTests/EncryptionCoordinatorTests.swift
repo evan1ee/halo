@@ -75,4 +75,48 @@ struct EncryptionCoordinatorTests {
         #expect(await coordinator.snapshot.recovery == .idle)
         #expect(await wait(coordinator) { $0.status.recovery == .enabled } != nil)
     }
+
+    @Test("SAS verification transitions from request through emoji comparison to verified")
+    func sasVerificationFlow() async throws {
+        let port = FakeEncryptionPort(recoveryKey: "k", verified: false)
+        let (coordinator, _) = try await make(port)
+        _ = await wait(coordinator) { $0.status.needsRecovery }
+
+        await coordinator.requestDeviceVerification()
+        #expect(await wait(coordinator) { $0.verificationPhase == .waitingForOtherDevice } != nil)
+
+        let emojis = [VerificationEmoji(symbol: "🐶", description: "Dog"), VerificationEmoji(symbol: "🐱", description: "Cat")]
+        port.simulateVerificationPhase(.comparingEmojis(emojis))
+        #expect(await wait(coordinator) { $0.verificationPhase == .comparingEmojis(emojis) } != nil)
+
+        await coordinator.approveVerification()
+        #expect(await wait(coordinator) { $0.verificationPhase == .waitingForPartnerConfirmation } != nil)
+
+        port.simulateVerificationPhase(.verified)
+        let finished = await wait(coordinator) { $0.verificationPhase == .verified && $0.status.verification == .verified }
+        #expect(finished != nil)
+    }
+
+    @Test("incoming SAS request can be accepted or declined")
+    func sasIncomingAndDecline() async throws {
+        let port = FakeEncryptionPort(recoveryKey: "k", verified: false)
+        let (coordinator, _) = try await make(port)
+        _ = await wait(coordinator) { $0.status.needsRecovery }
+
+        let req = VerificationRequest(senderID: "@alice:example.org", flowID: "flow-1", deviceID: "DEV2", deviceDisplayName: "Mac")
+        port.simulateVerificationPhase(.incomingRequest(req))
+        #expect(await wait(coordinator) { $0.verificationPhase == .incomingRequest(req) } != nil)
+
+        await coordinator.acceptVerificationRequest()
+        #expect(await wait(coordinator) { $0.verificationPhase == .startingSAS } != nil)
+
+        await coordinator.declineVerification()
+        #expect(await wait(coordinator) {
+            if case .cancelled = $0.verificationPhase { return true }
+            return false
+        } != nil)
+
+        await coordinator.cancelVerification()
+        #expect(await wait(coordinator) { $0.verificationPhase == .idle } != nil)
+    }
 }

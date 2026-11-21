@@ -349,6 +349,12 @@ public actor MatrixSessionPort: SessionPort {
         return client.encryption()
     }
 
+    /// The SDK's session verification controller for SAS (emoji / decimal) verification (ENCRYPTION_AND_DEVICES FR-2).
+    func sessionVerificationController() async throws(HaloError) -> SessionVerificationController {
+        guard let client else { throw .unauthorized(soft: false) }
+        do { return try await client.getSessionVerificationController() } catch { throw ErrorMapper.map(error) }
+    }
+
     // MARK: Internals
 
     private func register(_ continuation: AsyncStream<SessionEvent>.Continuation, id: UUID) { events[id] = continuation }

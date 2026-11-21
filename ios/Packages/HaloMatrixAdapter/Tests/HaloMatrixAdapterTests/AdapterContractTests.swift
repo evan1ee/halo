@@ -1185,9 +1185,29 @@ struct AdapterContractTests {
             Issue.record("the old recovery key still unlocks a new device")
         } catch {}
         try await within(seconds: 90) { try await EncryptionPortContract.verifyRecovery(fresh, recoveryKey: replaced) }
+
+        // SAS verification request flow (ENCRYPTION_AND_DEVICES FR-2): `requestDeviceVerification()` transitions
+        // `verificationPhases()` from `.idle` to `.waitingForOtherDevice`, and `cancelVerification()` returns to `.idle`.
+        let fourth = port()
+        _ = try await fourth.loginPassword(PasswordCredentials(username: user, password: password, deviceDisplayName: "e2ee-4"), on: details)
+        try await MatrixSyncPort(session: fourth).start()
+        let sasPort = MatrixEncryptionPort(session: fourth)
+        var initialPhase: SessionVerificationPhase?
+        for await phase in sasPort.verificationPhases() { initialPhase = phase; break }
+        #expect(initialPhase == .idle)
+        try await within(seconds: 30) { try await sasPort.requestDeviceVerification() }
+        var requestedPhase: SessionVerificationPhase?
+        for await phase in sasPort.verificationPhases() { requestedPhase = phase; break }
+        #expect(requestedPhase == .waitingForOtherDevice)
+        try? await sasPort.cancelVerification()
+        var cancelledPhase: SessionVerificationPhase?
+        for await phase in sasPort.verificationPhases() { cancelledPhase = phase; break }
+        #expect(cancelledPhase == .idle)
+
         try await first.logout()
         try await second.logout()
         try await third.logout()
+        try await fourth.logout()
     }
 
     /// The pushers the account has on the server, read with a plain HTTP login of its own (not through the adapter).

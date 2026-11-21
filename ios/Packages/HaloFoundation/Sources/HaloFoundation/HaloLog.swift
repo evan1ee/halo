@@ -1,6 +1,7 @@
 #if canImport(os)
 import os
 #endif
+import Synchronization
 
 /// Log categories (docs/architecture/LOGGING_AND_DIAGNOSTICS.md §1).
 public enum LogCategory: String, Sendable, CaseIterable {
@@ -94,3 +95,37 @@ public struct OSLogSink: LogSink {
     }
 }
 #endif
+
+/// Keeps a capped ring buffer of privacy-reviewed `HaloLog` lines in memory for Settings → Diagnostics zip export
+/// (docs/architecture/LOGGING_AND_DIAGNOSTICS.md §3), optionally forwarding every line to another sink (such as `OSLogSink`).
+public final class RingLogSink: LogSink {
+    private let capacity: Int
+    private let forwarding: (any LogSink)?
+    private let lines = Mutex<[String]>([])
+
+    public init(capacity: Int = 500, forwarding: (any LogSink)? = nil) {
+        self.capacity = max(1, capacity)
+        self.forwarding = forwarding
+    }
+
+    public func emit(level: LogLevel, category: LogCategory, event: String, code: String?, id: String?) {
+        forwarding?.emit(level: level, category: category, event: event, code: code, id: id)
+        let levelTag = switch level {
+        case .debug: "DEBUG"
+        case .info: "INFO"
+        case .warning: "WARN"
+        case .error: "ERROR"
+        }
+        let line = "[\(levelTag)] [\(category.rawValue)] \(event) code=\(code ?? "-") id=\(id ?? "-")"
+        lines.withLock { buffer in
+            buffer.append(line)
+            if buffer.count > capacity {
+                buffer.removeFirst(buffer.count - capacity)
+            }
+        }
+    }
+
+    public func snapshot() -> [String] {
+        lines.withLock { $0 }
+    }
+}

@@ -29,6 +29,7 @@ public struct SettingsView: View {
     private let loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)?
     private let saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)?
     private let diagnostics: (@Sendable () async -> String)?
+    private let exportDiagnosticsZip: (@Sendable () async -> URL?)?
     private let reconcile: (@Sendable () async -> Void)?
     private let unexplainedAuditCount: (@Sendable () async -> Int?)?
     @State private var unexplainedCount: Int?
@@ -52,7 +53,9 @@ public struct SettingsView: View {
     private let openSystemSettings: (() -> Void)?
     @State private var notifications = ""
     private let storageSizes: (@Sendable () async -> [StorageSize])?
+    private let clearCache: (@Sendable () async -> Bool)?
     @State private var storage: [StorageSize] = []
+    @State private var clearingCache = false
     @AppStorage(AppPreferences.appearanceKey) private var appearance = Appearance.system.rawValue
     @State private var mediaPreviews: MediaPreviewChoice = .always
     @State private var mediaPreviewsLoaded = false
@@ -69,12 +72,15 @@ public struct SettingsView: View {
         loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)? = nil,
         saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)? = nil,
         profile: ProfileSettingsActions? = nil, stickerPacks: StickerPackSettingsActions? = nil, devices: DevicesSettingsActions? = nil, changePassword: ChangePasswordActions? = nil, verifyDevice: VerifyDeviceAction? = nil, diagnostics: (@Sendable () async -> String)? = nil,
+        exportDiagnosticsZip: (@Sendable () async -> URL?)? = nil,
         reconcile: (@Sendable () async -> Void)? = nil, unexplainedAuditCount: (@Sendable () async -> Int?)? = nil,
         storageSizes: (@Sendable () async -> [StorageSize])? = nil,
+        clearCache: (@Sendable () async -> Bool)? = nil,
         security: (@MainActor () -> [StorageSize])? = nil, setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil,
         replaceRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil, notificationDefaults: NotificationDefaultsActions? = nil, notificationStatus: (@Sendable () async -> String)? = nil, openSystemSettings: (() -> Void)? = nil, onSignOut: @escaping () -> Void
     ) {
         self.diagnostics = diagnostics
+        self.exportDiagnosticsZip = exportDiagnosticsZip
         self.reconcile = reconcile
         self.unexplainedAuditCount = unexplainedAuditCount
         self.profile = profile
@@ -83,6 +89,7 @@ public struct SettingsView: View {
         self.changePassword = changePassword
         self.verifyDevice = verifyDevice
         self.storageSizes = storageSizes
+        self.clearCache = clearCache
         self.notificationStatus = notificationStatus
         self.notificationDefaults = notificationDefaults
         self.security = security
@@ -237,6 +244,18 @@ public struct SettingsView: View {
             if let storageSizes {
                 Section {
                     ForEach(storage) { LabeledContent($0.name, value: $0.formatted) }
+                    if let clearCache {
+                        Button(clearingCache ? "Clearing cache…" : "Clear media cache") {
+                            clearingCache = true
+                            Task {
+                                _ = await clearCache()
+                                storage = await storageSizes()
+                                clearingCache = false
+                            }
+                        }
+                        .disabled(clearingCache)
+                        .accessibilityIdentifier("clear-cache")
+                    }
                 } header: {
                     Text("Storage")
                 } footer: {
@@ -246,7 +265,7 @@ public struct SettingsView: View {
             }
             if let diagnostics {
                 Section {
-                    NavigationLink { DiagnosticsView(report: diagnostics, reconcile: reconcile) } label: {
+                    NavigationLink { DiagnosticsView(report: diagnostics, exportZip: exportDiagnosticsZip, reconcile: reconcile) } label: {
                         HStack {
                             Label("Diagnostics", systemImage: "stethoscope")
                             Spacer()
@@ -457,17 +476,25 @@ public struct StorageSize: Sendable, Identifiable, Equatable {
     public var formatted: String { text }
 }
 
-/// A plain-text status report (versions, device, read-state audit counts) to read or share, plus manual unread reconciliation (ROOM_LIST FR-8, SETTINGS §3).
+/// A plain-text status report (versions, device, read-state audit counts) to read or share, plus manual unread reconciliation
+/// and `.zip` diagnostics archive export (ROOM_LIST FR-8, SETTINGS §3, LOGGING_AND_DIAGNOSTICS §3).
 public struct DiagnosticsView: View {
     private let report: @Sendable () async -> String
+    private let exportZip: (@Sendable () async -> URL?)?
     private let reconcile: (@Sendable () async -> Void)?
     @State private var text = ""
+    @State private var zipURL: URL?
     @State private var reconciling = false
     @State private var reconciled = false
     @State private var copied = false
 
-    public init(report: @escaping @Sendable () async -> String, reconcile: (@Sendable () async -> Void)? = nil) {
+    public init(
+        report: @escaping @Sendable () async -> String,
+        exportZip: (@Sendable () async -> URL?)? = nil,
+        reconcile: (@Sendable () async -> Void)? = nil
+    ) {
         self.report = report
+        self.exportZip = exportZip
         self.reconcile = reconcile
     }
 
@@ -487,6 +514,12 @@ public struct DiagnosticsView: View {
                 }
                 .disabled(text.isEmpty)
                 #endif
+                if let zipURL {
+                    ShareLink(item: zipURL) {
+                        Label("Export diagnostics (.zip)", systemImage: "archivebox")
+                    }
+                    .accessibilityIdentifier("export-diagnostics-zip")
+                }
             }
             if let reconcile {
                 Section {
@@ -496,6 +529,7 @@ public struct DiagnosticsView: View {
                         Task {
                             await reconcile()
                             text = await report()
+                            if let exportZip { zipURL = await exportZip() }
                             reconciling = false
                             reconciled = true
                         }
@@ -511,9 +545,16 @@ public struct DiagnosticsView: View {
         }
         .navigationTitle("Diagnostics")
         .toolbar {
-            if !text.isEmpty { ToolbarItem(placement: .primaryAction) { ShareLink(item: text) } }
+            if let zipURL {
+                ToolbarItem(placement: .primaryAction) { ShareLink(item: zipURL) }
+            } else if !text.isEmpty {
+                ToolbarItem(placement: .primaryAction) { ShareLink(item: text) }
+            }
         }
-        .task { text = await report() }
+        .task {
+            text = await report()
+            if let exportZip { zipURL = await exportZip() }
+        }
         .task(id: copied) {
             guard copied else { return }
             try? await Task.sleep(for: .seconds(1.5))

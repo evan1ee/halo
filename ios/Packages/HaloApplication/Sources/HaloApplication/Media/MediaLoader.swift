@@ -54,6 +54,13 @@ public actor MediaLoader {
         do { return try await port.content(ref) } catch { throw error }
     }
 
+    /// Drops all cached thumbnails from memory (SETTINGS §3 Storage → Clear cache).
+    public func clearCache() {
+        cache.removeAll()
+        order.removeAll()
+        cachedBytes = 0
+    }
+
     // MARK: Cache
 
     private func touch(_ key: Key) {

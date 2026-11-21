@@ -67,4 +67,15 @@ struct MediaLoaderTests {
         #expect(port.thumbnailCalls == 2)
         await #expect(throws: HaloError.notFound) { try await loader.thumbnail(MediaRef(token: "gone"), width: 1, height: 1) }
     }
+
+    @Test("clearCache drops cached thumbnails so the next load fetches again")
+    func clearsCache() async throws {
+        let (port, refs) = port(["a": 10])
+        let loader = MediaLoader(port: port)
+        _ = try await loader.thumbnail(refs[0], width: 64, height: 64)
+        #expect(port.thumbnailCalls == 1)
+        await loader.clearCache()
+        _ = try await loader.thumbnail(refs[0], width: 64, height: 64)
+        #expect(port.thumbnailCalls == 2)
+    }
 }

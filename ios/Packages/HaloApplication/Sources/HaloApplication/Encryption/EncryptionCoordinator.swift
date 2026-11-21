@@ -1,7 +1,7 @@
 import HaloDomain
 import HaloFoundation
 
-/// Follows the device's encryption status while a session is ready and runs recovery-key entry
+/// Follows the device's encryption status while a session is ready and runs recovery-key entry and SAS device verification
 /// (docs/features/ENCRYPTION_AND_DEVICES.md §5–6). The recovery key is passed through, never kept.
 public actor EncryptionCoordinator {
     public enum Recovery: Sendable, Equatable {
@@ -14,9 +14,16 @@ public actor EncryptionCoordinator {
     public struct Snapshot: Sendable, Equatable {
         public var status: EncryptionStatus
         public var recovery: Recovery
+        public var verificationPhase: SessionVerificationPhase
+
+        public init(status: EncryptionStatus, recovery: Recovery, verificationPhase: SessionVerificationPhase = .idle) {
+            self.status = status
+            self.recovery = recovery
+            self.verificationPhase = verificationPhase
+        }
     }
 
-    public private(set) var snapshot = Snapshot(status: .unknown, recovery: .idle) {
+    public private(set) var snapshot = Snapshot(status: .unknown, recovery: .idle, verificationPhase: .idle) {
         didSet { if snapshot != oldValue { broadcaster.publish(snapshot) } }
     }
 
@@ -25,6 +32,7 @@ public actor EncryptionCoordinator {
     private var broadcaster = SnapshotBroadcaster<Snapshot>()
     private var sessionTask: Task<Void, Never>?
     private var portTask: Task<Void, Never>?
+    private var phaseTask: Task<Void, Never>?
 
     public init(port: any EncryptionPort, session: SessionCoordinator) {
         self.port = port
@@ -34,6 +42,7 @@ public actor EncryptionCoordinator {
     deinit {
         sessionTask?.cancel()
         portTask?.cancel()
+        phaseTask?.cancel()
     }
 
     public func snapshots() -> AsyncStream<Snapshot> { broadcaster.subscribe(current: snapshot) }
@@ -84,22 +93,74 @@ public actor EncryptionCoordinator {
         return try await port.resetRecovery()
     }
 
+    /// Requests interactive SAS (emoji / decimal) verification with the user's other signed-in devices (FR-2).
+    public func requestDeviceVerification() async {
+        do {
+            try await port.requestDeviceVerification()
+        } catch {
+            snapshot.verificationPhase = .failed(error.code)
+        }
+    }
+
+    /// Accepts an incoming SAS verification request from another device (FR-2).
+    public func acceptVerificationRequest() async {
+        do {
+            try await port.acceptVerificationRequest()
+        } catch {
+            snapshot.verificationPhase = .failed(error.code)
+        }
+    }
+
+    /// Confirms that the SAS emojis or decimal numbers match on both devices (FR-2).
+    public func approveVerification() async {
+        do {
+            try await port.approveVerification()
+        } catch {
+            snapshot.verificationPhase = .failed(error.code)
+        }
+    }
+
+    /// Rejects a mismatched SAS comparison (FR-2).
+    public func declineVerification() async {
+        do {
+            try await port.declineVerification()
+        } catch {
+            snapshot.verificationPhase = .failed(error.code)
+        }
+    }
+
+    /// Cancels an active SAS verification flow and resets to `.idle` (FR-2).
+    public func cancelVerification() async {
+        try? await port.cancelVerification()
+        snapshot.verificationPhase = .idle
+    }
+
     // MARK: Private
 
     private func sessionReady(_ ready: Bool) {
         portTask?.cancel()
         portTask = nil
+        phaseTask?.cancel()
+        phaseTask = nil
         guard ready else {
-            snapshot = Snapshot(status: .unknown, recovery: .idle)
+            snapshot = Snapshot(status: .unknown, recovery: .idle, verificationPhase: .idle)
             return
         }
         let statuses = port.statuses()
         portTask = Task { [weak self] in
             for await status in statuses { await self?.statusChanged(status) }
         }
+        let phases = port.verificationPhases()
+        phaseTask = Task { [weak self] in
+            for await phase in phases { await self?.phaseChanged(phase) }
+        }
     }
 
     private func statusChanged(_ status: EncryptionStatus) {
         snapshot.status = status
+    }
+
+    private func phaseChanged(_ phase: SessionVerificationPhase) {
+        snapshot.verificationPhase = phase
     }
 }

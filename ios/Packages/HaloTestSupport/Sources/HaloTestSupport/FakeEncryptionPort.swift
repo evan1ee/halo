@@ -3,13 +3,16 @@ import HaloDomain
 import HaloFoundation
 import Synchronization
 
-/// An in-memory `EncryptionPort`: an account either has a recovery key or not, and recovering with it verifies the device.
+/// An in-memory `EncryptionPort`: an account either has a recovery key or not, and recovering with it or completing
+/// SAS verification verifies the device.
 public final class FakeEncryptionPort: EncryptionPort {
     private struct State {
         var status: EncryptionStatus
+        var phase: SessionVerificationPhase = .idle
         var key: String?
         var nextError: HaloError?
         var continuations: [UUID: AsyncStream<EncryptionStatus>.Continuation] = [:]
+        var phaseContinuations: [UUID: AsyncStream<SessionVerificationPhase>.Continuation] = [:]
     }
 
     private let state: Mutex<State>
@@ -21,7 +24,26 @@ public final class FakeEncryptionPort: EncryptionPort {
     }
 
     public var status: EncryptionStatus { state.withLock { $0.status } }
+    public var verificationPhase: SessionVerificationPhase { state.withLock { $0.phase } }
     public func failNext(with error: HaloError) { state.withLock { $0.nextError = error } }
+
+    /// Simulates an external SAS verification event (such as an incoming request or emoji list from a peer device).
+    public func simulateVerificationPhase(_ phase: SessionVerificationPhase) {
+        let (status, phaseConts, statusConts) = state.withLock { state -> (EncryptionStatus?, [AsyncStream<SessionVerificationPhase>.Continuation], [AsyncStream<EncryptionStatus>.Continuation]) in
+            state.phase = phase
+            var updatedStatus: EncryptionStatus?
+            if phase == .verified {
+                let recovery: RecoveryState = state.key == nil ? .disabled : .enabled
+                state.status = EncryptionStatus(verification: .verified, recovery: recovery)
+                updatedStatus = state.status
+            }
+            return (updatedStatus, Array(state.phaseContinuations.values), Array(state.continuations.values))
+        }
+        for continuation in phaseConts { continuation.yield(phase) }
+        if let status {
+            for continuation in statusConts { continuation.yield(status) }
+        }
+    }
 
     public func statuses() -> AsyncStream<EncryptionStatus> {
         let (stream, continuation) = AsyncStream<EncryptionStatus>.makeStream(bufferingPolicy: .bufferingNewest(1))
@@ -32,6 +54,18 @@ public final class FakeEncryptionPort: EncryptionPort {
         }
         continuation.yield(current)
         continuation.onTermination = { [weak self] _ in self?.state.withLock { _ = $0.continuations.removeValue(forKey: id) } }
+        return stream
+    }
+
+    public func verificationPhases() -> AsyncStream<SessionVerificationPhase> {
+        let (stream, continuation) = AsyncStream<SessionVerificationPhase>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        let id = UUID()
+        let current = state.withLock { state in
+            state.phaseContinuations[id] = continuation
+            return state.phase
+        }
+        continuation.yield(current)
+        continuation.onTermination = { [weak self] _ in self?.state.withLock { _ = $0.phaseContinuations.removeValue(forKey: id) } }
         return stream
     }
 
@@ -74,6 +108,46 @@ public final class FakeEncryptionPort: EncryptionPort {
         }
         publish(try result.get())
         return key
+    }
+
+    public func requestDeviceVerification() async throws(HaloError) {
+        if let error = state.withLock({ state -> HaloError? in
+            defer { state.nextError = nil }
+            return state.nextError
+        }) { throw error }
+        simulateVerificationPhase(.waitingForOtherDevice)
+    }
+
+    public func acceptVerificationRequest() async throws(HaloError) {
+        if let error = state.withLock({ state -> HaloError? in
+            defer { state.nextError = nil }
+            return state.nextError
+        }) { throw error }
+        simulateVerificationPhase(.startingSAS)
+    }
+
+    public func approveVerification() async throws(HaloError) {
+        if let error = state.withLock({ state -> HaloError? in
+            defer { state.nextError = nil }
+            return state.nextError
+        }) { throw error }
+        simulateVerificationPhase(.waitingForPartnerConfirmation)
+    }
+
+    public func declineVerification() async throws(HaloError) {
+        if let error = state.withLock({ state -> HaloError? in
+            defer { state.nextError = nil }
+            return state.nextError
+        }) { throw error }
+        simulateVerificationPhase(.cancelled(reason: "The emojis didn't match."))
+    }
+
+    public func cancelVerification() async throws(HaloError) {
+        if let error = state.withLock({ state -> HaloError? in
+            defer { state.nextError = nil }
+            return state.nextError
+        }) { throw error }
+        simulateVerificationPhase(.idle)
     }
 
     private func publish(_ status: EncryptionStatus) {

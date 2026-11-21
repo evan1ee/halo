@@ -23,6 +23,8 @@ public final class RecoveryViewModel {
     /// Plain-language state for Settings → Security.
     public private(set) var deviceStatus = "Checking…"
     public private(set) var recoveryStatus = "Checking…"
+    /// Current interactive SAS (emoji / decimal) device verification phase (ENCRYPTION_AND_DEVICES FR-2).
+    public private(set) var verificationPhase: SessionVerificationPhase = .idle
 
     public var key = ""
 
@@ -77,11 +79,38 @@ public final class RecoveryViewModel {
         await coordinator.recover(recoveryKey: entered)
     }
 
+    /// Starts SAS (emoji / decimal) verification with another signed-in device (ENCRYPTION_AND_DEVICES FR-2).
+    public func requestDeviceVerification() async {
+        await coordinator.requestDeviceVerification()
+    }
+
+    /// Accepts an incoming SAS verification request from another session (FR-2).
+    public func acceptVerificationRequest() async {
+        await coordinator.acceptVerificationRequest()
+    }
+
+    /// Confirms that the SAS emojis or decimal numbers match on both screens (FR-2).
+    public func approveVerification() async {
+        await coordinator.approveVerification()
+    }
+
+    /// Rejects a mismatched SAS comparison (FR-2).
+    public func declineVerification() async {
+        await coordinator.declineVerification()
+    }
+
+    /// Cancels an active SAS verification flow and resets to `.idle` (FR-2).
+    public func cancelVerification() async {
+        await coordinator.cancelVerification()
+    }
+
     func apply(_ snapshot: EncryptionCoordinator.Snapshot) {
-        needsRecovery = snapshot.status.needsRecovery
+        let verified = snapshot.status.verification == .verified || snapshot.verificationPhase == .verified
+        needsRecovery = snapshot.status.needsRecovery && !verified
+        verificationPhase = snapshot.verificationPhase
         deviceStatus = switch snapshot.status.verification {
         case .verified: "Verified"
-        case .unverified: "Not verified"
+        case .unverified: verified ? "Verified" : "Not verified"
         case .unknown: "Checking…"
         }
         recoveryStatus = switch snapshot.status.recovery {
@@ -90,7 +119,7 @@ public final class RecoveryViewModel {
         case .disabled: "Not set up"
         case .unknown: "Checking…"
         }
-        isVerified = snapshot.status.verification == .verified
+        isVerified = verified
         switch snapshot.recovery {
         case .idle:
             isWorking = false

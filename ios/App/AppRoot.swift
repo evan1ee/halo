@@ -53,12 +53,15 @@ final class AppRoot {
     /// The signed-in Matrix ID, for the avatar's initial before the display name is known.
     var signedInUserID: String? { signedInUser?.rawValue }
     private let log: HaloLog
+    private let ringLog: RingLogSink
     private var auditPort: (any AuditEventPort)?
 
     init() {
         let namespace = Bundle.main.bundleIdentifier ?? "one.mbm.halo"
+        let ringLog = RingLogSink(capacity: 500, forwarding: OSLogSink(subsystem: namespace))
+        self.ringLog = ringLog
         let log = HaloLog(
-            category: .session, sink: OSLogSink(subsystem: namespace),
+            category: .session, sink: ringLog,
             minimum: Self.minimumLogLevel, salt: Self.installSalt())
 
         // Shared with the notification extension: the Keychain access group and the App Group container.
@@ -161,6 +164,13 @@ final class AppRoot {
                     let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
                     auditPort = AuditEventStore(database: database, account: user)
                     await readState.setAudit(.init(port: AuditEventStore(database: database, account: user), roomHash: { log.id($0) }, appVersion: version))
+                    #else
+                    if Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt" {
+                        let log = log
+                        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+                        auditPort = AuditEventStore(database: database, account: user)
+                        await readState.setAudit(.init(port: AuditEventStore(database: database, account: user), roomHash: { log.id($0) }, appVersion: version))
+                    }
                     #endif
                 } catch {
                     // Without a database, receipts and drafts still work from memory; there is nothing to restore.
@@ -238,6 +248,74 @@ final class AppRoot {
             lines.append("Read-state audit: off in this build")
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// Settings → Diagnostics → "Export diagnostics (.zip)" (LOGGING_AND_DIAGNOSTICS §3): builds a privacy-reviewed
+    /// `.zip` archive in a temporary file containing the summary report, `HaloLog` lines, `audit_event` rows (JSONL),
+    /// and anonymised room read-state snapshots (hashed room IDs and counts only; no message bodies, names or raw Matrix IDs).
+    func exportDiagnosticsZip() async -> URL? {
+        let reportText = await diagnosticsReport()
+        let logLines = ringLog.snapshot().joined(separator: "\n") + "\n"
+        var auditLines: [String] = []
+        if let events = try? await auditPort?.all() {
+            let formatter = ISO8601DateFormatter()
+            for event in events {
+                auditLines.append(
+                    "{\"at\":\"\(formatter.string(from: event.at))\",\"room_hash\":\"\(event.roomHash)\",\"kind\":\"\(event.finding.kind.rawValue)\",\"reason\":\"\(event.finding.reason)\",\"app_version\":\"\(event.appVersion)\",\"inputs\":\(event.inputsJSON)}"
+                )
+            }
+        }
+        let auditJSONL = auditLines.isEmpty ? "" : (auditLines.joined(separator: "\n") + "\n")
+
+        let log = self.log
+        let rooms = await roomCoordinator.rooms
+        var currentStates: [RoomID: RoomReadState] = [:]
+        for await snapshot in await readState.states() {
+            currentStates = snapshot
+            break
+        }
+        var roomLines: [String] = []
+        for summary in rooms {
+            let roomHash = log.id(summary.id)
+            let state = currentStates[summary.id]
+            let c = summary.read
+            let mode = switch c.mode { case .allMessages: "all"; case .mentionsAndKeywords: "mentions"; case .mute: "mute" }
+            let reasons = (state?.reasons.map { $0.rawValue } ?? []).joined(separator: ",")
+            roomLines.append(
+                "{\"room_hash\":\"\(roomHash)\",\"membership\":\"\(summary.membership)\",\"enc\":\(summary.isEncrypted),\"mode\":\"\(mode)\",\"marked\":\(c.isMarkedUnread),\"server\":[\(c.server.notification),\(c.server.highlight)],\"sdk\":[\(c.sdk.unreadMessages),\(c.sdk.unreadNotifications),\(c.sdk.unreadMentions)],\"attention\":\(state?.attention ?? false),\"unread\":\(state?.hasUnread ?? false),\"badge\":\(state?.badgeCount ?? 0),\"reasons\":\"\(reasons)\"}"
+            )
+        }
+        let roomsJSONL = roomLines.isEmpty ? "" : (roomLines.joined(separator: "\n") + "\n")
+
+        let archive = DiagnosticsZipArchive.build([
+            .init(filename: "report.txt", text: reportText + "\n"),
+            .init(filename: "app-logs.txt", text: logLines),
+            .init(filename: "audit-events.jsonl", text: auditJSONL),
+            .init(filename: "room-snapshots.jsonl", text: roomsJSONL),
+        ])
+        let out = FileManager.default.temporaryDirectory.appendingPathComponent("halo-diagnostics.zip")
+        do {
+            try archive.write(to: out, options: .atomic)
+            return out
+        } catch {
+            return nil
+        }
+    }
+
+    /// Settings → Storage → "Clear media cache" (SETTINGS §3): drops in-memory media thumbnails and any disk files
+    /// in the per-session SDK `caches/` directories without touching the encrypted `data/` store or `halo.sqlite`.
+    func clearMediaCache() async -> Bool {
+        await media.clearCache()
+        let root = HaloShared.storeDirectory()
+        let fm = FileManager.default
+        if let subdirs = try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey]) {
+            for dir in subdirs where dir.lastPathComponent != "halo" {
+                let cacheDir = dir.appendingPathComponent("caches", isDirectory: true)
+                guard let files = try? fm.contentsOfDirectory(at: cacheDir, includingPropertiesForKeys: nil) else { continue }
+                for file in files { try? fm.removeItem(at: file) }
+            }
+        }
+        return true
     }
 
     /// Settings → Diagnostics row counter (AC-U8): unexplained read-state audit events, or `nil` when the auditor is off.

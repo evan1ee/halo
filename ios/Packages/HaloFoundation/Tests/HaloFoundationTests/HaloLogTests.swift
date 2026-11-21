@@ -42,4 +42,19 @@ struct HaloLogTests {
             .init(level: .error, category: .sync, event: "sync failed", code: "NET_RETRYABLE", id: nil)
         ])
     }
+
+    @Test("RingLogSink keeps the newest capacity lines and forwards to its underlying sink")
+    func ringLogSink() {
+        let forward = CapturingSink()
+        let ring = RingLogSink(capacity: 2, forwarding: forward)
+        let log = HaloLog(category: .session, sink: ring, salt: 1)
+        log.info("first")
+        log.warning("second", error: .notFound)
+        log.error("third")
+        #expect(forward.lines.withLock { $0.count } == 3)
+        #expect(ring.snapshot() == [
+            "[WARN] [session] second code=NOT_FOUND id=-",
+            "[ERROR] [session] third code=- id=-",
+        ])
+    }
 }

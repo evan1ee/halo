@@ -61,6 +61,7 @@ private struct RootView: View {
             case .signedIn:
                 NavigationStack(path: $path) {
                     VStack(spacing: 0) {
+                        RecoveryBanner(model: root.recovery)
                         RoomListView(model: root.roomList, onRoomInfo: { roomInfo = root.makeRoomDetails(room: $0) }) { path.append($0) }
                     }
                     .navigationTitle("")
@@ -100,9 +101,11 @@ private struct RootView: View {
                                     changePassword: root.changePasswordActions(),
                                     verifyDevice: VerifyDeviceAction(isNeeded: { root.recovery.needsRecovery }, makeView: { AnyView(RecoveryView(model: root.recovery)) }),
                                     diagnostics: { await root.diagnosticsReport() },
+                                    exportDiagnosticsZip: { await root.exportDiagnosticsZip() },
                                     reconcile: { await root.reconcileNow() },
                                     unexplainedAuditCount: { await root.unexplainedAuditCount() },
                                     storageSizes: { await root.storageSizes() },
+                                    clearCache: { await root.clearMediaCache() },
                                     security: { [StorageSize(name: "This device", text: root.recovery.deviceStatus), StorageSize(name: "Recovery key", text: root.recovery.recoveryStatus)] },
                                     setUpRecovery: {
                                         switch await root.recovery.setUpRecovery() {
@@ -165,6 +168,12 @@ private struct RootView: View {
         }
         .task {
             PushDelegate.coordinator = root.push
+            PushDelegate.onNotificationTap = { room, event in
+                pendingEvent = event
+                if path.last != room {
+                    path.append(room)
+                }
+            }
             await root.push?.begin()
             await root.readState.begin()
             Task { await root.followReadIntents() }
@@ -276,11 +285,35 @@ private struct TimelineScreen: View {
     }
 }
 
-/// Receives the APNs device token and hands it to the push coordinator (PUSH_NOTIFICATIONS §2).
-final class PushDelegate: NSObject, UIApplicationDelegate {
+/// Receives the APNs device token and handles notification taps (PUSH_NOTIFICATIONS §2, NOTIFICATIONS §5).
+final class PushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     @MainActor static var coordinator: PushCoordinator?
+    @MainActor static var onNotificationTap: (@MainActor (RoomID, EventID?) -> Void)?
+
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
+        return true
+    }
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         Task { @MainActor in await Self.coordinator?.deviceTokenReceived(deviceToken) }
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+        let threadID = response.notification.request.content.threadIdentifier
+        let roomRaw = (userInfo["room_id"] as? String) ?? (threadID.isEmpty ? nil : threadID)
+        let eventRaw = userInfo["event_id"] as? String
+        if let roomRaw, let room = try? RoomID(roomRaw) {
+            let event = eventRaw.flatMap { try? EventID($0) }
+            Task { @MainActor in
+                Self.onNotificationTap?(room, event)
+            }
+        }
+        completionHandler()
     }
 }
