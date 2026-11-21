@@ -92,6 +92,8 @@ def check_file(path: Path) -> None:
                 violations.append(f"{where}: feature imports {name} — features use HaloApplication, not infrastructure")
             for name in sorted(i for i in imports if i.startswith("Feature") and i != module):
                 violations.append(f"{where}: feature imports another feature ({name}) — navigate through HaloApplication routes")
+            if re.search(r"\bReadStatePolicy\b", code):
+                violations.append(f"{where}: feature calls ReadStatePolicy directly — consume ReadStateCoordinator instead (R-05, AGENTS.md §4.2)")
         if PRINT_RE.search(code):
             violations.append(f"{where}: print( in production code — use HaloLog (AGENTS.md §17)")
         if TRY_BANG_RE.search(code):

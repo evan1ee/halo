@@ -9,7 +9,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 - **Checks:** `scripts/prepush.sh` passes (SwiftLint not configured, skipped); `scripts/prepush.sh` now also builds `Halo-Debug` for the simulator. All 17 contract tests (`infra/dev`) pass, none skipped (`scripts/contract-test.sh` after `infra/dev/create-fixtures.py`).
 - **CI:** PRs #1–#15 merged. CI runs only the Linux-portable packages (Foundation, Domain, TestSupport, Application): adapter, persistence, platform, features and the app are tested only by `prepush.sh` on a Mac. `licenses` runs only on SDK/inventory changes.
 
-- **Codebase review (2026-11-21):** [docs/CODEBASE_REVIEW.md](docs/CODEBASE_REVIEW.md), 27 findings (7 P0, all unread/badge), Top 10 risks, Phase 0–3 roadmap. **Fixed:** R-01 (D78), R-07 (D79), R-02/R-03/R-13 (record lifecycle + GRDB `notification_record`), R-04 (carry-over completeness at first sync). Next in Phase 0: R-05/R-08 (`ReadStateCoordinator` PR), R-06 (ADR revisiting D47/D72), R-10/R-12, R-09.
+- **Codebase review (2026-11-21):** [docs/CODEBASE_REVIEW.md](docs/CODEBASE_REVIEW.md), 27 findings (7 P0, all unread/badge), Top 10 risks, Phase 0–3 roadmap. **Fixed:** R-01 (D78), R-07 (D79), R-02/R-03/R-13 (record lifecycle + GRDB `notification_record`), R-04 (carry-over completeness), R-05/R-08 (`ReadStateCoordinator` + `NotificationProcessor`). Next in Phase 0: R-06 (ADR revisiting D47/D72), R-10/R-12, R-09.
 - **Loop state (2026-11-21, paused):** the small unblocked items are done (this session: timeline receipts/location/polls/calls/reply jump, Sticker packs, notification defaults and mention toggles, room info refresh; all but a few taps seen in the simulator). What is left is large or needs a decision: see §6 "Candidates". Restart with `/loop` once the founder picks one.
 - **Earlier loop state (2026-11-20):** what is left that needs no device, signing, gate decision or product decision is small polish: the bot reaction menu (FR-4, product detail), V-ST-2 (needs an expiring token the dev Synapse can't give). The loop paused here; restart it to take those.
 
@@ -32,9 +32,9 @@ Full list: docs/DECISION_LOG.md (D1–D79), docs/adr/. Most relevant now: D70 au
 
 ## 4. Modified files (this push)
 Earlier pushes: `git log`.
-- **R-02 / R-03 / R-13 (record lifecycle + GRDB):** `HaloPersistence` (`HaloDatabase.swift` migration v7 + `busy_timeout`, `NotificationRecordStore.swift`), `HaloPlatform` (`DarwinSignal.swift`, old UserDefaults store removed), `HaloDomain` (`NotificationRecordPort.swift`, `NotificationFetchPort.swift`, `RoomListPort.swift`, `ReadState.swift` `notifiedThrough`/`partitionRecords`), `HaloMatrixAdapter` (`MatrixNotificationPort.swift` raw `origin_server_ts`, `MatrixRoomListPort.swift` `leftRooms` + `ownReadThrough` for rooms with records), `HaloApplication` (`RoomListCoordinator.swift`, `BadgeCoordinator.swift`), `ios/App/AppRoot.swift`, `ios/NotificationService/NotificationService.swift`, `ios/project.yml` + `Halo.xcodeproj`. Tests: `ReadStatePolicyTests.partitionRecords`, `NotificationRecordStoreTests` (incl. PS27, PS33), `DarwinSignalTests`, `NotificationMapperTests.rawEventTimestamp`, `BadgeCoordinatorTests`, scenarios S25–S27.
-- **R-04 (carry-over completeness):** `RoomListPort.syncCompletions()`, `MatrixRoomListPort`, `RoomListCoordinator`, `BadgeCoordinator` (drops unconfirmed carried rooms and absent records at first sync response). Tests: `BadgeCoordinatorTests.carriedRoomDroppedAfterFirstSync`, scenario S28.
-- **Docs:** `docs/CODEBASE_REVIEW.md`, `docs/testing/UNREAD_REGRESSION_TESTS.md` (S25–S28), `docs/ROADMAP.md`, `HANDOFF.md`.
+- **R-05 / R-08 (`ReadStateCoordinator` + `NotificationProcessor`):** `HaloApplication` (`ReadState/ReadStateCoordinator.swift` replacing `Badge/BadgeCoordinator.swift`, `Notifications/NotificationProcessor.swift`), `FeatureRoomList` (`RoomListViewModel.swift` consumes `ReadStateCoordinator`, no `ReadStatePolicy` calls), `HaloDomain` (`NotificationFetchPort.swift` room `mode` + `isInvite`), `HaloMatrixAdapter` (`MatrixNotificationPort.swift` resolves room mode), `HaloPlatform` (`SystemBadge.swift` `AttentionCache.setForeground`/`isForeground`/`roomIDs`), `HaloTestSupport` (`FakeNotificationFetchPort.swift`), `ios/App/{AppRoot,HaloApp}.swift`, `ios/NotificationService/NotificationService.swift`, `ios/project.yml` + `Halo.xcodeproj`, `scripts/check_boundaries.py`.
+- **Tests:** `RoomListViewModelTests.roomListAndBadgeAlwaysAgree` (PS31), `NotificationProcessorTests` (PS32 + display/encrypted/duplicate/suppressed/error), `AttentionCacheTests`.
+- **Docs:** `docs/CODEBASE_REVIEW.md`, `docs/ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
 Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
@@ -50,7 +50,7 @@ Unverified items, known limits and test notes: [docs/development/OUTSTANDING_ISS
 
 ## 6. Next steps
 The queue is docs/ROADMAP.md §"Remaining work", worked by the loop in docs/development/AUTONOMOUS_LOOP.md.
-0. **Review Phase 0 (P0, correctness first):** docs/CODEBASE_REVIEW.md §14, in order: R-05/R-08 (`ReadStateCoordinator` PR), R-06 (needs an ADR revisiting D47/D72), R-10/R-12, R-09; then Phase 1–3.
+0. **Review Phase 0 (P0, correctness first):** docs/CODEBASE_REVIEW.md §14, in order: R-06 (PR + ADR revisiting D47/D72), R-10/R-12, R-09; then Phase 1–3.
 
 **Candidates for the founder to pick** after Phase 0 (each is a PR-sized feature or needs a decision):
 1. **M7 Bot Activity** slices 1–3 are merged/pushed (founder picked it); the rest is ROADMAP "M7 Bot Activity": nothing in M7 except `bot_action` persistence and the 👎 😝 🎉 menu (BOT_MESSAGES FR-4, product detail).

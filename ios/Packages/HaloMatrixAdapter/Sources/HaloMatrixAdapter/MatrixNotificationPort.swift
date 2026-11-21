@@ -16,48 +16,62 @@ public final class MatrixNotificationPort: NotificationFetchPort {
         do {
             let notifications = try await client.notificationClient(processSetup: .multipleProcesses)
             let status = try await notifications.getNotification(roomId: room.rawValue, eventId: event.rawValue)
-            return try NotificationMapper.result(status)
+            let mode: NotificationMode
+            if case .event(let item) = status {
+                let settings = await client.getNotificationSettings()
+                if let effective = try? await settings.getRoomNotificationSettings(
+                    roomId: room.rawValue, isEncrypted: item.roomInfo.isEncrypted ?? false, isOneToOne: item.roomInfo.isDirect
+                ) {
+                    mode = MatrixRoomListPort.mode(effective.mode)
+                } else {
+                    mode = .allMessages
+                }
+            } else {
+                mode = .allMessages
+            }
+            return try NotificationMapper.result(status, mode: mode)
         } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
     }
 }
 
 enum NotificationMapper {
-    static func result(_ status: NotificationStatus) throws(HaloError) -> NotificationFetchResult {
+    static func result(_ status: NotificationStatus, mode: NotificationMode = .allMessages) throws(HaloError) -> NotificationFetchResult {
         switch status {
-        case .event(let item): return result(item)
+        case .event(let item): return result(item, mode: mode)
         case .eventNotFound: throw .notFound
         case .eventFilteredOut, .eventRedacted: return .suppressed
         }
     }
 
-    static func result(_ item: NotificationItem) -> NotificationFetchResult {
+    static func result(_ item: NotificationItem, mode: NotificationMode = .allMessages) -> NotificationFetchResult {
         let sender = item.senderInfo.displayName ?? "Someone"
         switch item.event {
         case .invite(let inviter):
             return .display(NotificationDisplay(
                 title: item.roomInfo.displayName,
                 body: "\(item.senderInfo.displayName ?? inviter) invited you",
-                timestamp: rawEventTimestamp(item.rawEvent)))
+                timestamp: rawEventTimestamp(item.rawEvent),
+                mode: mode, isInvite: true))
         case .timeline(let event):
             guard let content = try? event.content() else { return .suppressed }
             guard case .messageLike(let like) = content else { return .suppressed }
             switch like {
             case .roomEncrypted:
-                return .encrypted(roomName: item.roomInfo.displayName, timestamp: eventTimestamp(event, rawEvent: item.rawEvent))
+                return .encrypted(roomName: item.roomInfo.displayName, timestamp: eventTimestamp(event, rawEvent: item.rawEvent), mode: mode)
             case .roomMessage(let type, _):
-                return .display(stamped(shape(sender: sender, room: item.roomInfo.displayName, isDirect: item.roomInfo.isDirect, text: text(of: type)), event: event, item: item))
+                return .display(stamped(shape(sender: sender, room: item.roomInfo.displayName, isDirect: item.roomInfo.isDirect, text: text(of: type)), event: event, item: item, mode: mode))
             case .sticker:
-                return .display(stamped(shape(sender: sender, room: item.roomInfo.displayName, isDirect: item.roomInfo.isDirect, text: "Sticker"), event: event, item: item))
+                return .display(stamped(shape(sender: sender, room: item.roomInfo.displayName, isDirect: item.roomInfo.isDirect, text: "Sticker"), event: event, item: item, mode: mode))
             default:
                 return .suppressed
             }
         }
     }
 
-    private static func stamped(_ display: NotificationDisplay, event: MatrixRustSDK.TimelineEvent, item: NotificationItem) -> NotificationDisplay {
+    private static func stamped(_ display: NotificationDisplay, event: MatrixRustSDK.TimelineEvent, item: NotificationItem, mode: NotificationMode) -> NotificationDisplay {
         NotificationDisplay(
             title: display.title, body: display.body, timestamp: eventTimestamp(event, rawEvent: item.rawEvent),
-            isMention: item.hasMention ?? false)
+            isMention: item.hasMention ?? false, mode: mode)
     }
 
     /// The event's `origin_server_ts`, from the SDK event or (as a fallback) from `rawEvent` JSON (R-02).

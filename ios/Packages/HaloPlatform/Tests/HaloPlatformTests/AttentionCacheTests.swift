@@ -17,5 +17,11 @@ struct AttentionCacheTests {
         #expect(cache.adding(b) == 2)  // the same room again doesn't count twice
         cache.store([b])  // the app's recomputation overwrites whatever the extension added
         #expect(cache.rooms() == ["!b:x.org"])
+        #expect(cache.roomIDs() == [b])
+        #expect(!cache.isForeground())
+        cache.setForeground(true)
+        #expect(cache.isForeground())
+        cache.setForeground(false)
+        #expect(!cache.isForeground())
     }
 }

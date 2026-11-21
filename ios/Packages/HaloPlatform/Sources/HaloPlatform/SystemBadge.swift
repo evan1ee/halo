@@ -41,6 +41,7 @@ public struct SystemBadge: BadgePort {
 public struct AttentionCache: Sendable {
     private let suiteName: String
     private static let storageName = "attentionRooms.v1"
+    private static let foregroundName = "appForeground.v1"
 
     public init(suiteName: String) { self.suiteName = suiteName }
 
@@ -48,8 +49,22 @@ public struct AttentionCache: Sendable {
         Set(UserDefaults(suiteName: suiteName)?.stringArray(forKey: Self.storageName) ?? [])
     }
 
+    public func roomIDs() -> Set<RoomID> {
+        Set(rooms().compactMap { try? RoomID($0) })
+    }
+
     public func store(_ rooms: Set<RoomID>) {
         UserDefaults(suiteName: suiteName)?.set(rooms.map(\.rawValue).sorted(), forKey: Self.storageName)
+    }
+
+    /// Records whether the app is currently active in the foreground so the NSE leaves the badge alone when the app
+    /// is running and recomputing it (R-08).
+    public func setForeground(_ active: Bool) {
+        UserDefaults(suiteName: suiteName)?.set(active, forKey: Self.foregroundName)
+    }
+
+    public func isForeground() -> Bool {
+        UserDefaults(suiteName: suiteName)?.bool(forKey: Self.foregroundName) ?? false
     }
 
     /// Adds a room the extension just fetched a notifying event for and returns the new badge (the size of the set).

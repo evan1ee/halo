@@ -69,6 +69,7 @@ targets:
     platform: iOS
     sources: [NotificationService]
     dependencies:
+      - package: HaloApplication
       - package: HaloMatrixAdapter
       - package: HaloDomain
       - package: HaloFoundation

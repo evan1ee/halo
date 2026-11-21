@@ -157,19 +157,11 @@ with **three different input sets**.
 - **Fix (done):** `MatrixRoomListPort` emits the complete joined/invited room ID set on `syncCompletions()` after each completed classic sync response has been applied; `BadgeCoordinator` intersects `carried` with that set (dropping rooms that never reappeared without flickering rooms whose diff is still in flight) and drops stale records for absent rooms. Partial pre-sync evaluations still keep stored attention (`partialEvaluationKeepsStoredAttention`).
 - **Tests:** `BadgeCoordinatorTests.carriedRoomDroppedAfterFirstSync`, scenario **S28**.
 
-### R-05 · The room list and the badge disagree by construction — CONFIRMED
+### R-05 · The room list and the badge disagree by construction — CONFIRMED, FIXED
 
-- **Where:** `ios/Packages/Features/FeatureRoomList/Sources/FeatureRoomList/RoomListViewModel.swift:257-261` evaluates the
-  policy with local positions and `ownReadThrough` but **without `unconfirmedNotified`**;
-  `BadgeCoordinator.evaluated` (`BadgeCoordinator.swift:145-161`) evaluates with the records folded in.
-- **Impact:** any attention that rests on a record (E4: push before sync, R-02's never-covered records, records of
-  missing rooms) raises the badge with **no indicator in the room list**. Conversely `ownLatest` (E1b) behaves differently
-  in the two paths because it depends on `unconfirmedNotified` being empty (`ReadState.swift:175`). AGENTS.md §4.2 ("one
-  read-state function") is honoured literally but defeated in practice.
-- **Fix:** one coordinator owns input assembly and publishes `[RoomID: RoomReadState]`; the room list, the badge and the
-  auditor all consume that output. This is the `ReadStateCoordinator` of UNREAD_STATE §7.
-- **Tests:** a property test: for every generated input set, `badge == rows.filter(attention).count` and every attention
-  room has a visible indicator.
+- **Where:** `ReadStateCoordinator` (`HaloApplication/ReadState/ReadStateCoordinator.swift`), `RoomListViewModel`, `scripts/check_boundaries.py`.
+- **Fix (done):** `ReadStateCoordinator` (the single owner of read-state evaluation) publishes `[RoomID: RoomReadState]` via `states()` and `roomStates`; `RoomListViewModel` consumes `readState.states()` and no longer calls `ReadStatePolicy.evaluate` (enforced by `scripts/check_boundaries.py`).
+- **Tests:** `RoomListViewModelTests.roomListAndBadgeAlwaysAgree` (PS31: 100 generated input sets with rooms, modes, encryption, and notification records; asserts `badge == rows.filter { $0.display != .none }.count` and exact attention-room match).
 
 ### R-06 · Read order is decided by timestamps — CONFIRMED (one case pinned as "limitation" by S18)
 
@@ -424,8 +416,8 @@ non-messages), and its SDK didn't count undecryptable events, which the real SDK
 | PS28 | Two messages from B with identical `origin_server_ts`; A views both | Receipt targets the second; server count 0 |
 | PS29 | A reads at T; B (slow clock) sends with ts < T | Attention (inverts S18's pinned limitation) |
 | PS30 | (done as **S24**, R-07) | — |
-| PS31 | Room list vs badge: any generated input set | `badge == count(rows with attention)` |
-| PS32 | NSE delivers while the app is foreground and the room is in mentions mode, non-mention push | Badge unchanged |
+| PS31 | (done: `RoomListViewModelTests.roomListAndBadgeAlwaysAgree`, R-05) | — |
+| PS32 | (done: `NotificationProcessorTests.foregroundAndModeAwareBadge`, R-08) | — |
 | PS33 | (done: `NotificationRecordStoreTests.concurrentAddAndClearNeverResurrects`, R-13) | — |
 | PS34 | Remote logout during sync | Session ends in `signedOut`/`softLoggedOut`, sync stops |
 | PS35 | Restore times out, then the SDK call completes | Exactly one client; state consistent |
@@ -475,10 +467,10 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 | R-02 | P0 | Unread/NSE | UTD push records stamped `Date()` are never covered | **FIXED:** raw event `origin_server_ts` on `.encrypted`/invites; `partitionRecords` supersedes on sync and covers via `notifiedThroughTs`; S25 |
 | R-03 | P0 | Unread | Records counted for rooms not in the list; not cleared on leave/hide/sign-out | **FIXED:** pruned on `rooms.left`, hidden, ignored, `forget`, `reset`, and account-scoped in GRDB; S26, S27 |
 | R-04 | P0 | Badge | Carried attention never dropped for rooms that don't reappear | **FIXED:** `RoomListPort.syncCompletions()` drops unconfirmed carried rooms and absent records at first sync; S28 |
-| R-05 | P0 | Unread | Room list evaluates without records; badge with records | One `ReadStateCoordinator` output for list, badge, auditor |
+| R-05 | P0 | Unread | Room list evaluates without records; badge with records | **FIXED:** `ReadStateCoordinator` publishes `[RoomID: RoomReadState]` for list, badge, auditor; `RoomListViewModel` never calls `ReadStatePolicy` (boundary-checked); PS31 |
 | R-06 | P0 | Unread/receipts | Timestamp ordering drops receipts (equal/skewed ts) and hides new messages (S18) | Event ids + timeline order; new ADR revisiting D47 |
 | R-07 | P0 | Unread | E1/E1b ("covers latest") suppressed positive SDK counts: an undecryptable message after the read position was hidden (confirmed live) | **Fixed (D79):** SDK counts win once its receipt is applied or the own latest event is on the server |
-| R-08 | P1 | Badge/NSE | NSE writes `content.badge` from a different formula after the app's write | NSE leaves the badge alone or uses app set + mode-aware delta |
+| R-08 | P1 | Badge/NSE | NSE writes `content.badge` from a different formula after the app's write | **FIXED:** `HaloApplication.NotificationProcessor` leaves `badge = nil` while app is foreground (`AttentionCache.isForeground`), and computes background fallback via `ReadStatePolicy` with room mode; PS32 |
 | R-09 | P1 | NSE | `restore` initialises the SDK with the full runtime in the NSE | Pass `lightweightRuntime` through `restore`/`loginPassword` |
 | R-10 | P1 | Session | No `ClientDelegate`; remote logout never handled; sync retried forever | Register `Client.setDelegate`, emit `.softLoggedOut`/`.loggedOut` |
 | R-11 | P1 | Security/session | NSE token refresh not persisted; delegate can't retrieve before first save | Persist refresh in the NSE (Keychain write), serve `retrieveSessionFromKeychain` from the Keychain |
@@ -524,7 +516,7 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 | 0.1 E3c (R-01) — **done 2026-11-21** | Ghost dot/badge from server-only counts | E3b on any SDK count; E3c → no unread (D78) | HaloDomain | — | S23 green; `encryptedNonMessageEvidence` and server-rules checks pass |
 | 0.2 Record lifecycle (R-02, R-03, R-13) — **done** | Ghost badge units | GRDB `notification_record`; event `origin_server_ts`; supersede on sync; prune on left/hidden/ignored/reset | HaloPersistence, HaloPlatform, NSE, HaloApplication | migration v7 | S25, S26, S27, PS33 green |
 | 0.3 Carry-over completeness (R-04) — **done** | Permanent ghosts | Sync emits post-sync room set via `RoomListPort.syncCompletions()`; coordinator drops unconfirmed carried rooms | HaloMatrixAdapter, HaloApplication | — | S28 green |
-| 0.4 `ReadStateCoordinator` (R-05, R-08) | One truth for list, badge, NSE | New actor owns input assembly and output; `RoomListViewModel` consumes states; NSE leaves badge or uses app set + policy delta | HaloApplication, FeatureRoomList, NSE | 0.2 | PS31, PS32 green; `RoomListViewModel` no longer calls `ReadStatePolicy` |
+| 0.4 `ReadStateCoordinator` (R-05, R-08) — **done** | One truth for list, badge, NSE | `ReadStateCoordinator` publishes `[RoomID: RoomReadState]`; `RoomListViewModel` consumes states; `NotificationProcessor` in `HaloApplication` handles NSE badge via `ReadStatePolicy` | HaloApplication, FeatureRoomList, NSE | 0.2 | PS31, PS32 green; boundary check forbids `ReadStatePolicy` in Features |
 | 0.5 Identity/order instead of timestamps (R-06; R-07 **done 2026-11-21**, D79) | Missed unreads | Inputs carry event ids/order; E1/E1b rewritten; new ADR revising D47/D72 | HaloDomain, adapter, ReadReceiptCoordinator, FeatureTimeline | ADR | PS28–PS30 green; S18 limitation assertion inverted |
 | 0.6 Session lifecycle (R-10, R-12) | Stuck sessions | `ClientDelegate`; single-flight restore | adapter, HaloApplication | — | PS34, PS35 green |
 | 0.7 NSE runtime (R-09) | Memory kills | Pass `lightweightRuntime` through | adapter | — | device check AC-NSE memory |
