@@ -1,4 +1,5 @@
 #if canImport(SwiftUI)
+import HaloDesignSystem
 import PhotosUI
 import SwiftUI
 
@@ -7,30 +8,32 @@ struct ProfileSettingsView: View {
     @State private var model: ProfileSettingsModel
 
     @State private var picked: PhotosPickerItem?
+    private let actions: ProfileSettingsActions
 
-    init(actions: ProfileSettingsActions) { _model = State(initialValue: ProfileSettingsModel(actions: actions)) }
+    init(actions: ProfileSettingsActions) {
+        self.actions = actions
+        _model = State(initialValue: ProfileSettingsModel(actions: actions))
+    }
 
     var body: some View {
         List {
             Section("Photo") {
                 HStack(spacing: 16) {
-                    ZStack {
-                        Circle().fill(.quaternary)
-                        #if canImport(UIKit)
-                        if let data = model.avatar, let image = UIImage(data: data) {
-                            Image(uiImage: image).resizable().scaledToFill()
-                        } else { Image(systemName: "person.fill").foregroundStyle(.secondary) }
-                        #endif
-                    }
-                    .frame(width: 64, height: 64).clipShape(Circle()).accessibilityHidden(true)
+                    // The same round picture (or initial) others see beside your messages.
+                    AvatarCircle(name: model.savedName.isEmpty ? (actions.userID ?? "?") : model.savedName, imageData: model.avatar, size: 64)
+                        .accessibilityHidden(true)
                     PhotosPicker(selection: $picked, matching: .images) { Text(model.avatar == nil ? "Choose photo" : "Change photo") }
                         .accessibilityIdentifier("avatar-picker")
                     if model.avatar != nil { Button("Remove", role: .destructive) { Task { await model.removePhoto() } } }
                 }
             }
-            Section("Display name") {
+            Section {
                 TextField("Display name", text: $model.name).accessibilityIdentifier("display-name")
                 Button("Save") { Task { await model.save() } }.disabled(!model.canSave)
+            } header: {
+                Text("Display name")
+            } footer: {
+                if let id = actions.userID { Text("Your Matrix ID is \(id). Others can find you with it.").textSelection(.enabled) }
             }
             Section {
                 if model.ignored.isEmpty {

@@ -245,7 +245,7 @@ final class AppRoot {
                 guard let image = try? ImagePreparer(maximumDimension: 512).prepare(data: data, filename: "avatar") else { return false }
                 return (try? await port.setOwnAvatar(mimeType: image.mimeType, data: image.data)) != nil
             },
-            removeAvatar: { (try? await port.removeOwnAvatar()) != nil })
+            removeAvatar: { (try? await port.removeOwnAvatar()) != nil }, userID: signedInUser?.rawValue)
     }
 
     /// The room's display name for the timeline's title; `nil` while the list doesn't know it.

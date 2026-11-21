@@ -7,9 +7,9 @@ let package = Package(
     name: "FeatureSettings",
     platforms: [.iOS(.v26), .macOS(.v26)],
     products: [.library(name: "FeatureSettings", targets: ["FeatureSettings"])],
-    dependencies: [.package(path: "../../HaloFoundation")],
+    dependencies: [.package(path: "../../HaloFoundation"), .package(path: "../../HaloDesignSystem")],
     targets: [
-        .target(name: "FeatureSettings", dependencies: ["HaloFoundation"], resources: [.copy("Resources/acknowledgements.csv")]),
+        .target(name: "FeatureSettings", dependencies: ["HaloFoundation", "HaloDesignSystem"], resources: [.copy("Resources/acknowledgements.csv")]),
         .testTarget(name: "FeatureSettingsTests", dependencies: ["FeatureSettings"]),
     ]
 )

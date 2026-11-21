@@ -12,13 +12,16 @@ public struct ProfileSettingsActions: Sendable {
     /// Shrinks and uploads a picked photo; `false` when it isn't an image or the upload failed.
     public let setAvatar: @Sendable (Data) async -> Bool
     public let removeAvatar: @Sendable () async -> Bool
+    /// The signed-in Matrix ID, shown so the user can tell others how to find them; `nil` hides it.
+    public let userID: String?
 
     public init(
         loadName: @escaping @Sendable () async -> String?, saveName: @escaping @Sendable (String) async -> Bool,
         loadIgnored: @escaping @Sendable () async -> [String]?, unignore: @escaping @Sendable (String) async -> Bool,
         loadAvatar: @escaping @Sendable () async -> Data? = { nil }, setAvatar: @escaping @Sendable (Data) async -> Bool = { _ in false },
-        removeAvatar: @escaping @Sendable () async -> Bool = { false }
+        removeAvatar: @escaping @Sendable () async -> Bool = { false }, userID: String? = nil
     ) {
+        self.userID = userID
         self.loadAvatar = loadAvatar
         self.setAvatar = setAvatar
         self.removeAvatar = removeAvatar
