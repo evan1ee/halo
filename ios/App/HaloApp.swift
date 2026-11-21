@@ -71,6 +71,7 @@ private struct RootView: View {
                                     saveMediaPreviews: { await root.setMediaPreviewChoice($0) },
                                     profile: root.profileSettings(),
                                     diagnostics: { await root.diagnosticsReport() },
+                                    reconcile: { await root.reconcileNow() },
                                     storageSizes: { await root.storageSizes() },
                                     security: { [StorageSize(name: "This device", text: root.recovery.deviceStatus), StorageSize(name: "Recovery key", text: root.recovery.recoveryStatus)] },
                                     setUpRecovery: {

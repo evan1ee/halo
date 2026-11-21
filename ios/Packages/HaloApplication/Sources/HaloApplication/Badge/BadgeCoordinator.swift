@@ -83,6 +83,13 @@ public actor BadgeCoordinator {
         await recompute()
     }
 
+    /// Forces a fresh evaluation of all current read inputs, notification records and read positions,
+    /// writing the badge and running the auditor (ROOM_LIST FR-8, SETTINGS §3). Preserves carried-over rooms (D73).
+    public func reconcile() async {
+        hasWritten = false
+        await recompute()
+    }
+
     /// Account change or sign-out: forgets everything, including the stored set, and clears the badge.
     public func reset() async {
         carried = []

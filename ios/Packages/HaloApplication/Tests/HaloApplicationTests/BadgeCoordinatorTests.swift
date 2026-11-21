@@ -244,4 +244,14 @@ struct BadgeCoordinatorTests {
         #expect(port.badge == 0 && port.history.last == [])
         #expect(await port.lastAttention().isEmpty)
     }
+
+    @Test("reconcile forces a fresh badge write without losing carried-over rooms (ROOM_LIST FR-8, D73)")
+    func manualReconcile() async throws {
+        let (_, port, badge) = try await started(preloaded: ["!a:x.org"])
+        let before = port.history.count
+        await badge.reconcile()
+        #expect(port.history.count == before + 1)
+        #expect(port.history.last == [try RoomID("!a:x.org")])
+        #expect(await badge.attentionRooms == [try RoomID("!a:x.org")])
+    }
 }

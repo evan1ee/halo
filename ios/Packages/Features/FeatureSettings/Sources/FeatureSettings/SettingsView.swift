@@ -17,6 +17,7 @@ public struct SettingsView: View {
     private let loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)?
     private let saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)?
     private let diagnostics: (@Sendable () async -> String)?
+    private let reconcile: (@Sendable () async -> Void)?
     private let profile: ProfileSettingsActions?
     private let security: (@MainActor () -> [StorageSize])?
     private let setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)?
@@ -42,11 +43,13 @@ public struct SettingsView: View {
         onPrivateReceiptsChange: @escaping (Bool) -> Void = { _ in },
         loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)? = nil,
         saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)? = nil,
-        profile: ProfileSettingsActions? = nil, diagnostics: (@Sendable () async -> String)? = nil, storageSizes: (@Sendable () async -> [StorageSize])? = nil,
+        profile: ProfileSettingsActions? = nil, diagnostics: (@Sendable () async -> String)? = nil,
+        reconcile: (@Sendable () async -> Void)? = nil, storageSizes: (@Sendable () async -> [StorageSize])? = nil,
         security: (@MainActor () -> [StorageSize])? = nil, setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil,
         replaceRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil, notificationStatus: (@Sendable () async -> String)? = nil, openSystemSettings: (() -> Void)? = nil, onSignOut: @escaping () -> Void
     ) {
         self.diagnostics = diagnostics
+        self.reconcile = reconcile
         self.profile = profile
         self.storageSizes = storageSizes
         self.notificationStatus = notificationStatus
@@ -167,7 +170,7 @@ public struct SettingsView: View {
             }
             if let diagnostics {
                 Section {
-                    NavigationLink { DiagnosticsView(report: diagnostics) } label: { Label("Diagnostics", systemImage: "stethoscope") }
+                    NavigationLink { DiagnosticsView(report: diagnostics, reconcile: reconcile) } label: { Label("Diagnostics", systemImage: "stethoscope") }
                         .accessibilityIdentifier("diagnostics")
                 } footer: {
                     Text("A short report you can share when something looks wrong. It holds no messages, names or account IDs.")
@@ -329,27 +332,68 @@ public struct StorageSize: Sendable, Identifiable, Equatable {
     public var formatted: String { text }
 }
 
-/// A plain-text status report (versions, device, read-state audit counts) to read or share.
+/// A plain-text status report (versions, device, read-state audit counts) to read or share, plus manual unread reconciliation (ROOM_LIST FR-8, SETTINGS §3).
 public struct DiagnosticsView: View {
     private let report: @Sendable () async -> String
+    private let reconcile: (@Sendable () async -> Void)?
     @State private var text = ""
+    @State private var reconciling = false
+    @State private var reconciled = false
+    @State private var copied = false
 
-    public init(report: @escaping @Sendable () async -> String) { self.report = report }
+    public init(report: @escaping @Sendable () async -> String, reconcile: (@Sendable () async -> Void)? = nil) {
+        self.report = report
+        self.reconcile = reconcile
+    }
 
     public var body: some View {
-        ScrollView {
-            Text(text.isEmpty ? "Collecting…" : text)
-                .font(.system(.footnote, design: .monospaced))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
-                .textSelection(.enabled)
-                .accessibilityIdentifier("diagnostics-report")
+        List {
+            Section("Report") {
+                Text(text.isEmpty ? "Collecting…" : text)
+                    .font(.system(.footnote, design: .monospaced))
+                    .textSelection(.enabled)
+                    .accessibilityIdentifier("diagnostics-report")
+                #if canImport(UIKit)
+                Button {
+                    UIPasteboard.general.string = text
+                    copied = true
+                } label: {
+                    Label(copied ? "Copied" : "Copy report", systemImage: copied ? "checkmark" : "doc.on.doc")
+                }
+                .disabled(text.isEmpty)
+                #endif
+            }
+            if let reconcile {
+                Section {
+                    Button {
+                        reconciling = true
+                        reconciled = false
+                        Task {
+                            await reconcile()
+                            text = await report()
+                            reconciling = false
+                            reconciled = true
+                        }
+                    } label: {
+                        Label(reconciling ? "Reconciling…" : "Reconcile now", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .disabled(reconciling)
+                    .accessibilityIdentifier("reconcile-now")
+                } footer: {
+                    Text(reconciled ? "Unread state and badge reconciled." : "Flushes pending read receipts and re-evaluates unread state and the app badge.")
+                }
+            }
         }
         .navigationTitle("Diagnostics")
         .toolbar {
             if !text.isEmpty { ToolbarItem(placement: .primaryAction) { ShareLink(item: text) } }
         }
         .task { text = await report() }
+        .task(id: copied) {
+            guard copied else { return }
+            try? await Task.sleep(for: .seconds(1.5))
+            copied = false
+        }
     }
 }
 

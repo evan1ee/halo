@@ -171,6 +171,13 @@ final class AppRoot {
         return lines.joined(separator: "\n")
     }
 
+    /// Settings → Diagnostics → "Reconcile now" (ROOM_LIST FR-8, SETTINGS §3): flushes pending read receipts
+    /// and re-evaluates the attention set and app badge from current state.
+    func reconcileNow() async {
+        await receipts.flush()
+        await badge.reconcile()
+    }
+
     /// Settings → Storage: sizes of the Matrix store and of Halo's own database on this device.
     nonisolated func storageSizes() async -> [StorageSize] {
         let directory = HaloShared.storeDirectory()
