@@ -301,6 +301,11 @@ final class MatrixTimelineSession: TimelineSession {
         do { guard try await timeline.abortSend(itemId: .transactionId(transactionId: localID), target: .event) else { throw HaloError.notFound } } catch { throw HaloError.notFound }
     }
 
+    func latestEventID() async -> EventID? {
+        guard let raw = await timeline.latestEventId() else { return nil }
+        return try? EventID(raw)
+    }
+
     func close() async {
         let done = release.withLock { action in
             defer { action = nil }

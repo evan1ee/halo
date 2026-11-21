@@ -50,7 +50,12 @@ public actor ReadStateCoordinator {
             self.now = now
         }
     }
-    private var positions: [RoomID: Date] = [:]
+    private var readPositions: [RoomID: LocalReadPosition] = [:]
+    /// Incremented on every completed sync response; used to know when a sent receipt has gone through at least one
+    /// sync round-trip (R-06, ADR-0020).
+    private var syncEpoch = 0
+    /// For each room whose local intent became `.isSent`, the `(eventID, syncEpoch)` at which it was observed sent.
+    private var sentAtEpoch: [RoomID: (eventID: EventID, epoch: Int)] = [:]
     private var inputs: [RoomReadInputs] = []
     private var statesBroadcaster = SnapshotBroadcaster<[RoomID: RoomReadState]>()
     private var tasks: [Task<Void, Never>] = []
@@ -93,8 +98,8 @@ public actor ReadStateCoordinator {
         let syncs = await rooms.syncCompletions()
         var follow: [Task<Void, Never>] = []
         if let receipts {
-            let positions = await receipts.positions()
-            follow.append(Task { [weak self] in for await positions in positions { await self?.positionsChanged(positions) } })
+            let positions = await receipts.readPositions()
+            follow.append(Task { [weak self] in for await positions in positions { await self?.readPositionsChanged(positions) } })
         }
         tasks = follow + [
             Task { [weak self] in for await inputs in roomInputs { await self?.roomsChanged(inputs) } },
@@ -161,6 +166,9 @@ public actor ReadStateCoordinator {
         excludedRooms = []
         hasSynced = false
         syncedRooms = []
+        syncEpoch = 0
+        sentAtEpoch = [:]
+        readPositions = [:]
         inputs = []
         if !roomStates.isEmpty {
             roomStates = [:]
@@ -191,32 +199,69 @@ public actor ReadStateCoordinator {
     /// The policy's output for each room with the inputs it was given (the read position and the unconfirmed pushes folded in).
     public static func evaluated(inputs: [RoomReadInputs], records: [NotificationRecord], positions: [RoomID: Date] = [:])
         -> [(input: RoomReadInputs, state: RoomReadState)] {
-        evaluatedWithSuperseded(inputs: inputs, records: records, positions: positions).results
+        evaluatedWithSuperseded(inputs: inputs, records: records, legacyPositions: positions).results
     }
 
-    private static func evaluatedWithSuperseded(inputs: [RoomReadInputs], records: [NotificationRecord], positions: [RoomID: Date] = [:])
-        -> (results: [(input: RoomReadInputs, state: RoomReadState)], superseded: Set<EventID>) {
+    private static func evaluatedWithSuperseded(
+        inputs: [RoomReadInputs], records: [NotificationRecord],
+        readPositions: [RoomID: LocalReadPosition] = [:], legacyPositions: [RoomID: Date] = [:],
+        syncEpoch: Int = 0, sentAtEpoch: [RoomID: (eventID: EventID, epoch: Int)] = [:]
+    ) -> (results: [(input: RoomReadInputs, state: RoomReadState)], superseded: Set<EventID>) {
         let byRoom = Dictionary(grouping: records, by: \.roomID)
         var results: [(input: RoomReadInputs, state: RoomReadState)] = []
         var superseded: Set<EventID> = []
         for input in inputs {
-            let readThrough = [positions[input.roomID], input.localIntent].compactMap { $0 }.max()
+            let localPos = readPositions[input.roomID]
+            let useLocal: Bool = {
+                guard let localPos else { return false }
+                if !localPos.isSent { return true }
+                guard let remoteTs = input.localIntent else { return true }
+                return localPos.timestamp >= remoteTs
+            }()
+            let readThrough: Date? = {
+                if useLocal, let localPos { return localPos.timestamp }
+                return [localPos?.timestamp, legacyPositions[input.roomID], input.localIntent].compactMap { $0 }.max()
+            }()
+            let intentEventID: EventID? = useLocal
+                ? localPos?.eventID
+                : (input.ownReceiptEventID ?? input.localIntentEventID ?? localPos?.eventID)
+            let intentConfirmed: Bool = {
+                if useLocal, let localPos {
+                    guard localPos.isSent else { return false }
+                    if input.ownReceiptEventID == localPos.eventID { return true }
+                    if let sent = sentAtEpoch[input.roomID], sent.eventID == localPos.eventID, syncEpoch > sent.epoch { return true }
+                    return false
+                }
+                return input.localIntentConfirmed || (input.ownReceiptEventID != nil && input.localIntent != nil)
+            }()
             let base = RoomReadInputs(
                 roomID: input.roomID, membership: input.membership, isEncrypted: input.isEncrypted, counts: input.counts,
-                latestEvent: input.latestEvent, localIntent: readThrough, receiptReadThrough: input.receiptReadThrough)
+                latestEvent: input.latestEvent, localIntent: readThrough, receiptReadThrough: input.receiptReadThrough,
+                localIntentEventID: intentEventID, localIntentConfirmed: intentConfirmed, ownReceiptEventID: input.ownReceiptEventID)
             let partition = ReadStatePolicy.partitionRecords(for: base, records: byRoom[input.roomID] ?? [])
             superseded.formUnion(partition.superseded)
             let effective = RoomReadInputs(
                 roomID: input.roomID, membership: input.membership, isEncrypted: input.isEncrypted, counts: input.counts,
                 latestEvent: input.latestEvent, localIntent: readThrough, receiptReadThrough: input.receiptReadThrough,
+                localIntentEventID: intentEventID, localIntentConfirmed: intentConfirmed, ownReceiptEventID: input.ownReceiptEventID,
                 unconfirmedNotified: partition.unconfirmed)
             results.append((effective, ReadStatePolicy.evaluate(effective)))
         }
         return (results, superseded)
     }
 
-    private func positionsChanged(_ positions: [RoomID: Date]) async {
-        self.positions = positions
+    private func readPositionsChanged(_ positions: [RoomID: LocalReadPosition]) async {
+        readPositions = positions
+        for (room, pos) in positions {
+            if pos.isSent {
+                if sentAtEpoch[room]?.eventID != pos.eventID {
+                    sentAtEpoch[room] = (pos.eventID, syncEpoch)
+                }
+            } else {
+                sentAtEpoch[room] = nil
+            }
+        }
+        sentAtEpoch = sentAtEpoch.filter { positions[$0.key] != nil }
         await recompute()
     }
 
@@ -242,6 +287,7 @@ public actor ReadStateCoordinator {
             return
         }
         hasSynced = true
+        syncEpoch += 1
         syncedRooms = present
         // Drop any carried room that the server did not report as joined/invited (R-04).
         // Rooms in `present` whose diff hasn't arrived yet remain carried until their inputs arrive.
@@ -290,13 +336,15 @@ public actor ReadStateCoordinator {
 
     private func auditCurrentState() async {
         let stored = records?.all() ?? []
-        await runAudit(Self.evaluated(inputs: inputs, records: stored, positions: positions))
+        await runAudit(Self.evaluatedWithSuperseded(
+            inputs: inputs, records: stored, readPositions: readPositions, syncEpoch: syncEpoch, sentAtEpoch: sentAtEpoch).results)
     }
 
     private func recompute() async {
         if !excludedRooms.isEmpty { records?.clear(rooms: excludedRooms) }
         let stored = records?.all() ?? []
-        let pass = Self.evaluatedWithSuperseded(inputs: inputs, records: stored, positions: positions)
+        let pass = Self.evaluatedWithSuperseded(
+            inputs: inputs, records: stored, readPositions: readPositions, syncEpoch: syncEpoch, sentAtEpoch: sentAtEpoch)
         if !pass.superseded.isEmpty {
             records?.remove(events: pass.superseded)
         }

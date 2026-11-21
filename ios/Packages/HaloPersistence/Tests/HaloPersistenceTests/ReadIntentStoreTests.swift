@@ -86,4 +86,20 @@ struct ReadIntentStoreTests {
         try await a.save(ReadIntent(room: room, event: e(1), timestamp: t(1), createdAt: t(1)))
         #expect(try await b.all().isEmpty)
     }
+
+    @Test("R-06: higher timeline sequence advances even for equal or backwards-skewed timestamps")
+    func timelineOrderAdvancesAcrossEqualAndSkewedTimestamps() async throws {
+        let store = try store()
+        try await store.save(ReadIntent(room: room, event: e(1), timestamp: t(100), createdAt: t(1), sequence: 1))
+        // Same timestamp, higher sequence (PS28).
+        try await store.save(ReadIntent(room: room, event: e(2), timestamp: t(100), createdAt: t(2), sequence: 2))
+        #expect(try await store.all().first?.event == e(2))
+        // Backwards-skewed timestamp, higher sequence (PS29).
+        try await store.save(ReadIntent(room: room, event: e(3), timestamp: t(50), createdAt: t(3), sequence: 3))
+        let stored = try #require(try await store.all().first)
+        #expect(stored.event == e(3) && stored.timestamp == t(50) && stored.sequence == 3)
+        // Lower sequence never moves backwards even with a larger timestamp.
+        try await store.save(ReadIntent(room: room, event: e(4), timestamp: t(999), createdAt: t(4), sequence: 2))
+        #expect(try await store.all().first?.event == e(3))
+    }
 }

@@ -61,11 +61,27 @@ public struct LatestEventRef: Sendable, Equatable {
     /// A message of the user's that the server hasn't confirmed yet (a local echo, sending or failed). The SDK takes an own
     /// event as a read receipt only once it is on the server, so its counts don't reflect a local echo yet.
     public let isLocal: Bool
+    /// The event ID when known (e.g. from an open timeline or model); `nil` when sourced from `Room.latestEvent()` (F-FFI-15).
+    public let eventID: EventID?
 
-    public init(timestamp: Date, senderIsSelf: Bool, isLocal: Bool = false) {
+    public init(timestamp: Date, senderIsSelf: Bool, isLocal: Bool = false, eventID: EventID? = nil) {
         self.timestamp = timestamp
         self.senderIsSelf = senderIsSelf
         self.isLocal = isLocal
+        self.eventID = eventID
+    }
+}
+
+/// This device's latest read intent for a room, carrying event identity and confirmation state (R-06, ADR-0020).
+public struct LocalReadPosition: Sendable, Equatable {
+    public let eventID: EventID
+    public let timestamp: Date
+    public let isSent: Bool
+
+    public init(eventID: EventID, timestamp: Date, isSent: Bool = false) {
+        self.eventID = eventID
+        self.timestamp = timestamp
+        self.isSent = isSent
     }
 }
 
@@ -93,11 +109,19 @@ public struct RoomReadInputs: Sendable, Equatable {
     /// relative to this receipt, so when it is at least `localIntent`, a positive SDK count is unread after the read position
     /// (R-07). `nil` when unknown.
     public let receiptReadThrough: Date?
+    /// The event ID of this device's local read intent (or own receipt when no local intent exists), when known (R-06).
+    public let localIntentEventID: EventID?
+    /// True once the local intent's receipt has been sent and confirmed by the server (echoed in `ownReceiptEventID` or
+    /// followed by a sync response): positive server/SDK counts then override E1 so a stale intent cannot hide unread (R-06, ADR-0020).
+    public let localIntentConfirmed: Bool
+    /// The event ID of the user's own newest receipt from the SDK, when resolved (R-06).
+    public let ownReceiptEventID: EventID?
     public let unconfirmedNotified: [NotifiedRef]
 
     public init(
         roomID: RoomID, membership: Membership, isEncrypted: Bool, counts: RoomReadCounts, latestEvent: LatestEventRef? = nil,
-        localIntent: Date? = nil, receiptReadThrough: Date? = nil, unconfirmedNotified: [NotifiedRef] = []
+        localIntent: Date? = nil, receiptReadThrough: Date? = nil, localIntentEventID: EventID? = nil,
+        localIntentConfirmed: Bool = false, ownReceiptEventID: EventID? = nil, unconfirmedNotified: [NotifiedRef] = []
     ) {
         self.roomID = roomID
         self.membership = membership
@@ -106,6 +130,9 @@ public struct RoomReadInputs: Sendable, Equatable {
         self.latestEvent = latestEvent
         self.localIntent = localIntent
         self.receiptReadThrough = receiptReadThrough
+        self.localIntentEventID = localIntentEventID
+        self.localIntentConfirmed = localIntentConfirmed
+        self.ownReceiptEventID = ownReceiptEventID
         self.unconfirmedNotified = unconfirmedNotified
     }
 }
@@ -138,6 +165,9 @@ public enum ReasonCode: String, Sendable, Equatable, CaseIterable {
     /// The read position covers the latest event, but the SDK, which has applied that position, still counts unread: an event
     /// after it that the latest event leaves out (one the SDK can't decrypt). E1/E1b give way (R-07).
     case sdkUnreadAfterRead = "SDK_UNREAD_AFTER_READ"
+    /// A sent local intent was confirmed by the server, yet the server (when countable) or SDK still counts unread:
+    /// a newer event arrived with an equal or skewed timestamp, so E1 gives way (R-06, ADR-0020).
+    case intentStale = "INTENT_STALE"
 }
 
 public struct RoomReadState: Sendable, Equatable {
@@ -224,7 +254,12 @@ public enum ReadStatePolicy {
         var hasUnread: Bool
 
         let intentCovers: Bool = {
-            guard let intent = input.localIntent, let latest = input.latestEvent else { return false }
+            guard let latest = input.latestEvent else { return false }
+            // R-06 (ADR-0020): when both event IDs are known, identity decides — equal or skewed timestamps never override it.
+            if let intentID = input.localIntentEventID, let latestID = latest.eventID {
+                return intentID == latestID
+            }
+            guard let intent = input.localIntent else { return false }
             return latest.timestamp <= intent
         }()
         let ownLatest = input.latestEvent?.senderIsSelf == true && input.unconfirmedNotified.isEmpty
@@ -236,11 +271,17 @@ public enum ReadStatePolicy {
             if ownLatest, input.latestEvent?.isLocal == false { return true }
             return false
         }()
+        // R-06 (ADR-0020): once the receipt is confirmed on the server (echoed or followed by a sync), a stale intent
+        // must not suppress positive server counts (when countable) or positive SDK counts (revisiting D47/D72).
+        let intentContradicted = intentCovers && input.localIntentConfirmed && (counts.sdk != .zero || (serverCanCount && counts.server != .zero))
 
         if sdkCountsAfterRead {
             reasons.insert(.sdkUnreadAfterRead)
         }
-        if (intentCovers || ownLatest) && !sdkCountsAfterRead {  // E1, E1b
+        if intentContradicted && !sdkCountsAfterRead {
+            reasons.insert(.intentStale)
+        }
+        if (intentCovers || ownLatest) && !sdkCountsAfterRead && !intentContradicted {  // E1, E1b
             reasons.insert(intentCovers ? .intentCovers : .ownLatest)
             hasUnread = false
         } else if serverZero {  // E2

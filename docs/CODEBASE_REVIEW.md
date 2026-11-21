@@ -163,33 +163,14 @@ with **three different input sets**.
 - **Fix (done):** `ReadStateCoordinator` (the single owner of read-state evaluation) publishes `[RoomID: RoomReadState]` via `states()` and `roomStates`; `RoomListViewModel` consumes `readState.states()` and no longer calls `ReadStatePolicy.evaluate` (enforced by `scripts/check_boundaries.py`).
 - **Tests:** `RoomListViewModelTests.roomListAndBadgeAlwaysAgree` (PS31: 100 generated input sets with rooms, modes, encryption, and notification records; asserts `badge == rows.filter { $0.display != .none }.count` and exact attention-room match).
 
-### R-06 · Read order is decided by timestamps — CONFIRMED (one case pinned as "limitation" by S18)
+### R-06 · Read order is decided by timestamps — CONFIRMED, FIXED (D80, ADR-0020)
 
-- **Where:**
-  - `ReadReceiptCoordinator.reportSeen` (`ReadReceiptCoordinator.swift:124-125`): `timestamp <= current` → ignored.
-  - `TimelineViewModel.reevaluateSeen` (`TimelineViewModel.swift:429`): the candidate is the visible event with the
-    greatest timestamp, not the lowest-in-timeline-order newest one.
-  - `ReadStatePolicy` E1 (`ReadState.swift:171-174`): `latest.timestamp <= intent` hides everything.
-  - `BadgeCoordinator.evaluated` record filter, `MatrixRoomListPort.ownReadThrough` (event time of the receipt target).
-  - `ReadStateScenarioTests.s18` asserts that a message stamped before the read position is **not** flagged although
-    the server counts it.
-- **Failure scenarios:**
-  1. Two messages with the same millisecond timestamp (bots, bridges, batch imports): the second is never receipted.
-     The server keeps count 1 on every other device; on this device E1 hides it until the 7-day intent expiry (D72),
-     after which the "1" reappears — "unread state changes unexpectedly after restart".
-  2. A federated sender with a slow clock sends after the user read: the new message is hidden here (S18), while the
-     server and other clients show it.
-  3. Clock skew in the other direction: the user reads a message with a future timestamp; every genuine later message
-     with a smaller timestamp is hidden until a message newer than the skewed one arrives.
-- **Why it matters:** these are silent *missed* unreads — worse than ghosts, and invisible to the auditor (the auditor
-  classifies "covered by intent while the server counts" as `INTENT_UNCONFIRMED`, *explained*).
-- **Fix:** carry the event id plus a timeline-order key through the read path. Within an open timeline the SDK gives
-  order directly (item positions). For E1, compare against the receipt *event id*: "intent covers latest" ⇔ the latest
-  event id equals the intent's event id, or the server counts have reached zero after the receipt was confirmed. Never
-  use an intent alone to suppress server counts for longer than one sync round-trip after its receipt was acknowledged:
-  if the server still counts after the receipt was confirmed, the server is right and the intent is stale.
-- **Migration risk:** moderate; it changes E1's contract and D47's statement that "read state never needs to order
-  receipts". Needs a new ADR (it revisits D47).
+- **Where:** `TimelineReadTracker.swift`, `TimelineViewModel.swift`, `ReadReceiptCoordinator.swift`, `ReadIntentStore.swift` (migration v8), `ReadState.swift`, `ReadStateCoordinator.swift`, `MatrixRoomListPort.swift`, `MatrixTimelinePort.swift`.
+- **Fix (done, D80 / ADR-0020):**
+  - Open timelines pick receipt candidates by timeline index (`TimelineReadTracker`), not `origin_server_ts`, and target `Timeline.latestEventId()` when viewing the tail row (covering trailing non-row events such as encrypted poll votes, finishing the R-01 leftover).
+  - `read_intent` gains monotonic `timeline_order` (migration `v8-read-intent-order`), allowing equal-millisecond and clock-skewed later events to advance cleanly while preserving P8.
+  - `RoomSummary` / `RoomReadInputs` carry `ownReceiptEventID`, `localIntentEventID`, `localIntentConfirmed`, and optional `LatestEventRef.eventID`; E1 compares event IDs when both are known and yields (`INTENT_STALE`) once a sent receipt is confirmed by the server/sync yet counts remain non-zero (revisiting D47 and D72).
+- **Tests:** `ReadStatePolicyTests.identityAndConfirmedIntent`, `ReadIntentStoreTests.timelineOrderAdvancesAcrossEqualAndSkewedTimestamps`, `ReadReceiptCoordinatorTests.timelineOrderAdvancesAcrossEqualAndSkewedTimestamps`, `TimelineReadTrackerTests` (PS28, PS29, tail poll-vote receipt), scenarios **S18** (inverted) and **S29**.
 
 ### R-07 · "Covers the latest event" (E1/E1b) overrode positive SDK counts — CONFIRMED (live), FIXED (D79)
 
@@ -413,8 +394,8 @@ non-messages), and its SDK didn't count undecryptable events, which the real SDK
 | PS25 | (done as **S26**: room with a record left on A2, pruned on sync, R-03) | — |
 | PS26 | (done as **S28** + `BadgeCoordinatorTests.carriedRoomDroppedAfterFirstSync`: carried room left while closed dropped after first sync, R-04) | — |
 | PS27 | (done as **S27** + `NotificationRecordStoreTests.accountIsolation`: sign out X, sign in Y, R-03/R-13) | — |
-| PS28 | Two messages from B with identical `origin_server_ts`; A views both | Receipt targets the second; server count 0 |
-| PS29 | A reads at T; B (slow clock) sends with ts < T | Attention (inverts S18's pinned limitation) |
+| PS28 | (done as **S29** + `TimelineReadTrackerTests.equalTimestampsPickLaterInTimelineOrder`: equal-ms messages receipt the second, R-06) | — |
+| PS29 | (done as **S18** inverted + `TimelineReadTrackerTests.skewedClockPicksTimelineOrderNotTimestamp`: skewed clock shows and advances receipt, R-06) | — |
 | PS30 | (done as **S24**, R-07) | — |
 | PS31 | (done: `RoomListViewModelTests.roomListAndBadgeAlwaysAgree`, R-05) | — |
 | PS32 | (done: `NotificationProcessorTests.foregroundAndModeAwareBadge`, R-08) | — |
@@ -468,7 +449,7 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 | R-03 | P0 | Unread | Records counted for rooms not in the list; not cleared on leave/hide/sign-out | **FIXED:** pruned on `rooms.left`, hidden, ignored, `forget`, `reset`, and account-scoped in GRDB; S26, S27 |
 | R-04 | P0 | Badge | Carried attention never dropped for rooms that don't reappear | **FIXED:** `RoomListPort.syncCompletions()` drops unconfirmed carried rooms and absent records at first sync; S28 |
 | R-05 | P0 | Unread | Room list evaluates without records; badge with records | **FIXED:** `ReadStateCoordinator` publishes `[RoomID: RoomReadState]` for list, badge, auditor; `RoomListViewModel` never calls `ReadStatePolicy` (boundary-checked); PS31 |
-| R-06 | P0 | Unread/receipts | Timestamp ordering drops receipts (equal/skewed ts) and hides new messages (S18) | Event ids + timeline order; new ADR revisiting D47 |
+| R-06 | P0 | Unread/receipts | Timestamp ordering drops receipts (equal/skewed ts) and hides new messages (S18) | **FIXED (D80, ADR-0020):** `TimelineReadTracker` orders by index + tail `latestEventId()`, `read_intent.timeline_order` (v8), identity E1 + `INTENT_STALE` on confirmed intents; S18, S29 |
 | R-07 | P0 | Unread | E1/E1b ("covers latest") suppressed positive SDK counts: an undecryptable message after the read position was hidden (confirmed live) | **Fixed (D79):** SDK counts win once its receipt is applied or the own latest event is on the server |
 | R-08 | P1 | Badge/NSE | NSE writes `content.badge` from a different formula after the app's write | **FIXED:** `HaloApplication.NotificationProcessor` leaves `badge = nil` while app is foreground (`AttentionCache.isForeground`), and computes background fallback via `ReadStatePolicy` with room mode; PS32 |
 | R-09 | P1 | NSE | `restore` initialises the SDK with the full runtime in the NSE | Pass `lightweightRuntime` through `restore`/`loginPassword` |
@@ -517,7 +498,7 @@ prepush attempt named a device that isn't installed ("iPhone 16"); both passed t
 | 0.2 Record lifecycle (R-02, R-03, R-13) — **done** | Ghost badge units | GRDB `notification_record`; event `origin_server_ts`; supersede on sync; prune on left/hidden/ignored/reset | HaloPersistence, HaloPlatform, NSE, HaloApplication | migration v7 | S25, S26, S27, PS33 green |
 | 0.3 Carry-over completeness (R-04) — **done** | Permanent ghosts | Sync emits post-sync room set via `RoomListPort.syncCompletions()`; coordinator drops unconfirmed carried rooms | HaloMatrixAdapter, HaloApplication | — | S28 green |
 | 0.4 `ReadStateCoordinator` (R-05, R-08) — **done** | One truth for list, badge, NSE | `ReadStateCoordinator` publishes `[RoomID: RoomReadState]`; `RoomListViewModel` consumes states; `NotificationProcessor` in `HaloApplication` handles NSE badge via `ReadStatePolicy` | HaloApplication, FeatureRoomList, NSE | 0.2 | PS31, PS32 green; boundary check forbids `ReadStatePolicy` in Features |
-| 0.5 Identity/order instead of timestamps (R-06; R-07 **done 2026-11-21**, D79) | Missed unreads | Inputs carry event ids/order; E1/E1b rewritten; new ADR revising D47/D72 | HaloDomain, adapter, ReadReceiptCoordinator, FeatureTimeline | ADR | PS28–PS30 green; S18 limitation assertion inverted |
+| 0.5 Identity/order instead of timestamps (R-06; R-07 **done 2026-11-21**, D79) — **done (D80, ADR-0020)** | Missed unreads | `TimelineReadTracker`, `read_intent.timeline_order` (v8), identity + confirmed E1 (`INTENT_STALE`), tail `latestEventId()`, ADR-0020 | HaloDomain, HaloPersistence, adapter, ReadReceiptCoordinator, ReadStateCoordinator, FeatureTimeline | ADR-0020 | S18 inverted, S29, PS28–PS30 green |
 | 0.6 Session lifecycle (R-10, R-12) | Stuck sessions | `ClientDelegate`; single-flight restore | adapter, HaloApplication | — | PS34, PS35 green |
 | 0.7 NSE runtime (R-09) | Memory kills | Pass `lightweightRuntime` through | adapter | — | device check AC-NSE memory |
 

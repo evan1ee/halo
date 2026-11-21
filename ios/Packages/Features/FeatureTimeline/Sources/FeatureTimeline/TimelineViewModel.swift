@@ -326,8 +326,7 @@ public final class TimelineViewModel {
     private let room: RoomID?
     private let dwell: Duration
     private let sleep: @Sendable (Duration) async throws -> Void
-    private var eventTimes: [EventID: Date] = [:]
-    private var visible: Set<EventID> = []
+    private var readTracker = TimelineReadTracker()
     private var isActive = true
     private var clearedMarkedUnread = false
     private var isRestoringDraft = false
@@ -406,7 +405,7 @@ public final class TimelineViewModel {
     /// The view reports a confirmed row entering or leaving the visible part of the list.
     public func rowVisibility(_ row: TimelineRow, isVisible: Bool) {
         guard let id = row.eventID else { return }
-        if isVisible { visible.insert(id) } else { visible.remove(id) }
+        readTracker.setVisible(id, isVisible: isVisible)
         reevaluateSeen()
     }
 
@@ -426,15 +425,28 @@ public final class TimelineViewModel {
 
     private func reevaluateSeen() {
         guard receipts != nil, room != nil else { return }
-        let candidate = isActive ? visible.filter { eventTimes[$0] != nil }.max { eventTimes[$0]! < eventTimes[$1]! } : nil
-        guard candidate != pendingCandidate else { return }
-        pendingCandidate = candidate
+        let candidate = readTracker.candidate(isActive: isActive)
+        guard candidate?.event != pendingCandidate else { return }
+        pendingCandidate = candidate?.event
         dwellTask?.cancel()
         dwellTask = nil
-        guard let candidate, let time = eventTimes[candidate], let receipts, let room else { return }
-        dwellTask = Task { [dwell, sleep] in
+        guard let candidate, let receipts, let room else { return }
+        let coordinator = coordinator
+        dwellTask = Task { [weak self, dwell, sleep] in
             do { try await sleep(dwell) } catch { return }
-            await receipts.reportSeen(room: room, event: candidate, timestamp: time)
+            guard !Task.isCancelled else { return }
+            // When the user has viewed the newest visible row at the tail, cover any trailing hidden event (such as an
+            // encrypted poll vote) by targeting `Timeline.latestEventId()` (R-01 leftover, R-06).
+            let targetEvent: EventID
+            if candidate.isAtTail, let latest = await coordinator.latestEventID() {
+                targetEvent = latest
+            } else {
+                targetEvent = candidate.event
+            }
+            self?.readTracker.markReported(candidate.event)
+            await receipts.reportSeen(
+                room: room, event: targetEvent, timestamp: candidate.timestamp,
+                advancesOrder: candidate.advancesOrder || targetEvent != candidate.event)
         }
     }
 
@@ -881,11 +893,7 @@ public final class TimelineViewModel {
         case .idle, .opening:
             content = .opening
         case .live(let snapshot):
-            var times: [EventID: Date] = [:]
-            for item in snapshot.items {
-                if case .event(let event) = item.content, let id = event.eventID { times[id] = event.timestamp }
-            }
-            eventTimes = times
+            readTracker.update(items: snapshot.items)
             botTasks = botTracker(snapshot.items)
             if let botActivity, let room, !botSenders.isEmpty {
                 let items = snapshot.items, senders = botSenders
@@ -921,8 +929,8 @@ public final class TimelineViewModel {
             } else {
                 updateDetachedCount(for: rows)
             }
-            visible.formIntersection(times.keys)
             reportOwnMessage(snapshot.items)
+            reevaluateSeen()
             typingText = Self.typingText(snapshot.typing, items: snapshot.items)
             content = .live(
                 rows: rows,
@@ -956,18 +964,18 @@ public final class TimelineViewModel {
         trackedTailID = tail
     }
 
-    /// Sending a message means the user has read up to it (MESSAGING FR-6, rule E1b): once the newest own message has a
-    /// server event ID it becomes the read position. The coordinator ignores anything not newer than the current one.
+    /// Sending a message means the user has read up to it (MESSAGING FR-6, rule E1b): once the newest own message (in
+    /// timeline order, not by timestamp, R-06) has a server event ID it becomes the read position.
     private func reportOwnMessage(_ items: [TimelineItem]) {
         guard let receipts, let room else { return }
         var newest: (id: EventID, time: Date)?
         for item in items {
             guard case .event(let event) = item.content, event.isOwn, let id = event.eventID else { continue }
-            if newest == nil || event.timestamp > newest!.time { newest = (id, event.timestamp) }
+            newest = (id, event.timestamp)
         }
         guard let newest, newest.id != reportedOwn else { return }
         reportedOwn = newest.id
-        Task { await receipts.reportSeen(room: room, event: newest.id, timestamp: newest.time) }
+        Task { await receipts.reportSeen(room: room, event: newest.id, timestamp: newest.time, advancesOrder: true) }
     }
 
     /// Names come from the timeline's senders; a user without one is shown by user ID (never invented).

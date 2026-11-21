@@ -213,6 +213,12 @@ public actor TimelineCoordinator {
         try await session.abortSend(localID: localID)
     }
 
+    /// The latest event ID in the room's timeline (including non-row events such as poll votes, R-01/R-06).
+    public func latestEventID() async -> EventID? {
+        guard let session, case .live = status else { return nil }
+        return await session.latestEventID()
+    }
+
     // MARK: Private
 
     private func subscribe() {

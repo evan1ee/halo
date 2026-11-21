@@ -17,6 +17,7 @@ public protocol TimelinePort: Sendable {
 extension TimelineSession {
     public func addReaction(on event: EventID, key: String) async throws(HaloError) -> Bool { throw .unsupported("ADD_REACTION") }
     public func editHistory(of event: EventID) async throws(HaloError) -> [EditRevision] { throw .unsupported("EDIT_HISTORY") }
+    public func latestEventID() async -> EventID? { nil }
 }
 
 extension TimelinePort {
@@ -86,6 +87,10 @@ public protocol TimelineSession: Sendable {
 
     /// Deletes a local echo that hasn't been sent (or is failed), so it is never sent. Throws `.notFound` if it already went out.
     func abortSend(localID: String) async throws(HaloError)
+
+    /// The latest event ID in the room's timeline (including non-row events such as poll votes), used to cover trailing
+    /// hidden events when the user has viewed the newest visible row (R-01 leftover, R-06).
+    func latestEventID() async -> EventID?
 
     func close() async
 }

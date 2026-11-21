@@ -71,6 +71,24 @@ struct ReadReceiptCoordinatorTests {
         #expect(await c.readPosition(of: room) == at(20))
     }
 
+    @Test("R-06 (PS28/PS29): timeline-ordered candidates advance across equal and backwards-skewed timestamps")
+    func timelineOrderAdvancesAcrossEqualAndSkewedTimestamps() async {
+        let store = FakeReadIntents()
+        let (c, port, _) = make(store: store)
+        await c.reportSeen(room: room, event: event(1), timestamp: at(100), advancesOrder: true)
+        #expect(await eventually { port.receipts.map(\.event) == [event(1)] })
+
+        // Same millisecond timestamp (PS28): advances and sends a receipt for event 2.
+        await c.reportSeen(room: room, event: event(2), timestamp: at(100), advancesOrder: true)
+        #expect(await eventually { port.receipts.map(\.event) == [event(1), event(2)] })
+
+        // Federated slow clock (timestamp < previous, PS29): advances and sends a receipt for event 3.
+        await c.reportSeen(room: room, event: event(3), timestamp: at(40), advancesOrder: true)
+        #expect(await eventually { port.receipts.map(\.event) == [event(1), event(2), event(3)] })
+        #expect(await c.localReadPosition(of: room)?.eventID == event(3))
+        #expect(store.intents.first?.event == event(3))
+    }
+
     @Test func burstWithinIntervalSendsOnlyNewestAfterWaiting() async {
         let (c, port, clock) = make()
         await c.reportSeen(room: room, event: event(1), timestamp: at(10))

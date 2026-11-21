@@ -61,7 +61,8 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 - [x] **P0** Review R-02/R-03/R-13 (docs/CODEBASE_REVIEW.md): GRDB `notification_record` (migration v7), raw event `origin_server_ts`, record superseding on sync, pruning on left/hidden/ignored/sign-out; S25–S27, PS33.
 - [x] **P0** Review R-04 (docs/CODEBASE_REVIEW.md): carry-over ends at the first completed sync response (`RoomListPort.syncCompletions()`); S28.
 - [x] **P0** Review R-05/R-08 (docs/CODEBASE_REVIEW.md): `ReadStateCoordinator` feeds room list, badge and auditor; `NotificationProcessor` in `HaloApplication` handles NSE mode-aware badge fallback and foreground suppression; PS31, PS32.
-- [ ] **P0** Review Phase 0, the rest (docs/CODEBASE_REVIEW.md §14): R-06 order by event identity (ADR revisiting D47), R-10/R-12 session lifecycle, R-09 NSE runtime.
+- [x] **P0** Review R-06 (docs/CODEBASE_REVIEW.md, D80, ADR-0020): `TimelineReadTracker` orders by timeline index and targets `Timeline.latestEventId()` at the tail (clearing R-01's trailing poll-vote count); `read_intent.timeline_order` (v8); E1 compares event IDs and yields (`INTENT_STALE`) once a sent receipt is confirmed; S18 inverted, S29.
+- [ ] **P0** Review Phase 0, the rest (docs/CODEBASE_REVIEW.md §14): R-10/R-12 session lifecycle, R-09 NSE runtime.
 
 **M4 Stickers v1** (exit: AC-S1–S5)
 - [x] Hide pack rooms (`one.mbm.halo.sticker_rooms`) from the room list and the badge (`RoomListCoordinator(hiddenRooms:)`; not checked on screen).

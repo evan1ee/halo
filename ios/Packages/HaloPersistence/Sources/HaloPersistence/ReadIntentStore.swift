@@ -19,13 +19,13 @@ public struct ReadIntentStore: ReadIntentPort {
         do {
             let account = account
             return try await database.pool.read { db in
-                try Row.fetchAll(db, sql: "SELECT room_id, event_id, event_ts, created_at, state, attempts, last_error FROM read_intent WHERE account = ?", arguments: [account])
+                try Row.fetchAll(db, sql: "SELECT room_id, event_id, event_ts, created_at, state, attempts, last_error, timeline_order FROM read_intent WHERE account = ?", arguments: [account])
                     .compactMap { row in
                         guard let room = try? RoomID(row["room_id"]), let event = try? EventID(row["event_id"]) else { return nil }
                         return ReadIntent(
                             room: room, event: event, timestamp: Self.date(row["event_ts"]),
                             isSent: (row["state"] as String) == "sent", createdAt: Self.date(row["created_at"]),
-                            attempts: row["attempts"], lastError: row["last_error"])
+                            attempts: row["attempts"], lastError: row["last_error"], sequence: row["timeline_order"])
                     }
             }
         } catch { throw .storage(.corrupted) }
@@ -37,18 +37,20 @@ public struct ReadIntentStore: ReadIntentPort {
             try await database.pool.write { db in
                 try db.execute(
                     sql: """
-                        INSERT INTO read_intent (account, room_id, event_id, event_ts, created_at, state, receipt_type)
-                        VALUES (?, ?, ?, ?, ?, ?, 'read')
+                        INSERT INTO read_intent (account, room_id, event_id, event_ts, created_at, state, receipt_type, timeline_order)
+                        VALUES (?, ?, ?, ?, ?, ?, 'read', ?)
                         ON CONFLICT (account, room_id) DO UPDATE SET
                           attempts = CASE WHEN read_intent.event_id = excluded.event_id THEN read_intent.attempts ELSE 0 END,
                           last_error = CASE WHEN read_intent.event_id = excluded.event_id THEN read_intent.last_error ELSE NULL END,
                           event_id = excluded.event_id, event_ts = excluded.event_ts, created_at = excluded.created_at,
+                          timeline_order = excluded.timeline_order,
                           state = CASE WHEN read_intent.event_id = excluded.event_id AND read_intent.state = 'sent' THEN 'sent' ELSE excluded.state END
-                        WHERE excluded.event_ts >= read_intent.event_ts
+                        WHERE excluded.timeline_order > read_intent.timeline_order
+                           OR (excluded.timeline_order = read_intent.timeline_order AND excluded.event_ts >= read_intent.event_ts)
                         """,
                     arguments: [
                         account, intent.room.rawValue, intent.event.rawValue, Self.millis(intent.timestamp), Self.millis(intent.createdAt),
-                        intent.isSent ? "sent" : "pending",
+                        intent.isSent ? "sent" : "pending", intent.sequence,
                     ])
             }
         } catch { throw .storage(.corrupted) }
