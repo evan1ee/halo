@@ -24,3 +24,4 @@ Format: [TEMPLATE.md](TEMPLATE.md). Numbering is sequential and never reused. An
 | [0018](0018-devices-list-over-direct-http.md) | List the account's sessions with one direct HTTP call | Accepted |
 | [0019](0019-change-password-over-direct-http.md) | Change the password with one direct HTTP call | Accepted |
 | [0020](0020-identity-read-order.md) | Order read state by event identity and timeline order, not timestamps | Accepted |
+| [0021](0021-unread-message-count-badge.md) | App icon badge shows total unread message count across rooms needing attention | Accepted |

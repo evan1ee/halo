@@ -33,20 +33,20 @@ struct BadgeCoordinatorTests {
         return (rooms, coordinator, records, port, badge)
     }
 
-    @Test("the badge follows the rooms that need attention and is recomputed, not counted up or down")
+    @Test("D82: the badge sums unread messages across rooms needing attention and is recomputed, not counted up or down")
     func follows() async throws {
         let (rooms, _, _, port, badge) = await make()
         try rooms.emit(.reset([try summary("!a:x.org", notify: 2), try summary("!b:x.org"), try summary("!c:x.org", notify: 1, mode: .mute)]))
-        #expect(await eventually { port.badge == 1 })
-        try rooms.emit(.set(index: 1, try summary("!b:x.org", notify: 4)))
         #expect(await eventually { port.badge == 2 })
+        try rooms.emit(.set(index: 1, try summary("!b:x.org", notify: 4)))
+        #expect(await eventually { port.badge == 6 })
         try rooms.emit(.set(index: 0, try summary("!a:x.org")))
-        #expect(await eventually { port.badge == 1 })
+        #expect(await eventually { port.badge == 4 })
         #expect(port.history.last == [try RoomID("!b:x.org")])
-        #expect(await badge.badge == 1)
+        #expect(await badge.badge == 4)
     }
 
-    @Test("a notification record makes a room count although the room list shows no unread, and opening it clears that")
+    @Test("a notification record makes a room count although the room list shows no unread, and clearing it updates the badge (D82)")
     func recordsCount() async throws {
         let (rooms, _, records, port, badge) = await make()
         defer { withExtendedLifetime(badge) {} }
@@ -55,10 +55,10 @@ struct BadgeCoordinatorTests {
         #expect(port.badge == 0)
         records.add(try record("!a:x.org", "$1"))  // written by the extension
         #expect(await eventually { port.badge == 1 })
-        records.add(try record("!a:x.org", "$2"))  // a second event in the same room: still one room
-        records.add(try record("!b:x.org", "$3"))
-        #expect(await eventually { port.badge == 2 })
-        records.clear(room: try RoomID("!a:x.org"))  // the user opened room a
+        records.add(try record("!a:x.org", "$2"))  // a second unread message in room a
+        records.add(try record("!b:x.org", "$3"))  // plus 1 in room b = 3 total unread messages
+        #expect(await eventually { port.badge == 3 })
+        records.clear(room: try RoomID("!a:x.org"))  // the user cleared room a
         #expect(await eventually { port.badge == 1 })
     }
 
@@ -101,19 +101,19 @@ struct BadgeCoordinatorTests {
         records.add(NotificationRecord(roomID: room, eventID: try EventID("$1"), timestamp: Date(timeIntervalSince1970: 100), isMention: false, deliveredAt: Date(timeIntervalSince1970: 100), source: .nse))
         records.add(NotificationRecord(roomID: room, eventID: try EventID("$3"), timestamp: Date(timeIntervalSince1970: 200), isMention: false, deliveredAt: Date(timeIntervalSince1970: 200), source: .nse))
         records.add(try record("!b:x.org", "$2"))
-        #expect(await eventually { port.badge == 2 })
+        #expect(await eventually { port.badge == 3 })
 
         // Opening the room alone does NOT wipe its notification records before anything is seen (D6, R-15).
         await TimelineCoordinator(port: timelines, room: room).open()
         #expect(Set(records.all().map(\.eventID.rawValue)) == ["$1", "$2", "$3"])
 
-        // Seeing $1 (ts 100) clears only $1; unseen newer record $3 (ts 200) and other room's $2 stay.
+        // Seeing $1 (ts 100) clears only $1; unseen newer record $3 (ts 200) and other room's $2 stay (badge 3 → 2).
         await receipts.reportSeen(room: room, event: try EventID("$1"), timestamp: Date(timeIntervalSince1970: 100))
         #expect(await eventually { !records.all().contains { $0.eventID.rawValue == "$1" } })
         #expect(Set(records.all().map(\.eventID.rawValue)) == ["$2", "$3"])
-        #expect(port.badge == 2)
+        #expect(await eventually { port.badge == 2 })
 
-        // Seeing $3 (ts 200) clears $3 and drops room !a from the badge.
+        // Seeing $3 (ts 200) clears $3 and drops room !a from the badge (badge 2 → 1).
         await receipts.reportSeen(room: room, event: try EventID("$3"), timestamp: Date(timeIntervalSince1970: 200))
         #expect(await eventually { port.badge == 1 })
         #expect(records.all().map(\.eventID.rawValue) == ["$2"])
@@ -136,13 +136,13 @@ struct BadgeCoordinatorTests {
                 latestEvent: LatestEventRef(timestamp: Date(timeIntervalSince1970: latest), senderIsSelf: false))
         }
         try rooms.emit(.reset([try unread(latest: 100)]))
-        #expect(await eventually { port.badge == 1 })
+        #expect(await eventually { port.badge == 3 })
 
         await receipts.reportSeen(room: try RoomID("!a:x.org"), event: try EventID("$e"), timestamp: Date(timeIntervalSince1970: 100))
         #expect(await eventually { port.badge == 0 })
 
         try rooms.emit(.set(index: 0, try unread(latest: 200)))
-        #expect(await eventually { port.badge == 1 })
+        #expect(await eventually { port.badge == 3 })
     }
 
     @Test("a receipt your other device sent clears the room here, until a newer event arrives")
@@ -161,11 +161,11 @@ struct BadgeCoordinatorTests {
                 ownReadThrough: readThrough.map { Date(timeIntervalSince1970: $0) })
         }
         try rooms.emit(.reset([try room(latest: 100, readThrough: nil)]))
-        #expect(await eventually { port.badge == 1 })
+        #expect(await eventually { port.badge == 3 })
         try rooms.emit(.set(index: 0, try room(latest: 100, readThrough: 100)))
         #expect(await eventually { port.badge == 0 })
         try rooms.emit(.set(index: 0, try room(latest: 200, readThrough: 100)))
-        #expect(await eventually { port.badge == 1 })
+        #expect(await eventually { port.badge == 3 })
     }
 
     @Test("a pushed event the user already read doesn't count, a newer one does")

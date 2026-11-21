@@ -30,9 +30,10 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D81), [docs/adr/RE
 - **D78 (R-01) / D79 (R-07):** SDK counts decide in encrypted rooms (`ENC_SERVER_ONLY` → no unread); E1/E1b yield to positive SDK counts once the SDK applied the read position.
 - **D80 / ADR-0020 (R-06):** identity and timeline-index read ordering, `read_intent.timeline_order` (v8), `INTENT_STALE` on confirmed intents (revises D47, D72).
 - **D81 (R-17):** removed native sliding-sync gate at server discovery and password login (amends AUTHENTICATION FR-5).
+- **D82 / ADR-0021 (founder, supersedes D5):** app icon badge shows total unread messages across rooms needing attention (`BadgeCalculator.badge` sums `RoomReadState.badgeCount` for `attention == true`; `AttentionCache` stores `[RoomID: Int]` + `updatedAt` so the NSE recomputes from GRDB `notification_record` without raw increments).
 
 ## 4. Modified files (this push)
-- **NSE sliding-sync fix & physical-device verification (`F-DEV-1`, `F-FFI-23c`):** `MatrixSessionPort.swift` (`enablesSlidingSync: Bool`), `ios/NotificationService/NotificationService.swift` (`enablesSlidingSync: true`), `ios/App/AppRoot.swift` (`#if DEBUG` `exportDeviceDiagnostics`), `AdapterContractTests.swift` (`nseNotificationFetch`), `docs/SOURCES.md` (`F-FFI-23c`, `F-DEV-1`), `docs/CODEBASE_REVIEW.md`, `HANDOFF.md`.
+- **Unread-message-count app badge (D82 / ADR-0021):** `HaloDomain` (`ReadState.swift`, `BadgePort.swift`, `ReadStatePolicyTests.swift`), `HaloTestSupport` (`FakeBadgePort.swift`), `HaloPlatform` (`SystemBadge.swift`, `AttentionCacheTests.swift`), `HaloApplication` (`ReadStateCoordinator.swift`, `NotificationProcessor.swift`, `BadgeCoordinatorTests.swift`, `NotificationProcessorTests.swift`), `ios/NotificationService/NotificationService.swift`, `docs/adr/0021-unread-message-count-badge.md`, `docs/adr/README.md`, `docs/DECISION_LOG.md`, `docs/matrix/UNREAD_STATE.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
 Unverified items and known limits: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).

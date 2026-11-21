@@ -22,14 +22,14 @@ public enum NotificationDecision: Sendable, Equatable {
 public struct NotificationProcessor: Sendable {
     private let fetcher: any NotificationFetchPort
     private let records: any NotificationRecordPort
-    private let lastAttention: @Sendable () -> Set<RoomID>
+    private let lastAttention: @Sendable () -> (counts: [RoomID: Int], updatedAt: Date?)
     private let isAppForeground: @Sendable () -> Bool
     private let now: @Sendable () -> Date
 
     public init(
         fetcher: any NotificationFetchPort,
         records: any NotificationRecordPort,
-        lastAttention: @escaping @Sendable () -> Set<RoomID>,
+        lastAttention: @escaping @Sendable () -> (counts: [RoomID: Int], updatedAt: Date?),
         isAppForeground: @escaping @Sendable () -> Bool,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
@@ -38,6 +38,19 @@ public struct NotificationProcessor: Sendable {
         self.lastAttention = lastAttention
         self.isAppForeground = isAppForeground
         self.now = now
+    }
+
+    public init(
+        fetcher: any NotificationFetchPort,
+        records: any NotificationRecordPort,
+        lastAttention: @escaping @Sendable () -> [RoomID: Int],
+        isAppForeground: @escaping @Sendable () -> Bool,
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) {
+        self.init(
+            fetcher: fetcher, records: records,
+            lastAttention: { (lastAttention(), nil) },
+            isAppForeground: isAppForeground, now: now)
     }
 
     public func process(room: RoomID, event: EventID) async -> NotificationDecision {
@@ -81,7 +94,8 @@ public struct NotificationProcessor: Sendable {
         }
     }
 
-    /// Mode-aware badge delta over the app's last authoritative attention set (R-08).
+    /// Mode-aware unread-message badge recomputation over the app's last authoritative per-room counts plus
+    /// unconfirmed `notification_record` entries delivered since that write (R-08, D82).
     /// Returns `nil` while the app is foregrounded (the app handles the badge via Darwin signal) or when the event
     /// does not give this room attention under `ReadStatePolicy` (e.g. non-mention in mentions-only or muted room).
     private func fallbackBadge(
@@ -89,13 +103,30 @@ public struct NotificationProcessor: Sendable {
         timestamp: Date, isMention: Bool
     ) -> Int? {
         guard !isAppForeground() else { return nil }
-        let input = RoomReadInputs(
+        let single = ReadStatePolicy.evaluate(RoomReadInputs(
             roomID: room, membership: membership, isEncrypted: isEncrypted,
             counts: RoomReadCounts(mode: mode, server: .zero, sdk: .zero, isMarkedUnread: false),
-            unconfirmedNotified: [NotifiedRef(timestamp: timestamp, isMention: isMention)])
-        let state = ReadStatePolicy.evaluate(input)
-        guard state.attention else { return nil }
-        return lastAttention().union([room]).count
+            unconfirmedNotified: [NotifiedRef(timestamp: timestamp, isMention: isMention)]))
+        guard single.attention else { return nil }
+
+        let snapshot = lastAttention()
+        let addedRecords = records.all().filter { record in
+            guard record.roomID == room else { return false }
+            if let cutoff = snapshot.updatedAt { return record.deliveredAt >= cutoff }
+            return true
+        }
+        let unconfirmed = addedRecords.isEmpty
+            ? [NotifiedRef(timestamp: timestamp, isMention: isMention)]
+            : addedRecords.map { NotifiedRef(timestamp: $0.timestamp, isMention: $0.isMention) }
+        let roomDelta = ReadStatePolicy.evaluate(RoomReadInputs(
+            roomID: room, membership: membership, isEncrypted: isEncrypted,
+            counts: RoomReadCounts(mode: mode, server: .zero, sdk: .zero, isMarkedUnread: false),
+            unconfirmedNotified: unconfirmed))
+        guard roomDelta.attention else { return nil }
+
+        var effective = snapshot.counts
+        effective[room] = (effective[room] ?? 0) + max(roomDelta.badgeCount, 1)
+        return effective.values.reduce(0, +)
     }
 }
 

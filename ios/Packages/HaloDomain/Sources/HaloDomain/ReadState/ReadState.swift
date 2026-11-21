@@ -178,19 +178,31 @@ public struct RoomReadState: Sendable, Equatable {
     public let hasUnread: Bool
     public let display: DisplayCount
     public let confidence: Confidence
+    /// Number of unread messages this room contributes to the app icon badge (D82: 0 when `!attention`, otherwise ≥ 1).
+    public let badgeCount: Int
     /// No notifying event up to this timestamp is unread (UNREAD_STATE §5): drives record pruning and clearing.
     public let notifiedThroughTs: Date?
     public let reasons: Set<ReasonCode>
 
     public init(
         roomID: RoomID, attention: Bool, hasUnread: Bool, display: DisplayCount, confidence: Confidence,
-        notifiedThroughTs: Date? = nil, reasons: Set<ReasonCode>
+        badgeCount: Int? = nil, notifiedThroughTs: Date? = nil, reasons: Set<ReasonCode>
     ) {
         self.roomID = roomID
         self.attention = attention
         self.hasUnread = hasUnread
         self.display = display
         self.confidence = confidence
+        if let badgeCount {
+            self.badgeCount = badgeCount
+        } else if !attention {
+            self.badgeCount = 0
+        } else {
+            switch display {
+            case .count(let n), .mentions(let n): self.badgeCount = max(n, 1)
+            case .dot, .none: self.badgeCount = 1
+            }
+        }
         self.notifiedThroughTs = notifiedThroughTs
         self.reasons = reasons
     }
@@ -241,10 +253,10 @@ public enum ReadStatePolicy {
         let id = input.roomID
         // E0: an invite always needs attention; a room the user isn't in never does.
         if input.membership == .invited {
-            return RoomReadState(roomID: id, attention: true, hasUnread: true, display: .dot, confidence: .exact, reasons: [.invite])
+            return RoomReadState(roomID: id, attention: true, hasUnread: true, display: .dot, confidence: .exact, badgeCount: 1, reasons: [.invite])
         }
         guard input.membership == .joined else {
-            return RoomReadState(roomID: id, attention: false, hasUnread: false, display: .none, confidence: .exact, reasons: [])
+            return RoomReadState(roomID: id, attention: false, hasUnread: false, display: .none, confidence: .exact, badgeCount: 0, reasons: [])
         }
 
         let counts = input.counts
@@ -335,10 +347,17 @@ public enum ReadStatePolicy {
         }
 
         let attention: Bool
+        let badgeCount: Int
         switch counts.mode {
-        case .allMessages: attention = notify > 0 || highlight > 0 || counts.isMarkedUnread
-        case .mentionsAndKeywords: attention = highlight > 0 || counts.isMarkedUnread
-        case .mute: attention = counts.isMarkedUnread
+        case .allMessages:
+            attention = notify > 0 || highlight > 0 || counts.isMarkedUnread
+            badgeCount = attention ? max(notify, highlight, 1) : 0
+        case .mentionsAndKeywords:
+            attention = highlight > 0 || counts.isMarkedUnread
+            badgeCount = attention ? max(highlight, 1) : 0
+        case .mute:
+            attention = counts.isMarkedUnread
+            badgeCount = attention ? 1 : 0
         }
 
         let display: DisplayCount
@@ -353,11 +372,14 @@ public enum ReadStatePolicy {
         }
         return RoomReadState(
             roomID: id, attention: attention, hasUnread: hasUnread, display: display, confidence: confidence,
-            notifiedThroughTs: notifiedThrough, reasons: reasons)
+            badgeCount: badgeCount, notifiedThroughTs: notifiedThrough, reasons: reasons)
     }
 }
 
-/// The app badge: the number of rooms that need attention (D5). Never incremented, always recomputed (D9).
+/// The app badge: total unread messages across rooms needing attention (D82, supersedes D5).
+/// Never incremented blindly; always recomputed by one function (D9).
 public enum BadgeCalculator {
-    public static func badge(_ states: [RoomReadState]) -> Int { states.filter(\.attention).count }
+    public static func badge(_ states: [RoomReadState]) -> Int {
+        states.reduce(0) { $0 + ($1.attention ? max($1.badgeCount, 1) : 0) }
+    }
 }

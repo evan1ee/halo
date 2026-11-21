@@ -171,9 +171,10 @@ struct RoomListViewModelTests {
                 return
             }
             let badgeCount = await readState.badge
+            let states = await readState.roomStates
             let attentionRooms = await readState.attentionRooms
             let rowsWithIndicator = rows.filter { $0.display != .none }
-            #expect(badgeCount == rowsWithIndicator.count, "seed 31 trial \(trial): badge \(badgeCount) != rows \(rowsWithIndicator.count)")
+            #expect(badgeCount == BadgeCalculator.badge(Array(states.values)), "seed 31 trial \(trial): badge \(badgeCount) disagrees with BadgeCalculator")
             #expect(attentionRooms == Set(rowsWithIndicator.map(\.id)), "seed 31 trial \(trial): attention rooms disagree with list rows")
         }
     }

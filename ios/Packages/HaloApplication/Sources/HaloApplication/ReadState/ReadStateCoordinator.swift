@@ -14,7 +14,9 @@ public actor ReadStateCoordinator {
 
     /// The latest evaluated read state per visible room; consumed by the room list so list and badge always agree (R-05).
     public private(set) var roomStates: [RoomID: RoomReadState] = [:]
-    public private(set) var attentionRooms: Set<RoomID> = []
+    /// Per-room unread badge counts for rooms needing attention (D82).
+    public private(set) var attentionCounts: [RoomID: Int] = [:]
+    public var attentionRooms: Set<RoomID> { Set(attentionCounts.keys) }
     /// The first evaluation always writes, even an empty set, so a stale badge can be cleared.
     private var hasWritten = false
 
@@ -24,9 +26,9 @@ public actor ReadStateCoordinator {
     private let receipts: ReadReceiptCoordinator?
     private var audit: Audit?
     private var audited: [RoomID: Set<AuditFinding>] = [:]
-    /// Rooms that needed attention at the last write (loaded from the port at launch) and that this run's room list
-    /// hasn't shown yet. They keep their state until the list shows them or the first sync completes (D73, R-04).
-    private var carried: Set<RoomID> = []
+    /// Per-room badge counts carried from the last write (loaded from the port at launch) for rooms this run's room
+    /// list hasn't shown yet. Kept until the list shows them or the first sync completes (D73, R-04, D82).
+    private var carried: [RoomID: Int] = [:]
     /// Rooms the list has shown in this run; once shown, a room that disappears from the list is dropped, not carried.
     private var seen: Set<RoomID> = []
     /// Rooms that must not count towards attention (left, hidden sticker-pack rooms, ignored-inviter invites, R-03).
@@ -143,7 +145,7 @@ public actor ReadStateCoordinator {
 
     /// Drops the stored state and notification records of `room` (the user left it) so it isn't carried over (R-03).
     public func forget(_ room: RoomID) async {
-        carried.remove(room)
+        carried.removeValue(forKey: room)
         seen.insert(room)
         excludedRooms.insert(room)
         records?.clear(room: room)
@@ -157,11 +159,11 @@ public actor ReadStateCoordinator {
         await recompute()
     }
 
-    /// Account change or sign-out: forgets everything, including the stored set and notification records, and clears the badge (R-03).
+    /// Account change or sign-out: forgets everything, including the stored counts and notification records, and clears the badge (R-03).
     public func reset() async {
         periodicAudit?.cancel()
         periodicAudit = nil
-        carried = []
+        carried = [:]
         seen = []
         excludedRooms = []
         hasSynced = false
@@ -174,15 +176,15 @@ public actor ReadStateCoordinator {
             roomStates = [:]
             statesBroadcaster.publish([:])
         }
-        attentionRooms = []
+        attentionCounts = [:]
         hasWritten = false
         audited = [:]
         records?.clearAll()
         await port.reset()
     }
 
-    /// The badge value for the current states.
-    public var badge: Int { attentionRooms.count }
+    /// The badge value for the current states: total unread messages across rooms needing attention (D82).
+    public var badge: Int { attentionCounts.values.reduce(0, +) }
 
     /// The attention set for `inputs` and `records`: every room whose state needs attention, plus rooms that have
     /// records but aren't in the loaded list (excluding left/hidden/ignored rooms, R-03).
@@ -273,7 +275,7 @@ public actor ReadStateCoordinator {
     private func excludedChanged(_ rooms: Set<RoomID>) async {
         excludedRooms = rooms
         if !rooms.isEmpty {
-            carried.subtract(rooms)
+            for room in rooms { carried.removeValue(forKey: room) }
             seen.formUnion(rooms)
             records?.clear(rooms: rooms)
         }
@@ -291,7 +293,7 @@ public actor ReadStateCoordinator {
         syncedRooms = present
         // Drop any carried room that the server did not report as joined/invited (R-04).
         // Rooms in `present` whose diff hasn't arrived yet remain carried until their inputs arrive.
-        carried.formIntersection(present)
+        carried = carried.filter { present.contains($0.key) }
         // Drop stale notification records for rooms not in the post-sync room set (R-03).
         if let stored = records?.all() {
             let absent = Set(stored.map(\.roomID)).subtracting(present)
@@ -357,21 +359,28 @@ public actor ReadStateCoordinator {
         seen.formUnion(inputs.map(\.roomID))
         seen.formUnion(excludedRooms)
         let activeRecords = stored.filter { !pass.superseded.contains($0.eventID) && !excludedRooms.contains($0.roomID) }
-        var attention = Set(pass.results.filter(\.state.attention).map(\.input.roomID))
+        var counts: [RoomID: Int] = [:]
+        for (input, state) in pass.results where state.attention {
+            counts[input.roomID] = max(state.badgeCount, 1)
+        }
         let known = Set(inputs.map(\.roomID))
         // Before the first sync response of the run, records for rooms not yet in the loaded list still count;
         // once sync has reported the full joined/invited set, unknown rooms no longer count (R-03, R-04).
         if !hasSynced {
-            for record in activeRecords where !known.contains(record.roomID) { attention.insert(record.roomID) }
+            for record in activeRecords where !known.contains(record.roomID) {
+                counts[record.roomID, default: 0] += 1
+            }
         }
-        let carryable = hasSynced ? carried.intersection(syncedRooms) : carried
-        attention.formUnion(carryable.subtracting(seen))
-        attention.subtract(excludedRooms)
-        carried = attention
-        guard attention != attentionRooms || !hasWritten else { return }
+        let carryable = hasSynced ? carried.filter { syncedRooms.contains($0.key) } : carried
+        for (room, count) in carryable where !seen.contains(room) && !excludedRooms.contains(room) && count > 0 {
+            if counts[room] == nil { counts[room] = count }
+        }
+        for room in excludedRooms { counts.removeValue(forKey: room) }
+        carried = counts
+        guard counts != attentionCounts || !hasWritten else { return }
         hasWritten = true
-        attentionRooms = attention
-        await port.update(attentionRooms: attention)
+        attentionCounts = counts
+        await port.update(attentionCounts: counts)
     }
 }
 

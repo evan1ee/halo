@@ -90,7 +90,7 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
             let processor = NotificationProcessor(
                 fetcher: MatrixNotificationPort(session: runtime.session),
                 records: runtime.records,
-                lastAttention: { attention.roomIDs() },
+                lastAttention: { (attention.roomCounts(), attention.updatedAt()) },
                 isAppForeground: { attention.isForeground() })
             let decision = await processor.process(room: room, event: event)
             metrics.step("fetch")

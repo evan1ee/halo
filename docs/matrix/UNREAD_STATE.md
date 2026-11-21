@@ -84,7 +84,9 @@ struct RoomReadState: Sendable, Equatable {
 ```
 
 `ReadStatePolicy.evaluate(_ inputs: RoomReadInputs) -> RoomReadState` is a **pure, total, deterministic**
-function. `BadgeCalculator.badge(_ states: [RoomReadState]) -> Int` = `states.filter(\.attention).count`.
+function. `BadgeCalculator.badge(_ states: [RoomReadState]) -> Int` sums `badgeCount` for rooms where `attention == true`
+(**[DECISION D82, ADR-0021]**, superseding D5: `allMessages` contributes `max(notify, highlight, 1)`, `mentionsAndKeywords`
+contributes `max(highlight, 1)`, muted marked-unread and invites contribute `1`, non-attention rooms contribute `0`).
 
 ## 5. Evaluation rules
 

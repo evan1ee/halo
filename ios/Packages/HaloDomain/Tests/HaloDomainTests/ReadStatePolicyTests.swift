@@ -232,13 +232,24 @@ struct ReadStatePolicyTests {
         }
     }
 
-    @Test("the badge is the number of rooms that need attention, recomputed from states and never counted up")
+    @Test("D82: the badge is the total unread message count across rooms needing attention, recomputed from states")
     func badge() throws {
-        func state(_ attention: Bool) throws -> RoomReadState {
-            RoomReadState(roomID: try RoomID("!\(UUID().uuidString.prefix(6)):x.org"), attention: attention, hasUnread: attention, display: .none, confidence: .exact, reasons: [])
+        func state(_ attention: Bool, count: Int) throws -> RoomReadState {
+            RoomReadState(
+                roomID: try RoomID("!\(UUID().uuidString.prefix(6)):x.org"),
+                attention: attention, hasUnread: attention,
+                display: attention ? (count > 0 ? .count(count) : .dot) : .none,
+                confidence: .exact, badgeCount: attention ? max(count, 1) : 0, reasons: [])
         }
         #expect(BadgeCalculator.badge([]) == 0)
-        #expect(BadgeCalculator.badge([try state(true), try state(false), try state(true)]) == 2)
+        #expect(BadgeCalculator.badge([try state(true, count: 10), try state(false, count: 0), try state(true, count: 3)]) == 13)
+        // All-messages room with 10 unread messages including 1 mention contributes 10 (not 1).
+        let mixed = eval(inputs(mode: .allMessages, server: ServerCounts(notification: 10, highlight: 1)))
+        #expect(mixed.display == .mentions(1) && mixed.badgeCount == 10)
+        // Mentions-only room with 5 messages and 2 mentions contributes 2; muted marked-unread contributes 1.
+        let mentionsOnly = eval(inputs(mode: .mentionsAndKeywords, server: ServerCounts(notification: 5, highlight: 2)))
+        let mutedMarked = eval(inputs(mode: .mute, marked: true))
+        #expect(BadgeCalculator.badge([mixed, mentionsOnly, mutedMarked]) == 13)
     }
 
     @Test("evaluation is deterministic over a grid of inputs and never claims attention without a reason to")
