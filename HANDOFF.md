@@ -14,8 +14,8 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log` and [docs/CODEBASE_REVIEW.md](docs/CODEBASE_REVIEW.md) §13.
 - **Room list toolbar & Settings layout polish (this push on `main`):**
-  - Removed `RecoveryBanner` from the home page (room list) in `HaloApp.swift`; verification stays in Settings → Security (with the yellow dot indicator on the Settings avatar).
-  - Moved "Find a person or create a room" (`NewChatView` trigger) into `SettingsView` ("Chats" section), removed the top-left `New chat` toolbar button, and moved the Settings avatar button to `.topBarLeading` (`d732f4f`).
+  - Replaced the inline horizontal filter bar in `RoomListView` with `RoomListFilterMenu` (filter icon next to Search in `.topBarTrailing`, opening All / Unread / People / Rooms / Favourites / Invites with a checkmark on the active filter and filled icon when filtered).
+  - Removed `RecoveryBanner` from the home page (`c5b539f`); moved "Find a person or create a room" into `SettingsView` and Settings avatar to `.topBarLeading` (`d732f4f`).
 - **Sticker send UX/validation & multi-image sending (`900bcab`):**
   - Sanitised `MatrixTimelinePort.stickerContent`, added `StickerPanelViewModel.isSending` double-tap guard, auto-dismissed `StickerPanelView` on send, surfaced error codes on failure, verified unencrypted + encrypted sends in `AdapterContractTests.stickers`, and upgraded `TimelineViewModel` & `Composer` to multi-image picking/sending (up to 10 photos).
 - **Message search fixes (`071fff3`):**
@@ -30,7 +30,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D82), [docs/adr/RE
 - **D82 / ADR-0021 (founder, supersedes D5):** app icon badge shows total unread messages across rooms needing attention (`BadgeCalculator.badge` sums `RoomReadState.badgeCount` for `attention == true`).
 
 ## 4. Modified files (this push)
-- **App:** `ios/App/HaloApp.swift`.
+- **FeatureRoomList & App:** `ios/Packages/Features/FeatureRoomList/Sources/FeatureRoomList/RoomListView.swift`, `ios/App/HaloApp.swift`.
 - **Docs:** `HANDOFF.md`.
 
 ## 5. Outstanding issues

@@ -29,7 +29,6 @@ public struct RoomListView: View {
             case .loaded(_, let rows):
                 VStack(spacing: 0) {
                 syncIndicator
-                filterBar
                 List {
                     Section {
                         ForEach(rows) { row in
@@ -156,8 +155,6 @@ public struct RoomListView: View {
         }
     }
 
-    private static let filters: [(RoomListFilter, String)] = [(.all, "All"), (.unread, "Unread"), (.people, "People"), (.rooms, "Rooms"), (.favourites, "Favourites"), (.invites, "Invites")]
-
     @ViewBuilder private var syncIndicator: some View {
         if let notice = model.syncNotice {
             HStack(spacing: 8) {
@@ -178,24 +175,6 @@ public struct RoomListView: View {
         }
     }
 
-    private var filterBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack {
-                ForEach(Self.filters, id: \.1) { filter, title in
-                    Button(title) { model.filter = filter }
-                        .buttonStyle(.bordered)
-                        .tint(model.filter == filter ? .accentColor : .secondary)
-                        .accessibilityIdentifier("filter-\(title)")
-                }
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 6)
-        }
-        #if os(iOS)
-        .background(Color(uiColor: .systemGroupedBackground))
-        #endif
-    }
-
     @ViewBuilder private func indicator(_ display: DisplayCount) -> some View {
         switch display {
         case .none: EmptyView()
@@ -203,6 +182,44 @@ public struct RoomListView: View {
         case .count(let n): Text("\(n)").font(.caption.bold()).padding(.horizontal, 7).background(.blue, in: Capsule()).foregroundStyle(.white)
         case .mentions(let n): Text("@\(n)").font(.caption.bold()).padding(.horizontal, 7).background(.red, in: Capsule()).foregroundStyle(.white)
         }
+    }
+}
+
+/// Toolbar filter icon (`line.3.horizontal.decrease.circle`) that opens the room-list filter menu
+/// (All, Unread, People, Rooms, Favourites, Invites) with a checkmark on the active filter.
+public struct RoomListFilterMenu: View {
+    @Bindable private var model: RoomListViewModel
+
+    private static let options: [(filter: RoomListFilter, title: String, symbol: String)] = [
+        (.all, "All", "tray.full"),
+        (.unread, "Unread", "envelope.badge"),
+        (.people, "People", "person.2"),
+        (.rooms, "Rooms", "bubble.left.and.bubble.right"),
+        (.favourites, "Favourites", "star"),
+        (.invites, "Invites", "envelope.open"),
+    ]
+
+    public init(model: RoomListViewModel) { self.model = model }
+
+    public var body: some View {
+        Menu {
+            ForEach(Self.options, id: \.title) { option in
+                Button {
+                    model.filter = option.filter
+                } label: {
+                    if model.filter == option.filter {
+                        Label(option.title, systemImage: "checkmark")
+                    } else {
+                        Label(option.title, systemImage: option.symbol)
+                    }
+                }
+                .accessibilityIdentifier("filter-\(option.title)")
+            }
+        } label: {
+            Image(systemName: model.filter == .all ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+        }
+        .accessibilityLabel("Filter rooms")
+        .accessibilityIdentifier("room-filter-menu")
     }
 }
 

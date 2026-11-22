@@ -125,6 +125,9 @@ private struct RootView: View {
                                 .accessibilityIdentifier("settings")
                         }
                         ToolbarItem(placement: .topBarTrailing) {
+                            RoomListFilterMenu(model: root.roomList)
+                        }
+                        ToolbarItem(placement: .topBarTrailing) {
                             Button { messageSearch = root.makeMessageSearch() } label: { Image(systemName: "magnifyingglass") }
                                 .accessibilityLabel("Search")
                                 .accessibilityIdentifier("search")
