@@ -6,7 +6,7 @@
 Show a room's history correctly and smoothly, and report what the user has actually seen.
 
 ## 2. User stories
-- I open a room and land at the first unread message (or the bottom if all is read).
+- I open a room and land at the newest message; if some messages were unread, the first of them stays marked and a "Jump to unread" button takes me up to it (D95).
 - I scroll back through history smoothly; media loads progressively.
 - I see who has read what, edits, reactions, replies, and why a message can't be decrypted.
 
@@ -27,7 +27,7 @@ Show a room's history correctly and smoothly, and report what the user has actua
 60 fps scrolling (NFR-2); a diff batch is applied within one frame; image decoding off the main thread; animated stickers pause off-screen.
 
 ## 5. User flows
-Open → position (first unread / bottom) → scroll → events become visible → intents → the list badge clears.
+Open → position (newest message; first unread marked) → scroll → events become visible → intents → the list badge clears.
 
 ## 6. State transitions
 `Opening → Positioned → Live`; `Live → PaginatingBack → Live`; `Live → Detached` (scrolled far up; new events show a "↓ N new" pill).

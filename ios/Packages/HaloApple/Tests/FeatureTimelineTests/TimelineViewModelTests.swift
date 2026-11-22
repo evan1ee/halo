@@ -598,7 +598,7 @@ struct TimelineViewModelTests {
         }
     }
 
-    @Test("the timeline lands once, on the first unread message, and not again on later updates")
+    @Test("the timeline lands once, on the newest row even with unread messages, and not again on later updates")
     func landsOnce() throws {
         let vm = TimelineViewModel(
             coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: try RoomID("!r:x.org")),
@@ -610,7 +610,8 @@ struct TimelineViewModelTests {
         vm.apply(snapshot([]))
         #expect(vm.landingRow == nil)  // nothing loaded yet: wait for the first items
         vm.apply(snapshot([timed("a", 10), timed("c", 30)]))
-        #expect(vm.landingRow == "c" && vm.landingIsUnread)
+        #expect(vm.landingRow == "c" && !vm.landingIsUnread)
+        #expect(vm.unreadMarkerID == "c")
         vm.landingShown()
         vm.apply(snapshot([timed("a", 10), timed("c", 30), timed("d", 40)]))
         #expect(vm.landingRow == nil)

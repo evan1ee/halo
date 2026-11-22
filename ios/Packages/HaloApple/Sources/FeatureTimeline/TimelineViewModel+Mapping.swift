@@ -36,13 +36,12 @@ extension TimelineViewModel {
             if !landed, !rows.isEmpty, hasMessage || (snapshot.reachedStart && !snapshot.isPaginating) {
                 landed = true
                 trackedTailID = rows.last?.id
+                // Always open at the newest message (D95); the first unread one stays marked, and the "Jump to unread" pill
+                // takes the reader up to it.
+                landingRow = rows.last?.id
+                landingIsUnread = false
                 if let unread = Self.firstUnreadItemID(snapshot.items, readThrough: readThroughAtOpen) {
-                    landingRow = unread
-                    landingIsUnread = true
                     unreadMarkerID = unread
-                } else {
-                    landingRow = rows.last?.id  // all read, or the position is unknown: the bottom
-                    landingIsUnread = false
                 }
             } else {
                 updateDetachedCount(for: rows)

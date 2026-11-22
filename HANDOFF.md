@@ -12,6 +12,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log`.
+- **A room always opens at the newest message (`fix/timeline-land-newest`, D95, founder bug report on room S10):** the earlier fix did not change what S10 showed, so the landing no longer jumps to the first unread message; it lands on the newest row, keeps the first unread marked, and the "Jump to unread" pill goes up to it. `TimelineViewModel+Mapping.swift`, tests, `docs/features/TIMELINE.md`, `DECISION_LOG.md`. Not reproduced in the simulator (no signed-in session); check S10 on the device.
 - **Opening a room: no flash, reliably lands (`fix/timeline-open-jump`, founder bug reports):** the list stays hidden (spinner) until the opening scroll finishes, so the jumps aren't seen (2 s fallback reveals it anyway), and the landing scroll repeats until the newest row (or the first unread one) is really on screen instead of exactly four tries; a long room such as S10 could stop short of the newest message. `FeatureTimeline/TimelineView.swift`. If a room with unread messages still opens at its first unread message rather than the newest, that is the designed behaviour (unread at the top, "Jump to unread" pill). Simulator only, not checked on the device.
 - **Room info button shows the room's picture (`feat/room-avatar-info`, founder request):** the `info.circle` in a chat's top bar is now the room's avatar (the other person's for a direct chat; the initial when none), 30 pt, still labelled "Room info". `AvatarView` in `FeatureRoomList` became public with a `size`; `TimelineScreen` in `HaloApp.swift` looks the picture up from the chat list. Not checked on a device.
 - **Accent is exactly Apple's system blue (`feat/accent-system-blue`, founder request):** light #007AFF, dark #0A84FF (Increase Contrast keeps #0040DD / #409CFF). That is ~3.7:1 on the grey background, so `ColorContrastTests` now asks `Accent` for 3:1 in normal light/dark (links, icons, controls) and still 4.5:1 in Increase Contrast; white button text on it (`OnAccent`, 4.02:1) is held to 3:1 in light mode; every other pair stays at 4.5:1. The sign-in UI audit now ignores Apple's "Contrast nearly passed" notes (link text in the blue); real contrast failures still fail. `DESIGN_SYSTEM.md` updated. Not checked on a device.
@@ -45,6 +46,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D86), [docs/adr/RE
 - **D84 / D85 / D86 (ADR-0022):** Apple-native north star; single `NavigationStack` shell; module layout v2 (all 4 steps complete).
 
 ## 4. Modified files (this push)
+- **Land at newest:** `FeatureTimeline/TimelineViewModel+Mapping.swift`, `TimelineViewModelTests.swift`, `docs/features/TIMELINE.md`, `docs/DECISION_LOG.md`.
 - **Timeline landing:** `FeatureTimeline/TimelineView.swift`.
 - **Room avatar button:** `ios/App/HaloApp.swift`, `FeatureRoomList/RoomListView.swift`.
 - **Accent #007AFF:** both `Accent*.colorset`, `ColorContrastTests.swift`, `docs/design/DESIGN_SYSTEM.md`.
