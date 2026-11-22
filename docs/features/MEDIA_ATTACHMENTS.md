@@ -18,6 +18,7 @@ Display every incoming media type and send photos (D16).
 - FR-5 Photo picker (`PHPicker`) → up to 10 images → `send_image` each with progress and cancel (`abort_send`) **[VERIFIED F-FFI-8]**.
 - FR-6 Strip location EXIF; HEIC → JPEG (see [../matrix/MEDIA.md](../matrix/MEDIA.md) §2).
 - FR-7 Media display respects the SDK media preview policy (`get_media_preview_display_policy`) **[VERIFIED F-FFI-18]**.
+- FR-8 Share extension (D87): text, a link, photos and files shared from other apps are staged by the extension and sent from the app to a chat the person picks; images over `OutgoingImage.maximumBytes` and files over `OutgoingFile.maximumBytes` are refused with a plain message.
 
 ## 4. Non-functional requirements
 Thumbnail decode ≤ 16 ms on a background thread; memory cap per [../matrix/MEDIA.md](../matrix/MEDIA.md).

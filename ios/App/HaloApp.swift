@@ -51,6 +51,12 @@ private struct RootView: View {
         _searchModel = State(initialValue: root.makeMessageSearch())
     }
 
+    /// The joined chats the share sheet offers.
+    private var shareTargets: [ShareTargetPickerView.Target] {
+        guard case .loaded(_, let rows) = root.roomList.content else { return [] }
+        return rows.filter { !$0.isInvite }.map { ShareTargetPickerView.Target(id: $0.id, name: $0.name) }
+    }
+
     private var colorScheme: ColorScheme? {
         switch root.preferences.appearance {
         case .system: nil
@@ -174,6 +180,7 @@ private struct RootView: View {
             PushDelegate.onNotificationTap = { room, event in
                 router.openRoom(room, focus: event)
             }
+            root.shareHandoff.onSent = { room in router.openRoom(room) }
             await root.push?.begin()
             await root.readState.begin()
             Task { await root.followReadIntents() }
@@ -218,6 +225,16 @@ private struct RootView: View {
                 }
             }
         }
+        // M16 share extension: what another app shared waits in the App Group inbox until the person picks a chat.
+        .task(id: root.auth.screen) {
+            if case .signedIn = root.auth.screen { await root.shareHandoff.refresh() }
+        }
+        .sheet(isPresented: Binding(
+            get: { root.shareHandoff.current != nil },
+            set: { if !$0 { root.shareHandoff.sheetClosed() } }
+        )) {
+            ShareTargetPickerView(model: root.shareHandoff, targets: shareTargets)
+        }
         .sheet(isPresented: $showingWhatsNew) {
             let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
             WhatsNewView(version: currentVersion) {
@@ -247,6 +264,7 @@ private struct RootView: View {
             case .active:
                 HaloDatabase.resumeAll()
                 await root.setForeground(true)
+                if case .signedIn = root.auth.screen { await root.shareHandoff.refresh() }
                 await root.receipts.flush()
             case .background:
                 let lease = BackgroundTaskLease(name: "halo.receipts.flush", onEnd: { HaloDatabase.suspendAll() })
