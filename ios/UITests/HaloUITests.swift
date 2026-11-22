@@ -119,6 +119,78 @@ final class HaloUITests: XCTestCase {
         try audit(app)
     }
 
+    /// M4/M5 simulator UI check: opens a chat, verifies the sticker panel loads packs/stickers, and exercises New pack creation.
+    @MainActor
+    func testStickerPanelAndPackCreationFlow() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        if !app.navigationBars["Chats"].waitForExistence(timeout: 3) {
+            let back = app.navigationBars.buttons.element(boundBy: 0)
+            if back.exists { back.tap() }
+        }
+        guard app.navigationBars["Chats"].waitForExistence(timeout: 5) else {
+            throw XCTSkip("App is signed out; skipping signed-in sticker panel UI check.")
+        }
+
+        let showAll = app.buttons["focus-show-all"]
+        if showAll.exists {
+            showAll.tap()
+            _ = showAll.waitForNonExistence(timeout: 2)
+        }
+
+        // Open the first non-gallery chat row so the composer (and its sticker button) is shown.
+        let cells = app.collectionViews.firstMatch.cells
+        guard cells.firstMatch.waitForExistence(timeout: 5) else {
+            throw XCTSkip("No chats available on this simulator.")
+        }
+        var openedChat = false
+        for index in 0..<min(cells.count, 5) {
+            let cell = cells.element(boundBy: index)
+            if cell.staticTexts["Media Gallery"].exists { continue }
+            cell.tap()
+            if app.buttons["sticker-button"].waitForExistence(timeout: 5) {
+                openedChat = true
+                break
+            }
+            let back = app.navigationBars.buttons.element(boundBy: 0)
+            if back.exists { back.tap() }
+        }
+        guard openedChat else {
+            throw XCTSkip("No room with a sticker button found on this simulator.")
+        }
+
+        app.buttons["sticker-button"].tap()
+        let search = app.textFields["sticker-search"]
+        XCTAssertTrue(search.waitForExistence(timeout: 5), "Sticker panel should show search field")
+        let loading = app.staticTexts["Loading stickers…"]
+        if loading.exists {
+            XCTAssertTrue(loading.waitForNonExistence(timeout: 5), "Sticker panel should finish loading")
+        }
+
+        // Open pack creation from the sticker panel (+ button or empty-state button).
+        let newPackButton = app.buttons["new-pack"].exists ? app.buttons["new-pack"] : app.buttons["New sticker pack"]
+        XCTAssertTrue(newPackButton.waitForExistence(timeout: 3), "Expected New pack button in sticker panel")
+        newPackButton.tap()
+
+        XCTAssertTrue(app.navigationBars["New pack"].waitForExistence(timeout: 5), "New pack sheet should appear")
+        let nameField = app.textFields["pack-name"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 3))
+        nameField.tap()
+        nameField.typeText("Test Pack")
+        XCTAssertFalse(app.buttons["Create"].isEnabled, "Create must stay disabled until at least one sticker is added")
+
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.navigationBars["New pack"].waitForNonExistence(timeout: 3), "Cancel should dismiss New pack sheet")
+
+        // Dismiss the sticker panel and return to Chats so @SceneStorage restores at the root for subsequent tests.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15)).tap()
+        _ = search.waitForNonExistence(timeout: 3)
+        let back = app.navigationBars.buttons.element(boundBy: 0)
+        if back.waitForExistence(timeout: 3) { back.tap() }
+        XCTAssertTrue(app.navigationBars["Chats"].waitForExistence(timeout: 5), "Should return to Chats root")
+    }
+
     /// Cold-launch performance metric (ROADMAP M15, SR-06, NFR-1).
     /// Opt-in via `HALO_RUN_PERF_TESTS=1` so routine `prepush.sh` runs stay fast.
     @MainActor

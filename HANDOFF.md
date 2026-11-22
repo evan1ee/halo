@@ -12,13 +12,13 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
+- **M4/M5 sticker panel & pack creation simulator UI check (`main`):** verified `stickers` & `createPack` contract tests against `infra/dev` and added `HaloUITests.testStickerPanelAndPackCreationFlow` on signed-in `iPhone Air`; fixed Dynamic Type clipping, contrast (`HaloColor.bgPrimary`/`textPrimary`), `.accessibilityHidden(true)` on sticker placeholder text, and 44×44 `+` hit target in `StickerPanelView`/`NewPackView`.
 - **M16 completion & timeline scroll follow-ups (`main`, `ae88d29..ce9073b`):**
   - iPad three-column layout (`RoomInfoPresentation` + `.inspector` column 300–420 pt + `⌘I`, sheet on compact/iPhone); `ChatsRouterSplitTests`.
   - Send-by-Siri (`SendMessageIntent` + `SiriSendCoordinator`, reuses D88 `ChatEntity`, confirmation before send, confirmed vs queued); `SiriSendCoordinatorTests`.
   - Drag items out of timeline (`TimelineDragExtractor`, `DraggedTimelineFile` for text/captions/notices/emotes, loaded photos, files ≤ 50 MiB); `TimelineDragTests`.
   - Timeline scroll follow-ups (`PrependedAnchor` preserves position on back-pagination; `ShortRoomAlignment` bottom-aligns short rooms above composer); `TimelineScrollHelpersTests`.
 - **Signed-in chat-list accessibility audit & local signing (`PR #74–#75`):** `AvatarTint` contrast ≥ 4.5:1 (`AvatarTests`), wrapping Media Gallery row, 44 pt Focus banner button, full-list audit in `HaloUITests` (D96); `ios/Config/Local.xcconfig` keeps `DEVELOPMENT_TEAM` out of git; removed deprecated `UIWindow(frame:)` in `WebAuthSessionPresenter`.
-- **Instant room landing at newest message (`PR #73`, D95):** rooms open at the newest row with no top-of-room flash or spinner; fixed photo box (`ThumbnailSize`), composer-aware `BottomGap`, off-screen-by-default `UnreadPill`; verified on `iPhone Air` simulator (S10 & S10 scroll test). Not checked on a device.
 
 ## 3. Key decisions
 Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D96), [docs/adr/README.md](docs/adr/README.md).
@@ -30,7 +30,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D96), [docs/adr/RE
 - **D96:** the accessibility audit skips contrast only for text under the floating search field (system glass); every other finding fails.
 
 ## 4. Modified files (this push)
-- **Handoff:** `HANDOFF.md` (slimmed §2 Completed work and §4 Modified files per AGENTS.md §18).
+- **Stickers UI & test:** `FeatureStickers/{StickerPanelView,NewPackView}.swift`, `ios/UITests/HaloUITests.swift`, `docs/ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).

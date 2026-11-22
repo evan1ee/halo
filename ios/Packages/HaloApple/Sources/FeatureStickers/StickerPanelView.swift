@@ -18,7 +18,8 @@ public struct StickerPanelView: View {
             HStack(spacing: 10) {
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass").foregroundStyle(.secondary).accessibilityHidden(true)
-                    TextField("Search stickers", text: $model.query)
+                    TextField("Search stickers", text: $model.query, axis: .vertical)
+                        .lineLimit(1...2)
                         .textFieldStyle(.plain)
                         .accessibilityIdentifier("sticker-search")
                     if !model.query.isEmpty {
@@ -32,9 +33,14 @@ public struct StickerPanelView: View {
                 .padding(.horizontal, 10).padding(.vertical, 7)
                 .background(.secondary.opacity(0.12), in: .rect(cornerRadius: 10))
                 if model.canCreatePack {
-                    Button { newPack = model.beginNewPack() } label: { Image(systemName: "plus.circle").font(.title2) }
-                        .accessibilityLabel("New sticker pack")
-                        .accessibilityIdentifier("new-pack")
+                    Button { newPack = model.beginNewPack() } label: {
+                        Image(systemName: "plus.circle")
+                            .font(.title2)
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(.rect)
+                    }
+                    .accessibilityLabel("New sticker pack")
+                    .accessibilityIdentifier("new-pack")
                 }
             }
             // Room for the sheet's drag indicator above the search field.
@@ -88,20 +94,24 @@ public struct StickerPanelView: View {
                     }
                 }
             } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
-                        if model.isSearching {
-                            grid(model.results)
-                        } else {
-                            section("Favourites", model.snapshot.favourites)
-                            section("Recent", model.snapshot.recents)
-                            ForEach(model.snapshot.packs) { pack in section(pack.displayName, pack.stickers) }
-                        }
+                List {
+                    if model.isSearching {
+                        grid(model.results)
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 8, trailing: 8))
+                    } else {
+                        section("Favourites", model.snapshot.favourites)
+                        section("Recent", model.snapshot.recents)
+                        ForEach(model.snapshot.packs) { pack in section(pack.displayName, pack.stickers) }
                     }
-                    .padding(.horizontal, 8)
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             }
         }
+        .background(HaloColor.bgPrimary)
+        .presentationBackground(HaloColor.bgPrimary)
         #if canImport(UIKit)
         .sheet(item: $newPack) { NewPackView(model: $0) }
         #endif
@@ -119,8 +129,17 @@ public struct StickerPanelView: View {
 
     @ViewBuilder private func section(_ title: String, _ stickers: [Sticker]) -> some View {
         if !stickers.isEmpty {
-            Text(title).font(.caption.bold()).foregroundStyle(.secondary)
-            grid(stickers)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(HaloColor.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityAddTraits(.isHeader)
+                grid(stickers)
+            }
+            .listRowSeparator(.hidden)
+            .listRowBackground(HaloColor.bgPrimary)
+            .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 8, trailing: 12))
         }
     }
 
@@ -186,7 +205,16 @@ private struct StickerCell: View {
     }
 
     private var placeholder: some View {
-        RoundedRectangle(cornerRadius: 8).fill(.secondary.opacity(0.15)).overlay { Text(sticker.shortcode).font(.caption2).lineLimit(1).padding(2) }
+        RoundedRectangle(cornerRadius: 8)
+            .fill(.secondary.opacity(0.15))
+            .overlay {
+                Text(sticker.shortcode)
+                    .font(.caption2)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .padding(2)
+            }
+            .accessibilityHidden(true)
     }
 }
 

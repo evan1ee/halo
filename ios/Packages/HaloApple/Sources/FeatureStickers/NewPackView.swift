@@ -37,7 +37,10 @@ public struct NewPackView: View {
 
     private var picturesSection: some View {
         Section {
-            PhotosPicker(selection: $picked, maxSelectionCount: 120, matching: .images) { Label("Add pictures", systemImage: "photo.badge.plus") }
+            PhotosPicker(selection: $picked, maxSelectionCount: 120, matching: .images) {
+                Label("Add pictures", systemImage: "photo.badge.plus")
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             ForEach(model.items) { item in ItemRow(item: item, model: model) }
         } header: {
             Text("Stickers (\(model.items.count))")

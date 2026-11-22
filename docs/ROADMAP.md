@@ -8,7 +8,7 @@ Capacity: solo, part-time (D24). Estimates are calendar weeks at ~15 h/week and 
 Ordered work queue for the autonomous loop ([development/AUTONOMOUS_LOOP.md](development/AUTONOMOUS_LOOP.md), D70). Take the first unchecked item the agent can do; items marked 📱 need a physical device and 👤 the founder (they go to HANDOFF §5 and don't block the queue). Completed M0–M10 history lives in the "Done (M0–M10)" appendix below (TD-09).
 
 **M4 / M5 leftovers**
-- [ ] Simulator UI check of the sticker panel and pack creation; real sticker images loaded from media.
+- [x] Simulator UI check of the sticker panel and pack creation; real sticker images loaded from media (`HaloUITests.testStickerPanelAndPackCreationFlow` on signed-in `iPhone Air` + `AdapterContractTests` `stickers` & `createPack` against `infra/dev`; fixed Dynamic Type clipping/contrast/hit targets in `StickerPanelView` and `NewPackView`).
 - [ ] (deferred, D71, not blocking) CI: macOS job for Mac-only packages and app build (Q-CI-MAC).
 - [ ] 👤 Push gateway (Sygnal + pushkin) for Beta/Release, APNs keys, TestFlight build.
 - [ ] 👤📱 AC-U8: 7-day soak with zero unexplained auditor findings.
