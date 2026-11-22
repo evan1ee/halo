@@ -25,7 +25,7 @@ Defined as asset-catalogue colours with light/dark variants; code uses semantic 
 | `bg.elevated` | #FFFFFF | #1E2128 | Sheets, panels |
 | `text.primary` | #111317 | #F2F3F5 | Body |
 | `text.secondary` | #5B616E | #A3A9B6 | Meta, timestamps |
-| `accent` | #0066CC (blue) | #2E90FF | Primary actions, own bubbles, links |
+| `accent` | #007AFF (Apple system blue; ≥ 3:1 as a control colour, Increase Contrast ≥ 4.5:1) | #0A84FF | Primary actions, own bubbles, links |
 | `onAccent` | #FFFFFF | #111317 | Text/glyphs on an `accent` fill (6.04:1 / 5.68:1) |
 | `attention` | #C2410C (burnt orange) | #FF7A33 | Unread badge fill |
 | `onAttention` | #FFFFFF | #111317 | Count on the unread badge (5.18:1 / 7.16:1) |

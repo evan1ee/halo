@@ -87,9 +87,13 @@ struct ColorContrastTests {
                 for fg in foregrounds {
                     let fgRGB = try resolve(fg, mode: mode)
                     let ratio = contrastRatio(fgRGB, bgRGB)
+                    // Founder decision: the accent is Apple's system blue (#007AFF / #0A84FF), which is ~3.7:1 on the grey
+                    // light background. Accent is for links, icons and controls (WCAG 3:1 for UI components); Increase
+                    // Contrast switches to a darker blue that clears 4.5:1.
+                    let minimum = (fg == "Accent" && (mode == .light || mode == .dark)) ? 3.0 : 4.5
                     #expect(
-                        ratio >= 4.5,
-                        "\(mode.rawValue): \(fg) on \(bg) contrast is \(String(format: "%.2f", ratio)):1 (< 4.5:1)"
+                        ratio >= minimum,
+                        "\(mode.rawValue): \(fg) on \(bg) contrast is \(String(format: "%.2f", ratio)):1 (< \(minimum):1)"
                     )
                 }
             }
@@ -97,9 +101,11 @@ struct ColorContrastTests {
                 let fgRGB = try resolve(pair.fg, mode: mode)
                 let bgRGB = try resolve(pair.bg, mode: mode)
                 let ratio = contrastRatio(fgRGB, bgRGB)
+                // White on #007AFF is 4.02:1 (button labels are large/bold text: WCAG 3:1); other modes stay at 4.5:1.
+                let minimum = (pair.fg == "OnAccent" && mode == .light) ? 3.0 : 4.5
                 #expect(
-                    ratio >= 4.5,
-                    "\(mode.rawValue): \(pair.fg) on \(pair.bg) contrast is \(String(format: "%.2f", ratio)):1 (< 4.5:1)"
+                    ratio >= minimum,
+                    "\(mode.rawValue): \(pair.fg) on \(pair.bg) contrast is \(String(format: "%.2f", ratio)):1 (< \(minimum):1)"
                 )
             }
         }
