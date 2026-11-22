@@ -1274,6 +1274,53 @@ struct MediaPreviewPolicyTests {
 
         await vm.stop()
     }
+
+    @Test("viewerPhotos returns non-sticker photos in chronological order, loads full image bytes, and exports (MEDIA_ATTACHMENTS FR-1)")
+    func photoViewerItemsAndExport() async throws {
+        let room = try RoomID("!photos:x.org")
+        let alice = try UserID("@alice:x.org")
+        let ref1 = MediaRef(token: "mxc://x.org/p1")
+        let ref2 = MediaRef(token: "mxc://x.org/p2")
+        let stickerRef = MediaRef(token: "mxc://x.org/s1")
+
+        let port = FakeTimelinePort()
+        port.addRoom(room, items: [
+            TimelineItem(id: TimelineItemID("p1"), content: .event(TimelineEvent(
+                eventID: try EventID("$p1"), sender: alice, senderName: "Alice",
+                timestamp: Date(timeIntervalSince1970: 100), isOwn: false,
+                kind: .media(MediaAttachment(kind: .image, body: "beach.jpg", source: ref1))))),
+            TimelineItem(id: TimelineItemID("s1"), content: .event(TimelineEvent(
+                eventID: try EventID("$s1"), sender: alice, senderName: "Alice",
+                timestamp: Date(timeIntervalSince1970: 110), isOwn: false,
+                kind: .sticker(body: "Wave", source: stickerRef)))),
+            TimelineItem(id: TimelineItemID("p2"), content: .event(TimelineEvent(
+                eventID: try EventID("$p2"), sender: alice, senderName: "Alice",
+                timestamp: Date(timeIntervalSince1970: 120), isOwn: true,
+                kind: .media(MediaAttachment(kind: .image, body: "sunset", source: ref2))))),
+        ])
+
+        let mediaPort = FakeMediaPort()
+        mediaPort.add(ref1, data: Data("beach-bytes".utf8))
+        mediaPort.add(ref2, data: Data("sunset-bytes".utf8))
+        let vm = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room), media: MediaLoader(port: mediaPort))
+        await vm.start()
+        for _ in 0..<200_000 { if vm.lastRowID == "p2" { break }; await Task.yield() }
+
+        let photos = vm.viewerPhotos
+        #expect(photos.map(\.id) == ["p1", "p2"])
+        #expect(photos[0].sender == "Alice" && photos[0].caption == "beach.jpg")
+        #expect(photos[1].sender == "You" && photos[1].caption == "sunset")
+
+        let full = await vm.fullImageData(for: photos[0].image)
+        #expect(full == Data("beach-bytes".utf8))
+
+        let exported = try #require(await vm.exportViewerPhoto(photos[1]))
+        #expect(exported.lastPathComponent == "sunset.jpg")
+        #expect(try Data(contentsOf: exported) == Data("sunset-bytes".utf8))
+        try? FileManager.default.removeItem(at: exported.deletingLastPathComponent())
+
+        await vm.stop()
+    }
 }
 
 private extension TimelineRow {

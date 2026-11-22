@@ -14,6 +14,7 @@ public struct TimelineView: View {
     private let stickerPanel: (@MainActor () -> AnyView)?
     private let onOpenThread: (@MainActor (EventID) -> Void)?
     @State private var showsStickers = false
+    @State private var viewerPhoto: TimelineViewModel.PhotoViewerItem?
     @State private var headerVisible = false
     /// History is only loaded after the opening scroll: rows prepended before it would push the landing row out of place.
     @State private var landed = false
@@ -71,7 +72,14 @@ public struct TimelineView: View {
                         .task(id: PaginationTrigger(rows: rows.count, ready: headerVisible && landed)) { if headerVisible, landed, paginationError == nil { await model.loadEarlier() } }
                     }
                     ForEach(rows) { row in
-                        RowView(row: row, model: model, onOpenThread: onOpenThread)
+                        RowView(
+                            row: row,
+                            model: model,
+                            onOpenThread: onOpenThread,
+                            onOpenPhoto: { rowID in
+                                viewerPhoto = model.viewerPhotos.first(where: { $0.id == rowID })
+                            }
+                        )
                             .background(model.highlightedRowID == row.id ? Color.accentColor.opacity(0.18) : .clear, in: .rect(cornerRadius: 8))
                             .animation(.easeOut(duration: 0.4), value: model.highlightedRowID)
                             // The pill's target: whether the first row that was unread at open is on screen.
@@ -182,6 +190,15 @@ public struct TimelineView: View {
         .sheet(isPresented: $showsStickers) { stickerPanel?().presentationDetents([.medium, .large]) }
         #if canImport(UIKit)
         .sheet(item: Binding(get: { model.openedFile }, set: { if $0 == nil { model.closeFile() } })) { QuickLookView(url: $0.url).ignoresSafeArea() }
+        .fullScreenCover(item: $viewerPhoto) { photo in
+            let all = model.viewerPhotos
+            TimelinePhotoViewer(initialPhoto: photo, photos: all.isEmpty ? [photo] : all, model: model)
+        }
+        #else
+        .sheet(item: $viewerPhoto) { photo in
+            let all = model.viewerPhotos
+            TimelinePhotoViewer(initialPhoto: photo, photos: all.isEmpty ? [photo] : all, model: model)
+        }
         #endif
         .alert("Can't open file", isPresented: Binding(get: { model.openFileError != nil }, set: { if !$0 { model.dismissOpenFileError() } })) {
             Button("OK", role: .cancel) {}
@@ -403,6 +420,7 @@ private struct RowView: View {
     let row: TimelineRow
     let model: TimelineViewModel
     let onOpenThread: ((EventID) -> Void)?
+    let onOpenPhoto: ((String) -> Void)?
     @State private var showingSource = false
     @State private var showingReaders = false
     /// A sent message is removed for everyone and can't be brought back: ask first.
@@ -486,7 +504,16 @@ private struct RowView: View {
                             .onTapGesture { Task { await model.jumpToReplyOriginal(from: row) } }
                             .accessibilityAddTraits(.isButton)
                         }
-                        if let image = row.image { ThumbnailView(image: image, model: model, isSticker: row.isSticker).accessibilityLabel(row.isSticker ? row.text : "Image") }
+                        if let image = row.image {
+                            ThumbnailView(image: image, model: model, isSticker: row.isSticker)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    if !row.isSticker, model.showsPreview(of: image) {
+                                        onOpenPhoto?(row.id)
+                                    }
+                                }
+                                .accessibilityLabel(row.isSticker ? row.text : "Image")
+                        }
                         if let file = row.file { FileTileView(file: file, isOpening: model.openingRow == row.id, model: model) { Task { await model.openFile(row) } } }
                         if let card = row.card, !showingOriginal {
                             BotCardView(
@@ -1113,6 +1140,134 @@ private struct ReactionFlowLayout: Layout {
         }
         if !current.items.isEmpty { result.append(current) }
         return result
+    }
+}
+
+/// Full-screen zoomable + swipeable photo viewer for timeline images (MEDIA_ATTACHMENTS FR-1).
+private struct TimelinePhotoViewer: View {
+    let photos: [TimelineViewModel.PhotoViewerItem]
+    let model: TimelineViewModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var currentID: String
+    @State private var exportedURL: URL?
+    @State private var isExporting = false
+
+    init(initialPhoto: TimelineViewModel.PhotoViewerItem, photos: [TimelineViewModel.PhotoViewerItem], model: TimelineViewModel) {
+        self.photos = photos
+        self.model = model
+        _currentID = State(initialValue: initialPhoto.id)
+    }
+
+    private var currentIndex: Int {
+        photos.firstIndex(where: { $0.id == currentID }) ?? 0
+    }
+
+    private var currentPhoto: TimelineViewModel.PhotoViewerItem {
+        photos[currentIndex]
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack(alignment: .bottom) {
+                Color.black.ignoresSafeArea()
+                TabView(selection: $currentID) {
+                    ForEach(photos) { item in
+                        TimelinePhotoPage(item: item, model: model)
+                            .tag(item.id)
+                    }
+                }
+                #if os(iOS)
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                #endif
+
+                if let caption = currentPhoto.caption {
+                    Text(caption)
+                        .font(.subheadline)
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity)
+                        .background(.black.opacity(0.6))
+                }
+            }
+            .navigationTitle(photos.count > 1 ? "\(currentIndex + 1) of \(photos.count)" : (currentPhoto.sender ?? "Photo"))
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                        .accessibilityIdentifier("photo-viewer-done")
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    if let exportedURL {
+                        ShareLink(item: exportedURL) {
+                            Image(systemName: "square.and.arrow.up")
+                        }
+                        .accessibilityLabel("Share photo")
+                    } else {
+                        Button {
+                            let target = currentPhoto
+                            isExporting = true
+                            Task {
+                                let url = await model.exportViewerPhoto(target)
+                                if currentID == target.id { exportedURL = url }
+                                isExporting = false
+                            }
+                        } label: {
+                            if isExporting {
+                                ProgressView().tint(.white)
+                            } else {
+                                Image(systemName: "square.and.arrow.up")
+                            }
+                        }
+                        .disabled(isExporting)
+                        .accessibilityLabel("Export photo")
+                    }
+                }
+            }
+            .onChange(of: currentID) {
+                exportedURL = nil
+                isExporting = false
+            }
+        }
+    }
+}
+
+private struct TimelinePhotoPage: View {
+    let item: TimelineViewModel.PhotoViewerItem
+    let model: TimelineViewModel
+    @State private var data: Data?
+    @State private var isLoading = false
+
+    var body: some View {
+        Group {
+            #if canImport(UIKit)
+            if let data, let image = UIImage(data: data) {
+                ZoomableImageView(image: image)
+            } else if isLoading {
+                ProgressView().tint(.white)
+            } else {
+                Image(systemName: "photo")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.secondary)
+            }
+            #else
+            Image(systemName: "photo")
+                .font(.system(size: 48))
+                .foregroundStyle(.secondary)
+            #endif
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task(id: item.id) {
+            data = nil
+            isLoading = true
+            data = await model.fullImageData(for: item.image)
+            isLoading = false
+        }
     }
 }
 #endif

@@ -13,14 +13,13 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log` and [docs/CODEBASE_REVIEW.md](docs/CODEBASE_REVIEW.md) §13.
-- **M9 Encrypted room export (D32, R-P2-EXPORT, this push on `main`):**
-  - Added `RoomExportMessage`, `RoomExportDocument`, `RoomExportEncryptor`, and `RoomPort.exportMessages` in `HaloDomain` / `FakeRoomPort` / `MatrixRoomPort`.
-  - Implemented `CryptoKitRoomExportEncryptor` (PBKDF2-HMAC-SHA256 + AES-256-GCM, format `one.mbm.halo.room_export.v1`) in `HaloPlatform` with round-trip, wrong-passphrase, tampering, and short-passphrase tests.
-  - Added `RoomDetailsViewModel.exportEncryptedRoom` and `RoomEncryptedExportView` ("Export encrypted history" under Room Info → Media & Files) with passphrase confirmation and `ShareLink` export, wired in `AppRoot`.
+- **Full-screen zoomable & swipeable media viewer (`MEDIA_ATTACHMENTS FR-1`, this push on `main`):**
+  - Added reusable `ZoomableImageView` (`UIScrollView`-backed pinch-to-zoom 1x–5x + double-tap 2.5x zoom) in `HaloDesignSystem`.
+  - Upgraded `TimelineView` with a full-screen swipeable `TimelinePhotoViewer` (`TabView(.page)`, zoom, caption, counter, Share/Export; unit-tested in `TimelineViewModelTests.photoViewerItemsAndExport`) and upgraded `GlobalMediaDetailSheet` in `GlobalMediaGalleryView` with swipe-between-media and `ZoomableImageView`.
+- **M9 Encrypted room export (`65977d1`, D32 / R-P2-EXPORT):**
+  - Added `RoomExportMessage`, `RoomExportDocument`, `RoomExportEncryptor`, `CryptoKitRoomExportEncryptor` (PBKDF2-HMAC-SHA256 + AES-256-GCM, `one.mbm.halo.room_export.v1`), `MatrixRoomPort.exportMessages`, and `RoomEncryptedExportView` under Room Info → Media & Files.
 - **V-MEDIA-1 SDK media retention policy & open-question closures (`1a8d05d`):**
   - Wired `Client.setMediaRetentionPolicy(policy:)` in `MatrixSessionPort.adopt` with D55 defaults (1 GiB / 50 MiB / 30 days / daily cleanup) and closed `V-MEDIA-1` & `V-SQL-2` in `docs/OPEN_QUESTIONS.md`.
-- **Global Media Gallery preset virtual room entry (`e34596c`, D83):**
-  - Added `GlobalMediaGalleryViewModel`, `GlobalMediaGalleryView`, the preset non-Matrix "Media Gallery" row in `RoomListView`, and `HomeRoute.globalMediaGallery` in `HaloApp` / `AppRoot`.
 
 ## 3. Key decisions
 Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D83), [docs/adr/README.md](docs/adr/README.md).
@@ -32,10 +31,10 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D83), [docs/adr/RE
 - **D83 (founder, refines D34 & D50):** global media gallery is surfaced as a preset virtual room entry in the room list (not a tab); purely a local UI entry, not a Matrix room (no server room ID, no sync state, excluded from unread counts and badge).
 
 ## 4. Modified files (this push)
-- **HaloDomain & HaloTestSupport:** `ios/Packages/HaloDomain/Sources/HaloDomain/RoomList/RoomExport.swift`, `ios/Packages/HaloDomain/Sources/HaloDomain/Ports/RoomPort.swift`, `ios/Packages/HaloTestSupport/Sources/HaloTestSupport/FakeRoomPort.swift`.
-- **HaloPlatform & HaloMatrixAdapter:** `ios/Packages/HaloPlatform/Sources/HaloPlatform/CryptoKitRoomExportEncryptor.swift`, `ios/Packages/HaloPlatform/Tests/HaloPlatformTests/CryptoKitRoomExportEncryptorTests.swift`, `ios/Packages/HaloMatrixAdapter/Sources/HaloMatrixAdapter/MatrixRoomPort.swift`.
-- **FeatureRoomDetails & App:** `ios/Packages/Features/FeatureRoomDetails/Sources/FeatureRoomDetails/RoomDetailsViewModel.swift`, `ios/Packages/Features/FeatureRoomDetails/Sources/FeatureRoomDetails/RoomEncryptedExportView.swift`, `ios/Packages/Features/FeatureRoomDetails/Sources/FeatureRoomDetails/RoomDetailsView.swift`, `ios/Packages/Features/FeatureRoomDetails/Tests/FeatureRoomDetailsTests/RoomDetailsViewModelTests.swift`, `ios/App/AppRoot.swift`.
-- **Docs:** `docs/ROADMAP.md`, `HANDOFF.md`.
+- **HaloDesignSystem:** `ios/Packages/HaloDesignSystem/Sources/HaloDesignSystem/ZoomableImageView.swift`.
+- **FeatureTimeline:** `ios/Packages/Features/FeatureTimeline/Sources/FeatureTimeline/TimelineViewModel.swift`, `ios/Packages/Features/FeatureTimeline/Sources/FeatureTimeline/TimelineView.swift`, `ios/Packages/Features/FeatureTimeline/Tests/FeatureTimelineTests/TimelineViewModelTests.swift`.
+- **FeatureRoomList:** `ios/Packages/Features/FeatureRoomList/Sources/FeatureRoomList/GlobalMediaGalleryView.swift`.
+- **Docs:** `HANDOFF.md`.
 
 ## 5. Outstanding issues
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).

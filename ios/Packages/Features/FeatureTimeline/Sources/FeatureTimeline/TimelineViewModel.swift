@@ -978,6 +978,59 @@ public final class TimelineViewModel {
         return try? await media.thumbnail(image.ref, width: 600, height: 600)
     }
 
+    /// One photo shown in the full-screen zoomable timeline photo viewer (MEDIA_ATTACHMENTS FR-1).
+    public struct PhotoViewerItem: Identifiable, Equatable, Sendable {
+        public let id: String
+        public let image: TimelineRow.Image
+        public let caption: String?
+        public let sender: String?
+        public let time: String?
+    }
+
+    /// All non-sticker photo rows currently loaded in the timeline, in chronological order (for swipe navigation).
+    public var viewerPhotos: [PhotoViewerItem] {
+        guard case .live(let rows, _, _, _) = content else { return [] }
+        return rows.compactMap { row in
+            guard let image = row.image, !row.isSticker else { return nil }
+            let trimmed = row.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return PhotoViewerItem(
+                id: row.id,
+                image: image,
+                caption: trimmed.isEmpty ? nil : trimmed,
+                sender: row.isOwn ? "You" : row.sender,
+                time: row.time
+            )
+        }
+    }
+
+    /// Full-resolution bytes for the full-screen photo viewer, falling back to thumbnail if full download fails.
+    public func fullImageData(for image: TimelineRow.Image) async -> Data? {
+        guard let media else { return nil }
+        if let full = try? await media.content(image.ref) { return full }
+        return try? await media.thumbnail(image.ref, width: 1200, height: 1200)
+    }
+
+    /// Exports a photo from the full-screen viewer to a temporary file for ShareLink / Save Image.
+    public func exportViewerPhoto(_ item: PhotoViewerItem) async -> URL? {
+        guard let data = await fullImageData(for: item.image) else { return nil }
+        do {
+            let dir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("halo-photo-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let raw = (item.caption ?? "photo.jpg")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: "/", with: "_")
+                .replacingOccurrences(of: ":", with: "_")
+            let base = raw.isEmpty ? "photo.jpg" : raw
+            let filename = base.contains(".") ? base : "\(base).jpg"
+            let url = dir.appendingPathComponent(filename)
+            try data.write(to: url, options: .atomic)
+            return url
+        } catch {
+            return nil
+        }
+    }
+
     func apply(_ status: TimelineCoordinator.Status) {
         switch status {
         case .idle, .opening:

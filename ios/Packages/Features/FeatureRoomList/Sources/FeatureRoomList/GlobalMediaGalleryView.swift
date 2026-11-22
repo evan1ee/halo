@@ -82,11 +82,12 @@ public struct GlobalMediaGalleryView: View {
         }
         .sheet(item: $selectedItem) { entry in
             GlobalMediaDetailSheet(
-                entry: entry,
+                initialEntry: entry,
+                items: model.filteredItems.isEmpty ? [entry] : model.filteredItems,
                 model: model,
-                onJumpToMessage: {
+                onJumpToMessage: { target in
                     selectedItem = nil
-                    onJumpToMessage(entry.roomID, entry.item.eventID)
+                    onJumpToMessage(target.roomID, target.item.eventID)
                 }
             )
         }
@@ -301,39 +302,64 @@ private struct GlobalMediaGridTile: View {
 }
 
 private struct GlobalMediaDetailSheet: View {
-    let entry: GlobalMediaItem
+    let items: [GlobalMediaItem]
     let model: GlobalMediaGalleryViewModel
-    let onJumpToMessage: () -> Void
+    let onJumpToMessage: (GlobalMediaItem) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var fullData: Data?
-    @State private var isLoadingFull = false
+    @State private var currentID: String
     @State private var exportedURL: URL?
     @State private var isExporting = false
+
+    init(
+        initialEntry: GlobalMediaItem,
+        items: [GlobalMediaItem],
+        model: GlobalMediaGalleryViewModel,
+        onJumpToMessage: @escaping (GlobalMediaItem) -> Void
+    ) {
+        self.items = items
+        self.model = model
+        self.onJumpToMessage = onJumpToMessage
+        _currentID = State(initialValue: initialEntry.id)
+    }
+
+    private var currentIndex: Int {
+        items.firstIndex(where: { $0.id == currentID }) ?? 0
+    }
+
+    private var currentEntry: GlobalMediaItem {
+        items[currentIndex]
+    }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                Spacer(minLength: 0)
-                previewContent
-                Spacer(minLength: 0)
+                TabView(selection: $currentID) {
+                    ForEach(items) { item in
+                        GlobalMediaPreviewPage(entry: item, model: model)
+                            .tag(item.id)
+                    }
+                }
+                #if os(iOS)
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                #endif
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(entry.item.attachment.body)
+                    Text(currentEntry.item.attachment.body)
                         .font(.headline)
                         .lineLimit(2)
                     HStack(spacing: 6) {
-                        Label(entry.roomName, systemImage: "bubble.left.and.bubble.right")
+                        Label(currentEntry.roomName, systemImage: "bubble.left.and.bubble.right")
                         Text("·")
-                        Text(entry.item.senderName)
+                        Text(currentEntry.item.senderName)
                     }
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
 
                     HStack(spacing: 6) {
-                        Text(entry.item.timestamp, format: .dateTime.month().day().year().hour().minute())
-                        if let size = entry.item.attachment.size {
+                        Text(currentEntry.item.timestamp, format: .dateTime.month().day().year().hour().minute())
+                        if let size = currentEntry.item.attachment.size {
                             Text("· \(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))")
                         }
                     }
@@ -342,7 +368,7 @@ private struct GlobalMediaDetailSheet: View {
 
                     HStack(spacing: 12) {
                         Button {
-                            onJumpToMessage()
+                            onJumpToMessage(currentEntry)
                         } label: {
                             Label("Jump to message", systemImage: "arrow.up.right.square")
                                 .frame(maxWidth: .infinity)
@@ -355,11 +381,13 @@ private struct GlobalMediaDetailSheet: View {
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.bordered)
-                        } else if entry.item.attachment.source != nil {
+                        } else if currentEntry.item.attachment.source != nil {
                             Button {
+                                let target = currentEntry
                                 isExporting = true
                                 Task {
-                                    exportedURL = await model.exportMediaFile(entry)
+                                    let url = await model.exportMediaFile(target)
+                                    if currentID == target.id { exportedURL = url }
                                     isExporting = false
                                 }
                             } label: {
@@ -380,7 +408,7 @@ private struct GlobalMediaDetailSheet: View {
                 .padding()
                 .background(.bar)
             }
-            .navigationTitle(entry.roomName)
+            .navigationTitle(items.count > 1 ? "\(currentIndex + 1) of \(items.count)" : currentEntry.roomName)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -389,37 +417,49 @@ private struct GlobalMediaDetailSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
-            .task {
-                guard entry.item.attachment.kind == .image, let source = entry.item.attachment.source else { return }
-                isLoadingFull = true
-                fullData = await model.fullImageData(source)
-                isLoadingFull = false
+            .onChange(of: currentID) {
+                exportedURL = nil
+                isExporting = false
             }
         }
     }
+}
 
-    @ViewBuilder
-    private var previewContent: some View {
-        #if canImport(UIKit)
-        if entry.item.attachment.kind == .image {
-            if let fullData, let image = UIImage(data: fullData) {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .padding()
-            } else if isLoadingFull {
-                ProgressView()
+private struct GlobalMediaPreviewPage: View {
+    let entry: GlobalMediaItem
+    let model: GlobalMediaGalleryViewModel
+
+    @State private var fullData: Data?
+    @State private var isLoadingFull = false
+
+    var body: some View {
+        Group {
+            #if canImport(UIKit)
+            if entry.item.attachment.kind == .image {
+                if let fullData, let image = UIImage(data: fullData) {
+                    ZoomableImageView(image: image)
+                } else if isLoadingFull {
+                    ProgressView()
+                } else {
+                    Image(systemName: "photo")
+                        .font(.system(size: 52))
+                        .foregroundStyle(.secondary)
+                }
             } else {
-                Image(systemName: "photo")
-                    .font(.system(size: 52))
-                    .foregroundStyle(.secondary)
+                nonImagePreview
             }
-        } else {
+            #else
             nonImagePreview
+            #endif
         }
-        #else
-        nonImagePreview
-        #endif
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task(id: entry.id) {
+            fullData = nil
+            guard entry.item.attachment.kind == .image, let source = entry.item.attachment.source else { return }
+            isLoadingFull = true
+            fullData = await model.fullImageData(source)
+            isLoadingFull = false
+        }
     }
 
     private var nonImagePreview: some View {
