@@ -17,12 +17,15 @@ public struct ShareTargetPickerView: View {
 
     private let model: ShareHandoffViewModel
     private let targets: [Target]
+    /// Set by the share extension, where `dismiss` can't close the sheet: "Later" calls it instead.
+    private let onLater: (() -> Void)?
     @State private var query = ""
     @Environment(\.dismiss) private var dismiss
 
-    public init(model: ShareHandoffViewModel, targets: [Target]) {
+    public init(model: ShareHandoffViewModel, targets: [Target], onLater: (() -> Void)? = nil) {
         self.model = model
         self.targets = targets
+        self.onLater = onLater
     }
 
     private var filtered: [Target] {
@@ -63,7 +66,7 @@ public struct ShareTargetPickerView: View {
                         .disabled(model.isSending)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    if model.isSending { ProgressView() } else { Button("Later") { dismiss() } }
+                    if model.isSending { HStack { Text("Sending…").font(.footnote); ProgressView() } } else { Button("Later") { if let onLater { onLater() } else { dismiss() } } }
                 }
             }
             .interactiveDismissDisabled(model.isSending)

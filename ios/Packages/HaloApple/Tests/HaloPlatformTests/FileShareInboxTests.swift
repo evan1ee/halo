@@ -1,13 +1,46 @@
+import CoreGraphics
 import Foundation
 import HaloDomain
 import HaloFoundation
+import ImageIO
 import Testing
+import UniformTypeIdentifiers
 @testable import HaloPlatform
 
 @Suite("FileShareInbox")
 struct FileShareInboxTests {
     private func makeDirectory() -> URL {
         FileManager.default.temporaryDirectory.appendingPathComponent("share-inbox-\(UUID().uuidString)", isDirectory: true)
+    }
+
+    private func jpeg(_ width: Int, _ height: Int, gps: Bool = false) -> Data {
+        let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+        context.setFillColor(red: 0.2, green: 0.4, blue: 0.9, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        let buffer = NSMutableData()
+        let destination = CGImageDestinationCreateWithData(buffer, UTType.jpeg.identifier as CFString, 1, nil)!
+        let properties: [CFString: Any] = gps ? [kCGImagePropertyGPSDictionary: [kCGImagePropertyGPSLatitude: 51.5, kCGImagePropertyGPSLongitude: -0.12]] : [:]
+        CGImageDestinationAddImage(destination, context.makeImage()!, properties as CFDictionary)
+        CGImageDestinationFinalize(destination)
+        return buffer as Data
+    }
+
+    @Test("a photo is prepared: its pixel size is recorded, location metadata is dropped, an unreadable image becomes a file")
+    func preparesPhotos() throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let inbox = FileShareInbox(directory: directory)
+        let staged = try inbox.stage([
+            .file(data: jpeg(120, 60, gps: true), filename: "IMG_1.HEIC", mimeType: "image/heic", isImage: true),
+            .file(data: Data("not an image".utf8), filename: "x.jpg", mimeType: "image/jpeg", isImage: true),
+        ])
+        let photo = try #require(staged.items.first)
+        #expect(photo.kind == .image && photo.width == 120 && photo.height == 60)
+        #expect(photo.filename == "IMG_1.jpg" && photo.mimeType == "image/jpeg")
+        let bytes = try inbox.data(of: photo, in: staged)
+        let properties = CGImageSourceCreateWithData(bytes as CFData, nil).flatMap { CGImageSourceCopyPropertiesAtIndex($0, 0, nil) as? [CFString: Any] }
+        #expect(properties?[kCGImagePropertyGPSDictionary] == nil)
+        #expect(staged.items.last?.kind == .file)
     }
 
     @Test("staged items round-trip through pending() and data(of:)")
@@ -17,12 +50,12 @@ struct FileShareInboxTests {
         let inbox = FileShareInbox(directory: directory)
         let staged = try inbox.stage([
             .text("hello"), .url("https://example.org"),
-            .file(data: Data([1, 2, 3]), filename: "../evil/photo.jpg", mimeType: "image/jpeg", isImage: true),
+            .file(data: Data([1, 2, 3]), filename: "../evil/photo.jpg", mimeType: "image/jpeg", isImage: false),
         ])
         let pending = try inbox.pending()
         #expect(pending == [staged])
         let photo = try #require(pending.first?.items.last)
-        #expect(photo.kind == .image && photo.filename == "photo.jpg" && photo.byteCount == 3)
+        #expect(photo.kind == .file && photo.filename == "photo.jpg" && photo.byteCount == 3)
         #expect(try inbox.data(of: photo, in: staged) == Data([1, 2, 3]))
         inbox.discard(staged)
         #expect(try inbox.pending().isEmpty)

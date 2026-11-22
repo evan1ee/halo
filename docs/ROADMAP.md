@@ -87,8 +87,18 @@ Halo is ready for external testers when **all** of these hold; each line names h
 
 **M16 Post-1.0 backlog** (first item picked by the founder, 2026-11-22)
 - [x] Share extension (D87): `HaloShareExtension` stages text, a link, photos and files into the App Group `share-inbox/` (`FileShareInbox`); the app shows "Send to…" on activation (`ShareHandoffViewModel`, `ShareTargetPickerView`) and `ShareCoordinator` sends through the timeline path. Tests: `ShareCoordinatorTests`, `FileShareInboxTests`, `ShareHandoffViewModelTests`; privacy manifest checked in `AcknowledgementsTests`.
+- [x] App Intents + Spotlight (D88): opt-in "Chats in Siri and Spotlight"; `OpenChatIntent` / `ChatEntity` (Siri phrase "Open <chat> in Halo"), Spotlight results open the chat. Tests: `ChatShortcutPublisherTests`, `SystemChatShortcutStoreTests`, `AppPreferencesTests`.
+- [x] Share sends from the share sheet (D92, ADR-0023): `MatrixShareTargetPort`, `SendConfirmation`, `ShareCoordinator.deliver(confirmingFor:)`, extension picker via `ShareTargetPickerView`; fallback to staging + notification. Tests: `SendConfirmationTests`, `ShareTargetTests`, `ShareCoordinatorTests`.
+- [ ] 📱 V-SHARE-1: encrypted-room send from the extension on a device.
 - [ ] 📱 Share extension on a physical device: the App Group container is shared only in signed builds; check Safari (link), Photos (several photos), Files (PDF) and a > 50 MiB file end to end.
-- [ ] App Intents / Siri, Spotlight, Focus filter, widgets, iPad layout, calls (D43).
+- [x] Unread widget (D89): `HaloWidgetExtension`, small and lock-screen families, count only; `UnreadWidgetSnapshot` tests, privacy manifest check.
+- [x] Focus filter (D90): `HaloFocusFilter` + `FocusChats`; room list `effectiveFilter` with a "Show all chats" banner; `RoomListFocusTests`, `FocusChatsTests`.
+- [x] iPad layout (D91): iPhone + iPad target, split view with the chat list as sidebar, `ChatsRouter.replacesDetail` + `ChatsRouterSplitTests`, readable sign-in column. Built and launched on iPad Pro 13-inch (M5) simulator (sign-in only; signed-in needs a homeserver).
+- [ ] 📱 iPad on a device or with the dev homeserver: sidebar selection, collapse in Slide Over / Split View, rotation, Settings and Stickers in the detail column.
+- [ ] 📱 Focus filter on a device: add Halo to a Focus, turn it on and off, check the list narrows and restores.
+- [ ] 📱 Widgets on a device: add the small and lock-screen widgets, receive a push and check the count refreshes.
+- [ ] 📱 App Intents on a device: the Siri phrase and a Spotlight result opening a chat (the simulator can't speak to Siri).
+- [ ] Send-by-Siri, chat-list widget, iPad extras (three columns, shortcuts, drag and drop), calls (D43).
 
 ## Release plan
 | Release | Contents | Audience | Entry |
@@ -96,7 +106,7 @@ Halo is ready for external testers when **all** of these hold; each line names h
 | **Beta 1** (internal TestFlight) | M0–M10 + M11 + M12 + push gateway (R-24) | Founder + 1–3 people | M12 merged, Beta push gateway live |
 | **Beta 2** (external TestFlight) | + M13, M14, M15 compliance items | ≤ 25 trusted testers | Ship-ready definition met except the 1.0-only lines |
 | **1.0** (App Store) | + fixes from Beta 2, final icon/screenshots, legal sign-off | Public (Matrix power users) | Two weeks of Beta 2 with no P0/P1 bug open |
-| **Post-1.0 backlog (M16)** | Share extension (started, D87), App Intents / Siri and Spotlight, Focus filter, widgets, iPad layout, calls (D43) | — | Re-plan after 1.0 |
+| **Post-1.0 backlog (M16)** | Share extension (done, D87), App Intents / Siri and Spotlight (open chat done, D88), widgets (unread count done, D89), Focus filter, widgets, iPad layout, calls (D43) | — | Re-plan after 1.0 |
 
 ## Milestones
 

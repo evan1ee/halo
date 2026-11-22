@@ -1,3 +1,4 @@
+import AppIntents
 import FeatureBotActivity
 import FeatureOnboarding
 import FeatureRoomList
@@ -22,6 +23,12 @@ final class AppRoot {
     let roomList: RoomListViewModel
     /// The "Send to…" sheet for what the share extension staged (M16).
     let shareHandoff: ShareHandoffViewModel
+    /// Chats offered to Siri, Shortcuts and Spotlight while the person allows it (M16, D88).
+    let chatShortcuts = ChatShortcutPublisher(port: SystemChatShortcutStore(file: SystemChatShortcutStore.defaultFile()))
+    /// An outside request (Siri, Shortcuts, Spotlight) to open a chat; the root view consumes it.
+    let openChat = OpenChatRequest()
+    /// The chats the active Focus allows (M16, D90).
+    let focus = FocusFilterState()
     let sync: SyncCoordinator
     let recovery: RecoveryViewModel
     /// `nil` when no push gateway is configured (Beta/Release until one is deployed).
@@ -161,6 +168,8 @@ final class AppRoot {
         shareHandoff = ShareHandoffViewModel(coordinator: ShareCoordinator(
             inbox: FileShareInbox(directory: HaloShared.shareInboxDirectory()), timelines: timelinePort
         ))
+        AppDependencyManager.shared.add(dependency: OpenChatRequestBox(self.openChat))
+        AppDependencyManager.shared.add(dependency: FocusFilterStateBox(self.focus))
         roomList.warm = { [timelinePort] rooms in await timelinePort.warm(rooms) }
         roomList.botSenders = { [preferences] in Set(preferences.botSenders) }
 

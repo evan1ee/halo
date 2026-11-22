@@ -61,4 +61,14 @@ struct AppPreferencesTests {
         AppPreferences(defaults: defaults).privacyBlur = true
         #expect(AppPreferences(defaults: defaults).privacyBlur == true)
     }
+
+    @Test("chats in Siri and Spotlight are off by default, and the choice is stored (M16, D88)")
+    func chatsInSystemSearch() throws {
+        let name = "halo.test.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        #expect(AppPreferences(defaults: defaults).chatsInSystemSearch == false)
+        AppPreferences(defaults: defaults).chatsInSystemSearch = true
+        #expect(AppPreferences(defaults: defaults).chatsInSystemSearch == true)
+    }
 }

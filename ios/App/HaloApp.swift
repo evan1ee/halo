@@ -1,3 +1,4 @@
+import CoreSpotlight
 import FeatureBotActivity
 import FeatureComposer
 import FeatureMedia
@@ -13,6 +14,7 @@ import HaloApplication
 import HaloDesignSystem
 import HaloDomain
 import HaloFoundation
+import HaloPlatform
 import HaloPersistence
 import SwiftUI
 import UIKit
@@ -35,7 +37,8 @@ private struct RootView: View {
     let root: AppRoot
     @Environment(\.scenePhase) private var scenePhase
     @SceneStorage("halo.navigation.path") private var savedPath: Data?
-    @State private var router = ChatsRouter()
+    @State private var router = ChatsRouter(replacesDetail: UIDevice.current.userInterfaceIdiom == .pad)
+    @State private var compactColumn: NavigationSplitViewColumn = .sidebar
     @State private var pathRestored = false
     @State private var searchModel: MessageSearchViewModel
     @State private var newChat: NewChatViewModel?
@@ -49,6 +52,18 @@ private struct RootView: View {
     init(root: AppRoot) {
         self.root = root
         _searchModel = State(initialValue: root.makeMessageSearch())
+    }
+
+    private struct ShortcutInputs: Equatable {
+        let content: RoomListViewModel.Content
+        let enabled: Bool
+        let auth: AuthViewModel.Screen
+    }
+
+    private func openRequestedChat() {
+        guard case .signedIn = root.auth.screen, let room = root.openChat.pending else { return }
+        root.openChat.pending = nil
+        router.openRoom(room)
     }
 
     /// The joined chats the share sheet offers.
@@ -81,11 +96,8 @@ private struct RootView: View {
         (.invites, "Invites", "envelope.open"),
     ]
 
-    var body: some View {
-        Group {
-            switch root.auth.screen {
-            case .signedIn:
-                NavigationStack(path: $router.path) {
+    /// The chat list with its toolbar, search and sheets: the whole screen on iPhone, the sidebar on iPad.
+    @ViewBuilder private var roomListRoot: some View {
                     RoomListView(
                         model: root.roomList,
                         searchQuery: searchModel.query,
@@ -167,8 +179,37 @@ private struct RootView: View {
                             }
                         )
                     }
+    }
+
+    /// iPad (M16, D91): the chat list as a sidebar and the router's path as the detail; narrow windows collapse to one column.
+    private var splitShell: some View {
+        NavigationSplitView(preferredCompactColumn: $compactColumn) {
+            roomListRoot
+        } detail: {
+            NavigationStack(path: $router.path) {
+                ContentUnavailableView("Select a chat", systemImage: "bubble.left.and.bubble.right")
                     .navigationDestination(for: ChatsRoute.self) { route in
                         destination(for: route)
+                    }
+            }
+        }
+        .onChange(of: router.path, initial: true) { compactColumn = router.path.isEmpty ? .sidebar : .detail }
+    }
+
+    private static var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
+
+    var body: some View {
+        Group {
+            switch root.auth.screen {
+            case .signedIn:
+                if Self.isPad {
+                    splitShell
+                } else {
+                    NavigationStack(path: $router.path) {
+                        roomListRoot
+                            .navigationDestination(for: ChatsRoute.self) { route in
+                                destination(for: route)
+                            }
                     }
                 }
             default:
@@ -202,6 +243,19 @@ private struct RootView: View {
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
             }
+        }
+        // M16 Siri, Shortcuts and Spotlight: open a chat by name; chat names are offered only while the setting is on (D88).
+        .onChange(of: root.focus.chats, initial: true) { root.roomList.setFocus(root.focus.chats) }
+        .onChange(of: root.openChat.pending, initial: true) { openRequestedChat() }
+        .onChange(of: root.auth.screen) { openRequestedChat() }
+        .onContinueUserActivity(CSSearchableItemActionType) { activity in
+            let identifier = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String
+            if let room = HaloSpotlight.roomID(fromIdentifier: identifier) { root.openChat.request(room) }
+        }
+        .task(id: ShortcutInputs(content: root.roomList.content, enabled: root.preferences.chatsInSystemSearch, auth: root.auth.screen)) {
+            var enabled = root.preferences.chatsInSystemSearch
+            if case .signedIn = root.auth.screen {} else { enabled = false }
+            await root.chatShortcuts.update(rooms: await root.roomCoordinator.rooms, enabled: enabled)
         }
         .onOpenURL { url in
             Task {
@@ -265,6 +319,9 @@ private struct RootView: View {
                 HaloDatabase.resumeAll()
                 await root.setForeground(true)
                 if case .signedIn = root.auth.screen { await root.shareHandoff.refresh() }
+                UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ["halo.share.ready"])
+                // M16 Focus filter: the system's current filter is the truth; a change missed in the background is caught here.
+                root.focus.chats = (try? await HaloFocusFilter.current)?.chats.domain
                 await root.receipts.flush()
             case .background:
                 let lease = BackgroundTaskLease(name: "halo.receipts.flush", onEnd: { HaloDatabase.suspendAll() })

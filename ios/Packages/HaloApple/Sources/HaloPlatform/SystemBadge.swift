@@ -2,6 +2,7 @@ import Foundation
 import HaloDomain
 import HaloFoundation
 import UserNotifications
+import WidgetKit
 
 /// `BadgePort` over the system badge, plus a small cache of per-room unread badge counts in the App Group so the
 /// notification extension can recompute the badge without evaluating every room (UNREAD_STATE §8: only a fallback
@@ -15,11 +16,13 @@ public struct SystemBadge: BadgePort {
 
     public func reset() async {
         attention.store([:])
+        WidgetCenter.shared.reloadAllTimelines()
         try? await UNUserNotificationCenter.current().setBadgeCount(0)
     }
 
     public func update(attentionCounts: [RoomID: Int]) async {
         attention.store(attentionCounts)
+        WidgetCenter.shared.reloadAllTimelines()  // the unread widget shows these counts (D89)
         // Notifications of rooms that no longer need attention are removed from Notification Center (read here, PUSH §5).
         let center = UNUserNotificationCenter.current()
         let keep = Set(attentionCounts.keys.map(\.rawValue))

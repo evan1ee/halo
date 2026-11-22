@@ -104,6 +104,7 @@ public struct SignInView: View {
             Spacer(minLength: HaloSpacing.l)
             }
             .padding(.horizontal, HaloSpacing.xl)
+            .frame(maxWidth: 520)  // a readable column on iPad (M16, D91)
             .frame(maxWidth: .infinity)
         }
         .scrollDismissesKeyboard(.interactively)

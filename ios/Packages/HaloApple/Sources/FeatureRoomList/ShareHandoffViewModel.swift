@@ -12,12 +12,18 @@ public final class ShareHandoffViewModel {
     public private(set) var isSending = false
     public private(set) var errorMessage: String?
 
+    /// What the last send reached: confirmed by the server, or queued for Halo to finish.
+    public private(set) var lastDelivery: ShareCoordinator.Delivery?
+
     private let coordinator: ShareCoordinator
+    /// `nil` in the app (sending is confirmed in the timeline); the share extension waits this long for the server.
+    private let confirmingFor: Duration?
     /// Called with the room after a successful send, so the app can open it.
     public var onSent: @MainActor (RoomID) -> Void
 
-    public init(coordinator: ShareCoordinator, onSent: @escaping @MainActor (RoomID) -> Void = { _ in }) {
+    public init(coordinator: ShareCoordinator, confirmingFor: Duration? = nil, onSent: @escaping @MainActor (RoomID) -> Void = { _ in }) {
         self.coordinator = coordinator
+        self.confirmingFor = confirmingFor
         self.onSent = onSent
     }
 
@@ -28,13 +34,19 @@ public final class ShareHandoffViewModel {
         errorMessage = nil
     }
 
+    /// Shows a payload the caller just staged (the share extension), instead of the oldest one in the inbox.
+    public func present(_ payload: SharePayload) {
+        current = payload
+        errorMessage = nil
+    }
+
     public func send(to room: RoomID) async {
         guard let payload = current, !isSending else { return }
         isSending = true
         errorMessage = nil
         defer { isSending = false }
         do {
-            try await coordinator.deliver(payload, to: room)
+            lastDelivery = try await coordinator.deliver(payload, to: room, confirmingFor: confirmingFor)
             current = nil
             onSent(room)
         } catch {

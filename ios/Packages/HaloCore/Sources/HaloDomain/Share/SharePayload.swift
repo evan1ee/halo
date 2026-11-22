@@ -14,8 +14,13 @@ public struct SharedItem: Sendable, Equatable, Codable, Identifiable {
     public let mimeType: String?
     /// The size of the staged file in bytes; `nil` for text and URLs.
     public let byteCount: Int?
+    /// Pixel size of a staged image, so the timeline reserves the right shape; `nil` when unknown.
+    public let width: Int?
+    public let height: Int?
 
-    public init(id: String = UUID().uuidString, kind: Kind, text: String? = nil, filename: String? = nil, mimeType: String? = nil, byteCount: Int? = nil) {
+    public init(id: String = UUID().uuidString, kind: Kind, text: String? = nil, filename: String? = nil, mimeType: String? = nil, byteCount: Int? = nil, width: Int? = nil, height: Int? = nil) {
+        self.width = width
+        self.height = height
         self.id = id
         self.kind = kind
         self.text = text
