@@ -99,7 +99,9 @@ Halo is ready for external testers when **all** of these hold; each line names h
 - [ ] 📱 Widgets on a device: add the small and lock-screen widgets, receive a push and check the count refreshes.
 - [ ] 📱 App Intents on a device: the Siri phrase and a Spotlight result opening a chat (the simulator can't speak to Siri).
 - [x] Unread chats widget (D93): medium widget, names from the D88 opt-in; `UnreadChatsSnapshot` tests.
-- [ ] Send-by-Siri, iPad extras (three columns, shortcuts, drag and drop), calls (D43).
+- [x] Hardware-keyboard shortcuts (D91 extras): ⌘N new chat, ⌘, settings, ⌘F search, ⌘1–⌘6 filters (`HaloApp.swift`); no unit test (SwiftUI wiring), built for iPad simulator.
+- [ ] Send-by-Siri, iPad extras (three columns, drag and drop).
+- Calls: will not be implemented (D94, founder).
 
 ## Release plan
 | Release | Contents | Audience | Entry |
@@ -107,7 +109,7 @@ Halo is ready for external testers when **all** of these hold; each line names h
 | **Beta 1** (internal TestFlight) | M0–M10 + M11 + M12 + push gateway (R-24) | Founder + 1–3 people | M12 merged, Beta push gateway live |
 | **Beta 2** (external TestFlight) | + M13, M14, M15 compliance items | ≤ 25 trusted testers | Ship-ready definition met except the 1.0-only lines |
 | **1.0** (App Store) | + fixes from Beta 2, final icon/screenshots, legal sign-off | Public (Matrix power users) | Two weeks of Beta 2 with no P0/P1 bug open |
-| **Post-1.0 backlog (M16)** | Share extension (done, D87), App Intents / Siri and Spotlight (open chat done, D88), widgets (unread count done, D89), Focus filter, widgets, iPad layout, calls (D43) | — | Re-plan after 1.0 |
+| **Post-1.0 backlog (M16)** | Share extension (done, D87), App Intents / Siri and Spotlight (open chat done, D88), widgets (unread count done, D89), Focus filter, widgets, iPad layout (calls dropped, D94) | — | Re-plan after 1.0 |
 
 ## Milestones
 

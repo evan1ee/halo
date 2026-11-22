@@ -22,7 +22,7 @@ Discord's and native, structured rendering of personal assistant bots.
 - A fork, rebrand or redistribution of Element X (D37).
 - Our own Matrix protocol implementation or crypto (we use matrix-rust-sdk).
 - Homeservers without native sliding sync (D4).
-- Voice/video calls in the MVP (D43).
+- Voice/video calls: never (D94; was "not in the MVP", D43).
 - An in-app LLM or AI backend (D18).
 - Feature parity with Element X in every corner (e.g. spaces management, polls creation, location sharing, widgets) before the MVP.
 - Android, macOS, iPad-optimised layouts for 1.0 (iPad runs the iPhone layout until M16; the split-view layout landed after 1.0, D91).

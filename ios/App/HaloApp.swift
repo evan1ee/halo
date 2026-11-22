@@ -39,6 +39,7 @@ private struct RootView: View {
     @SceneStorage("halo.navigation.path") private var savedPath: Data?
     @State private var router = ChatsRouter(replacesDetail: UIDevice.current.userInterfaceIdiom == .pad)
     @State private var compactColumn: NavigationSplitViewColumn = .sidebar
+    @State private var searchPresented = false
     @State private var pathRestored = false
     @State private var searchModel: MessageSearchViewModel
     @State private var newChat: NewChatViewModel?
@@ -87,6 +88,12 @@ private struct RootView: View {
         ownAvatar = await profile.loadAvatar()
     }
 
+    /// ⌘1…⌘6 pick the room-list filters in menu order (hardware keyboard on iPad, M16 D91).
+    private static func filterShortcut(for filter: RoomListFilter) -> KeyEquivalent {
+        let index = filterOptions.firstIndex { $0.filter == filter } ?? 0
+        return KeyEquivalent(Character("\(index + 1)"))
+    }
+
     private static let filterOptions: [(filter: RoomListFilter, title: String, symbol: String)] = [
         (.all, "All", "tray.full"),
         (.unread, "Unread", "envelope.badge"),
@@ -111,7 +118,14 @@ private struct RootView: View {
                     }
                     .navigationTitle("Chats")
                     .navigationBarTitleDisplayMode(.large)
-                    .searchable(text: $searchModel.query, prompt: "Search chats & messages")
+                    .searchable(text: $searchModel.query, isPresented: $searchPresented, prompt: "Search chats & messages")
+                    .background {
+                        // ⌘F starts a search (hardware keyboard).
+                        Button("Search") { searchPresented = true }
+                            .keyboardShortcut("f", modifiers: .command)
+                            .opacity(0)
+                            .accessibilityHidden(true)
+                    }
                     .onSubmit(of: .search) { Task { await searchModel.submit() } }
                     .task(id: searchModel.query) {
                         let trimmed = searchModel.query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -141,6 +155,7 @@ private struct RootView: View {
                             }
                             .accessibilityLabel("Settings")
                             .accessibilityIdentifier("settings")
+                            .keyboardShortcut(",", modifiers: .command)
                         }
                         ToolbarItemGroup(placement: .topBarTrailing) {
                             moreMenu
@@ -154,6 +169,7 @@ private struct RootView: View {
                             }
                             .accessibilityLabel("New chat")
                             .accessibilityIdentifier("compose-chat")
+                            .keyboardShortcut("n", modifiers: .command)
                         }
                     }
                     .onChange(of: root.roomList.content) {
@@ -353,6 +369,7 @@ private struct RootView: View {
                         }
                     }
                     .accessibilityIdentifier("filter-\(option.title)")
+                    .keyboardShortcut(Self.filterShortcut(for: option.filter), modifiers: .command)
                 }
             }
             Section {
