@@ -13,13 +13,12 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log` and [docs/CODEBASE_REVIEW.md](docs/CODEBASE_REVIEW.md) §13.
-- **Sticker send UX/validation & multi-image sending (this push on `main`):**
-  - Sanitised `MatrixTimelinePort.stickerContent` (non-empty `body`, positive `w`/`h`/`size`), added `StickerPanelViewModel.isSending` double-tap guard, auto-dismissed `StickerPanelView` when a sticker sends (including after the one-time encryption notice), surfaced the error code on failure, and verified both unencrypted and encrypted-room sticker sends in `AdapterContractTests.stickers` (`17.38s`).
-  - Upgraded `TimelineViewModel` & `Composer` to multi-image picking and sending (`PhotosPicker(maxSelectionCount: 10)`, `pendingPhotos: [OutgoingImage]`, horizontal thumbnail strip with individual remove buttons, sequential send with caption on the first photo and partial-failure preservation; unit-tested in `TimelineViewModelTests.multiPhotoAttachAndSend`).
+- **Room list toolbar & Settings layout polish (this push on `main`):**
+  - Moved "Find a person or create a room" (`NewChatView` trigger) into `SettingsView` ("Chats" section), removed the top-left `New chat` toolbar button, and moved the Settings avatar button to the top-left (`.topBarLeading`) position in `HaloApp.swift`.
+- **Sticker send UX/validation & multi-image sending (`900bcab`):**
+  - Sanitised `MatrixTimelinePort.stickerContent`, added `StickerPanelViewModel.isSending` double-tap guard, auto-dismissed `StickerPanelView` on send, surfaced error codes on failure, verified unencrypted + encrypted sends in `AdapterContractTests.stickers`, and upgraded `TimelineViewModel` & `Composer` to multi-image picking/sending (up to 10 photos).
 - **Message search fixes (`071fff3`):**
-  - Enabled SDK encrypted local search index (`ClientBuilder.withSearchIndexStore(path:key:)`, `enableAutomaticBackPagination(true)`, `runSearchBackfill(.foreground)`) for main-app sessions, fixed `MatrixSearchPort.setQuery` clear/re-search reset (`AdapterContractTests.messageSearch`), and upgraded `MessageSearchView` with always-visible `.searchable` bar, 300 ms debounced auto-search, and `searchedQuery` tracking.
-- **Native emoji & emoji input support (`bd4a913`):**
-  - Added pure Swift `NativeEmoji` (`HaloDomain/Emoji/NativeEmoji.swift`, `NativeEmojiTests`), jumbo emoji rendering (`TimelineRow.isJumboEmoji` → 48 pt), composer `:shortcode` autocomplete strip, dedicated composer Emoji picker button (`face.smiling`), and upgraded `ReactionPicker` with recents, search, categories, and `NativeEmojiKeyboardField`.
+  - Enabled SDK encrypted local search index (`withSearchIndexStore`, `enableAutomaticBackPagination`, `runSearchBackfill(.foreground)`), fixed `MatrixSearchPort.setQuery` clear/re-search reset, and upgraded `MessageSearchView` with always-visible `.searchable` bar + 300 ms debounced auto-search.
 
 ## 3. Key decisions
 Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D82), [docs/adr/README.md](docs/adr/README.md).
@@ -30,9 +29,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D82), [docs/adr/RE
 - **D82 / ADR-0021 (founder, supersedes D5):** app icon badge shows total unread messages across rooms needing attention (`BadgeCalculator.badge` sums `RoomReadState.badgeCount` for `attention == true`).
 
 ## 4. Modified files (this push)
-- **Adapter:** `ios/Packages/HaloMatrixAdapter/Sources/HaloMatrixAdapter/MatrixTimelinePort.swift`, `ios/Packages/HaloMatrixAdapter/Tests/HaloMatrixAdapterTests/AdapterContractTests.swift`.
-- **FeatureStickers:** `ios/Packages/Features/FeatureStickers/Sources/FeatureStickers/StickerPanelViewModel.swift`, `ios/Packages/Features/FeatureStickers/Sources/FeatureStickers/StickerPanelView.swift`.
-- **FeatureTimeline:** `ios/Packages/Features/FeatureTimeline/Sources/FeatureTimeline/TimelineViewModel.swift`, `ios/Packages/Features/FeatureTimeline/Sources/FeatureTimeline/TimelineView.swift`, `ios/Packages/Features/FeatureTimeline/Tests/FeatureTimelineTests/TimelineViewModelTests.swift`.
+- **FeatureSettings & App:** `ios/Packages/Features/FeatureSettings/Sources/FeatureSettings/SettingsView.swift`, `ios/App/HaloApp.swift`.
 - **Docs:** `HANDOFF.md`.
 
 ## 5. Outstanding issues

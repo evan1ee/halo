@@ -51,6 +51,7 @@ public struct SettingsView: View {
     private let notificationDefaults: NotificationDefaultsActions?
     private let notificationStatus: (@Sendable () async -> String)?
     private let openSystemSettings: (() -> Void)?
+    private let onNewChat: (() -> Void)?
     @State private var notifications = ""
     private let storageSizes: (@Sendable () async -> [StorageSize])?
     private let clearCache: (@Sendable () async -> Bool)?
@@ -77,7 +78,7 @@ public struct SettingsView: View {
         storageSizes: (@Sendable () async -> [StorageSize])? = nil,
         clearCache: (@Sendable () async -> Bool)? = nil,
         security: (@MainActor () -> [StorageSize])? = nil, setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil,
-        replaceRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil, notificationDefaults: NotificationDefaultsActions? = nil, notificationStatus: (@Sendable () async -> String)? = nil, openSystemSettings: (() -> Void)? = nil, onSignOut: @escaping () -> Void
+        replaceRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil, notificationDefaults: NotificationDefaultsActions? = nil, notificationStatus: (@Sendable () async -> String)? = nil, openSystemSettings: (() -> Void)? = nil, onNewChat: (() -> Void)? = nil, onSignOut: @escaping () -> Void
     ) {
         self.diagnostics = diagnostics
         self.exportDiagnosticsZip = exportDiagnosticsZip
@@ -96,6 +97,7 @@ public struct SettingsView: View {
         self.setUpRecovery = setUpRecovery
         self.replaceRecovery = replaceRecovery
         self.openSystemSettings = openSystemSettings
+        self.onNewChat = onNewChat
         self.loadMediaPreviews = loadMediaPreviews
         self.saveMediaPreviews = saveMediaPreviews
         self.version = version
@@ -110,6 +112,14 @@ public struct SettingsView: View {
 
     public var body: some View {
         List {
+            if let onNewChat {
+                Section("Chats") {
+                    Button(action: onNewChat) {
+                        Label("Find a person or create a room", systemImage: "square.and.pencil")
+                    }
+                    .accessibilityIdentifier("newChat")
+                }
+            }
             if let profile {
                 Section("Account") {
                     NavigationLink { ProfileSettingsView(actions: profile) } label: { Label("Profile", systemImage: "person.crop.circle") }

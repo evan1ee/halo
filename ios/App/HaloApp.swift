@@ -70,28 +70,6 @@ private struct RootView: View {
                     .task { await refreshOwnProfile() }
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
-                            Button {
-                                newChat = root.makeNewChat { room in
-                                    newChat = nil
-                                    path.append(room)
-                                }
-                            } label: { Image(systemName: "square.and.pencil") }
-                                .accessibilityLabel("New chat")
-                                .accessibilityIdentifier("newChat")
-                        }
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button { messageSearch = root.makeMessageSearch() } label: { Image(systemName: "magnifyingglass") }
-                                .accessibilityLabel("Search")
-                                .accessibilityIdentifier("search")
-                        }
-                        if !AppPreferences().botSenders.isEmpty {
-                            ToolbarItem(placement: .topBarTrailing) {
-                                Button { activity = root.makeBotActivity() } label: { Image(systemName: "checklist") }
-                                    .accessibilityLabel("Activity")
-                                    .accessibilityIdentifier("activity")
-                            }
-                        }
-                        ToolbarItem(placement: .topBarTrailing) {
                             // Destination-based: the stack's path is typed to `RoomID`, so a value link of another type can't push.
                             NavigationLink {
                                 SettingsView(
@@ -130,6 +108,12 @@ private struct RootView: View {
                                     openSystemSettings: {
                                         if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
                                     },
+                                    onNewChat: {
+                                        newChat = root.makeNewChat { room in
+                                            newChat = nil
+                                            path.append(room)
+                                        }
+                                    },
                                     onSignOut: { Task { await root.auth.signOut() } })
                                 .navigationBarTitleDisplayMode(.large)
                             } label: { AvatarCircle(name: ownName.isEmpty ? (root.signedInUserID ?? "?") : ownName, imageData: ownAvatar, size: 30)
@@ -142,6 +126,18 @@ private struct RootView: View {
                                 } }
                                 .accessibilityLabel("Settings")
                                 .accessibilityIdentifier("settings")
+                        }
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button { messageSearch = root.makeMessageSearch() } label: { Image(systemName: "magnifyingglass") }
+                                .accessibilityLabel("Search")
+                                .accessibilityIdentifier("search")
+                        }
+                        if !AppPreferences().botSenders.isEmpty {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button { activity = root.makeBotActivity() } label: { Image(systemName: "checklist") }
+                                    .accessibilityLabel("Activity")
+                                    .accessibilityIdentifier("activity")
+                            }
                         }
                     }
                     .onChange(of: root.roomList.content) { Task { await root.scanBotRooms() } }
