@@ -12,6 +12,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log`.
+- **Accent is exactly Apple's system blue (`feat/accent-system-blue`, founder request):** light #007AFF, dark #0A84FF (Increase Contrast keeps #0040DD / #409CFF). That is ~3.7:1 on the grey background, so `ColorContrastTests` now asks `Accent` for 3:1 in normal light/dark (links, icons, controls) and still 4.5:1 in Increase Contrast; white button text on it (`OnAccent`, 4.02:1) is held to 3:1 in light mode; every other pair stays at 4.5:1. The sign-in UI audit now ignores Apple's "Contrast nearly passed" notes (link text in the blue); real contrast failures still fail. `DESIGN_SYSTEM.md` updated. Not checked on a device.
 - **Theme picker fix (found on device):** Settings → Appearance → Theme wrote to `UserDefaults` but the app root reads `PreferencesStore`, which was never refreshed, so Light/Dark did nothing until relaunch; the picker (and the app-switcher blur toggle, same cause) now calls `onPreferencesChanged` → `PreferencesStore.reload()`. `SettingsView.swift`. Not checked on a device.
 - **Accent colour is system blue (`fix/accent-blue`, founder request):** `Accent` and the app `AccentColor` changed from Halo indigo to blue (#0066CC light, #2E90FF dark, high-contrast variants #0040DD / #409CFF; a little darker/lighter than Apple's #007AFF / #0A84FF so every text pair keeps 4.5:1); avatar palette drops indigo and purple; `DESIGN_SYSTEM.md` updated. Not checked on a device.
 - **Chat-list menu layout (`fix/more-menu-layout`, founder request):** the New chat button left the toolbar and is now in the ⋯ menu with Saved Messages (moved out of the New chat sheet) under the filters; Stickers left the menu (still in Settings). `HaloApp.swift` (`moreMenu`, `openSavedMessages`), `NewChatView.swift`, `docs/ROADMAP.md`. Not checked on a device. ⌘N still opens New chat.
@@ -42,6 +43,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D86), [docs/adr/RE
 - **D84 / D85 / D86 (ADR-0022):** Apple-native north star; single `NavigationStack` shell; module layout v2 (all 4 steps complete).
 
 ## 4. Modified files (this push)
+- **Accent #007AFF:** both `Accent*.colorset`, `ColorContrastTests.swift`, `docs/design/DESIGN_SYSTEM.md`.
 - **Theme fix:** `FeatureSettings/SettingsView.swift`.
 - **Accent blue:** both `Accent*.colorset` files, `HaloColor.swift`, `AvatarCircle.swift`, `docs/design/DESIGN_SYSTEM.md`, `HANDOFF.md`.
 - **Menu layout:** `ios/App/HaloApp.swift`, `FeatureRoomList/NewChatView.swift`, `docs/ROADMAP.md`, `HANDOFF.md`.
