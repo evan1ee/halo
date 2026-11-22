@@ -62,4 +62,21 @@ public final class MatrixChatCreationPort: ChatCreationPort {
             return try RoomID(created)
         } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
     }
+
+    public func joinRoom(_ idOrAlias: String) async throws(HaloError) -> RoomID {
+        let trimmed = idOrAlias.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (trimmed.hasPrefix("#") || trimmed.hasPrefix("!")),
+              let colon = trimmed.firstIndex(of: ":"),
+              trimmed.distance(from: trimmed.startIndex, to: colon) > 1
+        else {
+            throw .invalidInput("ROOM_ADDRESS")
+        }
+        let server = String(trimmed[trimmed.index(after: colon)...])
+        guard !server.isEmpty else { throw .invalidInput("ROOM_ADDRESS") }
+        let client = try await session.signedInClient()
+        do {
+            let room = try await client.joinRoomByIdOrAlias(roomIdOrAlias: trimmed, serverNames: [server])
+            return try RoomID(room.id())
+        } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
+    }
 }

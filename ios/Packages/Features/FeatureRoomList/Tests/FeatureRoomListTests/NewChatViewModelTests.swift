@@ -111,4 +111,34 @@ struct NewChatViewModelTests {
         await model.openSavedMessages()
         #expect(opened.count == 2 && opened[0] == opened[1] && model.errorText == nil)
     }
+
+    @Test("joinRoom validates #alias:server and !id:server, opens the joined room, and reports failures (ROOM_MANAGEMENT FR-5)")
+    func joinRoomByAliasOrID() async throws {
+        let port = FakeChatCreationPort()
+        var opened: [RoomID] = []
+        let model = NewChatViewModel(port: port, onCreated: { opened.append($0) })
+
+        // Invalid addresses are rejected before hitting the port.
+        model.roomAddress = "general"
+        #expect(!model.canJoinRoom)
+        await model.joinRoom()
+        #expect(opened.isEmpty && model.errorText != nil)
+
+        // Valid alias joins and opens the room.
+        model.roomAddress = " #halo:example.org "
+        #expect(model.canJoinRoom)
+        await model.joinRoom()
+        #expect(opened.count == 1 && model.errorText == nil)
+        #expect(port.joinedAddresses == ["#halo:example.org"])
+
+        // Valid room ID joins and opens that exact room.
+        model.roomAddress = "!direct:example.org"
+        await model.joinRoom()
+        #expect(opened.last == (try RoomID("!direct:example.org")))
+
+        // Server error surfaces honestly.
+        port.fail(with: .forbidden)
+        await model.joinRoom()
+        #expect(model.errorText == "You can't do that on this server.")
+    }
 }

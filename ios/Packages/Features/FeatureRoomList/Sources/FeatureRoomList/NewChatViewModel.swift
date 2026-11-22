@@ -25,6 +25,8 @@ public final class NewChatViewModel: Identifiable {
         }
     }
     public var roomName = ""
+    /// Room alias (`#room:server`) or room ID (`!id:server`) for joining an existing room (ROOM_MANAGEMENT FR-5).
+    public var roomAddress = ""
     /// Users picked for the new room.
     public private(set) var invited: [UserSummary] = []
 
@@ -110,6 +112,31 @@ public final class NewChatViewModel: Identifiable {
     /// Opens the user's private encrypted Saved Messages room, creating it once if needed (M8).
     public func openSavedMessages() async {
         await run { () async throws(HaloError) -> RoomID in try await port.openOrCreateSavedRoom() }
+    }
+
+    /// True when `roomAddress` looks like a complete `#alias:server` or `!id:server` address.
+    public var canJoinRoom: Bool {
+        Self.isValidRoomAddress(roomAddress) && !isWorking
+    }
+
+    public func joinRoom() async {
+        let address = roomAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard Self.isValidRoomAddress(address) else {
+            errorText = "Enter a full room address, like #room:server or !id:server."
+            return
+        }
+        await run { () async throws(HaloError) -> RoomID in try await port.joinRoom(address) }
+    }
+
+    static func isValidRoomAddress(_ raw: String) -> Bool {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (trimmed.hasPrefix("#") || trimmed.hasPrefix("!")),
+              !trimmed.contains(where: \.isWhitespace),
+              let colon = trimmed.firstIndex(of: ":"),
+              trimmed.distance(from: trimmed.startIndex, to: colon) > 1
+        else { return false }
+        let server = trimmed[trimmed.index(after: colon)...]
+        return !server.isEmpty
     }
 
     private func run(_ action: () async throws(HaloError) -> RoomID) async {

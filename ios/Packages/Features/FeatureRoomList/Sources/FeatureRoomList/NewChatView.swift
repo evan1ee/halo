@@ -77,6 +77,26 @@ public struct NewChatView: View {
                 } footer: {
                     Text("Name the room, then create it. To invite people, find them above and tap \"Add to room\". Messages are encrypted.")
                 }
+                Section {
+                    TextField("#room:server or !id:server", text: $model.roomAddress)
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        #endif
+                        .autocorrectionDisabled()
+                        .submitLabel(.join)
+                        .onSubmit { if model.canJoinRoom { Task { await model.joinRoom() } } }
+                        .accessibilityIdentifier("joinRoomAddress")
+                    Button { Task { await model.joinRoom() } } label: {
+                        Label("Join room", systemImage: "arrow.right.circle.fill")
+                            .foregroundStyle(model.canJoinRoom ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
+                    }
+                    .disabled(!model.canJoinRoom)
+                    .accessibilityIdentifier("joinRoomButton")
+                } header: {
+                    Text("Or join a room by address")
+                } footer: {
+                    Text("Enter a Matrix room alias (#room:server) or room ID (!id:server) to join directly.")
+                }
                 if let error = model.errorText { Section { Text(error).foregroundStyle(.red) } }
             }
             .navigationTitle("New chat")

@@ -1,3 +1,4 @@
+import Foundation
 import HaloDomain
 import HaloFoundation
 import Synchronization
@@ -9,6 +10,7 @@ public final class FakeChatCreationPort: ChatCreationPort {
         var existing: [UserID: RoomID]
         var error: HaloError?
         var created: [(name: String, invite: [UserID])] = []
+        var joined: [String] = []
         var savedRoom: RoomID?
         var counter = 0
     }
@@ -18,6 +20,7 @@ public final class FakeChatCreationPort: ChatCreationPort {
 
     public func fail(with error: HaloError?) { state.withLock { $0.error = error } }
     public var createdRooms: [(name: String, invite: [UserID])] { state.withLock { $0.created } }
+    public var joinedAddresses: [String] { state.withLock { $0.joined } }
 
     public func searchUsers(_ term: String, limit: Int) async throws(HaloError) -> [UserSummary] {
         let (directory, error) = state.withLock { ($0.directory, $0.error) }
@@ -48,6 +51,17 @@ public final class FakeChatCreationPort: ChatCreationPort {
         let id = try nextRoom()
         state.withLock { $0.savedRoom = id }
         return id
+    }
+
+    public func joinRoom(_ idOrAlias: String) async throws(HaloError) -> RoomID {
+        if let error = state.withLock({ $0.error }) { throw error }
+        let trimmed = idOrAlias.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (trimmed.hasPrefix("#") || trimmed.hasPrefix("!")), trimmed.contains(":") else {
+            throw .invalidInput("ROOM_ADDRESS")
+        }
+        state.withLock { $0.joined.append(trimmed) }
+        if trimmed.hasPrefix("!"), let direct = try? RoomID(trimmed) { return direct }
+        return try nextRoom()
     }
 
     private func nextRoom() throws(HaloError) -> RoomID {
