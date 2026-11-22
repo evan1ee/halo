@@ -485,6 +485,12 @@ private struct TimelineScreen: View {
         _stickers = State(initialValue: root.makeStickerPanel(room: room, timeline: timeline))
     }
 
+    /// The room's picture from the chat list (for a direct chat the other person's); `nil` shows the initial.
+    private var roomAvatar: MediaRef? {
+        guard case .loaded(_, let rows) = root.roomList.content else { return nil }
+        return rows.first(where: { $0.id == room })?.avatar
+    }
+
     var body: some View {
         TimelineView(
             model: model,
@@ -500,7 +506,9 @@ private struct TimelineScreen: View {
                 .accessibilityIdentifier("roomTitle")
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button { details = root.makeRoomDetails(room: room) } label: { Image(systemName: "info.circle") }
+                Button { details = root.makeRoomDetails(room: room) } label: {
+                    AvatarView(name: title, ref: roomAvatar, size: 30) { [roomList = root.roomList] in await roomList.avatarData($0) }
+                }
                     .accessibilityLabel("Room info")
                     .accessibilityIdentifier("roomInfo")
             }

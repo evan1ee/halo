@@ -327,14 +327,22 @@ public struct RoomListFilterMenu: View {
 }
 
 /// Loads the avatar bytes for a row, then shows `AvatarCircle`.
-struct AvatarView: View {
+public struct AvatarView: View {
     let name: String
     let ref: MediaRef?
+    let size: CGFloat
     let load: @Sendable (MediaRef) async -> Data?
     @State private var data: Data?
 
-    var body: some View {
-        AvatarCircle(name: name, imageData: data)
+    public init(name: String, ref: MediaRef?, size: CGFloat = 44, load: @escaping @Sendable (MediaRef) async -> Data?) {
+        self.name = name
+        self.ref = ref
+        self.size = size
+        self.load = load
+    }
+
+    public var body: some View {
+        AvatarCircle(name: name, imageData: data, size: size)
             .task(id: ref) {
                 data = nil
                 guard let ref else { return }
