@@ -48,10 +48,14 @@ public struct FileShareInbox: ShareInboxPort {
                 case .url(let url):
                     shared.append(SharedItem(kind: .url, text: url))
                 case .file(let data, let filename, let mimeType, let isImage):
-                    let entry = SharedItem(
-                        kind: isImage ? .image : .file, filename: Self.safeName(filename), mimeType: mimeType, byteCount: data.count
-                    )
-                    try data.write(to: temporary.appendingPathComponent(entry.id), options: .completeFileProtectionUntilFirstUserAuthentication)
+                    // Photos go through the same preparation as the composer's: orientation applied, shrunk, location
+                    // metadata dropped (AGENTS §4.6), and the pixel size recorded so the timeline shows the right shape.
+                    let prepared = isImage ? try? ImagePreparer().prepare(data: data, filename: Self.safeName(filename)) : nil
+                    let entry = prepared.map {
+                        SharedItem(kind: .image, filename: $0.filename, mimeType: $0.mimeType, byteCount: $0.data.count, width: $0.width, height: $0.height)
+                    } ?? SharedItem(kind: .file, filename: Self.safeName(filename), mimeType: mimeType, byteCount: data.count)
+                    try (prepared?.data ?? data).write(
+                        to: temporary.appendingPathComponent(entry.id), options: .completeFileProtectionUntilFirstUserAuthentication)
                     shared.append(entry)
                 }
             }

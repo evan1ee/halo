@@ -100,7 +100,7 @@ public actor ShareCoordinator {
             let data = try inbox.data(of: item, in: payload)
             guard data.count <= OutgoingImage.maximumBytes else { throw .invalidInput("SHARE_TOO_LARGE") }
             try await session.sendImage(OutgoingImage(
-                data: data, filename: item.filename ?? "image", mimeType: item.mimeType ?? "image/jpeg", width: nil, height: nil
+                data: data, filename: item.filename ?? "image", mimeType: item.mimeType ?? "image/jpeg", width: item.width, height: item.height
             ))
         case .file:
             let data = try inbox.data(of: item, in: payload)

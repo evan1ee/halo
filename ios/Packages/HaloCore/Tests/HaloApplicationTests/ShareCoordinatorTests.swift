@@ -20,7 +20,7 @@ struct ShareCoordinatorTests {
     func deliversEverything() async throws {
         let (coordinator, inbox, timelines) = setUp()
         let link = SharedItem(kind: .url, text: "https://example.org")
-        let photo = SharedItem(kind: .image, filename: "a.jpg", mimeType: "image/jpeg", byteCount: 3)
+        let photo = SharedItem(kind: .image, filename: "a.jpg", mimeType: "image/jpeg", byteCount: 3, width: 30, height: 20)
         let file = SharedItem(kind: .file, filename: "b.pdf", mimeType: "application/pdf", byteCount: 2)
         let payload = SharePayload(createdAt: Date(), items: [SharedItem(kind: .text, text: "hi"), link, photo, file])
         inbox.stage(payload, files: [photo.id: Data([1, 2, 3]), file.id: Data([4, 5])])
@@ -29,6 +29,7 @@ struct ShareCoordinatorTests {
 
         #expect(timelines.sentTexts(in: room) == ["hi", "https://example.org"])
         #expect(timelines.sentImages(in: room).map(\.filename) == ["a.jpg"])
+        #expect(timelines.sentImages(in: room).first.map { [$0.width, $0.height] } == [30, 20])
         #expect(timelines.sentFiles(in: room).map(\.mimeType) == ["application/pdf"])
         #expect(inbox.discarded == [payload.id])
         #expect(await coordinator.pending().isEmpty)
