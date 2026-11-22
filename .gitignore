@@ -18,6 +18,7 @@ target/
 # Secrets and local environment
 .env
 *.env.local
+ios/Config/Local.xcconfig
 *.p8
 *.p12
 *.mobileprovision

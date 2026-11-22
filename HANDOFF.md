@@ -1,6 +1,6 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-22 · Branch: `fix/timeline-land-newest` (PR to `main` opened with this push) · PRs #1–#72 merged
+Last updated: 2026-11-22 · Branch: `fix/timeline-land-newest` (PR #73 to `main`) · PRs #1–#72 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
@@ -13,6 +13,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log`.
+- **Signing team kept out of git:** the team set in Xcode lived only in an uncommitted `project.pbxproj` change, so a revert or `xcodegen` cleared it. `Base.xcconfig` now includes the git-ignored `ios/Config/Local.xcconfig` when present (`DEVELOPMENT_TEAM`; template `Local.xcconfig.example`); all configurations and extensions pick it up. Installed `Halo-Debug` on the founder's iPhone with it.
 - **A room opens instantly at its newest message — no flash, no spinner (`fix/timeline-land-newest`, D95, founder bug report on S10):**
   - D95: the landing goes to the newest row; the first unread message stays marked and the "Jump to unread" pill goes up to it (`TimelineViewModel+Mapping.swift`, tests, `TIMELINE.md`, `DECISION_LOG.md`).
   - Reopened rooms (120-message text room ended mid-list on ~3rd open): `MatrixTimelinePort.open` waits ≤ 400 ms for the first history page; the list is drawn once placed (600 ms fallback); "at bottom" from scroll geometry; rows added above re-scroll while pinned; paging waits.
@@ -54,6 +55,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D95), [docs/adr/RE
 - **D95:** a room opens at its newest message; the first unread message stays marked and "Jump to unread" goes up to it.
 
 ## 4. Modified files (this push)
+- **Personal signing team:** `ios/Config/Base.xcconfig` (`#include? "Local.xcconfig"`), `ios/Config/Local.xcconfig.example`, `.gitignore`, `docs/development/DEVELOPMENT_SETUP.md`, `docs/adr/0017-xcodegen-for-the-app-project.md`.
 - **Land at newest (this PR):** `HaloMatrixAdapter/Timeline/MatrixTimelinePort.swift`, `FeatureTimeline/{TimelineView,TimelineMediaViews,TimelineViewModel+Mapping}.swift`, `FeatureTimelineTests/{TimelineViewModelTests,ThumbnailSizeTests,BottomGapTests,UnreadPillTests}.swift`, `docs/features/TIMELINE.md`, `docs/DECISION_LOG.md`, `HANDOFF.md`.
 - **Room avatar button:** `ios/App/HaloApp.swift`, `FeatureRoomList/RoomListView.swift`.
 - **Accent #007AFF:** both `Accent*.colorset`, `ColorContrastTests.swift`, `docs/design/DESIGN_SYSTEM.md`.

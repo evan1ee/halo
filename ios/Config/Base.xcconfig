@@ -17,3 +17,7 @@ TARGETED_DEVICE_FAMILY = 1,2
 MARKETING_VERSION = 0.1.0
 CURRENT_PROJECT_VERSION = 1
 GENERATE_INFOPLIST_FILE = YES
+
+// Personal settings such as DEVELOPMENT_TEAM live in the git-ignored Local.xcconfig (copy Local.xcconfig.example).
+// It is optional: a build without it is unsigned for devices, as before.
+#include? "Local.xcconfig"
