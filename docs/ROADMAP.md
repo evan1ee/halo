@@ -89,8 +89,10 @@ Halo is ready for external testers when **all** of these hold; each line names h
 - [x] Share extension (D87): `HaloShareExtension` stages text, a link, photos and files into the App Group `share-inbox/` (`FileShareInbox`); the app shows "Send to…" on activation (`ShareHandoffViewModel`, `ShareTargetPickerView`) and `ShareCoordinator` sends through the timeline path. Tests: `ShareCoordinatorTests`, `FileShareInboxTests`, `ShareHandoffViewModelTests`; privacy manifest checked in `AcknowledgementsTests`.
 - [x] App Intents + Spotlight (D88): opt-in "Chats in Siri and Spotlight"; `OpenChatIntent` / `ChatEntity` (Siri phrase "Open <chat> in Halo"), Spotlight results open the chat. Tests: `ChatShortcutPublisherTests`, `SystemChatShortcutStoreTests`, `AppPreferencesTests`.
 - [ ] 📱 Share extension on a physical device: the App Group container is shared only in signed builds; check Safari (link), Photos (several photos), Files (PDF) and a > 50 MiB file end to end.
+- [x] Unread widget (D89): `HaloWidgetExtension`, small and lock-screen families, count only; `UnreadWidgetSnapshot` tests, privacy manifest check.
+- [ ] 📱 Widgets on a device: add the small and lock-screen widgets, receive a push and check the count refreshes.
 - [ ] 📱 App Intents on a device: the Siri phrase and a Spotlight result opening a chat (the simulator can't speak to Siri).
-- [ ] Send-by-Siri, Focus filter, widgets, iPad layout, calls (D43).
+- [ ] Send-by-Siri, Focus filter, chat-list widget, iPad layout, calls (D43).
 
 ## Release plan
 | Release | Contents | Audience | Entry |
@@ -98,7 +100,7 @@ Halo is ready for external testers when **all** of these hold; each line names h
 | **Beta 1** (internal TestFlight) | M0–M10 + M11 + M12 + push gateway (R-24) | Founder + 1–3 people | M12 merged, Beta push gateway live |
 | **Beta 2** (external TestFlight) | + M13, M14, M15 compliance items | ≤ 25 trusted testers | Ship-ready definition met except the 1.0-only lines |
 | **1.0** (App Store) | + fixes from Beta 2, final icon/screenshots, legal sign-off | Public (Matrix power users) | Two weeks of Beta 2 with no P0/P1 bug open |
-| **Post-1.0 backlog (M16)** | Share extension (done, D87), App Intents / Siri and Spotlight (open chat done, D88), Focus filter, widgets, iPad layout, calls (D43) | — | Re-plan after 1.0 |
+| **Post-1.0 backlog (M16)** | Share extension (done, D87), App Intents / Siri and Spotlight (open chat done, D88), widgets (unread count done, D89), Focus filter, widgets, iPad layout, calls (D43) | — | Re-plan after 1.0 |
 
 ## Milestones
 

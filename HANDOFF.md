@@ -1,6 +1,6 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-22 · Branch: `feat/m16-app-intents` · PRs #1–#57 merged
+Last updated: 2026-11-22 · Branch: `feat/m16-widgets` · PRs #1–#57 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
@@ -12,6 +12,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log`.
+- **M16 Unread widget (`feat/m16-widgets`, stacked on PR #59, D89):** `HaloWidgetExtension` (small + lock-screen families) shows the `AttentionCache` total from the App Group, count only, `privacySensitive`, stale after 6 h; `SystemBadge` reloads timelines; `UnreadWidgetSnapshot` (HaloDomain) + tests; extension privacy manifest checked.
 - **M16 App Intents + Spotlight (`feat/m16-app-intents`, stacked on PR #58, D88):** opt-in setting "Chats in Siri and Spotlight" (default off); `ChatShortcutPublisher` (HaloApplication) → `SystemChatShortcutStore` (App Group JSON + `CSSearchableIndex`, names only, ≤ 100); `OpenChatIntent`/`ChatEntity`/`HaloShortcuts` in `ios/App/Intents/`; intent and Spotlight activity set `OpenChatRequest`, the root view opens the room via `ChatsRouter`. Tests: `ChatShortcutPublisherTests`, `SystemChatShortcutStoreTests`, preference tests.
 - **M16 Share extension (`feat/m16-share-extension`, D87):** founder picked it first from the post-1.0 backlog. `HaloShareExtension` target stages text, a link, photos and files into the App Group `share-inbox/` (`FileShareInbox`, 50 MiB cap, 7-day expiry) and never touches the homeserver; the app shows "Send to…" on activation (`ShareHandoffViewModel`, `ShareTargetPickerView`) and `ShareCoordinator` sends through the timeline path (retry skips sent items; payload deleted only when all sent). Tests: `ShareCoordinatorTests`, `FileShareInboxTests`, `ShareHandoffViewModelTests`, privacy manifest for the extension.
 - **M15 Ship readiness + Tech Debt Phase D (`feat/m15-ship-readiness`, SR-01/SR-05, TD-04/TD-08):**
@@ -30,6 +31,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D86), [docs/adr/RE
 - **D84 / D85 / D86 (ADR-0022):** Apple-native north star; single `NavigationStack` shell; module layout v2 (all 4 steps complete).
 
 ## 4. Modified files (this push)
+- **M16 widget:** `ios/WidgetExtension/*`, `ios/project.yml`, `ios/Config/Base.xcconfig`, `HaloDomain/Widgets/UnreadWidgetSnapshot.swift` + test, `HaloPlatform/SystemBadge.swift`, `AcknowledgementsTests.swift`, `docs/{DECISION_LOG,ROADMAP}.md`, `docs/architecture/MODULE_BOUNDARIES.md`.
 - **M16 App Intents:** `HaloDomain/Shortcuts/ChatShortcut.swift`, `HaloApplication/Shortcuts/ChatShortcutPublisher.swift`, `HaloTestSupport/Shortcuts/FakeChatShortcutPort.swift`, `HaloPlatform/SystemChatShortcutStore.swift`, preferences (`PreferencesPort`, `PreferencesStore`, `UserDefaultsPreferencesStore`, `AppPreferences`, `SettingsView`), `ios/App/Intents/OpenChatIntent.swift`, `AppRoot.swift`, `HaloApp.swift`, tests, `docs/{DECISION_LOG,ROADMAP}.md`, `docs/security/PRIVACY.md`.
 - **M16 share extension:** `ios/ShareExtension/*`, `ios/project.yml`, `ios/Config/Base.xcconfig`, `HaloDomain/Share/SharePayload.swift`, `HaloApplication/Share/ShareCoordinator.swift`, `HaloTestSupport/Share/FakeShareInbox.swift`, `HaloPlatform/FileShareInbox.swift` + `HaloShared.swift`, `FeatureRoomList/Share*.swift`, `ios/App/AppRoot.swift`, `ios/App/HaloApp.swift`, their tests, `docs/{DECISION_LOG,ROADMAP}.md`, `docs/architecture/MODULE_BOUNDARIES.md`, `docs/features/MEDIA_ATTACHMENTS.md`.
 - **Privacy & CI:** `ios/App/Resources/PrivacyInfo.xcprivacy`, `ios/NotificationService/PrivacyInfo.xcprivacy`, `.github/workflows/macos-build.yml`.
@@ -47,6 +49,7 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 - 👤 **R-18 & R-21 (upstream SDK gaps):** `SyncSettingsV2` filter and queued `sendRaw`/`sendSticker` need upstream `matrix-rust-sdk` PR + SDK bump.
 - 👤 **R-24 (pushkin & Beta/Release push gateway):** decide `infra/sygnal/` pushkin vs amending ADR-0015; configure Beta/Release push gateway + APNs keys + TestFlight.
 - 👤 **UX/ship open questions (D84):** **Q-BRAND** (sign-in illustration; halo disc `AppIcon` landed), **Q-ONBOARD-SERVER**, **Q-L10N**, **Q-APPSTORE** (App Store metadata, privacy policy & support pages), legal review (D38), export compliance (V-LEGAL), privacy nutrition labels ([docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md)).
+- 📱 **Widgets on a device (D89):** add the small and lock-screen widgets, receive a message and check the count refreshes; check the lock-screen redaction.
 - 📱 **App Intents on a device (D88):** turn on "Chats in Siri and Spotlight", then say "Open <chat> in Halo" and tap a Spotlight result.
 - 📱 **Share extension on a device (D87):** App Group sharing needs a signed build; check Safari link, several Photos, a Files PDF and a > 50 MiB file end to end. The simulator build only proves it compiles and the inbox logic.
 - 📱 **Physical-device validation:** 7-day AC-U8 daily-driver soak, Release/TestFlight G-NSE spot check, NFR-1/NFR-2 XCTest metrics on iPhone 15-class device (`HALO_RUN_PERF_TESTS=1`), MetricKit hang/launch review, and Beta 1 → Beta 2 → 1.0 release.
