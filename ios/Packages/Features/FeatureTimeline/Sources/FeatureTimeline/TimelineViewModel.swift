@@ -126,6 +126,14 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
         public let ref: MediaRef
         /// Width / height, when the sender gave dimensions; the view falls back to 4:3.
         public let aspectRatio: Double?
+        /// Optional BlurHash placeholder string (`xyz.amorgan.blurhash`), when provided by the sender.
+        public let blurhash: String?
+
+        public init(ref: MediaRef, aspectRatio: Double?, blurhash: String? = nil) {
+            self.ref = ref
+            self.aspectRatio = aspectRatio
+            self.blurhash = blurhash
+        }
     }
 
     init(
@@ -1283,7 +1291,8 @@ public final class TimelineViewModel {
                 if attachment.kind == .image, let source = attachment.source {
                     let ratio = Self.aspectRatio(width: attachment.width, height: attachment.height)
                     return TimelineRow(
-                        id: id, style: style, sender: name, text: attachment.body, image: .init(ref: source, aspectRatio: ratio),
+                        id: id, style: style, sender: name, text: attachment.body,
+                        image: .init(ref: source, aspectRatio: ratio, blurhash: attachment.blurhash),
                         eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions), source: plainSource(event, attachment.body))
                 }
                 let label = "[\(Self.label(attachment.kind))] \(attachment.body)"
@@ -1291,7 +1300,9 @@ public final class TimelineViewModel {
                 return TimelineRow(
                     id: id, style: style, sender: name, text: label, eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions),
                     file: .init(kind: attachment.kind, name: attachment.body, detail: Self.fileDetail(attachment), ref: source, size: attachment.size,
-                        thumbnail: attachment.kind == .video ? attachment.thumbnail.map { .init(ref: $0, aspectRatio: Self.aspectRatio(width: attachment.width, height: attachment.height)) } : nil), source: plainSource(event, attachment.body))
+                        thumbnail: attachment.kind == .video ? attachment.thumbnail.map {
+                            .init(ref: $0, aspectRatio: Self.aspectRatio(width: attachment.width, height: attachment.height), blurhash: attachment.blurhash)
+                        } : nil), source: plainSource(event, attachment.body))
             case .sticker(let body, let source):
                 guard let source else {
                     return TimelineRow(

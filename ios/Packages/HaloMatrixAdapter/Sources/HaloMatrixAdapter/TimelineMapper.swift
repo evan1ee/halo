@@ -116,13 +116,15 @@ enum TimelineMapper {
             case .image(let content):
                 .media(MediaAttachment(
                     kind: .image, body: message.body, source: ref(content.source),
-                    width: content.info?.width.map(Int.init), height: content.info?.height.map(Int.init)))
+                    width: content.info?.width.map(Int.init), height: content.info?.height.map(Int.init),
+                    mimeType: content.info?.mimetype, size: content.info?.size.map(Int.init),
+                    thumbnail: content.info?.thumbnailSource.map(ref), blurhash: content.info?.blurhash))
             case .video(let content):
                 .media(MediaAttachment(
                     kind: .video, body: message.body, source: ref(content.source),
                     width: content.info?.width.map(Int.init), height: content.info?.height.map(Int.init),
                     mimeType: content.info?.mimetype, size: content.info?.size.map(Int.init), duration: content.info?.duration,
-                    thumbnail: content.info?.thumbnailSource.map(ref)))
+                    thumbnail: content.info?.thumbnailSource.map(ref), blurhash: content.info?.blurhash))
             case .audio(let content):
                 .media(MediaAttachment(
                     kind: .audio, body: message.body, source: ref(content.source),

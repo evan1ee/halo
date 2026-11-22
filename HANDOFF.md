@@ -13,13 +13,13 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log` and [docs/CODEBASE_REVIEW.md](docs/CODEBASE_REVIEW.md) §13.
-- **Full-screen zoomable & swipeable media viewer (`MEDIA_ATTACHMENTS FR-1`, this push on `main`):**
-  - Added reusable `ZoomableImageView` (`UIScrollView`-backed pinch-to-zoom 1x–5x + double-tap 2.5x zoom) in `HaloDesignSystem`.
-  - Upgraded `TimelineView` with a full-screen swipeable `TimelinePhotoViewer` (`TabView(.page)`, zoom, caption, counter, Share/Export; unit-tested in `TimelineViewModelTests.photoViewerItemsAndExport`) and upgraded `GlobalMediaDetailSheet` in `GlobalMediaGalleryView` with swipe-between-media and `ZoomableImageView`.
+- **BlurHash media placeholders (`MEDIA_ATTACHMENTS FR-1`, this push on `main`):**
+  - Added pure-Swift, zero-dependency `BlurHashDecoder` + `BlurHashDecoderTests` and `MediaAttachment.blurhash` in `HaloDomain`.
+  - Mapped `blurhash`, `mimeType`, `size`, and `thumbnail` from SDK `ImageInfo` / `VideoInfo` in `TimelineMapper`, added `RGBAPlaceholderImage` in `HaloDesignSystem`, and wired BlurHash placeholders into `TimelineView` (`ThumbnailView`) and `GlobalMediaGalleryView` (`GlobalMediaGridTile`).
+- **Full-screen zoomable & swipeable media viewer (`18d01d7`, `MEDIA_ATTACHMENTS FR-1`):**
+  - Added reusable `ZoomableImageView` in `HaloDesignSystem`, full-screen swipeable `TimelinePhotoViewer` in `FeatureTimeline`, and swipeable `GlobalMediaDetailSheet` in `GlobalMediaGalleryView`.
 - **M9 Encrypted room export (`65977d1`, D32 / R-P2-EXPORT):**
   - Added `RoomExportMessage`, `RoomExportDocument`, `RoomExportEncryptor`, `CryptoKitRoomExportEncryptor` (PBKDF2-HMAC-SHA256 + AES-256-GCM, `one.mbm.halo.room_export.v1`), `MatrixRoomPort.exportMessages`, and `RoomEncryptedExportView` under Room Info → Media & Files.
-- **V-MEDIA-1 SDK media retention policy & open-question closures (`1a8d05d`):**
-  - Wired `Client.setMediaRetentionPolicy(policy:)` in `MatrixSessionPort.adopt` with D55 defaults (1 GiB / 50 MiB / 30 days / daily cleanup) and closed `V-MEDIA-1` & `V-SQL-2` in `docs/OPEN_QUESTIONS.md`.
 
 ## 3. Key decisions
 Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D83), [docs/adr/README.md](docs/adr/README.md).
@@ -31,9 +31,9 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D83), [docs/adr/RE
 - **D83 (founder, refines D34 & D50):** global media gallery is surfaced as a preset virtual room entry in the room list (not a tab); purely a local UI entry, not a Matrix room (no server room ID, no sync state, excluded from unread counts and badge).
 
 ## 4. Modified files (this push)
-- **HaloDesignSystem:** `ios/Packages/HaloDesignSystem/Sources/HaloDesignSystem/ZoomableImageView.swift`.
-- **FeatureTimeline:** `ios/Packages/Features/FeatureTimeline/Sources/FeatureTimeline/TimelineViewModel.swift`, `ios/Packages/Features/FeatureTimeline/Sources/FeatureTimeline/TimelineView.swift`, `ios/Packages/Features/FeatureTimeline/Tests/FeatureTimelineTests/TimelineViewModelTests.swift`.
-- **FeatureRoomList:** `ios/Packages/Features/FeatureRoomList/Sources/FeatureRoomList/GlobalMediaGalleryView.swift`.
+- **HaloDomain:** `ios/Packages/HaloDomain/Sources/HaloDomain/Media/BlurHashDecoder.swift`, `ios/Packages/HaloDomain/Tests/HaloDomainTests/BlurHashDecoderTests.swift`, `ios/Packages/HaloDomain/Sources/HaloDomain/Timeline/TimelineModels.swift`.
+- **HaloMatrixAdapter & HaloDesignSystem:** `ios/Packages/HaloMatrixAdapter/Sources/HaloMatrixAdapter/TimelineMapper.swift`, `ios/Packages/HaloDesignSystem/Sources/HaloDesignSystem/RGBAPlaceholderImage.swift`.
+- **FeatureTimeline & FeatureRoomList:** `ios/Packages/Features/FeatureTimeline/Sources/FeatureTimeline/TimelineViewModel.swift`, `ios/Packages/Features/FeatureTimeline/Sources/FeatureTimeline/TimelineView.swift`, `ios/Packages/Features/FeatureRoomList/Sources/FeatureRoomList/GlobalMediaGalleryView.swift`.
 - **Docs:** `HANDOFF.md`.
 
 ## 5. Outstanding issues

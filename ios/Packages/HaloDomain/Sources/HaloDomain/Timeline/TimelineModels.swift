@@ -168,11 +168,15 @@ public struct MediaAttachment: Sendable, Equatable {
     public let duration: TimeInterval?
     /// A still picture the sender attached to a video (`info.thumbnail_url`), when there is one.
     public let thumbnail: MediaRef?
+    /// Optional BlurHash placeholder string (`xyz.amorgan.blurhash`), when provided by the sender (MEDIA_ATTACHMENTS FR-1).
+    public let blurhash: String?
 
     public init(
         kind: MediaKind, body: String, source: MediaRef?, width: Int? = nil, height: Int? = nil,
-        mimeType: String? = nil, size: Int? = nil, duration: TimeInterval? = nil, thumbnail: MediaRef? = nil
+        mimeType: String? = nil, size: Int? = nil, duration: TimeInterval? = nil, thumbnail: MediaRef? = nil,
+        blurhash: String? = nil
     ) {
+        self.blurhash = blurhash
         self.thumbnail = thumbnail
         self.kind = kind
         self.body = body

@@ -654,7 +654,14 @@ private struct ThumbnailView: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("media-failed")
             } else {
-                Rectangle().fill(.secondary.opacity(0.2)).overlay(ProgressView())
+                ZStack {
+                    if let hash = image.blurhash, let decoded = BlurHashDecoder.decode(hash, width: 24, height: 24) {
+                        RGBAPlaceholderImage(width: decoded.width, height: decoded.height, rgba: decoded.rgba)
+                    } else {
+                        Rectangle().fill(.secondary.opacity(0.2))
+                    }
+                    ProgressView()
+                }
             }
             #else
             Rectangle().fill(.secondary.opacity(0.2))

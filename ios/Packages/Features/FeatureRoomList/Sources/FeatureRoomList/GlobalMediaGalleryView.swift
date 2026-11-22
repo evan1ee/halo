@@ -285,17 +285,23 @@ private struct GlobalMediaGridTile: View {
     }
 
     private var placeholder: some View {
-        VStack(spacing: 4) {
-            Image(systemName: symbol)
-                .font(.title3)
-                .foregroundStyle(.secondary)
-            if entry.item.attachment.kind == .file || entry.item.attachment.kind == .audio {
-                Text(entry.item.attachment.body)
-                    .font(.caption2)
+        ZStack {
+            if let hash = entry.item.attachment.blurhash,
+               let decoded = BlurHashDecoder.decode(hash, width: 24, height: 24) {
+                RGBAPlaceholderImage(width: decoded.width, height: decoded.height, rgba: decoded.rgba)
+            }
+            VStack(spacing: 4) {
+                Image(systemName: symbol)
+                    .font(.title3)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 6)
+                if entry.item.attachment.kind == .file || entry.item.attachment.kind == .audio {
+                    Text(entry.item.attachment.body)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 6)
+                }
             }
         }
     }
