@@ -94,6 +94,18 @@ final class HaloUITests: XCTestCase {
         }
 
         XCTAssertTrue(app.navigationBars["Chats"].waitForExistence(timeout: 15))
-        try app.performAccessibilityAudit()
+        try audit(app)
+    }
+
+    /// Cold-launch performance metric (ROADMAP M15, SR-06, NFR-1).
+    /// Opt-in via `HALO_RUN_PERF_TESTS=1` so routine `prepush.sh` runs stay fast.
+    @MainActor
+    func testLaunchPerformanceMetric() throws {
+        guard ProcessInfo.processInfo.environment["HALO_RUN_PERF_TESTS"] == "1" else {
+            throw XCTSkip("Set HALO_RUN_PERF_TESTS=1 to run XCTApplicationLaunchMetric.")
+        }
+        measure(metrics: [XCTApplicationLaunchMetric()]) {
+            XCUIApplication().launch()
+        }
     }
 }

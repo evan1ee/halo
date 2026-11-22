@@ -1,6 +1,6 @@
 # Roadmap
 
-**Where we are (2026-11-22):** functional roadmap M0–M10, **M11–M14** (Design-system foundation, D85 Navigation & IA, Core-flow polish, Accessibility & localisation + `HaloUITests`), and **ADR-0022 steps 1–4** (two-manifest `HaloCore` + `HaloApple` layout, D86) + Tech Debt Phases A–C + TD-03 are done (founder-blocked items: HANDOFF §5). Next: **M15 Ship readiness** (+ remaining Tech Debt Phase D: TD-04, TD-08). Evidence: [design/UX_AUDIT.md](design/UX_AUDIT.md); bar: "Ship-ready definition" below.
+**Where we are (2026-11-22):** all autonomous engineering work across **M0–M15** (including **ADR-0022 steps 1–4**, D84–D86, and **Tech Debt Phases A–D**) is complete! Only founder (`👤`) and physical-device (`📱`) items remain (listed in `HANDOFF.md` §5). Evidence: [design/UX_AUDIT.md](design/UX_AUDIT.md); bar: "Ship-ready definition" below.
 
 Capacity: solo, part-time (D24). Estimates are calendar weeks at ~15 h/week and are **[ASSUMPTION]**s. Each milestone ends with its exit criteria **verified by tests** (AGENTS.md §0, §12).
 
@@ -54,11 +54,11 @@ Ordered work queue for the autonomous loop ([development/AUTONOMOUS_LOOP.md](dev
 - [x] String Catalog `ios/App/Resources/Localizable.xcstrings` with English source language and plural rules (`%lld unread messages`, `%lld members`), validated by `RoomRowAccessibilityTests.stringCatalogIsValid`.
 - [ ] 👤 Q-L10N: languages for the external beta (recommendation: English only for Beta 1, then the founder's languages).
 
-**M15 Ship readiness — external TestFlight and App Store** (exit: AC-UX-11, AC-UX-12 and the "Ship-ready definition" below; fixes SR-01, SR-03…SR-06)
-- [ ] `PrivacyInfo.xcprivacy` for the app and the NSE (required-reason APIs actually used, no tracking, no collected data beyond the account on the user's homeserver); checked against the archive's privacy report.
-- [ ] In-app feedback: Settings → "Send feedback" opens a mail/share sheet with an optional diagnostics `.zip` (never automatic; PRIVACY §1); TestFlight screenshot feedback mentioned in What's New.
-- [ ] "What's New" sheet once per marketing version (local flag), and an About screen with privacy policy and support links.
-- [ ] Performance budgets on a physical device with XCTest metrics: cold start to an interactive room list ≤ 1 s for 300 rooms (NFR-1), timeline scroll hitch ratio < 5 ms/s (NFR-2), memory under 200 MB in a media-heavy room; MetricKit hang and launch reports reviewed.
+**M15 Ship readiness — external TestFlight and App Store** (exit: AC-UX-11, AC-UX-12 and the "Ship-ready definition" below; fixes SR-01, SR-05; done except 👤/📱 items)
+- [x] `PrivacyInfo.xcprivacy` for the app (`ios/App/Resources/`) and the NSE (`ios/NotificationService/`) declaring required-reason APIs (`UserDefaults`, `FileTimestamp`, `DiskSpace`), `NSPrivacyTracking = false`, no collected data; validated in `AcknowledgementsTests.privacyManifestsAreValid`.
+- [x] In-app feedback: Settings → "Send feedback" (`FeedbackSheetView`) opens a share sheet with optional, opt-in diagnostics `.zip` (never automatic; PRIVACY §1); TestFlight screenshot feedback mentioned in What's New.
+- [x] "What's New" sheet (`WhatsNewView`) shown once per marketing version via `PreferencesPort.lastSeenWhatsNewVersion`, plus About section links (Privacy policy, Support, What's New).
+- [ ] 📱 Performance budgets on a physical device with XCTest metrics (`testLaunchPerformanceMetric` in `HaloUITests` ready; cold start ≤ 1 s for 300 rooms NFR-1, scroll hitch < 5 ms/s NFR-2, memory < 200 MB, MetricKit reports need physical device).
 - [ ] 👤 Q-APPSTORE: name, subtitle, category, age rating, keywords; screenshots (6.9" and 6.3", light and dark) generated from the M14 UI test with fixture data; support and privacy-policy pages.
 - [ ] 👤 Legal review (D38), export compliance (V-LEGAL), privacy nutrition labels (PRIVACY §5), Q-SDK-BUILD and Q-CRASH decided before external testers.
 - [ ] 👤📱 Beta 1 (internal TestFlight) → Beta 2 (external TestFlight, ≤ 25 trusted testers) → 1.0 App Store, per the release plan below.
@@ -67,7 +67,7 @@ Ordered work queue for the autonomous loop ([development/AUTONOMOUS_LOOP.md](dev
 - [x] Phase A with M11: `.swift-format` + `.swiftlint.yml` enforced by `prepush.sh` (TD-06, D62); `@unchecked Sendable` justifications added (TD-14); roadmap queue slimmed to one-line items with M0–M10 history in the appendix below (TD-09).
 - [x] Phase B with M11–M12: `PreferencesPort` + observable `PreferencesStore`, no `AppPreferences()` in `ios/App/` (TD-02); `AppRoot` split into `ios/App/Composition/*Assembly.swift` (≤ 300 lines) and `SettingsView` built from `SettingsConfiguration` model factory (TD-10).
 - [x] Phase C with M13: `HaloErrorCopy` user-facing error map (TD-01/UX-15); `ActionState` double-tap guard helper (TD-07, unit-tested); split `TimelineViewModel`/`TimelineView` below 500 lines per file (TD-11); removed 1.5 s sleep workaround in room details (TD-13).
-- [ ] Phase D with M14–M15: `HaloUITests` (TD-03); manual-dispatch macOS build workflow before TestFlight uploads, revisiting D71 (TD-04); `bot_action` table for pending ticks (TD-08).
+- [x] Phase D with M14–M15: `HaloUITests` (TD-03); manual-dispatch macOS build workflow `.github/workflows/macos-build.yml` (TD-04); `bot_action` table (`v9-bot-action` + `BotActionStore` + tests, TD-08).
 - [x] ADR-0022 (module layout v2, TD-16) accepted by the founder (2026-11-22, D86); its four steps are queued in M11, M12, M13 and "ADR-0022 step 4" above.
 - [ ] 👤 TD-12 (R-16 field encryption) and 📤 TD-15 (upstream SDK filter / queued raw sends).
 

@@ -40,6 +40,11 @@ public final class PreferencesStore {
         set { update { $0.appearance = newValue } }
     }
 
+    public var lastSeenWhatsNewVersion: String? {
+        get { snapshot.lastSeenWhatsNewVersion }
+        set { update { $0.lastSeenWhatsNewVersion = newValue } }
+    }
+
     /// Reloads from the backing port (e.g. if another view wrote via legacy `UserDefaults`).
     public func reload() {
         snapshot = port.load()

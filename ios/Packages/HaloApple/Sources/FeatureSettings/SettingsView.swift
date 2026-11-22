@@ -152,6 +152,8 @@ public struct SettingsView: View {
     @State private var mediaPreviewsLoaded = false
     @State private var mediaPreviewsFailed = false
     @State private var confirmingSignOut = false
+    @State private var showingFeedback = false
+    @State private var showingWhatsNew = false
     @State private var privateReceipts: Bool
     @State private var sendTypingNotices: Bool
     @State private var privacyBlur: Bool
@@ -361,6 +363,16 @@ public struct SettingsView: View {
             }
             Section("About") {
                 LabeledContent("Version", value: "\(version) (\(build))")
+                Button { showingWhatsNew = true } label: { Label("What's New", systemImage: "sparkles") }
+                    .accessibilityIdentifier("whats-new")
+                Button { showingFeedback = true } label: { Label("Send feedback", systemImage: "envelope") }
+                    .accessibilityIdentifier("send-feedback")
+                if let privacyURL = URL(string: "https://halo.mbm.one/privacy") {
+                    Link(destination: privacyURL) { Label("Privacy policy", systemImage: "hand.raised") }
+                }
+                if let supportURL = URL(string: "https://halo.mbm.one/support") {
+                    Link(destination: supportURL) { Label("Support", systemImage: "questionmark.circle") }
+                }
                 NavigationLink { AcknowledgementsView() } label: { Label("Acknowledgements", systemImage: "doc.text") }
                     .accessibilityIdentifier("acknowledgements")
             }
@@ -410,6 +422,12 @@ public struct SettingsView: View {
         .confirmationDialog("Sign out of Halo?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
             Button("Sign out", role: .destructive, action: onSignOut)
             Button("Cancel", role: .cancel) {}
+        }
+        .sheet(isPresented: $showingFeedback) {
+            FeedbackSheetView(version: version, build: build, exportDiagnosticsZip: exportDiagnosticsZip)
+        }
+        .sheet(isPresented: $showingWhatsNew) {
+            WhatsNewView(version: version) { showingWhatsNew = false }
         }
     }
 }

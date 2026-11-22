@@ -14,6 +14,7 @@ public struct UserDefaultsPreferencesStore: PreferencesPort, Sendable {
     public static let privacyBlurKey = "halo.privacyBlur"
     public static let appearanceKey = "halo.appearance"
     public static let botSendersKey = "halo.botSenders"
+    public static let lastSeenWhatsNewVersionKey = "halo.lastSeenWhatsNewVersion"
 
     public init(defaults: UserDefaults = .standard) {
         box = Box(defaults: defaults)
@@ -26,7 +27,8 @@ public struct UserDefaultsPreferencesStore: PreferencesPort, Sendable {
             sendTypingNotices: d.object(forKey: Self.sendTypingNoticesKey) as? Bool ?? true,
             privacyBlur: d.object(forKey: Self.privacyBlurKey) as? Bool ?? true,
             botSenders: d.stringArray(forKey: Self.botSendersKey) ?? [],
-            appearance: AppAppearance(rawValue: d.string(forKey: Self.appearanceKey) ?? "") ?? .system
+            appearance: AppAppearance(rawValue: d.string(forKey: Self.appearanceKey) ?? "") ?? .system,
+            lastSeenWhatsNewVersion: d.string(forKey: Self.lastSeenWhatsNewVersionKey)
         )
     }
 
@@ -37,5 +39,6 @@ public struct UserDefaultsPreferencesStore: PreferencesPort, Sendable {
         d.set(snapshot.privacyBlur, forKey: Self.privacyBlurKey)
         d.set(snapshot.botSenders, forKey: Self.botSendersKey)
         d.set(snapshot.appearance.rawValue, forKey: Self.appearanceKey)
+        d.set(snapshot.lastSeenWhatsNewVersion, forKey: Self.lastSeenWhatsNewVersionKey)
     }
 }

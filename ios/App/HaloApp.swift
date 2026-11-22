@@ -41,6 +41,7 @@ private struct RootView: View {
     @State private var newChat: NewChatViewModel?
     @State private var roomInfo: RoomDetailsViewModel?
     @State private var showingNotificationPriming = false
+    @State private var showingWhatsNew = false
     @State private var ownName = ""
     @State private var ownAvatar: Data?
     @AppStorage("halo.onboarding.notificationPrimingShown") private var notificationPrimingShown = false
@@ -211,7 +212,17 @@ private struct RootView: View {
             case .notDetermined where !notificationPrimingShown:
                 showingNotificationPriming = true
             default:
-                break
+                let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+                if root.preferences.lastSeenWhatsNewVersion != currentVersion {
+                    showingWhatsNew = true
+                }
+            }
+        }
+        .sheet(isPresented: $showingWhatsNew) {
+            let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+            WhatsNewView(version: currentVersion) {
+                root.preferences.lastSeenWhatsNewVersion = currentVersion
+                showingWhatsNew = false
             }
         }
         .sheet(isPresented: $showingNotificationPriming) {
