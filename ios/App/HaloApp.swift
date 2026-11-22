@@ -159,17 +159,6 @@ private struct RootView: View {
                         }
                         ToolbarItemGroup(placement: .topBarTrailing) {
                             moreMenu
-                            Button {
-                                newChat = root.makeNewChat { room in
-                                    newChat = nil
-                                    router.openRoom(room)
-                                }
-                            } label: {
-                                Image(systemName: "square.and.pencil")
-                            }
-                            .accessibilityLabel("New chat")
-                            .accessibilityIdentifier("compose-chat")
-                            .keyboardShortcut("n", modifiers: .command)
                         }
                     }
                     .onChange(of: root.roomList.content) {
@@ -355,6 +344,12 @@ private struct RootView: View {
         }
     }
 
+    /// Opens (creating once) the private Saved Messages room straight from the menu.
+    private func openSavedMessages() async {
+        let model = root.makeNewChat { room in router.openRoom(room) }
+        await model.openSavedMessages()
+    }
+
     private var moreMenu: some View {
         Menu {
             Section("Filter") {
@@ -374,11 +369,21 @@ private struct RootView: View {
             }
             Section {
                 Button {
-                    router.push(.stickerLibrary)
+                    Task { await openSavedMessages() }
                 } label: {
-                    Label("Stickers", systemImage: "sparkles.rectangle.stack")
+                    Label("Saved Messages", systemImage: "bookmark.fill")
                 }
-                .accessibilityIdentifier("more-stickers")
+                .accessibilityIdentifier("savedMessages")
+                Button {
+                    newChat = root.makeNewChat { room in
+                        newChat = nil
+                        router.openRoom(room)
+                    }
+                } label: {
+                    Label("New chat", systemImage: "square.and.pencil")
+                }
+                .accessibilityIdentifier("compose-chat")
+                .keyboardShortcut("n", modifiers: .command)
                 if !root.preferences.botSenders.isEmpty {
                     Button {
                         router.push(.activity)
