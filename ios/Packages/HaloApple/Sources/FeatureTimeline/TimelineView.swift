@@ -18,11 +18,22 @@ public struct TimelineView: View {
     @State private var headerVisible = false
     /// History is only loaded after the opening scroll: rows prepended before it would push the landing row out of place.
     @State private var landed = false
-    /// The list stays invisible while it jumps to its landing row, so opening a room doesn't flash or visibly jump.
-    @State private var revealed = false
     /// Whether the unread marker row and the newest row are on screen (the marker is above the viewport when it isn't, and the newest is).
-    @State private var markerVisible = true
+    /// Off screen until the marker row reports itself visible: a lazy list never lays out a row it lands far below, so that
+    /// row never reports going away either (with `true` here the pill never showed after 40 unread messages).
+    @State private var markerVisible = UnreadPill.markerOnScreenAtOpen
     @State private var bottomVisible = false
+    /// The list follows its newest row (also when older history arrives above it) until the user scrolls away themselves.
+    @State private var pinnedToBottom = true
+    /// The list is drawn once it has been placed at the newest row (a frame or two), so it never shows its top first and then
+    /// jumps. No spinner: a short fallback timer shows it anyway if that never happens.
+    @State private var listPlaced = false
+    /// The list is being scrolled (a drag, a fling, an animated scroll): it is not following the newest row then.
+    @State private var scrollMoving = false
+    /// Automatic history paging only runs with the newest row on screen (a short room that needs filling) or once the user has
+    /// scrolled; right after history lands above the newest row the "Load earlier" row is briefly visible and paging then would
+    /// move the content again.
+    private var pagingAllowed: Bool { bottomVisible || !pinnedToBottom }
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -47,7 +58,8 @@ public struct TimelineView: View {
         Group {
             switch model.content {
             case .opening:
-                ProgressView()
+                // No spinner when a room opens: it is normally there within a moment. Only a slow open (a poor network) gets one.
+                DelayedProgressView()
             case .failed(let message):
                 ContentUnavailableView {
                     Label("Couldn't open room", systemImage: "exclamationmark.triangle")
@@ -75,7 +87,7 @@ public struct TimelineView: View {
                         // screen is full or the start marker arrives; opening a room never loads it all.
                         .onAppear { headerVisible = true }
                         .onDisappear { headerVisible = false }
-                        .task(id: PaginationTrigger(rows: rows.count, ready: headerVisible && landed)) { if headerVisible, landed, paginationError == nil { await model.loadEarlier() } }
+                        .task(id: PaginationTrigger(rows: rows.count, ready: headerVisible && landed && pagingAllowed)) { if headerVisible, landed, pagingAllowed, paginationError == nil { await model.loadEarlier() } }
                     }
                     ForEach(rows) { row in
                         RowView(
@@ -91,13 +103,7 @@ public struct TimelineView: View {
                             // The pill's target: whether the first row that was unread at open is on screen.
                             .onScrollVisibilityChange { if row.id == model.unreadMarkerID { markerVisible = $0 } }
                             // D6: a row counts as seen when at least half of it is on screen; the 0.5 s dwell is in the view model.
-                            .onScrollVisibilityChange(threshold: 0.5) {
-                                model.rowVisibility(row, isVisible: $0)
-                                if row.id == rows.last?.id {
-                                    bottomVisible = $0
-                                    if landed { model.setAtBottom($0) }
-                                }
-                            }
+                            .onScrollVisibilityChange(threshold: 0.5) { model.rowVisibility(row, isVisible: $0) }
                             .onDisappear { model.rowVisibility(row, isVisible: false) }
                             .listRowSeparator(.hidden, edges: .all)
                             // Messages of one group sit close together; a new sender or a gap gets more room above. Stickers and
@@ -106,42 +112,76 @@ public struct TimelineView: View {
                     }
                 }
                 .listStyle(.plain)
-                .opacity(revealed || rows.isEmpty ? 1 : 0)
-                .overlay { if !revealed && !rows.isEmpty { ProgressView() } }
+                .opacity(listPlaced || rows.isEmpty ? 1 : 0)
                 .task {
-                    // Never leave the list hidden if landing doesn't complete (for example a room that stays offline).
-                    try? await Task.sleep(for: .seconds(2))
-                    revealed = true
+                    try? await Task.sleep(for: .milliseconds(600))
+                    listPlaced = true
                 }
                 .environment(\.defaultMinListRowHeight, 0)  // rows are as tall as their content, so a group reads as one
                 .listSectionSeparator(.hidden)
                 .listRowSeparatorTint(.clear)
                 .defaultScrollAnchor(.bottom)
+                // "At the bottom" comes from the scroll geometry, not from one row's visibility: that flag could stay true after
+                // rows were added above the newest row and then hide that the list had moved away from the bottom.
+                // While the list follows the newest row and nothing is scrolling it, any change that leaves it short of the bottom
+                // scrolls it back: history arriving above, a row that grows (a reaction), the keyboard, and a lazy list replacing
+                // estimated row heights with real ones after the opening scroll (it then drifts up by itself; seen in S10 scroll
+                // test). Any scroll movement — a drag, a fling, a tap on the status bar, an animated jump — stops the following.
+                .onScrollGeometryChange(for: BottomGap.self) { geometry in
+                    BottomGap(
+                        contentHeight: geometry.contentSize.height, bottomInset: geometry.contentInsets.bottom,
+                        visibleMaxY: geometry.visibleRect.maxY)
+                } action: { _, value in
+                    let atBottom = value.isAtBottom
+                    if atBottom != bottomVisible {
+                        bottomVisible = atBottom
+                        if landed { model.setAtBottom(atBottom) }
+                    }
+                    if atBottom {
+                        pinnedToBottom = true
+                    } else if scrollMoving {
+                        pinnedToBottom = false
+                    } else if pinnedToBottom, let last = rows.last?.id {
+                        proxy.scrollTo(last, anchor: .bottom)
+                    }
+                }
+                .onScrollPhaseChange { _, phase in scrollMoving = phase == .interacting || phase == .decelerating || phase == .animating }
                 .accessibilityIdentifier("timeline")
-                // A newer last row (own echo or incoming message) scrolls into view. Earlier history prepended at the
-                // top doesn't change the last row, so reading old messages isn't disturbed.
-                // Opening a room: the first unread message goes to the top of the screen, else the newest row to the bottom.
+                // Opening a room: the newest row goes to the bottom. `.defaultScrollAnchor(.bottom)` already opens the list there, so
+                // when that row is on screen nothing is scrolled and the list never visibly moves.
                 // `.task(id:)` also runs for a value that was already set when this list first appeared (onChange wouldn't).
                 .task(id: model.landingRow) {
                     guard let landing = model.landingRow else { return }
-                    try? await Task.sleep(for: .milliseconds(150))  // let the list lay the rows out first
+                    try? await Task.sleep(for: .milliseconds(80))  // let the list lay the rows out first
                     // A lazy list estimates the height of rows it hasn't laid out, so one jump to a row far below the visible
-                    // part lands short (seen in the simulator with 14 unread messages); jumping again after each layout converges.
-                    // Keep going until the target is really on screen (a long room needs more than four jumps), at most ~2 s.
-                    for attempt in 0..<16 {
-                        if attempt >= 3, model.landingIsUnread ? markerVisible : bottomVisible { break }
+                    // part lands short; jumping again after each layout converges (at most ~2 s).
+                    var confirmed = 0
+                    for _ in 0..<16 {
+                        if Task.isCancelled { return }
+                        // Placed only when the newest row is still there one check later: right after the first scroll the list
+                        // replaces estimated row heights with real ones and can move again.
+                        if model.landingIsUnread ? markerVisible : bottomVisible {
+                            confirmed += 1
+                            if confirmed >= 2 { break }
+                            try? await Task.sleep(for: .milliseconds(60))
+                            continue
+                        }
+                        confirmed = 0
                         // Landing at the bottom means the newest row now: history can still be arriving in batches after
                         // the landing row was chosen (seen on a reopened room), and that row would leave the list mid-history.
                         let target = model.landingIsUnread ? landing : (model.lastRowID ?? landing)
                         proxy.scrollTo(target, anchor: model.landingIsUnread ? .top : .bottom)
                         try? await Task.sleep(for: .milliseconds(120))
                     }
-                    model.landingShown()
-                    revealed = true
+                    listPlaced = true
+                    // Settle first: `landingShown()` clears `landingRow`, which changes this task's id and cancels it.
                     try? await Task.sleep(for: .milliseconds(250))  // let the scroll settle before history may load
                     landed = true
+                    model.landingShown()
                     model.setAtBottom(bottomVisible)
                 }
+                // A newer last row (own echo or incoming message) scrolls into view when the user is at the bottom. Earlier
+                // history prepended at the top doesn't change the last row, so reading old messages isn't disturbed.
                 .task(id: rows.last?.id) {
                     // A new last row scrolls into view when already at the bottom or when the user just sent it; when
                     // scrolled up reading history, stay put so the "↓ N new" pill lets the user jump down on their own (TIMELINE §6).
@@ -153,6 +193,7 @@ public struct TimelineView: View {
                 }
                 .onChange(of: model.jumpRequest) { _, target in
                     guard let target else { return }
+                    pinnedToBottom = false  // a reply jump leaves the bottom: new rows must not pull the reader back down
                     withAnimation { proxy.scrollTo(target, anchor: .center) }
                     model.jumpHandled()
                     Task {
@@ -162,8 +203,12 @@ public struct TimelineView: View {
                 }
                 // FR-4: the marker is above the viewport once the user is at the bottom and the marker is out of sight.
                 .overlay(alignment: .top) {
-                    if let marker = model.unreadMarkerID, landed, !markerVisible, bottomVisible {
-                        Button { withAnimation { proxy.scrollTo(marker, anchor: .top) } } label: {
+                    if let marker = model.unreadMarkerID,
+                       UnreadPill.isShown(hasMarker: true, landed: landed, markerOnScreen: markerVisible, atBottom: bottomVisible) {
+                        Button {
+                            pinnedToBottom = false
+                            withAnimation { proxy.scrollTo(marker, anchor: .top) }
+                        } label: {
                             Label("Jump to unread", systemImage: "arrow.up")
                                 .font(.footnote.bold()).padding(.horizontal, 12).padding(.vertical, 6)
                                 .background(.regularMaterial, in: Capsule())
@@ -178,6 +223,7 @@ public struct TimelineView: View {
                     if landed, !model.isAtBottom, let last = rows.last?.id {
                         Button {
                             model.setAtBottom(true)
+                            pinnedToBottom = true
                             withAnimation { proxy.scrollTo(last, anchor: .bottom) }
                         } label: {
                             if model.newSinceDetached > 0 {
@@ -451,9 +497,49 @@ struct Composer: View {
 }
 
 
+/// TIMELINE FR-4 and D95: the "Jump to unread" pill shows once the room has landed at the newest message and the first
+/// unread message is above the screen.
+enum UnreadPill {
+    /// The marker row counts as off screen until it reports itself visible.
+    static let markerOnScreenAtOpen = false
+
+    static func isShown(hasMarker: Bool, landed: Bool, markerOnScreen: Bool, atBottom: Bool) -> Bool {
+        hasMarker && landed && !markerOnScreen && atBottom
+    }
+}
+
+/// How far the end of the list is below its visible part (≤ 0 at the bottom), and the content height, so a change of either
+/// reaches the scroll-geometry action. The visible rect reaches under the composer, so the end is the content plus the bottom
+/// inset; measured against the content alone, the newest row could sit half behind the composer and count as at the bottom.
+struct BottomGap: Equatable {
+    let gap: Double
+    let contentHeight: Double
+
+    init(contentHeight: Double, bottomInset: Double, visibleMaxY: Double) {
+        gap = contentHeight + bottomInset - visibleMaxY
+        self.contentHeight = contentHeight
+    }
+
+    var isAtBottom: Bool { gap <= 8 }
+}
+
 struct PaginationTrigger: Hashable {
     let rows: Int
     let ready: Bool
+}
+
+/// A spinner that appears only when the wait passes one second.
+private struct DelayedProgressView: View {
+    @State private var shown = false
+
+    var body: some View {
+        ProgressView()
+            .opacity(shown ? 1 : 0)
+            .task {
+                try? await Task.sleep(for: .seconds(1))
+                shown = true
+            }
+    }
 }
 
 /// "View source" for a text message: who sent it, which event, and the plain and HTML bodies exactly as received.

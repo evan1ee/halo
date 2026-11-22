@@ -82,6 +82,17 @@ public final class MatrixTimelinePort: TimelinePort {
     /// Whether `room` has a prepared timeline waiting (tests).
     func isWarm(_ room: RoomID) -> Bool { warmState.withLock { $0.timelines[room] != nil } }
 
+    /// Requests the first page of history and waits for it for at most 400 ms (it keeps loading afterwards).
+    private static func firstPage(of timeline: Timeline) async {
+        let page = Task { _ = try? await timeline.paginateBackwards(numEvents: 20) }
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await page.value }
+            group.addTask { try? await Task.sleep(for: .milliseconds(400)) }
+            await group.next()
+            group.cancelAll()
+        }
+    }
+
     public func open(room id: RoomID) async throws(HaloError) -> any TimelineSession {
         let room = try await session.room(id)
         let own = try await session.ownUserID()
@@ -96,8 +107,10 @@ public final class MatrixTimelinePort: TimelinePort {
         do {
             let timeline = try await room.timeline()
             // Classic sync (D73) doesn't pre-fill a timeline the way sliding sync did: it starts empty and fills from the
-            // server. One page is requested at once, in the background; its events arrive through `items()`.
-            Task { _ = try? await timeline.paginateBackwards(numEvents: 20) }
+            // server. Like a warm timeline, the first page is put in place before the first snapshot, so history never
+            // arrives above the newest row right after the opening scroll. Bounded, so a room that needs the network
+            // doesn't hold the open up; the page keeps loading in the background then.
+            await Self.firstPage(of: timeline)
             return MatrixTimelineSession(room: room, timeline: timeline, ownUserID: own, release: release)
         } catch {
             release()
@@ -117,7 +130,7 @@ public final class MatrixTimelinePort: TimelinePort {
             reportUtds: true)
         do {
             let timeline = try await room.timelineWithConfiguration(configuration: config)
-            Task { _ = try? await timeline.paginateBackwards(numEvents: 20) }
+            await Self.firstPage(of: timeline)
             return MatrixTimelineSession(room: room, timeline: timeline, ownUserID: own)
         } catch {
             throw ErrorMapper.map(error)

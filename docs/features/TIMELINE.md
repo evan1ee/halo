@@ -6,7 +6,7 @@
 Show a room's history correctly and smoothly, and report what the user has actually seen.
 
 ## 2. User stories
-- I open a room and land at the first unread message (or the bottom if all is read).
+- I open a room and land at the newest message; if some messages were unread, the first of them stays marked and a "Jump to unread" button takes me up to it (D95).
 - I scroll back through history smoothly; media loads progressively.
 - I see who has read what, edits, reactions, replies, and why a message can't be decrypted.
 
@@ -25,9 +25,10 @@ Show a room's history correctly and smoothly, and report what the user has actua
 
 ## 4. Non-functional requirements
 60 fps scrolling (NFR-2); a diff batch is applied within one frame; image decoding off the main thread; animated stickers pause off-screen.
+Opening a room shows no spinner (one appears only if opening takes over 1 s) and no frame of the room's top before it lands at the newest message (D95). A row keeps its height once laid out: a photo's box has the size the event announces (4:3 when it announces none) and the picture fills it, because a lazy list that re-measures a row while scrolling to the newest message loses its place (seen in S10). While the list follows the newest message, history arriving above, a row that grows (a reaction) and the list settling its estimated row heights after the opening scroll keep the newest row fully in view above the composer ("at the bottom" counts the inset under the composer; seen in S10 scroll test, where the landing stopped with the newest message half hidden); any scroll movement (a drag, a fling, jumping to unread or to a reply) stops the following, so nothing pulls the reader back down. The "Jump to unread" pill counts the first unread message as off screen until its row reports itself visible, because a room that lands 40 messages below it never lays that row out.
 
 ## 5. User flows
-Open → position (first unread / bottom) → scroll → events become visible → intents → the list badge clears.
+Open → position (newest message; first unread marked) → scroll → events become visible → intents → the list badge clears.
 
 ## 6. State transitions
 `Opening → Positioned → Live`; `Live → PaginatingBack → Live`; `Live → Detached` (scrolled far up; new events show a "↓ N new" pill).
@@ -42,7 +43,7 @@ Open → position (first unread / bottom) → scroll → events become visible �
 Pagination failure (retry button) · media download failure (retry tile) · timeline reset by the SDK (re-position on the same event).
 
 ## 10. Edge cases
-Gaps in history · an event-focused jump to a very old event · own message from another device · a redaction of an item in view · a room with only state events · rapid diffs during scrolling.
+A photo without a size (4:3 box, cropped) · a short room (fits on screen) · gaps in history · an event-focused jump to a very old event · own message from another device · a redaction of an item in view · a room with only state events · rapid diffs during scrolling.
 
 ## 11. Acceptance criteria
 - AC-TL-1 Opening a room with unread messages positions at the read-marker line.
