@@ -55,7 +55,8 @@ public struct TimelineView: View {
         Group {
             switch model.content {
             case .opening:
-                ProgressView()
+                // No spinner when a room opens: it is normally there within a moment. Only a slow open (a poor network) gets one.
+                DelayedProgressView()
             case .failed(let message):
                 ContentUnavailableView {
                     Label("Couldn't open room", systemImage: "exclamationmark.triangle")
@@ -126,17 +127,22 @@ public struct TimelineView: View {
                     if landed { model.setAtBottom(atBottom) }
                     if atBottom { pinnedToBottom = true } else if userScrolling { pinnedToBottom = false }
                 }
+                // A row that grows while the list follows the bottom (a reaction under the newest message) keeps the newest row in view.
+                .onScrollGeometryChange(for: Double.self) { $0.contentSize.height } action: { old, new in
+                    guard landed, pinnedToBottom, !userScrolling, new > old, let last = rows.last?.id else { return }
+                    proxy.scrollTo(last, anchor: .bottom)
+                }
                 .onScrollPhaseChange { _, phase in userScrolling = phase == .interacting || phase == .decelerating }
                 // Older rows arrived above the newest one while the list follows the bottom: keep the newest row in place. Keyed on
                 // the row count (the first row's id does not change when history is added above it).
                 .onChange(of: rows.count) { _, _ in
-                    guard pinnedToBottom, let last = rows.last?.id else { return }
+                    guard pinnedToBottom, !userScrolling, let last = rows.last?.id else { return }
                     proxy.scrollTo(last, anchor: .bottom)
                     Task { @MainActor in
                         var confirmed = 0
                         for _ in 0..<16 {
                             try? await Task.sleep(for: .milliseconds(80))
-                            guard pinnedToBottom else { return }
+                            guard pinnedToBottom, !userScrolling else { return }
                             if bottomVisible { confirmed += 1; if confirmed >= 2 { return } } else { confirmed = 0 }
                             proxy.scrollTo(last, anchor: .bottom)
                         }
@@ -180,6 +186,7 @@ public struct TimelineView: View {
                 }
                 .onChange(of: model.jumpRequest) { _, target in
                     guard let target else { return }
+                    pinnedToBottom = false  // a reply jump leaves the bottom: new rows must not pull the reader back down
                     withAnimation { proxy.scrollTo(target, anchor: .center) }
                     model.jumpHandled()
                     Task {
@@ -190,7 +197,10 @@ public struct TimelineView: View {
                 // FR-4: the marker is above the viewport once the user is at the bottom and the marker is out of sight.
                 .overlay(alignment: .top) {
                     if let marker = model.unreadMarkerID, landed, !markerVisible, bottomVisible {
-                        Button { withAnimation { proxy.scrollTo(marker, anchor: .top) } } label: {
+                        Button {
+                            pinnedToBottom = false
+                            withAnimation { proxy.scrollTo(marker, anchor: .top) }
+                        } label: {
                             Label("Jump to unread", systemImage: "arrow.up")
                                 .font(.footnote.bold()).padding(.horizontal, 12).padding(.vertical, 6)
                                 .background(.regularMaterial, in: Capsule())
@@ -205,6 +215,7 @@ public struct TimelineView: View {
                     if landed, !model.isAtBottom, let last = rows.last?.id {
                         Button {
                             model.setAtBottom(true)
+                            pinnedToBottom = true
                             withAnimation { proxy.scrollTo(last, anchor: .bottom) }
                         } label: {
                             if model.newSinceDetached > 0 {
@@ -481,6 +492,20 @@ struct Composer: View {
 struct PaginationTrigger: Hashable {
     let rows: Int
     let ready: Bool
+}
+
+/// A spinner that appears only when the wait passes one second.
+private struct DelayedProgressView: View {
+    @State private var shown = false
+
+    var body: some View {
+        ProgressView()
+            .opacity(shown ? 1 : 0)
+            .task {
+                try? await Task.sleep(for: .seconds(1))
+                shown = true
+            }
+    }
 }
 
 /// "View source" for a text message: who sent it, which event, and the plain and HTML bodies exactly as received.

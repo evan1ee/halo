@@ -25,6 +25,7 @@ Show a room's history correctly and smoothly, and report what the user has actua
 
 ## 4. Non-functional requirements
 60 fps scrolling (NFR-2); a diff batch is applied within one frame; image decoding off the main thread; animated stickers pause off-screen.
+Opening a room shows no spinner (one appears only if opening takes over 1 s) and no frame of the room's top before it lands at the newest message (D95). A row keeps its height once laid out: a photo's box has the size the event announces (4:3 when it announces none) and the picture fills it, because a lazy list that re-measures a row while scrolling to the newest message loses its place (seen in S10). While the list follows the newest message, history arriving above and a row that grows (a reaction) keep the newest row in view; once the reader scrolls, jumps to unread or to a reply, nothing pulls the list back down.
 
 ## 5. User flows
 Open → position (newest message; first unread marked) → scroll → events become visible → intents → the list badge clears.
@@ -42,7 +43,7 @@ Open → position (newest message; first unread marked) → scroll → events be
 Pagination failure (retry button) · media download failure (retry tile) · timeline reset by the SDK (re-position on the same event).
 
 ## 10. Edge cases
-Gaps in history · an event-focused jump to a very old event · own message from another device · a redaction of an item in view · a room with only state events · rapid diffs during scrolling.
+A photo without a size (4:3 box, cropped) · a short room (fits on screen) · gaps in history · an event-focused jump to a very old event · own message from another device · a redaction of an item in view · a room with only state events · rapid diffs during scrolling.
 
 ## 11. Acceptance criteria
 - AC-TL-1 Opening a room with unread messages positions at the read-marker line.

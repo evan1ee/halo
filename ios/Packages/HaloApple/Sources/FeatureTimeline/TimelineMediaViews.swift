@@ -18,7 +18,14 @@ struct ThumbnailSize: ViewModifier {
         if isSticker {
             content.frame(width: 160, height: 160)  // FR-8 allows up to 256 pt; 160 keeps a sticker from filling the screen
         } else {
-            content.aspectRatio(aspectRatio ?? 4 / 3, contentMode: .fit).frame(maxWidth: 240)
+            // The box has the announced shape (4:3 when the event has none) whether the placeholder or the picture is in it, so a
+            // row never changes height when its picture loads: a lazy list that has to re-measure a row while it is being scrolled
+            // to the newest message drops its measurements and lands near the top of the room (seen in S10).
+            Color.clear
+                .aspectRatio(aspectRatio ?? 4 / 3, contentMode: .fit)
+                .frame(maxWidth: 240)
+                .overlay { content }
+                .contentShape(.rect)
         }
     }
 }
@@ -52,7 +59,8 @@ struct ThumbnailView: View {
             } else if let animated {
                 AnimatedStickerView(data: animated).allowsHitTesting(false)
             } else if let data, let uiImage = UIImage(data: data) {
-                Image(uiImage: uiImage).resizable().scaledToFit()
+                // A photo fills its box (cropped when the event announced no size; the viewer shows all of it); a sticker fits.
+                Image(uiImage: uiImage).resizable().aspectRatio(contentMode: isSticker ? .fit : .fill)
             } else if failed {
                 Button { failed = false; attempt += 1 } label: {
                     VStack(spacing: 6) {
