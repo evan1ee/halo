@@ -118,11 +118,11 @@
 		0F8074686EE2413DD3A76477 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		26BC78D89D8CCE4267C675AB /* HaloApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloApp.swift; sourceTree = "<group>"; };
 		364A4573FF5AC59B3F1FC07A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		37DF13476047C551C8A5B76A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		37DF13476047C551C8A5B76A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		3E457C3DEF961D641C793165 /* HaloCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HaloCore; path = Packages/HaloCore; sourceTree = SOURCE_ROOT; };
 		3E813B4DC62204A281544127 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
-		3F2C170BE176BC90FE577F40 /* HaloUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = HaloUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		40A03C813EBE2E6108907E04 /* HaloShareExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = HaloShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		3F2C170BE176BC90FE577F40 /* HaloUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HaloUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		40A03C813EBE2E6108907E04 /* HaloShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HaloShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		42E309E4074E74D663AD652D /* HaloNotificationService.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HaloNotificationService.entitlements; sourceTree = "<group>"; };
 		42F80F910CDB8774DE53E357 /* NSEMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NSEMetrics.swift; sourceTree = "<group>"; };
 		46A5693D428F4FBDB6D39B2E /* Halo.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Halo.entitlements; sourceTree = "<group>"; };
@@ -130,11 +130,11 @@
 		4BDC8814C4AFFBC100878182 /* HaloShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HaloShareExtension.entitlements; sourceTree = "<group>"; };
 		51E7411CD28B45D20D086BF9 /* HaloWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HaloWidgetExtension.entitlements; sourceTree = "<group>"; };
 		5312809511AE2A016CFF2B93 /* Info-Debug.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "Info-Debug.plist"; sourceTree = "<group>"; };
-		76ED106E261A2A8948DB12F6 /* HaloNotificationService.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = HaloNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		76ED106E261A2A8948DB12F6 /* HaloNotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HaloNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		7B1C7551E74F66AFB802B40D /* HaloWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloWidgets.swift; sourceTree = "<group>"; };
-		7B1FFC724B23663BCBD3B43E /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		7B1FFC724B23663BCBD3B43E /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		83605BC369A2723B3B4D357A /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
-		8C6A146CA948A68B3C27D0B0 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		8C6A146CA948A68B3C27D0B0 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		8F90361C223365FE98857942 /* ChatsAssembly.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatsAssembly.swift; sourceTree = "<group>"; };
 		9372E57DDA275246046E5388 /* SessionAssembly.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionAssembly.swift; sourceTree = "<group>"; };
 		97AB108BB6E92BAD05A9F942 /* AppRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRoot.swift; sourceTree = "<group>"; };
@@ -144,10 +144,10 @@
 		C02129F24C211154F50ADD8A /* Beta.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Beta.xcconfig; sourceTree = "<group>"; };
 		C16D71590F85662C76E571D5 /* SettingsAssembly.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsAssembly.swift; sourceTree = "<group>"; };
 		C39E1DD7E1B18BA46D103E0D /* NotificationsAssembly.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsAssembly.swift; sourceTree = "<group>"; };
-		CA7ADFA3DD899A545A8E13A0 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		DA3E1B8904AC903EF6240A91 /* Halo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Halo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CA7ADFA3DD899A545A8E13A0 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		DA3E1B8904AC903EF6240A91 /* Halo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Halo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DA48BA22FDC622EB8DE52D0C /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
-		DF7826C388270691B130BFEC /* HaloWidgetExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = HaloWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		DF7826C388270691B130BFEC /* HaloWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HaloWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E3D88711EB462A1A12171D80 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		E564C282FF13C235D2277912 /* BotsAssembly.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotsAssembly.swift; sourceTree = "<group>"; };
 		E7755C85ABFB47907E05E9EA /* OpenChatIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenChatIntent.swift; sourceTree = "<group>"; };
@@ -655,6 +655,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				DEVELOPMENT_TEAM = RN9SLQ2637;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -671,6 +672,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = WidgetExtension/HaloWidgetExtension.entitlements;
+				DEVELOPMENT_TEAM = RN9SLQ2637;
 				INFOPLIST_FILE = WidgetExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Halo Widgets";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -719,6 +721,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = RN9SLQ2637;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -751,6 +754,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = App/Support/Halo.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = RN9SLQ2637;
 				INFOPLIST_FILE = App/Support/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Halo;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
@@ -770,6 +774,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				DEVELOPMENT_TEAM = RN9SLQ2637;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -786,6 +791,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = NotificationService/HaloNotificationService.entitlements;
+				DEVELOPMENT_TEAM = RN9SLQ2637;
 				INFOPLIST_FILE = NotificationService/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Halo Notifications";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -802,6 +808,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				DEVELOPMENT_TEAM = RN9SLQ2637;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -821,6 +828,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = App/Support/Halo.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = RN9SLQ2637;
 				INFOPLIST_FILE = App/Support/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Halo;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
@@ -840,6 +848,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = NotificationService/HaloNotificationService.entitlements;
+				DEVELOPMENT_TEAM = RN9SLQ2637;
 				INFOPLIST_FILE = NotificationService/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Halo Notifications";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -888,6 +897,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = RN9SLQ2637;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -911,6 +921,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/HaloShareExtension.entitlements;
+				DEVELOPMENT_TEAM = RN9SLQ2637;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Halo;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -927,6 +938,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/HaloShareExtension.entitlements;
+				DEVELOPMENT_TEAM = RN9SLQ2637;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Halo;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -946,6 +958,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = App/Support/Halo.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = RN9SLQ2637;
 				INFOPLIST_FILE = "App/Support/Info-Debug.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Halo;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
@@ -997,6 +1010,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = RN9SLQ2637;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -1020,6 +1034,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = WidgetExtension/HaloWidgetExtension.entitlements;
+				DEVELOPMENT_TEAM = RN9SLQ2637;
 				INFOPLIST_FILE = WidgetExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Halo Widgets";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1036,6 +1051,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/HaloShareExtension.entitlements;
+				DEVELOPMENT_TEAM = RN9SLQ2637;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Halo;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1052,6 +1068,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = NotificationService/HaloNotificationService.entitlements;
+				DEVELOPMENT_TEAM = RN9SLQ2637;
 				INFOPLIST_FILE = NotificationService/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Halo Notifications";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1068,6 +1085,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = WidgetExtension/HaloWidgetExtension.entitlements;
+				DEVELOPMENT_TEAM = RN9SLQ2637;
 				INFOPLIST_FILE = WidgetExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Halo Widgets";
 				LD_RUNPATH_SEARCH_PATHS = (
