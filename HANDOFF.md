@@ -12,6 +12,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log`.
+- **Accent colour is system blue (`fix/accent-blue`, founder request):** `Accent` and the app `AccentColor` changed from Halo indigo to blue (#0066CC light, #2E90FF dark, high-contrast variants #0040DD / #409CFF; a little darker/lighter than Apple's #007AFF / #0A84FF so every text pair keeps 4.5:1); avatar palette drops indigo and purple; `DESIGN_SYSTEM.md` updated. Not checked on a device.
 - **Chat-list menu layout (`fix/more-menu-layout`, founder request):** the New chat button left the toolbar and is now in the ⋯ menu with Saved Messages (moved out of the New chat sheet) under the filters; Stickers left the menu (still in Settings). `HaloApp.swift` (`moreMenu`, `openSavedMessages`), `NewChatView.swift`, `docs/ROADMAP.md`. Not checked on a device. ⌘N still opens New chat.
 - **M16 drag and drop (`feat/m16-ipad-drop`):** a conversation accepts dropped pictures (pending photos, like the picker), files (sent at once, ≤ 50 MiB) and text/links (appended to the draft); `TimelineDropModifier` + `DropClassifier` in `FeatureTimeline/TimelineDrop.swift`, tests in `TimelineDropTests`. Dragging items out is not done.
 - **M16 keyboard shortcuts:** ⌘N new chat, ⌘, settings, ⌘F search, ⌘1–⌘6 filters on the chat list (`HaloApp.swift`); built for iPad, not exercised with a hardware keyboard.
@@ -40,6 +41,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D86), [docs/adr/RE
 - **D84 / D85 / D86 (ADR-0022):** Apple-native north star; single `NavigationStack` shell; module layout v2 (all 4 steps complete).
 
 ## 4. Modified files (this push)
+- **Accent blue:** both `Accent*.colorset` files, `HaloColor.swift`, `AvatarCircle.swift`, `docs/design/DESIGN_SYSTEM.md`, `HANDOFF.md`.
 - **Menu layout:** `ios/App/HaloApp.swift`, `FeatureRoomList/NewChatView.swift`, `docs/ROADMAP.md`, `HANDOFF.md`.
 - **M16 chat-list widget:** `HaloDomain/Widgets/{UnreadChatsSnapshot,UnreadWidgetSnapshot}.swift` + test, `ios/WidgetExtension/HaloWidgets.swift`, `docs/{DECISION_LOG,ROADMAP}.md`, `docs/security/PRIVACY.md`.
 - **M16 share send:** `ios/ShareExtension/*`, `ios/project.yml`, `HaloDomain/Share/ShareTarget.swift`, `HaloApplication/Share/{SendConfirmation,ShareCoordinator}.swift`, `HaloMatrixAdapter/Share/MatrixShareTargetPort.swift`, `FeatureRoomList/Share*.swift`, tests, `docs/adr/0023-*`, `docs/{DECISION_LOG,ROADMAP,OPEN_QUESTIONS}.md`, `docs/architecture/MODULE_BOUNDARIES.md`.

@@ -23,7 +23,7 @@ import SwiftUI
 /// A round avatar: the image when `imageData` decodes, otherwise the initial of `name` in a stable soft tint.
 /// Loading the bytes is the caller's job.
 public struct AvatarCircle: View {
-    private static let palette: [Color] = [.blue, .teal, .indigo, .purple, .pink, .orange, .green, .mint]
+    private static let palette: [Color] = [.blue, .teal, .pink, .orange, .green, .mint]
 
     private let name: String
     private let imageData: Data?
