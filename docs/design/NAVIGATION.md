@@ -12,12 +12,15 @@
 
 The tab badge on Chats equals the app badge (same `BadgeCalculator` result).
 
+**[DECISION D83]** Do **not** add a Photos/Media tab. The **Global Media Gallery** (D34, R-P2-GALLERY) is surfaced as a **preset virtual room entry** inside the Room list. It is a local navigation entry only—**not** a Matrix room (no server room ID, no Matrix sync state, no unread count, no read receipts, never contributes to the app badge). Tapping it pushes the Global Media Gallery screen on the Chats `NavigationStack`.
+
 ```mermaid
 flowchart TB
   Root[RootView] -->|signed out| Onb[Onboarding / Login]
   Root -->|signed in| Tabs
   subgraph Tabs[TabView]
     Chats --> RL[Room list] --> TL[Timeline] --> RD[Room details] --> MB[Members] --> PR[Profile]
+    RL --> MG["Global Media Gallery (preset entry, non-Matrix)"]
     TL --> MV[Media viewer]
     TL --> TH["Thread (P2)"]
     RL --> NC[New chat]

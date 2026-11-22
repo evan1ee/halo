@@ -76,7 +76,7 @@ Legend: ✅ active · ⛔ superseded (see the replacing entry)
 | D31 | Bookmarks: private "Saved" room | ✅ |
 | D32 | Backup: on-demand encrypted export | ✅ |
 | D33 | Saved message = copy + origin header + permalink + origin ids | ✅ |
-| D34 | Global media gallery from a local media index | ✅ |
+| D34 | Global media gallery from a local media index (entry point revised by D83) | ✅ |
 
 ## Quality, licensing, process
 | ID | Decision | Status |
@@ -125,3 +125,4 @@ These were stated as decisions inside individual documents without an ID; they a
 | D80 | **Order read state by event identity and timeline order, not timestamps (revises D47 and D72, R-06, 2026-11-21):** open timelines pick receipt candidates by timeline index (`TimelineReadTracker`) and target `Timeline.latestEventId()` at the tail (clearing trailing non-row events such as poll votes, R-01 leftover); `read_intent` adds monotonic `timeline_order` (migration v8) so equal-ms and clock-skewed later events advance cleanly; E1 compares event IDs when both are known and yields (`INTENT_STALE`) once a sent receipt is confirmed by the server/sync yet counts remain non-zero. See ADR-0020. | ✅ ADR-0020 |
 | D81 | **Remove native sliding-sync gate at login (R-17, 2026-11-21):** since Halo uses classic `/sync` (`slidingSyncVersionBuilder(.none)`, D74), server discovery and password login no longer require `supportsNativeSlidingSync` (amends AUTHENTICATION FR-5). | ✅ |
 | D82 | **App icon badge = total unread message count across rooms needing attention (founder decision, supersedes D5, 2026-11-21):** `BadgeCalculator.badge(_ states)` sums `RoomReadState.badgeCount` for rooms with `attention == true` (`allMessages`: `max(notify, highlight, 1)`, `mentionsAndKeywords`: `max(highlight, 1)`, muted marked-unread / invite: `1`). `AttentionCache` stores per-room counts + timestamp so the NSE recomputes from GRDB `notification_record` without raw increments (D9, D65 preserved). See ADR-0021. | ✅ ADR-0021 |
+| D83 | **Global media gallery as a preset virtual room entry in the room list, not a tab (founder decision, refines D34 & D50, 2026-11-22):** do not use a tab to organize or display photos/media. Instead, present the global media gallery as a preset room entry in the room list. This preset entry is purely a local UI entry—**not** a Matrix room (no server room ID, no Matrix sync state, excluded from unread counts, read receipts, and the app badge). Tapping it opens the global media gallery view to display and organize media across rooms ([design/NAVIGATION.md](design/NAVIGATION.md), [features/ROOM_LIST.md](features/ROOM_LIST.md)). | ✅ |

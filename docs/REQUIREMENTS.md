@@ -60,7 +60,7 @@ Full design: [matrix/UNREAD_STATE.md](matrix/UNREAD_STATE.md). Must be prevented
 | R-P2-ACT | Bot Activity tab with task extraction and tracking | [features/BOT_ACTIVITY.md](features/BOT_ACTIVITY.md) |
 | R-P2-SEARCH | Local message search (D30) | [ROADMAP.md](ROADMAP.md) M8 |
 | R-P2-SAVED | Saved messages room (D31, D33) | ROADMAP M8 |
-| R-P2-GALLERY | Global media gallery (D34) | ROADMAP M9 |
+| R-P2-GALLERY | Global media gallery via a preset non-Matrix room entry in the room list (D34, D83) | [design/NAVIGATION.md](design/NAVIGATION.md), [features/ROOM_LIST.md](features/ROOM_LIST.md), ROADMAP M9 |
 | R-P2-EXPORT | Encrypted room export (D32) | ROADMAP M9 |
 | R-P2-THREADS | Threads with per-thread receipts | ROADMAP M10 |
 | R-P2-CALLS | MatrixRTC calls | ROADMAP (later) |

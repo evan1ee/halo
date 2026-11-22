@@ -20,6 +20,7 @@ Show every conversation, sorted by activity, with indicators you can trust.
 - FR-6 Swipe actions: mark read (`ReadMarkerPort.markRoomRead(room)` + clear the flag — see READ_RECEIPTS §1), mark unread (`setMarkedUnread(true)`), mute (mode), favourite (`Room.set_is_favourite` **[VERIFIED F-FFI-18]**).
 - FR-7 Sync indicator in the header (`sync_indicator`).
 - FR-8 Pull-to-refresh is **not** provided (sync is continuous); a manual "Reconcile" exists under Diagnostics.
+- FR-9 **Preset Global Media Gallery entry** **[DECISION D83]**: the room list presents a preset virtual room entry for the global media gallery (D34, R-P2-GALLERY) instead of a dedicated tab. It is strictly a local UI entry—**not** a Matrix room (no server room ID, no Matrix sync state, excluded from `ReadStateCoordinator` / unread counts / app badge, and does not expose Matrix room actions such as mark read/unread, mute, room details, or leave). Tapping it opens the global media gallery view to display and organize media across rooms.
 
 ## 4. Non-functional requirements
 NFR-1 (cold start ≤ 1 s for 300 rooms); diff application without full reloads; stable row identity (room id).
