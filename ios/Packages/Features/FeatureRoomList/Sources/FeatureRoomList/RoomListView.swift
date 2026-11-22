@@ -134,12 +134,24 @@ public struct RoomListView<SearchResults: View>: View {
                             }
                             .foregroundStyle(HaloColor.textPrimary)
                                 .swipeActions(edge: .leading) {
-                                    Button("Read") { Task { await model.markRead(row.id) } }.tint(HaloColor.accent)
-                                    Button(row.isFavourite ? "Unfavourite" : "Favourite") { Task { await model.toggleFavourite(row) } }.tint(HaloColor.warning)
+                                    Button { Task { await model.markRead(row.id) } } label: {
+                                        Label("Read", systemImage: "envelope.open")
+                                    }
+                                    .tint(HaloColor.accent)
+                                    Button { Task { await model.toggleFavourite(row) } } label: {
+                                        Label(row.isFavourite ? "Unfavourite" : "Favourite", systemImage: row.isFavourite ? "star.slash" : "star.fill")
+                                    }
+                                    .tint(HaloColor.warning)
                                 }
                                 .swipeActions(edge: .trailing) {
-                                    Button("Unread") { Task { await model.markUnread(row.id) } }.tint(HaloColor.attention)
-                                    Button(row.isMuted ? "Unmute" : "Mute") { Task { await model.toggleMute(row) } }.tint(HaloColor.textSecondary)
+                                    Button { Task { await model.markUnread(row.id) } } label: {
+                                        Label("Unread", systemImage: "envelope.badge")
+                                    }
+                                    .tint(HaloColor.attention)
+                                    Button { Task { await model.toggleMute(row) } } label: {
+                                        Label(row.isMuted ? "Unmute" : "Mute", systemImage: row.isMuted ? "bell" : "bell.slash")
+                                    }
+                                    .tint(HaloColor.textSecondary)
                                 }
                                 .contextMenu {
                                     if let onRoomInfo {
@@ -168,6 +180,7 @@ public struct RoomListView<SearchResults: View>: View {
                     searchResults
                 }
                 .contentMargins(.top, 8, for: .scrollContent)
+                .refreshable { await model.refresh() }
                 .accessibilityIdentifier("room-list")
                 .overlay {
                     if trimmedQuery.isEmpty && visibleRows.isEmpty && !showMediaGallery {

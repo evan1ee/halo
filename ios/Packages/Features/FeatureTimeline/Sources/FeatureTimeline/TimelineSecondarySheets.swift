@@ -134,7 +134,7 @@ private final class EmojiUITextField: UITextField {
     }
 }
 
-struct NativeEmojiKeyboardField: UIViewRepresentable {
+private struct NativeEmojiKeyboardField: UIViewRepresentable {
     let placeholder: String
     let onEmoji: (String) -> Void
 

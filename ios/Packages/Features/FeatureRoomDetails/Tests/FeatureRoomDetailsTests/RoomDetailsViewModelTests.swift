@@ -276,20 +276,16 @@ extension RoomDetailsViewModelTests {
         #expect(model.actionError == nil)
     }
 
-    @Test("when initial permissions are false on a newly created room, load re-reads once after the sync delay")
-    func rechecksMissingPermissions() async throws {
+    @Test("refresh picks up updated permissions without a sleep workaround (TD-13)")
+    func refreshUpdatesMissingPermissions() async throws {
         let id = try RoomID("!new:x.org")
         let initial = RoomDetails(id: id, name: "New", topic: nil, isDirect: false, isEncrypted: true, joinedMemberCount: 1, notificationMode: .allMessages, canEditDetails: false, canInvite: false)
         let updated = RoomDetails(id: id, name: "New", topic: nil, isDirect: false, isEncrypted: true, joinedMemberCount: 1, notificationMode: .allMessages, canEditDetails: true, canInvite: true)
         let port = FakeRoomPort(details: initial)
-        let model = RoomDetailsViewModel(port: port, room: id, sleep: { _ in
-            port.setDetails(updated)
-        })
+        let model = RoomDetailsViewModel(port: port, room: id)
         await model.load()
-        for _ in 0..<200 {
-            if case .loaded(let d, _) = model.content, d.canEditDetails && d.canInvite { break }
-            await Task.yield()
-        }
+        port.setDetails(updated)
+        await model.refresh()
         guard case .loaded(let finalDetails, _) = model.content else { Issue.record("not loaded"); return }
         #expect(finalDetails.canEditDetails && finalDetails.canInvite)
     }

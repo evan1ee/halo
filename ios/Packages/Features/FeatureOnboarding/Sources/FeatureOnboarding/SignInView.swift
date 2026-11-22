@@ -7,6 +7,7 @@ public struct SignInView: View {
     private enum Field { case server, username, password }
     @Bindable private var model: AuthViewModel
     @FocusState private var focus: Field?
+    @State private var showingHomeserverHelp = false
 
     public init(model: AuthViewModel) { self.model = model }
 
@@ -24,17 +25,26 @@ public struct SignInView: View {
                 case .launching, .busy:
                     ProgressView().padding(.top, 8)
                 case .server:
-                    Text("Enter your Matrix homeserver to sign in.")
-                        .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    Text("Fast, private Matrix messaging with an honest unread badge.")
+                        .font(HaloTypography.meta).foregroundStyle(HaloColor.textSecondary).multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
-                TextField("Server (example.org)", text: $model.server)
-                    .plainInput(.URL).textFieldStyle(.roundedBorder)
-                    .focused($focus, equals: .server)
-                    .submitLabel(.continue)
-                    .onSubmit { if model.canSubmitServer { Task { await model.submitServer() } } }
-                Button { Task { await model.submitServer() } } label: { Text("Continue").frame(maxWidth: .infinity) }
-                    .buttonStyle(.borderedProminent).controlSize(.large)
-                    .disabled(!model.canSubmitServer)
+                    TextField("Homeserver (e.g. matrix.org)", text: $model.server)
+                        .plainInput(.URL).textFieldStyle(.roundedBorder)
+                        .focused($focus, equals: .server)
+                        .submitLabel(.continue)
+                        .onSubmit { if model.canSubmitServer { Task { await model.submitServer() } } }
+                        .accessibilityLabel("Homeserver or Matrix ID")
+                    DisclosureGroup("What's a homeserver?", isExpanded: $showingHomeserverHelp) {
+                        Text("Matrix works like email: your account lives on a homeserver (the part after the colon in @you:example.org). Enter that domain to sign in.")
+                            .font(HaloTypography.caption)
+                            .foregroundStyle(HaloColor.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, HaloSpacing.xs)
+                    }
+                    .font(HaloTypography.meta)
+                    Button { Task { await model.submitServer() } } label: { Text("Continue").frame(maxWidth: .infinity) }
+                        .buttonStyle(.borderedProminent).controlSize(.large)
+                        .disabled(!model.canSubmitServer)
             case .credentials(let host, let supportsPassword, let supportsOIDC):
                 Text("Sign in to \(host)").font(.subheadline).foregroundStyle(.secondary)
                 if supportsOIDC {

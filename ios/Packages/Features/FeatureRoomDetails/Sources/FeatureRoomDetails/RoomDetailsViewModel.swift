@@ -166,30 +166,13 @@ public final class RoomDetailsViewModel: Identifiable {
     }
 
     /// The members shown under a heading; administrators carry a badge.
-    /// If power levels haven't reached the SDK on a newly created room yet (`!canEditDetails && !canInvite`),
-    /// re-checks once after 1.5 s so the edit/invite controls appear without requiring a manual pull-to-refresh.
     public func load() async {
         content = .loading
         do throws(HaloError) {
             let details = try await port.details(room)
             let members = try await port.members(room, limit: requestedMembers)
             content = .loaded(details, members: members)
-            if !details.canEditDetails, !details.canInvite {
-                let sleep = self.sleep
-                Task { [weak self] in
-                    try? await sleep(.milliseconds(1500))
-                    guard !Task.isCancelled else { return }
-                    await self?.refreshQuietly()
-                }
-            }
         } catch { content = .failed(Self.text(error)) }
-    }
-
-    private func refreshQuietly() async {
-        guard case .loaded = content else { return }
-        guard let details = try? await port.details(room),
-              let members = try? await port.members(room, limit: requestedMembers) else { return }
-        content = .loaded(details, members: members)
     }
 
     /// Reads the details and members again without the loading screen (pull to refresh), so permissions that reached the SDK

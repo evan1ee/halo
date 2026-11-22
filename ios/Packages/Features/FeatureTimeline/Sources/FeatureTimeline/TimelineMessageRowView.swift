@@ -20,6 +20,8 @@ struct RowView: View {
     /// A sent message is removed for everyone and can't be brought back: ask first.
     @State private var confirmingDelete = false
     @State private var showingOriginal = false
+    @State private var reactionHaptic = 0
+    @State private var replyHaptic = 0
 
     /// Long-press menu for confirmed messages: quick reactions, and edit/delete for own messages.
     @ViewBuilder private var actions: some View {
@@ -200,6 +202,24 @@ struct RowView: View {
         }
         .sheet(isPresented: $showingReaders) { ReadersView(row: row, model: model) }
         .sheet(isPresented: $showingSource) { if let source = row.source { MessageSourceView(source: source) } }
+        .onTapGesture(count: 2) {
+            guard row.eventID != nil else { return }
+            reactionHaptic += 1
+            Task { await model.toggleReaction(on: row, key: "👍") }
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            if row.eventID != nil {
+                Button {
+                    replyHaptic += 1
+                    model.beginReply(row)
+                } label: {
+                    Label("Reply", systemImage: "arrowshape.turn.up.left")
+                }
+                .tint(HaloColor.accent)
+            }
+        }
+        .haloFeedback(.reaction, trigger: reactionHaptic)
+        .haloFeedback(.swipeThreshold, trigger: replyHaptic)
         .confirmationDialog("Delete this message for everyone?", isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button("Delete", role: .destructive) { Task { await model.delete(row) } }
             Button("Cancel", role: .cancel) {}

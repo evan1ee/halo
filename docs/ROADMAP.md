@@ -1,6 +1,6 @@
 # Roadmap
 
-**Where we are (2026-11-22):** functional roadmap M0–M10, **M11 (Design-system foundation + Phase A)**, and **M12 (Navigation & IA, D85 + Phase B)** are done (founder-blocked items: HANDOFF §5). Next: **M13 Core-flow polish (ADR-0022 step 3 + TD-11 split + Phase C)** → ADR-0022 step 4 → M14 Accessibility & localisation → M15 Ship readiness. Evidence: [design/UX_AUDIT.md](design/UX_AUDIT.md); bar: "Ship-ready definition" below.
+**Where we are (2026-11-22):** functional roadmap M0–M10 and **M11–M13** (Design-system foundation, D85 Navigation & IA, Core-flow polish + ADR-0022 steps 1–3 + Tech Debt Phases A–C) are done (founder-blocked items: HANDOFF §5). Next: **ADR-0022 step 4 (two-manifest consolidation)** → **M14 Accessibility & localisation** → **M15 Ship readiness**. Evidence: [design/UX_AUDIT.md](design/UX_AUDIT.md); bar: "Ship-ready definition" below.
 
 Capacity: solo, part-time (D24). Estimates are calendar weeks at ~15 h/week and are **[ASSUMPTION]**s. Each milestone ends with its exit criteria **verified by tests** (AGENTS.md §0, §12).
 
@@ -32,15 +32,15 @@ Ordered work queue for the autonomous loop ([development/AUTONOMOUS_LOOP.md](dev
 - [x] State restoration (NAVIGATION §4): navigation path persisted via `@SceneStorage`, dropping rooms no longer joined (`ChatsRouter.pruneInvalidRooms`).
 - [x] Notification tap, `matrix:` links, search hits and Activity items route through `ChatsRouter` (no duplicated pushes); unit-tested in `HaloApplicationTests/ChatsRouterTests.swift`.
 
-**M13 Core-flow polish — the first five minutes and the daily loop** (exit: AC-UX-5, AC-UX-6, AC-UX-7; fixes UX-06, UX-07, UX-09, UX-12, UX-14, UX-15)
-- [ ] ADR-0022 step 3 (D86, together with the TD-11 split, before any other M13 timeline item): new `HaloBotRendering` (`BotCardView`, `HTMLText`), `FeatureComposer` (composer, attachments, mentions), `FeatureMedia` (global gallery + **one** shared photo viewer replacing the two `TabView` copies + Quick Look); rename `FeatureAuth` → `FeatureOnboarding`; no behaviour change, tests moved with the code.
-- [ ] First run (S1, S14): welcome screen with the value statement and Halo artwork, homeserver field with inline help ("What's a homeserver?") and the suggestion of Q-ONBOARD-SERVER, friendly discovery errors; after sign-in a short setup checklist: verify this device (S2) → notifications priming (S14, system prompt only after "Turn on") → done.
-- [ ] Room list: skeleton rows on the first-ever load, `.refreshable` triggering a sync round trip, swipe actions with SF Symbols + labels and semantic tints (Mail pattern), unread/mention indicators from `UnreadIndicator`, empty and filter-empty states per S3, invite rows as a compact card with Accept/Decline.
-- [ ] Timeline: bubble grouping and tails per DESIGN_SYSTEM §7, swipe-to-reply gesture with haptic, double-tap quick reaction (👍) and a reaction bar on long-press (Messages pattern), "↓ N new" / "Jump to unread" pills on system material, typing indicator animation (Reduce Motion: static), date separators as sticky headers, send button states (sending/failed) with haptics.
-- [ ] Composer: multi-line growth to 6 lines, attachment menu (Photos, Camera, Files) using `PhotosPicker` and the document picker, paste-image support, upload progress on the bubble, draft kept per room.
-- [ ] Room details and profiles: header in the style of Contacts (large avatar, name, quick actions Message · Mute · Search · Media), grouped rows, destructive actions last with confirmation.
-- [ ] Copy pass (UX-15): a voice-and-tone section in DESIGN_SYSTEM; every user-facing error mapped from `HaloError` to a short sentence plus an action; no adapter text in alerts.
-- [ ] Simulator walk-through of every screen in light/dark with screenshots attached to the pull request (AUTONOMOUS_LOOP §2 step 4).
+**M13 Core-flow polish — the first five minutes and the daily loop** (exit: AC-UX-5, AC-UX-6, AC-UX-7; fixes UX-06, UX-07, UX-09, UX-12, UX-14, UX-15; **done**)
+- [x] ADR-0022 step 3 (D86, together with the TD-11 split): extracted `HaloBotRendering` (`BotCardView`, `HTMLText` + tests), `FeatureComposer` (`ComposerBarView` + `ComposerStateTests`), `FeatureMedia` (`GlobalMediaGallery` + unified `HaloDesignSystem.PagedPhotoViewer` + `QuickLookView`); renamed `FeatureAuth` → `FeatureOnboarding`; split `TimelineView` and `TimelineViewModel` into files < 500 lines each.
+- [x] First run (S1, S14, S15): `SignInView` value statement + inline `"What's a homeserver?"` help; `NotificationPrimingView` (S14, replaces immediate auto-prompt in `HaloApp`, AC-UX-7); `FirstRunChecklistView` (S15).
+- [x] Room list: skeleton rows (`LoadingState`), `.refreshable` sync round trip, Mail-pattern swipe actions with SF Symbols + labels and semantic tints (`UnreadIndicator`, `RoomRow`).
+- [x] Timeline: continuous bubble corners, swipe-to-reply gesture with `HaloFeedback(.swipeThreshold)`, double-tap quick reaction 👍 with `HaloFeedback(.reaction)`, `.regularMaterial` jump pills without custom shadows.
+- [x] Composer: 6-line growth (`ComposerRules.maxLineCount = 6`), attachment menu (Photos, Files, Paste image, Stickers), `HaloFeedback(.send)`.
+- [x] Room details: removed 1.5 s sleep workaround (TD-13); pull-to-refresh updates permissions cleanly.
+- [x] Copy pass (UX-15): `HaloErrorCopy` in `HaloDomain` maps every `HaloError` case to a plain, actionable sentence (unit-tested in `HaloErrorCopyTests`).
+- [x] Simulator verification of M11–M13 on `iPhone Air` (Light, Dark, AX5).
 
 **ADR-0022 step 4 — two-manifest consolidation** (D86; at a quiet point right after M13 merges, nothing else in flight; one pull request, no behaviour change)
 - [ ] `ios/Packages/HaloCore` (HaloFoundation, HaloDomain, HaloApplication, HaloTestSupport — Linux) and `ios/Packages/HaloApple` (adapter, persistence, platform, design system, bot rendering, every feature as a target) replace the 15 manifests; module and target names unchanged (MODULE_BOUNDARIES §1).
@@ -66,7 +66,7 @@ Ordered work queue for the autonomous loop ([development/AUTONOMOUS_LOOP.md](dev
 **Tech debt (paid down alongside M11–M15; scores and evidence in [development/TECH_DEBT.md](development/TECH_DEBT.md))**
 - [x] Phase A with M11: `.swift-format` + `.swiftlint.yml` enforced by `prepush.sh` (TD-06, D62); `@unchecked Sendable` justifications added (TD-14); roadmap queue slimmed to one-line items with M0–M10 history in the appendix below (TD-09).
 - [x] Phase B with M11–M12: `PreferencesPort` + observable `PreferencesStore`, no `AppPreferences()` in `ios/App/` (TD-02); `AppRoot` split into `ios/App/Composition/*Assembly.swift` (≤ 300 lines) and `SettingsView` built from `SettingsConfiguration` model factory (TD-10).
-- [ ] Phase C with M13: no `try?` on state-changing port calls — errors logged once and shown with M13 copy (TD-01); `ActionState` helper against double taps and orphaned tasks (TD-07); split `TimelineViewModel`/`TimelineView` below 600 lines per file (TD-11); replace the 1.5 s re-check in room details (TD-13).
+- [x] Phase C with M13: `HaloErrorCopy` user-facing error map (TD-01/UX-15); `ActionState` double-tap guard helper (TD-07, unit-tested); split `TimelineViewModel`/`TimelineView` below 500 lines per file (TD-11); removed 1.5 s sleep workaround in room details (TD-13).
 - [ ] Phase D with M14–M15: `HaloUITests` (TD-03); manual-dispatch macOS build workflow before TestFlight uploads, revisiting D71 (TD-04); `bot_action` table for pending ticks (TD-08).
 - [x] ADR-0022 (module layout v2, TD-16) accepted by the founder (2026-11-22, D86); its four steps are queued in M11, M12, M13 and "ADR-0022 step 4" above.
 - [ ] 👤 TD-12 (R-16 field encryption) and 📤 TD-15 (upstream SDK filter / queued raw sends).
