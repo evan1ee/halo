@@ -5,7 +5,7 @@ Last updated: 2026-11-22 · Branch: `main` · PRs #1–#75 merged
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
-- **Roadmap / Autonomous Loop:** **ALL autonomous engineering work across M0–M15, ADR-0022 steps 1–4 (D86), and Tech Debt Phases A–D is complete!** Only founder (`👤`) and physical-device (`📱`) items remain (listed in §5).
+- **Roadmap / Autonomous Loop:** **ALL autonomous engineering work across M0–M16, ADR-0022 steps 1–4 (D86), and Tech Debt Phases A–D is complete!** Only founder (`👤`) and physical-device (`📱`) items remain (listed in §5).
 - **Milestones:** M0–M15 done except founder/device items (G-FFI/G-UNREAD/G-NSE confirmations, Beta/Release push gateway + TestFlight, 7-day AC-U8 soak, physical-device NFR-1/NFR-2/MetricKit run, Q-BRAND sign-in illustration, Q-ONBOARD-SERVER, Q-L10N, Q-APPSTORE, legal/export/privacy nutrition labels). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`).
 - **Checks (this branch):** `HALO_SIM="iPhone Air" scripts/prepush.sh` (`HaloCore` 165 tests, `HaloApple-Package` all 16 targets incl. `BotActionStoreTests` and `privacyManifestsAreValid`, `Halo-Debug` app build, `HaloUITests` with `performAccessibilityAudit()`, `validate-docs.sh`, `check-boundaries.sh`, `test_check_boundaries.py`, `check-design-tokens.sh`, `swiftlint --strict`, `gitleaks`).
 - **Last prepush (this push):** `HALO_SIM="iPhone Air" scripts/prepush.sh` (Halo closed in every simulator first): all steps passed, including `HaloUITests` (`testLaunchRootScreenPassesAccessibilityAudit` on the signed-in chat list, Focus banner and full list), `HaloCore` (182 tests), `HaloApple-Package` (incl. new `AvatarTests` contrast checks), `Halo-Debug` build, gitleaks and swiftlint.
@@ -13,6 +13,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log`.
+- **M16 iPad three-column layout (`main`, builds on D91):** on regular-width iPad (`RoomInfoPresentation.style(isPad:regularWidth:)`), Room info docks as a trailing `.inspector` third column (300–420 pt) toggled by the room title/avatar button or `⌘I`; compact Slide Over / Split View and iPhone keep the modal sheet. Tests: `ChatsRouterSplitTests.roomInfoPresentation`; `ROADMAP.md` updated. Not checked on a device.
 - **M16 Send-by-Siri (`main`, builds on D88):** `SendMessageIntent` ("Send a message to <chat> in Halo" / "Message <chat> in Halo") reuses the opt-in `ChatEntity` list, requests explicit Siri confirmation before sending, and runs through `SiriSendCoordinator` (restores session if woken in the background, sends via `TimelinePort`, waits briefly on `SendConfirmation` and reports confirmed vs queued). Tests: `SiriSendCoordinatorTests` (4 tests); `PRIVACY.md` §4b and `ROADMAP.md` updated. Not checked on a device.
 - **M16 drag items out of timeline (`main`):** messages (text, captions, notices, emotes), loaded photos (not stickers), and file attachments (≤ 50 MiB, via sanitized `downloadFileToTemp`) can be dragged out of a conversation (`TimelineDrag.swift`, `TimelineMessageRowView.swift`, `TimelineMediaViews.swift`, `TimelineViewModel+Actions.swift`). Tests: `TimelineDragTests` (5 tests). Not checked on a device.
 - **Timeline scroll follow-ups (`main`):** when older history pages prepend while scrolled up (e.g. after a fling to the top), `PrependedAnchor` re-anchors at the previous top row instead of jumping to the start of the newly inserted page (skipped before landing, while pinned to bottom, or during an active drag). Short rooms with no earlier history to load are anchored just above the composer via top scroll content margins (`ShortRoomAlignment`), without changing `contentSize.height`. Tests: `TimelineScrollHelpersTests` (7 tests); `docs/features/TIMELINE.md` updated. Not checked on a device.
@@ -60,6 +61,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D96), [docs/adr/RE
 - **D96:** the accessibility audit skips contrast only for text under the floating search field (system glass); every other finding fails.
 
 ## 4. Modified files (this push)
+- **M16 iPad three-column layout:** `HaloApplication/Navigation/ChatsRoute.swift`, `HaloApplicationTests/ChatsRouterTests.swift`, `ios/App/HaloApp.swift`, `docs/ROADMAP.md`, `HANDOFF.md`.
 - **M16 Send-by-Siri:** `HaloApplication/Shortcuts/SiriSendCoordinator.swift`, `HaloApplicationTests/SiriSendCoordinatorTests.swift`, `ios/App/Intents/{SendMessageIntent,OpenChatIntent}.swift`, `ios/App/AppRoot.swift`, `ios/Halo.xcodeproj/project.pbxproj`, `docs/security/PRIVACY.md`, `docs/ROADMAP.md`, `HANDOFF.md`.
 - **M16 drag out of timeline:** `FeatureTimeline/{TimelineDrag,TimelineMessageRowView,TimelineMediaViews,TimelineViewModel+Actions}.swift`, `FeatureTimelineTests/TimelineDragTests.swift`, `docs/ROADMAP.md`, `HANDOFF.md`.
 - **Timeline scroll follow-ups:** `FeatureTimeline/{TimelineScrollHelpers,TimelineView}.swift`, `FeatureTimelineTests/TimelineScrollHelpersTests.swift`, `docs/features/TIMELINE.md`, `HANDOFF.md`.
@@ -103,7 +105,7 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 - 📱 **Unread chats widget (device, D93):** add the medium widget with the setting on and off; names hidden on a locked screen.
 - 📱 **V-SHARE-1 (device, ADR-0023):** share a photo and a link to an encrypted room from Photos/Safari with Halo closed, then with it running; one copy each, no undecryptable event; also signed out (fallback) and with Airplane mode (queued).
 - 📱 **Share hand-back (device):** share a photo with notifications allowed, tap the notification, check "Send to…" appears; with notifications off the extension says to open Halo. Auto-opening Halo from the extension is not possible with public API; a chat picker inside the extension would be the alternative.
-- 📱 **iPad on a device / dev homeserver (D91):** only the signed-out screen was checked in the iPad simulator. Check sidebar selection, Slide Over / Split View collapse, rotation, and Settings/Stickers in the detail column.
+- 📱 **iPad on a device / dev homeserver (D91):** only the signed-out screen was checked in the iPad simulator. Check sidebar selection, trailing Room info inspector (button + ⌘I), Slide Over / Split View collapse to a sheet, rotation, and Settings/Stickers in the detail column.
 - 📱 **Focus filter on a device (D90):** add Halo's filter to a Focus, toggle the Focus, check the list narrows, "Show all chats" works, and it restores when the Focus ends (also whether the system calls the intent on deactivation).
 - 📱 **Widgets on a device (D89):** add the small and lock-screen widgets, receive a message and check the count refreshes; check the lock-screen redaction.
 - 📱 **App Intents on a device (D88):** turn on "Chats in Siri and Spotlight", then say "Open <chat> in Halo", "Send a message to <chat> in Halo" (confirm online and offline), and tap a Spotlight result.
@@ -114,25 +116,23 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §"Remaining work".
 1. Founder checks room opening on the device (`Halo-Debug` is installed on the iPhone) (§5 📱 "Opening rooms"); then the timeline follow-ups in §5 "Engineering".
 2. Founder resolves §5 items (gates, push gateway / APNs, Q-BRAND sign-in illustration, Q-APPSTORE, legal/export/privacy labels) and runs Beta 1 (internal TestFlight) on a physical device.
-3. Post-1.0 backlog (M16): iPad three-column layout. Calls will not be implemented (D94).
+3. Post-1.0 backlog (M16): all autonomous items complete (share extension, share-sheet sending, App Intents/Spotlight + Send-by-Siri, unread + unread-chats widgets, Focus filter, iPad two/three-column layout, keyboard shortcuts, drag-and-drop in and out). Calls will not be implemented (D94).
 
 ## 7. Next Session Prompt
 ```text
 Read AGENTS.md, HANDOFF.md, and docs/ROADMAP.md (§"Remaining work").
-All autonomous engineering work for M0–M15, ADR-0022 steps 1–4, and Tech Debt
-Phases A–D is complete and merged.
+All autonomous engineering work for M0–M16, ADR-0022 steps 1–4, and Tech Debt
+Phases A–D is complete and on main.
 
 Only founder (👤) and physical-device (📱) items remain in HANDOFF.md §5
 (gates, Beta/Release push gateway + TestFlight, Q-BRAND sign-in artwork,
 Q-ONBOARD-SERVER, Q-L10N, Q-APPSTORE, legal/export/privacy labels, 7-day
 AC-U8 soak, and physical-device NFR-1/NFR-2 metrics).
-Last push: fix/chat-list-a11y-audit (the signed-in chat list passes the
-accessibility audit; D96). Earlier: a room opens at its newest message (D95).
-See HANDOFF §5 "Engineering" for the timeline follow-ups.
-Next: if the founder reports S10 still misbehaving on the device, reproduce
-with a photo-heavy room in the simulator (dev homeserver, iPhone Air) and
-log onScrollGeometryChange (contentOffset/contentSize) during the open.
-Otherwise ask the founder which release or post-1.0 (M16) item to tackle next.
+Last pushes on main: timeline scroll anchor on prepend & short-room bottom
+alignment, M16 drag out of timeline, M16 Send-by-Siri (SendMessageIntent +
+SiriSendCoordinator), and M16 iPad three-column inspector layout (⌘I).
+Next: check the device/founder items in HANDOFF §5, or pick any bug report
+or release-prep task the founder raises.
 Checks: HALO_SIM="iPhone Air" scripts/prepush.sh (close Halo in every
 simulator first).
 ```

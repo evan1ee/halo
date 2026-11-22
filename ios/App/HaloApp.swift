@@ -463,6 +463,7 @@ private struct TimelineScreen: View {
     @State private var details: RoomDetailsViewModel?
     @State private var title = ""
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     private let root: AppRoot
     private let room: RoomID
     private let openRoom: @MainActor (RoomID) -> Void
@@ -491,6 +492,35 @@ private struct TimelineScreen: View {
         return rows.first(where: { $0.id == room })?.avatar
     }
 
+    /// On regular-width iPad, Room info docks as a trailing third column (M16 three-column layout, D91); on iPhone and
+    /// compact Slide Over / Split View it stays a modal sheet.
+    private var usesInspector: Bool {
+        RoomInfoPresentation.style(
+            isPad: UIDevice.current.userInterfaceIdiom == .pad,
+            regularWidth: horizontalSizeClass == .regular
+        ) == .inspector
+    }
+
+    private func toggleRoomInfo() {
+        if details != nil {
+            details = nil
+        } else {
+            details = root.makeRoomDetails(room: room)
+        }
+    }
+
+    private func roomDetailsView(_ model: RoomDetailsViewModel) -> some View {
+        RoomDetailsView(
+            model: model,
+            profileSheet: { member in
+                root.makeUserProfile(member: member, onOpenRoom: { room in details = nil; openRoom(room) })
+                    .map { AnyView(UserProfileView(model: $0)) }
+            },
+            onRenamed: { title = $0 },
+            onLeft: { details = nil; dismiss() }
+        )
+    }
+
     var body: some View {
         TimelineView(
             model: model,
@@ -500,29 +530,34 @@ private struct TimelineScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Button { details = root.makeRoomDetails(room: room) } label: {
+                Button { toggleRoomInfo() } label: {
                     Text(title).font(.headline).lineLimit(1).foregroundStyle(.primary)
                 }
                 .accessibilityIdentifier("roomTitle")
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button { details = root.makeRoomDetails(room: room) } label: {
+                Button { toggleRoomInfo() } label: {
                     AvatarView(name: title, ref: roomAvatar, size: 30) { [roomList = root.roomList] in await roomList.avatarData($0) }
                 }
-                    .accessibilityLabel("Room info")
-                    .accessibilityIdentifier("roomInfo")
+                .keyboardShortcut("i", modifiers: .command)
+                .accessibilityLabel("Room info")
+                .accessibilityIdentifier("roomInfo")
             }
         }
-        .sheet(item: $details, onDismiss: { Task { title = await root.roomName(room) ?? title } }) { model in
-            RoomDetailsView(
-                model: model,
-                profileSheet: { member in
-                    root.makeUserProfile(member: member, onOpenRoom: { room in details = nil; openRoom(room) })
-                        .map { AnyView(UserProfileView(model: $0)) }
-                },
-                onRenamed: { title = $0 },
-                onLeft: { dismiss() }
-            )
+        .inspector(isPresented: Binding(
+            get: { usesInspector && details != nil },
+            set: { if !$0 { details = nil; Task { title = await root.roomName(room) ?? title } } }
+        )) {
+            if let model = details {
+                roomDetailsView(model)
+                    .inspectorColumnWidth(min: 300, ideal: 340, max: 420)
+            }
+        }
+        .sheet(item: Binding(
+            get: { usesInspector ? nil : details },
+            set: { details = $0 }
+        ), onDismiss: { Task { title = await root.roomName(room) ?? title } }) { model in
+            roomDetailsView(model)
         }
         .task { title = await root.roomName(room) ?? "Unnamed room" }
     }

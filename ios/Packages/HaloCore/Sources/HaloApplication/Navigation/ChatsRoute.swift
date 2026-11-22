@@ -94,3 +94,13 @@ public struct ChatsRouter: Sendable, Equatable {
         path = decoded
     }
 }
+
+/// Decides whether Room info docks as a third inspector column on iPad or presents as a modal sheet (M16, D91).
+public enum RoomInfoPresentation: Equatable, Sendable {
+    case sheet
+    case inspector
+
+    public static func style(isPad: Bool, regularWidth: Bool) -> Self {
+        isPad && regularWidth ? .inspector : .sheet
+    }
+}

@@ -132,4 +132,12 @@ struct ChatsRouterSplitTests {
         router.push(.settings)
         #expect(router.path.count == 3)
     }
+
+    @Test("room info docks as a third inspector column on regular-width iPad and uses a sheet elsewhere")
+    func roomInfoPresentation() {
+        #expect(RoomInfoPresentation.style(isPad: true, regularWidth: true) == .inspector)
+        #expect(RoomInfoPresentation.style(isPad: true, regularWidth: false) == .sheet)
+        #expect(RoomInfoPresentation.style(isPad: false, regularWidth: true) == .sheet)
+        #expect(RoomInfoPresentation.style(isPad: false, regularWidth: false) == .sheet)
+    }
 }

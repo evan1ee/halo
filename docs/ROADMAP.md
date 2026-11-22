@@ -1,6 +1,6 @@
 # Roadmap
 
-**Where we are (2026-11-22):** all autonomous engineering work across **M0–M15** (including **ADR-0022 steps 1–4**, D84–D86, and **Tech Debt Phases A–D**) is complete! Only founder (`👤`) and physical-device (`📱`) items remain (listed in `HANDOFF.md` §5). Evidence: [design/UX_AUDIT.md](design/UX_AUDIT.md); bar: "Ship-ready definition" below.
+**Where we are (2026-11-22):** all autonomous engineering work across **M0–M16** (including **ADR-0022 steps 1–4**, D84–D96, and **Tech Debt Phases A–D**) is complete! Only founder (`👤`) and physical-device (`📱`) items remain (listed in `HANDOFF.md` §5). Evidence: [design/UX_AUDIT.md](design/UX_AUDIT.md); bar: "Ship-ready definition" below.
 
 Capacity: solo, part-time (D24). Estimates are calendar weeks at ~15 h/week and are **[ASSUMPTION]**s. Each milestone ends with its exit criteria **verified by tests** (AGENTS.md §0, §12).
 
@@ -105,7 +105,8 @@ Halo is ready for external testers when **all** of these hold; each line names h
 - [ ] 📱 Drag and drop on an iPad: from Photos, Files and Safari into an open chat, and dragging text/photos/files out of a chat (also between Halo and another app in Split View).
 - [x] Send-by-Siri (`SendMessageIntent`, `SiriSendCoordinator`, builds on D88): reuses the opt-in `ChatEntity` list, asks for Siri confirmation before sending, restores the session if woken in the background, sends through the normal timeline path and speaks honestly whether confirmed or queued. `SiriSendCoordinatorTests`.
 - [ ] 📱 Send-by-Siri on a device: turn on "Chats in Siri and Spotlight", then say "Send a message to <chat> in Halo" and confirm; check both online (confirmed) and offline (queued).
-- [ ] iPad three-column layout.
+- [x] iPad three-column layout (`RoomInfoPresentation`, `TimelineScreen` `.inspector` column): on regular-width iPad, tapping the room title/avatar or pressing ⌘I docks Room info as a trailing third column (300–420 pt); compact iPad windows and iPhone keep the modal sheet. `ChatsRouterSplitTests`.
+- [ ] 📱 iPad three-column inspector on a device: toggle Room info with the top-bar button and ⌘I in full screen and Split View, check rotation and Slide Over collapse to a sheet.
 - Calls: will not be implemented (D94, founder).
 
 ## Release plan
