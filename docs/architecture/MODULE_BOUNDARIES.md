@@ -42,6 +42,22 @@ flowchart BT
   NSE[NSE target] --> AP & MX & PE & PL
 ```
 
+### Module naming
+| Kind | Pattern | Examples |
+|---|---|---|
+| Layer or shared library | `Halo<Layer>` | `HaloDomain`, `HaloMatrixAdapter`, `HaloDesignSystem`, `HaloTestSupport` |
+| Feature (screens + view models) | `Feature<Area>` | `FeatureTimeline`, `FeatureRoomList`, `FeatureStickers` |
+| Composition roots | `Halo` (app), `HaloNotificationService` (NSE); later extensions `Halo<Extension>` | — |
+| Test targets | `<Module>Tests` | `FeatureTimelineTests` |
+
+Why: (1) `scripts/check_boundaries.py` identifies feature modules by the `Feature` prefix to enforce the rules in §2, so a
+feature without it escapes the checks; (2) a module must never share a name with a type: Swift then can't qualify the
+module (`Timeline.Item` becomes ambiguous), and bare area names like `Timeline`, `RoomList` or `Settings` are already types in
+the SDK or `HaloDomain`; (3) the prefix shows the layer in import lists and sorts features together. `<Area>` is
+UpperCamelCase, singular for a thing (`FeatureProfile`) and the screen's name for a flow (`FeatureOnboarding`), and reuses the
+area names of the core layers ([../adr/0022-module-layout-v2.md](../adr/0022-module-layout-v2.md), proposed folder rule).
+Renaming an existing module needs a reason beyond style.
+
 ## 2. Forbidden dependencies
 
 | Rule | Reason |

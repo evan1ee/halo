@@ -13,6 +13,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log` and [docs/CODEBASE_REVIEW.md](docs/CODEBASE_REVIEW.md) §13.
+- **Module layout proposal (this change, docs only):** [docs/adr/0022-module-layout-v2.md](docs/adr/0022-module-layout-v2.md) (Proposed): two manifests (`HaloCore` Linux / `HaloApple`), logic moved to its owning layer (`TimelineReadTracker` → domain, preferences port, routes → `HaloApplication`), new `FeatureSearch`/`FeatureProfile`/`FeatureMedia`/`FeatureComposer`/`HaloBotRendering`, `App/{Composition,Resources,Support}`, doc path fixes; TD-16. Module naming rule (`Halo<Layer>`, `Feature<Area>`, never a type's name) documented in MODULE_BOUNDARIES §1.
 - **Tech-debt register (this change, docs only):** new [docs/development/TECH_DEBT.md](docs/development/TECH_DEBT.md) — 15 scored items (TD-01…15; top: silent `try?` on state-changing calls, preferences without a port, untested composition roots/UI, CI covering 4 of 12 packages) and a 4-phase plan riding on M11–M15, queued in ROADMAP "Tech debt".
 - **UX & ship-readiness roadmap (D84, this change, docs only; checks run: `scripts/validate-docs.sh` and `check_handoff.py structure` pass; `prepush.sh` not run — no code changed):**
   - New [docs/design/UX_AUDIT.md](docs/design/UX_AUDIT.md): 16 UX findings (UX-01…16) and 7 ship-readiness findings (SR-01…07) with code evidence at `8da66aa`.
@@ -33,7 +34,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D85), [docs/adr/RE
 - **D83 (founder, refines D34 & D50):** global media gallery is surfaced as a preset virtual room entry in the room list (not a tab); purely a local UI entry, not a Matrix room (no server room ID, no sync state, excluded from unread counts and badge).
 
 ## 4. Modified files (this push)
-- **Docs (new):** `docs/design/UX_AUDIT.md`, `docs/development/TECH_DEBT.md`.
+- **Docs (new):** `docs/design/UX_AUDIT.md`, `docs/development/TECH_DEBT.md`, `docs/adr/0022-module-layout-v2.md`, `docs/architecture/MODULE_BOUNDARIES.md`.
 - **Docs (updated):** `docs/ROADMAP.md`, `docs/REQUIREMENTS.md`, `docs/DECISION_LOG.md`, `docs/OPEN_QUESTIONS.md`, `docs/RISK_REGISTER.md`, `docs/PRODUCT_VISION.md`, `docs/README.md`, `docs/design/DESIGN_SYSTEM.md`, `docs/design/NAVIGATION.md`, `docs/design/SCREEN_SPECIFICATIONS.md`, `docs/features/SETTINGS.md`, `docs/security/PRIVACY.md`, `docs/testing/TEST_STRATEGY.md`, `docs/development/BUILD_AND_RELEASE.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
@@ -45,6 +46,7 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 - 👤 **R-16 (DB field encryption):** decide whether to implement AES-GCM field encryption using `KeychainItem.haloDatabaseKey` for `draft.body` and `bot_task.title/detail`, or accept plaintext under `completeUntilFirstUserAuthentication` with a new ADR.
 - 👤 **R-18 & R-21 (upstream SDK gaps):** pinned `matrix_sdk_ffi.swift` (`26.11.17`, F-FFI-23) `SyncSettingsV2` has no filter (`lazy_load_members` / timeline limit) and `Timeline` has no queued `sendRaw`/`sendSticker`; requires upstream `matrix-rust-sdk` PR + SDK pin bump.
 - 👤 **R-24 (pushkin & Beta/Release push gateway):** decide whether to build the `infra/sygnal/` Halo pushkin or amend ADR-0015, and configure the Beta/Release push gateway + APNs keys + TestFlight.
+- 👤 **ADR-0022 (module layout v2):** accept, amend or reject; step 1 can ride on M11.
 - 👤 **New UX/ship questions (D84):** **Q-BRAND** (icon/artwork), **Q-ONBOARD-SERVER**, **Q-L10N**, **Q-APPSTORE** — all in [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md).
 - 📱 **Long-horizon physical device soak:** 7-day AC-U8 daily-driver soak (and Release/TestFlight G-NSE spot check once TestFlight is configured).
 

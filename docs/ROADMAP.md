@@ -161,6 +161,7 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 - [ ] Phase B with M11–M12: `PreferencesPort` + observable preferences store, no `AppPreferences()` in the app (TD-02); move bot-allowlist sync, diagnostics and cache logic from `AppRoot` into `HaloApplication`, Settings built from a model factory (TD-10).
 - [ ] Phase C with M13: no `try?` on state-changing port calls — errors logged once and shown with M13 copy (TD-01); `ActionState` helper against double taps and orphaned tasks (TD-07); split `TimelineViewModel`/`TimelineView` below 600 lines per file (TD-11); replace the 1.5 s re-check in room details (TD-13).
 - [ ] Phase D with M14–M15: `HaloUITests` (TD-03); manual-dispatch macOS build workflow before TestFlight uploads, revisiting D71 (TD-04); `bot_action` table for pending ticks (TD-08).
+- [ ] 👤 ADR-0022 (module layout v2, TD-16) accepted, then its four steps ride on M11, M12, the TD-11 split and a quiet point after M13.
 - [ ] 👤 TD-12 (R-16 field encryption) and 📤 TD-15 (upstream SDK filter / queued raw sends).
 
 ## Ship-ready definition (D84)
