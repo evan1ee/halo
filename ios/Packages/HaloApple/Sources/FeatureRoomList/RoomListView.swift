@@ -60,9 +60,10 @@ public struct RoomListView<SearchResults: View>: View {
                     ? rows
                     : rows.filter { $0.name.localizedCaseInsensitiveContains(trimmedQuery) }
                 let showMediaGallery = onMediaGallery != nil
-                    && model.filter == .all
+                    && model.effectiveFilter == .all
                     && (trimmedQuery.isEmpty || "Media Gallery".localizedCaseInsensitiveContains(trimmedQuery))
                 VStack(spacing: 0) {
+                focusBanner
                 syncIndicator
                 List {
                     Section {
@@ -137,7 +138,7 @@ public struct RoomListView<SearchResults: View>: View {
                 .accessibilityIdentifier("room-list")
                 .overlay {
                     if trimmedQuery.isEmpty && visibleRows.isEmpty && !showMediaGallery {
-                        EmptyState(icon: "bubble.left.and.bubble.right", title: Self.emptyTitle(model.filter))
+                        EmptyState(icon: "bubble.left.and.bubble.right", title: Self.emptyTitle(model.effectiveFilter))
                     }
                 }
                 .safeAreaInset(edge: .bottom) {
@@ -170,6 +171,21 @@ public struct RoomListView<SearchResults: View>: View {
         case .rooms: "No group rooms"
         case .favourites: "No favourites"
         case .invites: "No invitations"
+        }
+    }
+
+    @ViewBuilder private var focusBanner: some View {
+        if model.isFocusFiltering, let chats = model.focusChats {
+            HStack(spacing: 8) {
+                Image(systemName: "moon.fill").font(.footnote).foregroundStyle(.secondary).accessibilityHidden(true)
+                Text("Focus: showing \(chats.title.lowercased()) only").font(.footnote).foregroundStyle(.secondary)
+                Spacer()
+                Button("Show all chats") { model.suspendFocusFilter() }
+                    .font(.footnote)
+                    .accessibilityIdentifier("focus-show-all")
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 6)
         }
     }
 

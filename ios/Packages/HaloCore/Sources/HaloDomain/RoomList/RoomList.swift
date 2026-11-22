@@ -109,6 +109,30 @@ public enum RoomListFilter: Sendable, Equatable {
     case all, unread, people, rooms, favourites, invites
 }
 
+/// What a Focus (Do Not Disturb, Work, …) lets the chat list show (M16, D90). The person picks it in Settings → Focus; the
+/// app maps it to the room-list filter while the Focus is on.
+public enum FocusChats: String, Sendable, Equatable, CaseIterable {
+    case people, rooms, favourites, unread
+
+    public var listFilter: RoomListFilter {
+        switch self {
+        case .people: .people
+        case .rooms: .rooms
+        case .favourites: .favourites
+        case .unread: .unread
+        }
+    }
+
+    public var title: String {
+        switch self {
+        case .people: "People"
+        case .rooms: "Rooms"
+        case .favourites: "Favourites"
+        case .unread: "Unread"
+        }
+    }
+}
+
 /// One change to the ordered room list (see `ListDiff`).
 public typealias RoomListDiff = ListDiff<RoomSummary>
 

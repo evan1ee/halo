@@ -90,9 +90,11 @@ Halo is ready for external testers when **all** of these hold; each line names h
 - [x] App Intents + Spotlight (D88): opt-in "Chats in Siri and Spotlight"; `OpenChatIntent` / `ChatEntity` (Siri phrase "Open <chat> in Halo"), Spotlight results open the chat. Tests: `ChatShortcutPublisherTests`, `SystemChatShortcutStoreTests`, `AppPreferencesTests`.
 - [ ] 📱 Share extension on a physical device: the App Group container is shared only in signed builds; check Safari (link), Photos (several photos), Files (PDF) and a > 50 MiB file end to end.
 - [x] Unread widget (D89): `HaloWidgetExtension`, small and lock-screen families, count only; `UnreadWidgetSnapshot` tests, privacy manifest check.
+- [x] Focus filter (D90): `HaloFocusFilter` + `FocusChats`; room list `effectiveFilter` with a "Show all chats" banner; `RoomListFocusTests`, `FocusChatsTests`.
+- [ ] 📱 Focus filter on a device: add Halo to a Focus, turn it on and off, check the list narrows and restores.
 - [ ] 📱 Widgets on a device: add the small and lock-screen widgets, receive a push and check the count refreshes.
 - [ ] 📱 App Intents on a device: the Siri phrase and a Spotlight result opening a chat (the simulator can't speak to Siri).
-- [ ] Send-by-Siri, Focus filter, chat-list widget, iPad layout, calls (D43).
+- [ ] Send-by-Siri, chat-list widget, iPad layout, calls (D43).
 
 ## Release plan
 | Release | Contents | Audience | Entry |
