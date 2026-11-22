@@ -45,6 +45,7 @@ private struct RootView: View {
     @State private var ownName = ""
     @State private var ownAvatar: Data?
     @AppStorage(AppPreferences.appearanceKey) private var appearance = Appearance.system.rawValue
+    @AppStorage(AppPreferences.privacyBlurKey) private var privacyBlur = true
 
     private var colorScheme: ColorScheme? {
         switch Appearance(rawValue: appearance) ?? .system {
@@ -208,6 +209,19 @@ private struct RootView: View {
             await root.auth.start()
         }
         .preferredColorScheme(colorScheme)
+        .overlay {
+            if privacyBlur && scenePhase != .active {
+                ZStack {
+                    Rectangle().fill(.ultraThinMaterial)
+                    Image(systemName: "lock.shield.fill")
+                        .font(.system(size: 44))
+                        .foregroundStyle(.secondary)
+                }
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+        }
         .onOpenURL { url in
             Task {
                 guard let target = await root.resolveMatrixLink(url) else { return }

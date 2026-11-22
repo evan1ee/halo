@@ -8,6 +8,7 @@ public struct AppPreferences: Sendable {
 
     public static let privateReceiptsKey = "halo.privateReadReceipts"
     public static let sendTypingNoticesKey = "halo.sendTypingNotices"
+    public static let privacyBlurKey = "halo.privacyBlur"
     public static let appearanceKey = "halo.appearance"
     public static let botSendersKey = "halo.botSenders"
 
@@ -23,6 +24,12 @@ public struct AppPreferences: Sendable {
     public var sendTypingNotices: Bool {
         get { box.defaults.object(forKey: Self.sendTypingNoticesKey) as? Bool ?? true }
         nonmutating set { box.defaults.set(newValue, forKey: Self.sendTypingNoticesKey) }
+    }
+
+    /// `true` (default, D61): blur the app screen in the iOS app switcher while inactive or backgrounded (SECURITY §4).
+    public var privacyBlur: Bool {
+        get { box.defaults.object(forKey: Self.privacyBlurKey) as? Bool ?? true }
+        nonmutating set { box.defaults.set(newValue, forKey: Self.privacyBlurKey) }
     }
 
     /// Local cache of user IDs whose recognised messages render as bot cards (Settings → Bots; synced via `one.mbm.halo.bot_allowlist`).

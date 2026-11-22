@@ -49,4 +49,16 @@ struct AppPreferencesTests {
         AppPreferences(defaults: defaults).sendTypingNotices = true
         #expect(AppPreferences(defaults: defaults).sendTypingNotices == true)
     }
+
+    @Test("app-switcher privacy blur is on by default and stored immediately (D61, SECURITY §4)")
+    func privacyBlur() throws {
+        let name = "halo.test.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        #expect(AppPreferences(defaults: defaults).privacyBlur == true)
+        AppPreferences(defaults: defaults).privacyBlur = false
+        #expect(AppPreferences(defaults: defaults).privacyBlur == false)
+        AppPreferences(defaults: defaults).privacyBlur = true
+        #expect(AppPreferences(defaults: defaults).privacyBlur == true)
+    }
 }

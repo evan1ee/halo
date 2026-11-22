@@ -13,13 +13,12 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log` and [docs/CODEBASE_REVIEW.md](docs/CODEBASE_REVIEW.md) §13.
-- **Matrix deep-link handling & Global Media Gallery search (`NAVIGATION §3`, D83, this push on `main`):**
-  - Added pure-Swift `MatrixLink` parser + `MatrixLinkTests` in `HaloDomain` (`https://matrix.to/#/...` and MSC2312 `matrix:` URIs for rooms, events, aliases, and users) and wired `.onOpenURL` → `AppRoot.resolveMatrixLink(_:)` in `HaloApp`.
-  - Added `.searchable` search filtering (by filename/caption, sender, or room name) to `GlobalMediaGalleryViewModel` / `GlobalMediaGalleryView` with unit tests.
+- **App-switcher privacy blur (`D61`, `SECURITY §4`, this push on `main`):**
+  - Added `AppPreferences.privacyBlur` (default `true`, unit-tested in `AppPreferencesTests.privacyBlur`), Settings → Privacy → "Hide content in app switcher" toggle, and the `.ultraThinMaterial` privacy veil in `HaloApp` whenever `scenePhase != .active`.
+- **Matrix deep-link handling & Global Media Gallery search (`a32934c`, `NAVIGATION §3`, D83):**
+  - Added pure-Swift `MatrixLink` parser + `MatrixLinkTests`, `.onOpenURL` → `AppRoot.resolveMatrixLink(_:)`, and `.searchable` filtering in `GlobalMediaGalleryViewModel` / `GlobalMediaGalleryView`.
 - **Join room by alias or ID (`7eb0ff0`, `ROOM_MANAGEMENT FR-5`):**
   - Added `ChatCreationPort.joinRoom(_:)`, `FakeChatCreationPort`, `MatrixChatCreationPort` over `Client.joinRoomByIdOrAlias`, and "Or join a room by address" in `NewChatViewModel` / `NewChatView`.
-- **BlurHash media placeholders (`4dceb6b`, `MEDIA_ATTACHMENTS FR-1`):**
-  - Added pure-Swift `BlurHashDecoder` + `BlurHashDecoderTests`, `MediaAttachment.blurhash`, `TimelineMapper` mapping, `RGBAPlaceholderImage`, and placeholders in `TimelineView` & `GlobalMediaGalleryView`.
 
 ## 3. Key decisions
 Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D83), [docs/adr/README.md](docs/adr/README.md).
@@ -31,9 +30,8 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D83), [docs/adr/RE
 - **D83 (founder, refines D34 & D50):** global media gallery is surfaced as a preset virtual room entry in the room list (not a tab); purely a local UI entry, not a Matrix room (no server room ID, no sync state, excluded from unread counts and badge).
 
 ## 4. Modified files (this push)
-- **HaloDomain:** `ios/Packages/HaloDomain/Sources/HaloDomain/Navigation/MatrixLink.swift`, `ios/Packages/HaloDomain/Tests/HaloDomainTests/MatrixLinkTests.swift`.
-- **FeatureRoomList:** `ios/Packages/Features/FeatureRoomList/Sources/FeatureRoomList/GlobalMediaGalleryViewModel.swift`, `ios/Packages/Features/FeatureRoomList/Sources/FeatureRoomList/GlobalMediaGalleryView.swift`, `ios/Packages/Features/FeatureRoomList/Tests/FeatureRoomListTests/GlobalMediaGalleryViewModelTests.swift`.
-- **App:** `ios/App/AppRoot.swift`, `ios/App/HaloApp.swift`.
+- **FeatureSettings:** `ios/Packages/Features/FeatureSettings/Sources/FeatureSettings/AppPreferences.swift`, `ios/Packages/Features/FeatureSettings/Sources/FeatureSettings/SettingsView.swift`, `ios/Packages/Features/FeatureSettings/Tests/FeatureSettingsTests/AppPreferencesTests.swift`.
+- **App:** `ios/App/HaloApp.swift`.
 - **Docs:** `HANDOFF.md`.
 
 ## 5. Outstanding issues

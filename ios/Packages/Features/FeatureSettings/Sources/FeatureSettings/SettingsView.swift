@@ -64,6 +64,7 @@ public struct SettingsView: View {
     @State private var confirmingSignOut = false
     @State private var privateReceipts: Bool
     @State private var sendTypingNotices: Bool
+    @State private var privacyBlur: Bool
 
     /// `onPrivateReceiptsChange` applies a changed receipt privacy to the running app (the preference itself is stored here).
     public init(
@@ -108,6 +109,7 @@ public struct SettingsView: View {
         self.onSignOut = onSignOut
         _privateReceipts = State(initialValue: preferences.privateReceipts)
         _sendTypingNotices = State(initialValue: preferences.sendTypingNotices)
+        _privacyBlur = State(initialValue: preferences.privacyBlur)
     }
 
     public var body: some View {
@@ -146,10 +148,15 @@ public struct SettingsView: View {
                     .onChange(of: sendTypingNotices) { _, value in
                         preferences.sendTypingNotices = value
                     }
+                Toggle("Hide content in app switcher", isOn: $privacyBlur)
+                    .accessibilityIdentifier("privacy-blur")
+                    .onChange(of: privacyBlur) { _, value in
+                        preferences.privacyBlur = value
+                    }
             } header: {
                 Text("Privacy")
             } footer: {
-                Text("Private read receipts hide that you read messages from others while keeping your devices in sync (applies from now on). Typing notices let others see when you're writing.")
+                Text("Private read receipts hide that you read messages from others while keeping your devices in sync (applies from now on). Typing notices let others see when you're writing. App-switcher blur hides your chats when switching apps.")
             }
             Section("Appearance") {
                 Picker("Theme", selection: $appearance) {
