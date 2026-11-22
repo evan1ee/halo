@@ -12,37 +12,29 @@ step "boundaries" scripts/check-boundaries.sh
 step "boundaries unit tests" python3 scripts/test_check_boundaries.py
 step "design tokens" scripts/check-design-tokens.sh
 
-packages=(HaloFoundation HaloDomain HaloTestSupport HaloApplication)
 if command -v swift >/dev/null; then
-  for p in "${packages[@]}"; do step "swift test $p" swift test --package-path "ios/Packages/$p" -Xswiftc -warnings-as-errors; done
+  step "swift test HaloCore" swift test --package-path ios/Packages/HaloCore -Xswiftc -warnings-as-errors
 elif command -v docker >/dev/null && docker info >/dev/null 2>&1; then
-  for p in "${packages[@]}"; do
-    step "swift test $p (docker swift:6.2-noble)" docker run --rm -v "$PWD/ios/Packages:/w" -w /w swift:6.2-noble \
-      swift test --package-path "$p" --scratch-path "/tmp/build-$p" -Xswiftc -warnings-as-errors
-  done
+  step "swift test HaloCore (docker swift:6.2-noble)" docker run --rm -v "$PWD/ios/Packages:/w" -w /w swift:6.2-noble \
+    swift test --package-path HaloCore --scratch-path /tmp/build-HaloCore -Xswiftc -warnings-as-errors
 else
   skipped+=("swift tests (no swift toolchain or docker)")
 fi
 
-# Apple-only packages (not Linux-buildable). The adapter is built for the iOS Simulator because the
-# prebuilt SDK has no macOS slice; its contract tests are skipped unless HALO_DEV_* is exported as
-# TEST_RUNNER_HALO_DEV_* (docs/testing/INTEGRATION_TESTS.md).
-if [[ "$(uname)" == Darwin ]] && command -v swift >/dev/null; then
-  for p in HaloDesignSystem HaloBotRendering HaloPlatform HaloPersistence Features/FeatureOnboarding Features/FeatureRoomList Features/FeatureTimeline Features/FeatureComposer Features/FeatureMedia Features/FeatureStickers Features/FeatureSettings Features/FeatureRoomDetails Features/FeatureBotActivity Features/FeatureSearch Features/FeatureProfile; do
-    step "swift test $p" swift test --package-path "ios/Packages/$p" -Xswiftc -warnings-as-errors
-  done
-  if command -v xcodebuild >/dev/null; then
-    sim="${HALO_SIM:-iPhone 17}"
-    step "xcodebuild test HaloMatrixAdapter (iOS Simulator)" bash -c \
-      'cd ios/Packages/HaloMatrixAdapter && xcodebuild -scheme HaloMatrixAdapter -destination "platform=iOS Simulator,name=$1" test -quiet' _ "${HALO_SIM:-iPhone 17}"
-    if [[ -f ios/Halo.xcodeproj/project.pbxproj ]]; then
-      step "xcodebuild build Halo-Debug (iOS Simulator)" xcodebuild -project ios/Halo.xcodeproj -scheme Halo-Debug \
-        -destination "platform=iOS Simulator,name=${HALO_SIM:-iPhone 17}" -quiet build
-    elif command -v xcodegen >/dev/null; then
-      step "xcodegen + build Halo-Debug (iOS Simulator)" bash -c 'cd ios && xcodegen generate -q && xcodebuild -project Halo.xcodeproj -scheme Halo-Debug -destination "platform=iOS Simulator,name=$1" -quiet build' _ "${HALO_SIM:-iPhone 17}"
-    else skipped+=("app build (no ios/Halo.xcodeproj; install xcodegen)"); fi
-  else skipped+=("adapter tests and app build (no xcodebuild)"); fi
-else skipped+=("HaloPlatform and adapter tests (not macOS)"); fi
+# Apple-only package (not Linux-buildable). Built and tested for the iOS Simulator because the
+# prebuilt MatrixRustSDK has no macOS slice; adapter contract tests are skipped unless HALO_DEV_*
+# is exported as TEST_RUNNER_HALO_DEV_* (docs/testing/INTEGRATION_TESTS.md).
+if [[ "$(uname)" == Darwin ]] && command -v xcodebuild >/dev/null; then
+  sim="${HALO_SIM:-iPhone 17}"
+  step "xcodebuild test HaloApple-Package (iOS Simulator)" bash -c \
+    'cd ios/Packages/HaloApple && xcodebuild -scheme HaloApple-Package -destination "platform=iOS Simulator,name=$1" test -quiet' _ "$sim"
+  if [[ -f ios/Halo.xcodeproj/project.pbxproj ]]; then
+    step "xcodebuild build Halo-Debug (iOS Simulator)" xcodebuild -project ios/Halo.xcodeproj -scheme Halo-Debug \
+      -destination "platform=iOS Simulator,name=$sim" -quiet build
+  elif command -v xcodegen >/dev/null; then
+    step "xcodegen + build Halo-Debug (iOS Simulator)" bash -c 'cd ios && xcodegen generate -q && xcodebuild -project Halo.xcodeproj -scheme Halo-Debug -destination "platform=iOS Simulator,name=$1" -quiet build' _ "$sim"
+  else skipped+=("app build (no ios/Halo.xcodeproj; install xcodegen)"); fi
+else skipped+=("HaloApple tests and app build (not macOS / no xcodebuild)"); fi
 
 if command -v gitleaks >/dev/null; then step "gitleaks" gitleaks git --redact --no-banner .; else skipped+=("gitleaks (not installed)"); fi
 if command -v swiftlint >/dev/null && [[ -f .swiftlint.yml ]]; then step "swiftlint" swiftlint --strict; else skipped+=("swiftlint (not installed or not configured yet)"); fi

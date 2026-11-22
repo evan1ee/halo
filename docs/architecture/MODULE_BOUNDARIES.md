@@ -1,9 +1,11 @@
 # Module Boundaries
 
-**[DECISION ADR-0008]** Code lives in local Swift packages under `ios/Packages/`. The Xcode project
-contains only the two composition roots. Boundaries are enforced by package manifests (a module can't
-import what it doesn't declare) and by `scripts/check-boundaries.sh` (planned for M0, see
-[../development/CI_CD.md](../development/CI_CD.md)).
+**[DECISION ADR-0008, ADR-0022]** Code lives in two local Swift packages under `ios/Packages/`:
+`HaloCore` (Linux-buildable: `HaloFoundation`, `HaloDomain`, `HaloApplication`, `HaloTestSupport`) and
+`HaloApple` (iOS/Apple targets: `HaloMatrixAdapter`, `HaloPersistence`, `HaloPlatform`, `HaloDesignSystem`,
+`HaloBotRendering`, and every `Feature<Area>` target). The Xcode project contains only the two composition
+roots (`Halo`, `HaloNotificationService`). Boundaries are enforced by target dependencies in the two
+manifests and by `scripts/check-boundaries.sh` (see [../development/CI_CD.md](../development/CI_CD.md)).
 
 ## 1. Modules
 
@@ -17,7 +19,7 @@ import what it doesn't declare) and by `scripts/check-boundaries.sh` (planned fo
 | `HaloPlatform` | 6 | UserNotifications, BackgroundTasks, Keychain, file protection, ImageIO decoding, haptics | HaloDomain, HaloFoundation | ❌ |
 | `HaloDesignSystem` | 1 | Tokens, components, HTML-subset → `AttributedString` renderer | HaloFoundation | ❌ |
 | `HaloBotRendering` | 1 | `BotMessageRenderer`: cards for parsed templates, generic fallback | HaloDomain, HaloDesignSystem | ❌ |
-| `Feature*` (Auth, RoomList, Timeline, Composer, RoomDetails, Profile, Settings, Stickers, BotActivity) | 1–2 | Screens + `@Observable` view models | HaloApplication, HaloDomain, HaloDesignSystem, HaloBotRendering (Timeline, BotActivity only), HaloFoundation | ❌ |
+| `Feature*` (Onboarding, RoomList, Timeline, Composer, Media, RoomDetails, Profile, Search, Settings, Stickers, BotActivity) | 1–2 | Screens + `@Observable` view models | HaloApplication, HaloDomain, HaloDesignSystem, HaloBotRendering (Timeline, BotActivity only), HaloFoundation | ❌ |
 | `HaloTestSupport` | test | Fakes of every port, the shared port contract suites, fixture loaders, scenario builders | HaloDomain, HaloFoundation (not HaloApplication: its tests use these fakes, and SwiftPM forbids package cycles) | ✅ |
 | `Halo` (app target) | root | `AppContainer`, scene setup, deep links | all | ❌ |
 | `HaloNotificationService` (NSE target) | root | NSE entry point; the notification pipeline | HaloApplication, HaloDomain, HaloMatrixAdapter, HaloPersistence, HaloPlatform, HaloFoundation | ❌ |

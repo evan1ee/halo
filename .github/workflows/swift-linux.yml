@@ -1,23 +1,18 @@
 name: swift-linux
-# Linux-buildable packages (docs/development/CI_CD.md, ADR-0009). Swift version must match the
-# Xcode used for iOS builds (V-CI-2); HaloPersistence will also need libsqlite3-dev (F-CI-1).
+# Linux-buildable core targets (docs/development/CI_CD.md, ADR-0009, ADR-0022 step 4).
 on:
   pull_request:
-    paths: ["ios/Packages/**", ".github/workflows/swift-linux.yml"]
+    paths: ["ios/Packages/HaloCore/**", ".github/workflows/swift-linux.yml"]
   push:
     branches: [main]
-    paths: ["ios/Packages/**", ".github/workflows/swift-linux.yml"]
+    paths: ["ios/Packages/HaloCore/**", ".github/workflows/swift-linux.yml"]
 permissions:
   contents: read
 jobs:
   test:
     runs-on: ubuntu-latest
     container: swift:6.2-noble
-    strategy:
-      fail-fast: false
-      matrix:
-        package: [HaloFoundation, HaloDomain, HaloTestSupport, HaloApplication]
     steps:
       - uses: actions/checkout@v4
-      - name: Test ${{ matrix.package }} (warnings as errors)
-        run: swift test --package-path "ios/Packages/${{ matrix.package }}" -Xswiftc -warnings-as-errors
+      - name: Test HaloCore (warnings as errors)
+        run: swift test --package-path ios/Packages/HaloCore -Xswiftc -warnings-as-errors

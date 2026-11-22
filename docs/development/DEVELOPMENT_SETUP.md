@@ -17,11 +17,11 @@ halo/
 │   ├── Config/               xcconfig files (Base, Debug, Release, per-environment)
 │   ├── SDKVERSION.md         pinned SDK package version ↔ upstream commit
 │   └── Packages/
-│       ├── HaloFoundation/  HaloDomain/  HaloApplication/
-│       ├── HaloMatrixAdapter/  HaloPersistence/  HaloPlatform/
-│       ├── HaloDesignSystem/  HaloBotRendering/  HaloTestSupport/
-│       └── Features/ (FeatureAuth, FeatureRoomList, FeatureTimeline, FeatureComposer,
-│                      FeatureRoomDetails, FeatureProfile, FeatureSettings, FeatureStickers, FeatureBotActivity)
+│       ├── HaloCore/         Linux-buildable manifest (HaloFoundation, HaloDomain, HaloApplication, HaloTestSupport)
+│       └── HaloApple/        Apple manifest (HaloMatrixAdapter, HaloPersistence, HaloPlatform, HaloDesignSystem,
+│                             HaloBotRendering, FeatureOnboarding, FeatureRoomList, FeatureTimeline, FeatureComposer,
+│                             FeatureMedia, FeatureRoomDetails, FeatureProfile, FeatureSearch, FeatureSettings,
+│                             FeatureStickers, FeatureBotActivity)
 ├── tools/
 │   └── scenario-driver/      Swift (Linux) CLI driving Synapse for scenario tests
 ├── infra/
@@ -33,8 +33,8 @@ halo/
 └── .github/workflows/        CI (see CI_CD.md)
 ```
 
-Each package is a separate `Package.swift` (local package), referenced by the Xcode project. Responsibilities and allowed
-dependencies: [../architecture/MODULE_BOUNDARIES.md](../architecture/MODULE_BOUNDARIES.md).
+Two local SwiftPM manifests (`HaloCore` and `HaloApple`, ADR-0022 / D86) are referenced by the Xcode project, with one
+Swift target per module. Responsibilities and allowed dependencies: [../architecture/MODULE_BOUNDARIES.md](../architecture/MODULE_BOUNDARIES.md).
 
 ## 2. Prerequisites
 | Tool | Version | Note |
@@ -83,7 +83,7 @@ types, so it is treated as fixed.
 ## 5. Local workflow
 1. `docker compose -f infra/dev/docker-compose.yml up -d`, then `infra/dev/smoke.sh` and `infra/dev/create-user.sh <name>` ([../../infra/dev/README.md](../../infra/dev/README.md))
 2. Open `ios/Halo.xcodeproj`, scheme `Halo-Debug`, run on the simulator (push needs a device).
-3. Fast loop for logic: `swift test --package-path ios/Packages/HaloDomain` (also runs on Linux).
+3. Fast loop for logic: `swift test --package-path ios/Packages/HaloCore` (also runs on Linux).
 4. Before pushing: `scripts/validate-docs.sh`, `scripts/check-boundaries.sh`, SwiftLint, unit tests.
 
 ## 6. Dependency management

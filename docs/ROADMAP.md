@@ -1,6 +1,6 @@
 # Roadmap
 
-**Where we are (2026-11-22):** functional roadmap M0–M10 and **M11–M13** (Design-system foundation, D85 Navigation & IA, Core-flow polish + ADR-0022 steps 1–3 + Tech Debt Phases A–C) are done (founder-blocked items: HANDOFF §5). Next: **ADR-0022 step 4 (two-manifest consolidation)** → **M14 Accessibility & localisation** → **M15 Ship readiness**. Evidence: [design/UX_AUDIT.md](design/UX_AUDIT.md); bar: "Ship-ready definition" below.
+**Where we are (2026-11-22):** functional roadmap M0–M10, **M11–M13** (Design-system foundation, D85 Navigation & IA, Core-flow polish), and **ADR-0022 steps 1–4** (two-manifest `HaloCore` + `HaloApple` layout, D86) + Tech Debt Phases A–C are done (founder-blocked items: HANDOFF §5). Next: **M14 Accessibility & localisation** → **M15 Ship readiness** (+ Tech Debt Phase D). Evidence: [design/UX_AUDIT.md](design/UX_AUDIT.md); bar: "Ship-ready definition" below.
 
 Capacity: solo, part-time (D24). Estimates are calendar weeks at ~15 h/week and are **[ASSUMPTION]**s. Each milestone ends with its exit criteria **verified by tests** (AGENTS.md §0, §12).
 
@@ -42,10 +42,10 @@ Ordered work queue for the autonomous loop ([development/AUTONOMOUS_LOOP.md](dev
 - [x] Copy pass (UX-15): `HaloErrorCopy` in `HaloDomain` maps every `HaloError` case to a plain, actionable sentence (unit-tested in `HaloErrorCopyTests`).
 - [x] Simulator verification of M11–M13 on `iPhone Air` (Light, Dark, AX5).
 
-**ADR-0022 step 4 — two-manifest consolidation** (D86; at a quiet point right after M13 merges, nothing else in flight; one pull request, no behaviour change)
-- [ ] `ios/Packages/HaloCore` (HaloFoundation, HaloDomain, HaloApplication, HaloTestSupport — Linux) and `ios/Packages/HaloApple` (adapter, persistence, platform, design system, bot rendering, every feature as a target) replace the 15 manifests; module and target names unchanged (MODULE_BOUNDARIES §1).
-- [ ] Same area folders in `HaloMatrixAdapter` and `HaloTestSupport` as in `HaloDomain`/`HaloApplication` (`Session`, `Sync`, `RoomList`, `Timeline`, `Media`, `Stickers`, `Encryption`, `Notifications`, `Bots`, `Search`, `Account`, `Support`).
-- [ ] Tooling and docs follow: `ios/project.yml`, `scripts/prepush.sh`, `scripts/check_boundaries.py` (target-level rules, same `Feature` prefix), `.github/workflows/swift-linux.yml`, MODULE_BOUNDARIES §1–2, AGENTS.md §5/§13, DEVELOPMENT_SETUP, ADR-0008 status note. Exit: `prepush.sh`, app build, contract tests and Linux CI green; `.build` size before/after recorded in the pull request.
+**ADR-0022 step 4 — two-manifest consolidation** (D86; **done**)
+- [x] `ios/Packages/HaloCore` (HaloFoundation, HaloDomain, HaloApplication, HaloTestSupport — Linux) and `ios/Packages/HaloApple` (adapter, persistence, platform, design system, bot rendering, every feature as a target) replace the 20 manifests; module and target names unchanged (MODULE_BOUNDARIES §1).
+- [x] Same area folders in `HaloMatrixAdapter` and `HaloTestSupport` as in `HaloDomain`/`HaloApplication` (`Session`, `Sync`, `RoomList`, `Timeline`, `Media`, `Stickers`, `Encryption`, `Notifications`, `Bots`, `Search`, `Account`, `Support`).
+- [x] Tooling and docs updated: `ios/project.yml`, `scripts/prepush.sh`, `scripts/check_boundaries.py` (target-level rules, same `Feature` prefix), `.github/workflows/swift-linux.yml`, MODULE_BOUNDARIES §1–2, AGENTS.md §5/§13, DEVELOPMENT_SETUP, ADR-0008 status note.
 
 **M14 Accessibility and localisation** (exit: AC-UX-8, AC-UX-9, AC-UX-10; fixes UX-10, UX-11, SR-07)
 - [ ] VoiceOver pass per DESIGN_SYSTEM §9: rows read as one element ("Alice, 3 unread messages, last message …, 10:42"), custom actions (Reply, React, Mark read) through `.accessibilityActions`, bot-card states announced, focus moves sensibly after sheets close.

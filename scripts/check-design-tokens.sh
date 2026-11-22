@@ -18,7 +18,7 @@ RAW_COLOR_RE = re.compile(
 )
 FIXED_FONT_RE = re.compile(r'\.font\(\s*\.system\(\s*size:')
 
-roots = [Path("ios/App")] + sorted(Path("ios/Packages/Features").glob("*/Sources"))
+roots = [Path("ios/App")] + sorted(Path("ios/Packages/HaloApple/Sources").glob("Feature*"))
 violations: list[str] = []
 
 for root in roots:

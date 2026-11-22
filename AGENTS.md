@@ -51,13 +51,13 @@ GRDB (exact version); Apple frameworks only otherwise. Infrastructure: Synapse (
 | Path | Contents | Rules |
 |---|---|---|
 | `docs/` | Requirements, architecture, ADRs | Keep consistent; run `scripts/validate-docs.sh` |
-| `ios/Packages/HaloDomain/` | Models, ports, pure policies | Pure Swift; imports only HaloFoundation; must build on Linux |
-| `ios/Packages/HaloApplication/` | Coordinators, use cases, routes | No SwiftUI/UIKit; Linux-buildable |
-| `ios/Packages/HaloMatrixAdapter/` | Port implementations over MatrixRustSDK | Only place for upstream types; mapping tests required |
-| `ios/Packages/HaloPersistence/` | GRDB DB, migrations, repositories | Append-only migrations; monotonic upserts |
-| `ios/Packages/HaloPlatform/` | Notifications, BG tasks, Keychain, decoding | Apple APIs live here |
-| `ios/Packages/HaloDesignSystem/`, `HaloBotRendering/` | UI tokens/components, bot cards | No business logic |
-| `ios/Packages/Features/*` | Screens + view models | Depend on Application/Domain/DesignSystem only; never on another feature |
+| `ios/Packages/HaloCore/Sources/HaloDomain/` | Models, ports, pure policies | Pure Swift; imports only HaloFoundation; must build on Linux |
+| `ios/Packages/HaloCore/Sources/HaloApplication/` | Coordinators, use cases, routes | No SwiftUI/UIKit; Linux-buildable |
+| `ios/Packages/HaloApple/Sources/HaloMatrixAdapter/` | Port implementations over MatrixRustSDK | Only place for upstream types; mapping tests required |
+| `ios/Packages/HaloApple/Sources/HaloPersistence/` | GRDB DB, migrations, repositories | Append-only migrations; monotonic upserts |
+| `ios/Packages/HaloApple/Sources/HaloPlatform/` | Notifications, BG tasks, Keychain, decoding | Apple APIs live here |
+| `ios/Packages/HaloApple/Sources/HaloDesignSystem/`, `HaloBotRendering/` | UI tokens/components, bot cards | No business logic |
+| `ios/Packages/HaloApple/Sources/Feature*` | Screens + view models | Depend on Application/Domain/DesignSystem only; never on another feature |
 | `ios/App/`, `ios/NotificationService/` | Composition roots | Wiring only |
 | `infra/`, `tools/`, `scripts/` | Servers, scenario driver, scripts | No secrets (`.env.example` only) |
 Full dependency table: [docs/architecture/MODULE_BOUNDARIES.md](docs/architecture/MODULE_BOUNDARIES.md).
@@ -101,9 +101,9 @@ Before adding or upgrading **any** dependency: (1) justify it in the PR/commit; 
 |---|---|---|
 | Documentation checks | `scripts/validate-docs.sh` | **Phase 0** |
 | Module boundary checks | `scripts/check-boundaries.sh` | **M0 (in place)** |
-| Pure package tests (Linux or macOS) | `swift test --package-path ios/Packages/<Package> -Xswiftc -warnings-as-errors` (Linux: `swift:6.2-noble` image) | **M0 (in place)**: HaloFoundation, HaloDomain, HaloTestSupport, HaloApplication |
+| Pure package tests (Linux or macOS) | `swift test --package-path ios/Packages/HaloCore -Xswiftc -warnings-as-errors` (Linux: `swift:6.2-noble` image) | **in place**: HaloFoundation, HaloDomain, HaloTestSupport, HaloApplication |
+| Apple/Feature/Adapter tests | `cd ios/Packages/HaloApple && xcodebuild -scheme HaloApple-Package -destination 'platform=iOS Simulator,name=<device>' test` (in `prepush.sh`); adapter contracts against `infra/dev`: `scripts/contract-test.sh [test …]` (settings in `~/.config/halo-dev/contract.env`) | **in place** |
 | App build | `xcodebuild -project ios/Halo.xcodeproj -scheme Halo-Debug -destination 'platform=iOS Simulator,name=<device>' build` | M0 (macOS only) |
-| Adapter/FFI tests | `xcodebuild … -scheme HaloMatrixAdapter test` (unit, in `prepush.sh`); contracts against `infra/dev`: `scripts/contract-test.sh [test …]` (settings in `~/.config/halo-dev/contract.env`) | **in place** |
 | Scenario suite | `docker compose -f infra/dev/docker-compose.yml up -d && python3 tools/scenario-driver/run_scenarios.py` | **in place** |
 | Secret scan | `gitleaks git --redact .` (gitleaks 8.30.1) | **M0 (in place)** |
 | Rust licence gate | `scripts/rust-license-inventory.py --sdk <checkout at ios/SDKVERSION.md sdk_commit> --check docs/security/inventory/rust-deps-matrix-sdk-ffi.csv` | **M0 (in place)** |
