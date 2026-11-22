@@ -1,0 +1,27 @@
+# Synapse overrides for the isolated MAS dev stack (infra/dev/docker-compose.mas.yml).
+# Contains no secrets; the shared MAS secret is written to /mas-data/synapse-mas.yaml at init time.
+database:
+  name: psycopg2
+  args:
+    user: synapse
+    database: synapse
+    host: postgres
+    cp_min: 2
+    cp_max: 10
+
+listeners:
+  - port: 8008
+    type: http
+    tls: false
+    bind_addresses: ["0.0.0.0"]
+    x_forwarded: true
+    resources:
+      - names: [client]
+        compress: false
+
+public_baseurl: http://127.0.0.1:8009/
+enable_registration: false
+report_stats: false
+trusted_key_servers: []
+suppress_key_server_warning: true
+ip_range_whitelist: ["172.16.0.0/12", "10.0.0.0/8", "192.168.0.0/16"]

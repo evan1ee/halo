@@ -1304,6 +1304,18 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
+    @Test("OIDC/MAS discovery & authorization URL (V-AUTH-1): MatrixSessionPort discovers OIDC on Synapse + MAS and obtains an authorization URL",
+          .enabled(if: env["HALO_DEV_MAS_SYNAPSE_URL"] != nil))
+    func oidcDiscovery() async throws {
+        let session = port()
+        let masSynapse = env["HALO_DEV_MAS_SYNAPSE_URL"] ?? ""
+        let details = try await session.loginDetails(server: masSynapse)
+        #expect(details.supportsOIDC)
+        let authURL = try await session.oauthURL(on: details)
+        #expect(authURL.absoluteString.contains("/authorize"))
+        await session.abortOAuth()
+    }
+
     /// S01/S02/S09-style scenario with the real stack: the adapter's room list over classic sync feeds `ReadStatePolicy`.
     /// Peer messages and a mention make the room need attention (`.mentions(1)`); a read receipt from another device of the same
     /// account clears it within a sync; `m.marked_unread` from the other device brings attention back (E5).

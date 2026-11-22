@@ -1,0 +1,137 @@
+# Halo isolated local Synapse + Matrix Authentication Service (MAS) stack (M5, V-AUTH-1).
+# Runs on separate ports (Synapse 127.0.0.1:8009, MAS 127.0.0.1:8080) and project name `halo-dev-mas`
+# so it never disturbs the native-password `infra/dev/docker-compose.yml` stack on 8008.
+# Local development only — never expose this setup to a network you don't control.
+name: halo-dev-mas
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: synapse
+      POSTGRES_DB: synapse
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - mas-postgres-data:/var/lib/postgresql/data
+      - ./mas/init-db.sql:/docker-entrypoint-initdb.d/01-mas.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "synapse"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Generates fresh MAS keys + shared secret into a temp file; synapse-init promotes it once (idempotent).
+  mas-keygen:
+    image: ghcr.io/element-hq/matrix-authentication-service:${MAS_VERSION:-1.29.0}
+    user: "0:0"
+    command: ["config", "generate", "-o", "/mas-data/generated.tmp.yaml"]
+    volumes:
+      - mas-data:/mas-data
+
+  # Generates Synapse homeserver.yaml once, promotes mas-keygen output once, and writes /mas-data/mas.yaml
+  # and /mas-data/synapse-mas.yaml with matching shared secret (no secrets ever committed to git).
+  synapse-init:
+    image: matrixdotorg/synapse:${SYNAPSE_VERSION:-v1.165.0}
+    depends_on:
+      mas-keygen:
+        condition: service_completed_successfully
+    environment:
+      SYNAPSE_SERVER_NAME: halo-mas.localhost
+      SYNAPSE_REPORT_STATS: "no"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        [ -f /data/homeserver.yaml ] || /start.py generate
+        if [ ! -f /mas-data/generated.yaml ]; then
+          cp /mas-data/generated.tmp.yaml /mas-data/generated.yaml
+        fi
+        rm -f /mas-data/generated.tmp.yaml
+        python3 - <<'PY'
+        import yaml
+        with open("/mas-data/generated.yaml") as f:
+            gen = yaml.safe_load(f)
+        with open("/config/mas.dev.yaml") as f:
+            ov = yaml.safe_load(f)
+        secret = gen["matrix"]["secret"]
+        merged = dict(gen)
+        for k, v in ov.items():
+            if isinstance(v, dict) and isinstance(merged.get(k), dict):
+                merged[k] = {**merged[k], **v}
+            else:
+                merged[k] = v
+        merged["matrix"]["secret"] = secret
+        with open("/mas-data/mas.yaml", "w") as f:
+            yaml.safe_dump(merged, f, sort_keys=False)
+        with open("/mas-data/synapse-mas.yaml", "w") as f:
+            yaml.safe_dump({
+                "matrix_authentication_service": {
+                    "enabled": True,
+                    "endpoint": "http://mas:8080/",
+                    "secret": secret,
+                }
+            }, f, sort_keys=False)
+        PY
+        chmod 644 /mas-data/mas.yaml /mas-data/synapse-mas.yaml
+    volumes:
+      - mas-synapse-data:/data
+      - mas-data:/mas-data
+      - ./mas/mas.dev.yaml:/config/mas.dev.yaml:ro
+
+  mas-migrate:
+    image: ghcr.io/element-hq/matrix-authentication-service:${MAS_VERSION:-1.29.0}
+    depends_on:
+      synapse-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    command: ["database", "migrate", "--config", "/mas-data/mas.yaml"]
+    volumes:
+      - mas-data:/mas-data:ro
+
+  mas:
+    image: ghcr.io/element-hq/matrix-authentication-service:${MAS_VERSION:-1.29.0}
+    depends_on:
+      mas-migrate:
+        condition: service_completed_successfully
+    command: ["server", "--config", "/mas-data/mas.yaml"]
+    volumes:
+      - mas-data:/mas-data:ro
+    ports:
+      - "${HALO_DEV_BIND:-127.0.0.1}:${HALO_DEV_MAS_PORT:-8080}:8080"
+
+  synapse:
+    image: matrixdotorg/synapse:${SYNAPSE_VERSION:-v1.165.0}
+    depends_on:
+      synapse-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      mas:
+        condition: service_started
+    command:
+      - run
+      - --config-path
+      - /data/homeserver.yaml
+      - --config-path
+      - /config/homeserver.mas.yaml
+      - --config-path
+      - /mas-data/synapse-mas.yaml
+    volumes:
+      - mas-synapse-data:/data
+      - mas-data:/mas-data:ro
+      - ./mas/homeserver.mas.yaml:/config/homeserver.mas.yaml:ro
+    ports:
+      - "${HALO_DEV_BIND:-127.0.0.1}:${HALO_DEV_MAS_SYNAPSE_PORT:-8009}:8008"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8008/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+
+volumes:
+  mas-postgres-data:
+  mas-synapse-data:
+  mas-data:

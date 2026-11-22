@@ -13,6 +13,7 @@ Re-verify at every SDK bump (see [development/BUILD_AND_RELEASE.md](development/
 | ruma (used by the SDK) | 0.17.2 git rev `5133d4ec` | SDK `Cargo.lock` |
 | Matrix spec | Latest release **v1.19** | Tags of https://github.com/matrix-org/matrix-spec |
 | Synapse | Latest tag v1.165.0 | Tags of https://github.com/element-hq/synapse |
+| Matrix Authentication Service (MAS) | Pinned tag v1.29.0 (`ghcr.io/element-hq/matrix-authentication-service:1.29.0`) | Tags of https://github.com/element-hq/matrix-authentication-service (`mas-cli v1.29.0`) |
 | Sygnal | Latest tag v0.15.1 | Tags of https://github.com/matrix-org/sygnal |
 | GRDB.swift | v7.12.0, MIT | https://github.com/groue/GRDB.swift (LICENSE) |
 | Synapse push code | tag `v1.165.0`, `synapse/push/httppusher.py`, `synapse/push/push_tools.py`, `synapse/config/push.py` | Sparse checkout of https://github.com/element-hq/synapse |

@@ -1,0 +1,35 @@
+# Non-secret MAS overrides for local development (infra/dev/docker-compose.mas.yml).
+# Merged with the volume-generated secrets/keys by synapse-init into /mas-data/mas.yaml.
+http:
+  listeners:
+    - name: web
+      resources:
+        - name: discovery
+        - name: human
+        - name: oauth
+        - name: compat
+        - name: graphql
+        - name: assets
+      binds:
+        - address: '0.0.0.0:8080'
+      proxy_protocol: false
+    - name: internal
+      resources:
+        - name: health
+      binds:
+        - address: '0.0.0.0:8081'
+      proxy_protocol: false
+  public_base: http://127.0.0.1:8080/
+  issuer: http://127.0.0.1:8080/
+
+database:
+  uri: postgresql://synapse@postgres/mas
+
+passwords:
+  enabled: true
+  minimum_complexity: 1
+
+matrix:
+  kind: synapse
+  homeserver: halo-mas.localhost
+  endpoint: http://synapse:8008/
