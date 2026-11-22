@@ -1,6 +1,6 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-22 · Branch: `chore/local-xcconfig` (PR to `main` opened with this push) · PRs #1–#73 merged
+Last updated: 2026-11-22 · Branch: `fix/chat-list-a11y-audit` (PR to `main` opened with this push) · PRs #1–#74 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
@@ -8,11 +8,12 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 - **Roadmap / Autonomous Loop:** **ALL autonomous engineering work across M0–M15, ADR-0022 steps 1–4 (D86), and Tech Debt Phases A–D is complete!** Only founder (`👤`) and physical-device (`📱`) items remain (listed in §5).
 - **Milestones:** M0–M15 done except founder/device items (G-FFI/G-UNREAD/G-NSE confirmations, Beta/Release push gateway + TestFlight, 7-day AC-U8 soak, physical-device NFR-1/NFR-2/MetricKit run, Q-BRAND sign-in illustration, Q-ONBOARD-SERVER, Q-L10N, Q-APPSTORE, legal/export/privacy nutrition labels). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`).
 - **Checks (this branch):** `HALO_SIM="iPhone Air" scripts/prepush.sh` (`HaloCore` 165 tests, `HaloApple-Package` all 16 targets incl. `BotActionStoreTests` and `privacyManifestsAreValid`, `Halo-Debug` app build, `HaloUITests` with `performAccessibilityAudit()`, `validate-docs.sh`, `check-boundaries.sh`, `test_check_boundaries.py`, `check-design-tokens.sh`, `swiftlint --strict`, `gitleaks`).
-- **Last prepush (this push):** `HALO_SIM="iPhone Air" scripts/prepush.sh` (Halo closed in every simulator first): handoff, docs, boundaries, design tokens, `HaloCore` (182 tests), `HaloApple-Package`, `Halo-Debug` build, gitleaks and swiftlint passed; **`HaloUITests.testLaunchRootScreenPassesAccessibilityAudit` failed** (signed-in simulator, chat-list findings, unchanged since PR #73, see §5 Engineering).
-- **CI:** PRs #1–#72 merged. Linux CI runs `HaloCore` tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
+- **Last prepush (this push):** `HALO_SIM="iPhone Air" scripts/prepush.sh` (Halo closed in every simulator first): all steps passed, including `HaloUITests` (`testLaunchRootScreenPassesAccessibilityAudit` on the signed-in chat list, Focus banner and full list), `HaloCore` (182 tests), `HaloApple-Package` (incl. new `AvatarTests` contrast checks), `Halo-Debug` build, gitleaks and swiftlint.
+- **CI:** PRs #1–#74 merged. Linux CI runs `HaloCore` tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log`.
+- **Chat-list accessibility audit passes signed in (`fix/chat-list-a11y-audit`):** letter avatars use `AvatarTint` (pale circle, letter darkened in light / lightened in dark mode, ≥ 4.5:1, unit-tested) instead of the system tint on itself; the Media Gallery row's two lines wrap instead of clipping at large type; "Show all chats" in the Focus banner has a 44 pt tap target. `testLaunchRootScreenPassesAccessibilityAudit` now also taps "Show all chats" and audits the full list, prints each finding's frame, and skips contrast findings only for text reaching the floating search field (D96). Run on a signed-in iPhone Air simulator: passes.
 - **Signing team kept out of git:** the team set in Xcode lived only in an uncommitted `project.pbxproj` change, so a revert or `xcodegen` cleared it. `Base.xcconfig` now includes the git-ignored `ios/Config/Local.xcconfig` when present (`DEVELOPMENT_TEAM`; template `Local.xcconfig.example`); all configurations and extensions pick it up. Installed `Halo-Debug` on the founder's iPhone with it. `WebAuthSessionPresenter` no longer uses the deprecated `UIWindow(frame:)`: it picks its window before starting the sheet and returns nil (cancelled) when there is no window scene; not exercised against a real OIDC provider.
 - **A room opens instantly at its newest message — no flash, no spinner (`fix/timeline-land-newest`, D95, founder bug report on S10):**
   - D95: the landing goes to the newest row; the first unread message stays marked and the "Jump to unread" pill goes up to it (`TimelineViewModel+Mapping.swift`, tests, `TIMELINE.md`, `DECISION_LOG.md`).
@@ -47,14 +48,16 @@ Summary only; details in `git log`.
 - **ADR-0022 step 4 — two-manifest consolidation (`PR #55`, merged `433e337`, D86):** replaced 20 `Package.swift` manifests with `HaloCore` (Linux) and `HaloApple` (16 iOS/Apple targets), organized `HaloMatrixAdapter` and `HaloTestSupport` into 12 matching area folders; `.build` disk footprint dropped from **6.5 GB** to **530 MB** (92% reduction).
 
 ## 3. Key decisions
-Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D95), [docs/adr/README.md](docs/adr/README.md).
+Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D96), [docs/adr/README.md](docs/adr/README.md).
 - **D73 / D74 / D78–D80 (ADR-0020):** classic sync unread evidence, encrypted-room SDK counts decide, identity/timeline-index read ordering.
 - **D82 (ADR-0021):** app icon badge sums `RoomReadState.badgeCount` for `attention == true`.
 - **D83:** Global Media Gallery is a preset virtual room entry in the room list (not a tab, excluded from unread/badge).
 - **D84 / D85 / D86 (ADR-0022):** Apple-native north star; single `NavigationStack` shell; module layout v2 (all 4 steps complete).
 - **D95:** a room opens at its newest message; the first unread message stays marked and "Jump to unread" goes up to it.
+- **D96:** the accessibility audit skips contrast only for text under the floating search field (system glass); every other finding fails.
 
 ## 4. Modified files (this push)
+- **Chat-list audit:** `HaloDesignSystem/Components/AvatarCircle.swift`, `HaloDesignSystemTests/AvatarTests.swift`, `FeatureRoomList/RoomListView.swift`, `ios/UITests/HaloUITests.swift`, `docs/design/DESIGN_SYSTEM.md`, `docs/DECISION_LOG.md`.
 - **Personal signing team:** `ios/Config/Base.xcconfig` (`#include? "Local.xcconfig"`), `ios/Config/Local.xcconfig.example`, `.gitignore`, `docs/development/DEVELOPMENT_SETUP.md`, `docs/adr/0017-xcodegen-for-the-app-project.md`.
 - **iOS 26 deprecation:** `HaloPlatform/WebAuthSessionPresenter.swift`.
 - **Land at newest (PR #73, merged):** `HaloMatrixAdapter/Timeline/MatrixTimelinePort.swift`, `FeatureTimeline/{TimelineView,TimelineMediaViews,TimelineViewModel+Mapping}.swift`, `FeatureTimelineTests/{TimelineViewModelTests,ThumbnailSizeTests,BottomGapTests,UnreadPillTests}.swift`, `docs/features/TIMELINE.md`, `docs/DECISION_LOG.md`, `HANDOFF.md`.
@@ -79,7 +82,6 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D95), [docs/adr/RE
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
 
 **Engineering (not blocking this PR)**
-- **`HaloUITests.testLaunchRootScreenPassesAccessibilityAudit` fails on a signed-in simulator:** with the dev account signed in, the root screen is the chat list and the audit reports 13 issues there (contrast of the avatar initials on the light avatar colours, "Media Gallery" text that may clip at large type, and the row half under the floating search field); a later run, with the Focus banner showing, reported only "Show all chats" (hit area too small). Signed out (CI, fresh simulators) it audits the sign-in screen. Not caused by the timeline change (no chat-list file changed); fix the chat list, don't loosen the audit. The earlier "-902 Invalid target app" error did not recur once no other Halo instance was running.
 - **Timeline follow-ups seen while testing:** when a fling reaches the very top before older pages arrive, the inserted pages leave the reader at the start of the conversation instead of where they were; a short room sits at the top of the screen (Element X keeps it just above the composer); the room appears ~150 ms after the push starts (the list is hidden until placed).
 
 **Needs the founder (`👤`) or physical device (`📱`)**
@@ -104,7 +106,7 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 
 ## 6. Next steps
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §"Remaining work".
-1. Founder checks room opening on the device (`Halo-Debug` is installed on the iPhone) (§5 📱 "Opening rooms"); then the chat-list accessibility audit fix and the timeline follow-ups in §5 "Engineering".
+1. Founder checks room opening on the device (`Halo-Debug` is installed on the iPhone) (§5 📱 "Opening rooms"); then the timeline follow-ups in §5 "Engineering".
 2. Founder resolves §5 items (gates, push gateway / APNs, Q-BRAND sign-in illustration, Q-APPSTORE, legal/export/privacy labels) and runs Beta 1 (internal TestFlight) on a physical device.
 3. Post-1.0 backlog (M16): send-by-Siri, iPad extras (three columns, dragging items out). Calls will not be implemented (D94).
 
@@ -118,10 +120,9 @@ Only founder (👤) and physical-device (📱) items remain in HANDOFF.md §5
 (gates, Beta/Release push gateway + TestFlight, Q-BRAND sign-in artwork,
 Q-ONBOARD-SERVER, Q-L10N, Q-APPSTORE, legal/export/privacy labels, 7-day
 AC-U8 soak, and physical-device NFR-1/NFR-2 metrics).
-Last push: fix/timeline-land-newest (a room opens at its newest message, D95);
-see HANDOFF §2 for the cause found in S10 (photo rows changing height) and
-§5 "Engineering" for the chat-list accessibility audit failure on a
-signed-in simulator and timeline follow-ups.
+Last push: fix/chat-list-a11y-audit (the signed-in chat list passes the
+accessibility audit; D96). Earlier: a room opens at its newest message (D95).
+See HANDOFF §5 "Engineering" for the timeline follow-ups.
 Next: if the founder reports S10 still misbehaving on the device, reproduce
 with a photo-heavy room in the simulator (dev homeserver, iPhone Air) and
 log onScrollGeometryChange (contentOffset/contentSize) during the open.

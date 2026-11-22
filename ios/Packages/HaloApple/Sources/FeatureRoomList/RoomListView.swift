@@ -79,16 +79,15 @@ public struct RoomListView<SearchResults: View>: View {
                                         HStack {
                                             Text("Media Gallery")
                                                 .font(HaloTypography.bodyEmphasis)
-                                                .lineLimit(1)
                                             Spacer()
                                             Image(systemName: "chevron.right")
                                                 .font(HaloTypography.captionEmphasis)
                                                 .foregroundStyle(.tertiary)
                                         }
+                                        // No line limit on either text: at large Dynamic Type they wrap instead of clipping.
                                         Text("Photos, videos & files across rooms")
                                             .font(HaloTypography.meta)
                                             .foregroundStyle(HaloColor.textSecondary)
-                                            .lineLimit(1)
                                     }
                                 }
                             }
@@ -182,10 +181,11 @@ public struct RoomListView<SearchResults: View>: View {
                 Spacer()
                 Button("Show all chats") { model.suspendFocusFilter() }
                     .font(.footnote)
+                    .frame(minHeight: 44)  // the footnote text alone is a ~16 pt tap target; HIG asks for 44
+                    .contentShape(.rect)
                     .accessibilityIdentifier("focus-show-all")
             }
             .padding(.horizontal)
-            .padding(.vertical, 6)
         }
     }
 
