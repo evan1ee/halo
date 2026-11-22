@@ -35,6 +35,10 @@ public struct UnreadWidgetSnapshot: Sendable, Equatable {
 
     public func isStale(at now: Date) -> Bool {
         guard let updatedAt else { return false }
-        return now.timeIntervalSince(updatedAt) > Self.staleAfter
+        return Self.isStale(updatedAt, at: now)
+    }
+
+    public static func isStale(_ updatedAt: Date, at now: Date) -> Bool {
+        now.timeIntervalSince(updatedAt) > staleAfter
     }
 }

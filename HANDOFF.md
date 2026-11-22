@@ -1,6 +1,6 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-22 · Branch: `feat/m16-share-send` · PRs #1–#57 merged
+Last updated: 2026-11-22 · Branch: `feat/m16-chat-list-widget` · PRs #1–#57 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
@@ -12,6 +12,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log`.
+- **M16 Unread chats widget (`feat/m16-chat-list-widget`, D93):** medium widget with up to four chats and counts; names from the D88 chat-shortcuts file (opt-in), counts from `AttentionCache`; off → explains how to turn names on. `UnreadChatsSnapshot` + tests.
 - **Share photo fix (found on device):** a shared photo showed small because the image info had no pixel size, and it went out with its original metadata. `FileShareInbox` now runs photos through `ImagePreparer` (orientation, ≤ 2048 px, location EXIF dropped) and records `width`/`height` on `SharedItem`; `ShareCoordinator` passes them on. Tests in `FileShareInboxTests`, `ShareCoordinatorTests`.
 - **Share sends from the share sheet (`feat/m16-share-send`, D92, ADR-0023):** the extension stages first, restores the SDK session like the NSE (`holderName: "share"`, `sendsMessages: false`), lists chats from the local store (`MatrixShareTargetPort`), sends via `ShareCoordinator.deliver(confirmingFor: 90 s)` and closes on the server's echo (`SendConfirmation`); unconfirmed sends stay in the shared queue for the app. No session → staged items + notification (below). Extension gets the Keychain group and links `HaloMatrixAdapter`/`FeatureRoomList`.
 - **Share → app hand-back (`fix/m16-share-notify`):** a share extension can't open its app, so after staging it posts a content-free local notification ("Ready to send in Halo", only if notifications are already allowed); tapping it opens Halo and the app clears it and shows "Send to…". Found on device: sharing a photo left the user in the source app.
@@ -36,6 +37,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D86), [docs/adr/RE
 - **D84 / D85 / D86 (ADR-0022):** Apple-native north star; single `NavigationStack` shell; module layout v2 (all 4 steps complete).
 
 ## 4. Modified files (this push)
+- **M16 chat-list widget:** `HaloDomain/Widgets/{UnreadChatsSnapshot,UnreadWidgetSnapshot}.swift` + test, `ios/WidgetExtension/HaloWidgets.swift`, `docs/{DECISION_LOG,ROADMAP}.md`, `docs/security/PRIVACY.md`.
 - **M16 share send:** `ios/ShareExtension/*`, `ios/project.yml`, `HaloDomain/Share/ShareTarget.swift`, `HaloApplication/Share/{SendConfirmation,ShareCoordinator}.swift`, `HaloMatrixAdapter/Share/MatrixShareTargetPort.swift`, `FeatureRoomList/Share*.swift`, tests, `docs/adr/0023-*`, `docs/{DECISION_LOG,ROADMAP,OPEN_QUESTIONS}.md`, `docs/architecture/MODULE_BOUNDARIES.md`.
 - **M16 iPad:** `ios/App/HaloApp.swift`, `ios/Config/Base.xcconfig`, `ios/project.yml`, `HaloApplication/Navigation/ChatsRoute.swift` + `ChatsRouterTests.swift`, `FeatureOnboarding/SignInView.swift`, `docs/{DECISION_LOG,ROADMAP,PRODUCT_VISION}.md`.
 - **M16 Focus filter:** `HaloDomain/RoomList/RoomList.swift` (`FocusChats`), `HaloApplication/Shortcuts/FocusFilterState.swift`, `FeatureRoomList/RoomListViewModel.swift` + `RoomListView.swift`, `ios/App/Intents/FocusFilterIntent.swift`, `AppRoot.swift`, `HaloApp.swift`, tests, `docs/{DECISION_LOG,ROADMAP}.md`.
@@ -57,6 +59,7 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 - 👤 **R-18 & R-21 (upstream SDK gaps):** `SyncSettingsV2` filter and queued `sendRaw`/`sendSticker` need upstream `matrix-rust-sdk` PR + SDK bump.
 - 👤 **R-24 (pushkin & Beta/Release push gateway):** decide `infra/sygnal/` pushkin vs amending ADR-0015; configure Beta/Release push gateway + APNs keys + TestFlight.
 - 👤 **UX/ship open questions (D84):** **Q-BRAND** (sign-in illustration; halo disc `AppIcon` landed), **Q-ONBOARD-SERVER**, **Q-L10N**, **Q-APPSTORE** (App Store metadata, privacy policy & support pages), legal review (D38), export compliance (V-LEGAL), privacy nutrition labels ([docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md)).
+- 📱 **Unread chats widget (device, D93):** add the medium widget with the setting on and off; names hidden on a locked screen.
 - 📱 **V-SHARE-1 (device, ADR-0023):** share a photo and a link to an encrypted room from Photos/Safari with Halo closed, then with it running; one copy each, no undecryptable event; also signed out (fallback) and with Airplane mode (queued).
 - 📱 **Share hand-back (device):** share a photo with notifications allowed, tap the notification, check "Send to…" appears; with notifications off the extension says to open Halo. Auto-opening Halo from the extension is not possible with public API; a chat picker inside the extension would be the alternative.
 - 📱 **iPad on a device / dev homeserver (D91):** only the signed-out screen was checked in the iPad simulator. Check sidebar selection, Slide Over / Split View collapse, rotation, and Settings/Stickers in the detail column.
@@ -69,7 +72,7 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 ## 6. Next steps
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §"Remaining work".
 1. Founder resolves §5 items (gates, push gateway / APNs, Q-BRAND sign-in illustration, Q-APPSTORE, legal/export/privacy labels) and runs Beta 1 (internal TestFlight) on a physical device.
-2. Post-1.0 backlog (M16, share extension done): App Intents / Siri, Spotlight, Focus filter, widgets, iPad layout, calls (D43).
+2. Post-1.0 backlog (M16): send-by-Siri, iPad extras (three columns, shortcuts, drag and drop), calls (D43).
 
 ## 7. Next Session Prompt
 ```text
