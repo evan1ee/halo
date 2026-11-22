@@ -1,5 +1,5 @@
-import FeatureAuth
 import FeatureBotActivity
+import FeatureOnboarding
 import FeatureRoomList
 import Foundation
 import HaloApplication

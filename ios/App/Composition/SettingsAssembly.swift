@@ -1,4 +1,4 @@
-import FeatureAuth
+import FeatureOnboarding
 import FeatureProfile
 import FeatureSettings
 import Foundation

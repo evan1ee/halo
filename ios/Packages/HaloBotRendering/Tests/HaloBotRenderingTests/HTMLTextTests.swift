@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import FeatureTimeline
+@testable import HaloBotRendering
 
 @Suite("HTMLText")
 struct HTMLTextTests {

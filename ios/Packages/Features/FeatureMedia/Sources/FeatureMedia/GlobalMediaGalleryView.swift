@@ -82,11 +82,36 @@ public struct GlobalMediaGalleryView: View {
             #endif
         }
         .sheet(item: $selectedItem) { entry in
-            GlobalMediaDetailSheet(
-                initialEntry: entry,
-                items: model.filteredItems.isEmpty ? [entry] : model.filteredItems,
-                model: model,
-                onJumpToMessage: { target in
+            let list = model.filteredItems.isEmpty ? [entry] : model.filteredItems
+            let byID = Dictionary(uniqueKeysWithValues: list.map { ($0.id, $0) })
+            let items = list.map { item -> PagedMediaItem in
+                let symbol: String = switch item.item.attachment.kind {
+                case .image: "photo"
+                case .video: "video.fill"
+                case .audio: "waveform"
+                case .file: "doc.fill"
+                }
+                return PagedMediaItem(
+                    id: item.id,
+                    title: item.item.attachment.body,
+                    caption: "\(item.roomName) · \(item.item.senderName)",
+                    fallbackSymbol: symbol,
+                    isImage: item.item.attachment.kind == .image
+                )
+            }
+            PagedPhotoViewer(
+                items: items,
+                initialID: entry.id,
+                loadImageData: { media in
+                    guard let target = byID[media.id], let source = target.item.attachment.source else { return nil }
+                    return await model.fullImageData(source)
+                },
+                exportItem: { media in
+                    guard let target = byID[media.id] else { return nil }
+                    return await model.exportMediaFile(target)
+                },
+                onJumpToMessage: { media in
+                    guard let target = byID[media.id] else { return }
                     selectedItem = nil
                     onJumpToMessage(target.roomID, target.item.eventID)
                 }
@@ -304,190 +329,6 @@ private struct GlobalMediaGridTile: View {
                         .padding(.horizontal, 6)
                 }
             }
-        }
-    }
-}
-
-private struct GlobalMediaDetailSheet: View {
-    let items: [GlobalMediaItem]
-    let model: GlobalMediaGalleryViewModel
-    let onJumpToMessage: (GlobalMediaItem) -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var currentID: String
-    @State private var exportedURL: URL?
-    @State private var isExporting = false
-
-    init(
-        initialEntry: GlobalMediaItem,
-        items: [GlobalMediaItem],
-        model: GlobalMediaGalleryViewModel,
-        onJumpToMessage: @escaping (GlobalMediaItem) -> Void
-    ) {
-        self.items = items
-        self.model = model
-        self.onJumpToMessage = onJumpToMessage
-        _currentID = State(initialValue: initialEntry.id)
-    }
-
-    private var currentIndex: Int {
-        items.firstIndex(where: { $0.id == currentID }) ?? 0
-    }
-
-    private var currentEntry: GlobalMediaItem {
-        items[currentIndex]
-    }
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                TabView(selection: $currentID) {
-                    ForEach(items) { item in
-                        GlobalMediaPreviewPage(entry: item, model: model)
-                            .tag(item.id)
-                    }
-                }
-                #if os(iOS)
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                #endif
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(currentEntry.item.attachment.body)
-                        .font(.headline)
-                        .lineLimit(2)
-                    HStack(spacing: 6) {
-                        Label(currentEntry.roomName, systemImage: "bubble.left.and.bubble.right")
-                        Text("·")
-                        Text(currentEntry.item.senderName)
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
-                    HStack(spacing: 6) {
-                        Text(currentEntry.item.timestamp, format: .dateTime.month().day().year().hour().minute())
-                        if let size = currentEntry.item.attachment.size {
-                            Text("· \(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))")
-                        }
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                    HStack(spacing: 12) {
-                        Button {
-                            onJumpToMessage(currentEntry)
-                        } label: {
-                            Label("Jump to message", systemImage: "arrow.up.right.square")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-
-                        if let exportedURL {
-                            ShareLink(item: exportedURL) {
-                                Label("Share", systemImage: "square.and.arrow.up")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.bordered)
-                        } else if currentEntry.item.attachment.source != nil {
-                            Button {
-                                let target = currentEntry
-                                isExporting = true
-                                Task {
-                                    let url = await model.exportMediaFile(target)
-                                    if currentID == target.id { exportedURL = url }
-                                    isExporting = false
-                                }
-                            } label: {
-                                if isExporting {
-                                    ProgressView()
-                                        .frame(maxWidth: .infinity)
-                                } else {
-                                    Label("Export", systemImage: "square.and.arrow.up")
-                                        .frame(maxWidth: .infinity)
-                                }
-                            }
-                            .buttonStyle(.bordered)
-                            .disabled(isExporting)
-                        }
-                    }
-                    .padding(.top, 4)
-                }
-                .padding()
-                .background(.bar)
-            }
-            .navigationTitle(items.count > 1 ? "\(currentIndex + 1) of \(items.count)" : currentEntry.roomName)
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-            .onChange(of: currentID) {
-                exportedURL = nil
-                isExporting = false
-            }
-        }
-    }
-}
-
-private struct GlobalMediaPreviewPage: View {
-    let entry: GlobalMediaItem
-    let model: GlobalMediaGalleryViewModel
-
-    @State private var fullData: Data?
-    @State private var isLoadingFull = false
-
-    var body: some View {
-        Group {
-            #if canImport(UIKit)
-            if entry.item.attachment.kind == .image {
-                if let fullData, let image = UIImage(data: fullData) {
-                    ZoomableImageView(image: image)
-                } else if isLoadingFull {
-                    ProgressView()
-                } else {
-                    Image(systemName: "photo")
-                        .font(.largeTitle)
-                        .imageScale(.large)
-                        .foregroundStyle(HaloColor.textSecondary)
-                }
-            } else {
-                nonImagePreview
-            }
-            #else
-            nonImagePreview
-            #endif
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task(id: entry.id) {
-            fullData = nil
-            guard entry.item.attachment.kind == .image, let source = entry.item.attachment.source else { return }
-            isLoadingFull = true
-            fullData = await model.fullImageData(source)
-            isLoadingFull = false
-        }
-    }
-
-    private var nonImagePreview: some View {
-        VStack(spacing: 12) {
-            Image(systemName: {
-                switch entry.item.attachment.kind {
-                case .image: "photo"
-                case .video: "video.fill"
-                case .audio: "waveform"
-                case .file: "doc.fill"
-                }
-            }())
-                .font(.largeTitle)
-                .imageScale(.large)
-                .foregroundStyle(HaloColor.textSecondary)
-            Text(entry.item.attachment.body)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
         }
     }
 }

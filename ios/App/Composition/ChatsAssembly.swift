@@ -1,3 +1,4 @@
+import FeatureMedia
 import FeatureProfile
 import FeatureRoomDetails
 import FeatureRoomList

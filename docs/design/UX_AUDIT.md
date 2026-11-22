@@ -26,15 +26,9 @@ Halo should be indistinguishable in feel from Messages, Mail and Photos while ke
 
 | ID | Sev. | Finding | Evidence | Breaks | Fix |
 |---|---|---|---|---|---|
-| UX-04 | Blocker | Sign-in artwork pending Q-BRAND (founder's halo disc `AppIcon` and `Assets.xcassets` landed in M11) | `ios/App/Resources/Assets.xcassets`; `FeatureAuth/SignInView.swift` | App Store submission; DESIGN_SYSTEM §5 | Q-BRAND (👤) |
-| UX-06 | Medium | Remaining bare `ProgressView()` in secondary screens (room-list first load now uses `LoadingState(.roomList())` in M11) | remaining feature views | DESIGN_SYSTEM §8 ("no spinners for lists") | M13 |
-| UX-07 | Medium | Notification permission is asked the moment sign-in finishes, with no explanation; a denial is hard to undo and push is a P0 feature | `App/HaloApp.swift` | HIG (ask in context) | M13 (S14 priming) |
-| UX-09 | Medium | Wire `HaloFeedback` (landed in M11) across timeline send, reaction, and swipe gestures | `FeatureTimeline` | D84 §1.3 | M13 |
-| UX-10 | High | Accessibility is unverified: 36 `accessibilityLabel`s, no VoiceOver pass, no AX5 Dynamic Type check, no automated audit; custom rows don't combine elements | NFR-6 never measured | NFR-6, DESIGN_SYSTEM §9 | M14 |
-| UX-11 | High | Not localisation-ready: no String Catalog, view-model strings are plain `String`s, plurals built by hand (`members == 1 ? …`) | `FeatureRoomList/RoomListView.swift:83`; no `*.xcstrings` | NFR-9 | M14 (Q-L10N) |
-| UX-12 | Low | Swipe actions are text-only (semantic tints landed in M11); Mail uses icon + label | `FeatureRoomList/RoomListView.swift` | D84 §1.3 | M13 |
-| UX-14 | Medium | Sign-in starts with a bare "Server" field; no explanation of a homeserver, no suggested server, no "what's Matrix" help | `FeatureAuth/SignInView.swift:21-30` | S1 spec ("value statement") | M13 (Q-ONBOARD-SERVER) |
-| UX-15 | Medium | Errors are shown as developer text in places (adapter error descriptions reach alerts); there is no voice-and-tone guide | 9 `.alert(` call sites | Honest UI, D84 §1.4 | M13 (copy pass) |
+| UX-04 | Blocker | Sign-in artwork pending Q-BRAND (founder's halo disc `AppIcon` and `Assets.xcassets` landed in M11) | `ios/App/Resources/Assets.xcassets`; `FeatureOnboarding/SignInView.swift` | App Store submission; DESIGN_SYSTEM §5 | Q-BRAND (👤) |
+| UX-10 | High | Accessibility is unverified: VoiceOver pass, AX5 Dynamic Type check across all screens, automated `performAccessibilityAudit()` | NFR-6 | NFR-6, DESIGN_SYSTEM §9 | M14 |
+| UX-11 | High | Not localisation-ready: no String Catalog, view-model strings are plain `String`s, plurals built by hand | no `*.xcstrings` | NFR-9 | M14 (Q-L10N) |
 | UX-16 | Low | No system integrations users expect from a native messenger: share extension, App Intents / Siri, Spotlight, Focus filter, Live Activity for uploads | none present | NAVIGATION §3 (share extension P2) | Post-1.0 (M16 backlog) |
 
 ## 3. Findings — ship readiness

@@ -1,5 +1,7 @@
-import FeatureAuth
 import FeatureBotActivity
+import FeatureComposer
+import FeatureMedia
+import FeatureOnboarding
 import FeatureProfile
 import FeatureRoomDetails
 import FeatureRoomList
@@ -38,8 +40,10 @@ private struct RootView: View {
     @State private var searchModel: MessageSearchViewModel
     @State private var newChat: NewChatViewModel?
     @State private var roomInfo: RoomDetailsViewModel?
+    @State private var showingNotificationPriming = false
     @State private var ownName = ""
     @State private var ownAvatar: Data?
+    @AppStorage("halo.onboarding.notificationPrimingShown") private var notificationPrimingShown = false
 
     init(root: AppRoot) {
         self.root = root
@@ -197,12 +201,34 @@ private struct RootView: View {
                 router.openRoom(target.room, focus: target.event)
             }
         }
-        // Ask for notification permission once signed in; the token then arrives in `PushDelegate`.
+        // S14 Notifications priming (AC-UX-7, UX-07): explain why Halo needs notifications before showing the system prompt.
         .task(id: root.auth.screen) {
             guard root.push != nil, case .signedIn = root.auth.screen else { return }
-            if (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) == true {
+            let settings = await UNUserNotificationCenter.current().notificationSettings()
+            switch settings.authorizationStatus {
+            case .authorized, .provisional, .ephemeral:
                 UIApplication.shared.registerForRemoteNotifications()
+            case .notDetermined where !notificationPrimingShown:
+                showingNotificationPriming = true
+            default:
+                break
             }
+        }
+        .sheet(isPresented: $showingNotificationPriming) {
+            NotificationPrimingView(
+                onTurnOn: {
+                    notificationPrimingShown = true
+                    if (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) == true {
+                        UIApplication.shared.registerForRemoteNotifications()
+                    }
+                    showingNotificationPriming = false
+                },
+                onNotNow: {
+                    notificationPrimingShown = true
+                    showingNotificationPriming = false
+                }
+            )
+            .presentationDetents([.medium, .large])
         }
         // Sync and periodic read-state auditing run only in the foreground (SYNC_ENGINE §2 rule 1, LOGGING_AND_DIAGNOSTICS §2).
         .task(id: scenePhase) {

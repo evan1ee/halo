@@ -1,4 +1,4 @@
-import FeatureRoomList
+import FeatureMedia
 import Foundation
 import HaloApplication
 import HaloDomain

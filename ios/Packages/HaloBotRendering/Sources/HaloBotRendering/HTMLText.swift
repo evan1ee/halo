@@ -5,10 +5,10 @@ import SwiftUI
 /// Turns the HTML subset Matrix clients send in `formatted_body` into styled text (docs/features/MESSAGING.md FR-1,
 /// TIMELINE FR-2). Only a fixed set of tags is honoured; every other tag is dropped but its text stays, and nothing is
 /// ever executed or fetched. Links are kept only for web, mail and Matrix schemes.
-enum HTMLText {
+public enum HTMLText {
     private static let allowedSchemes: Set<String> = ["http", "https", "mailto", "matrix"]
 
-    static func attributed(_ html: String) -> AttributedString {
+    public static func attributed(_ html: String) -> AttributedString {
         var result = AttributedString()
         var bold = 0, italic = 0, strike = 0, code = 0
         var links: [URL?] = []
