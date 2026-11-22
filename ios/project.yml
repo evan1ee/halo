@@ -64,6 +64,8 @@ targets:
         embed: true
       - target: HaloShareExtension
         embed: true
+      - target: HaloWidgetExtension
+        embed: true
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -121,6 +123,23 @@ targets:
         CODE_SIGN_ENTITLEMENTS: ShareExtension/HaloShareExtension.entitlements
         INFOPLIST_KEY_CFBundleDisplayName: Halo
         INFOPLIST_FILE: ShareExtension/Info.plist
+  HaloWidgetExtension:
+    type: app-extension
+    platform: iOS
+    sources: [WidgetExtension]
+    dependencies:
+      - package: HaloCore
+        product: HaloFoundation
+      - package: HaloCore
+        product: HaloDomain
+      - package: HaloApple
+        product: HaloPlatform
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(HALO_WIDGET_BUNDLE_ID)
+        CODE_SIGN_ENTITLEMENTS: WidgetExtension/HaloWidgetExtension.entitlements
+        INFOPLIST_KEY_CFBundleDisplayName: Halo Widgets
+        INFOPLIST_FILE: WidgetExtension/Info.plist
   HaloUITests:
     type: bundle.ui-testing
     platform: iOS
