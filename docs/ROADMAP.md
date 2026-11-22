@@ -96,8 +96,9 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 - [ ] 👤 Push gateway (Sygnal + pushkin) for Beta/Release, APNs keys, TestFlight build.
 - [ ] 👤📱 AC-U8: 7-day soak with zero unexplained auditor findings.
 
-**P2** — M6 Bot cards (AC-B*; cards, tick and the template parsers are done under M5 above), M8 Search + Saved (V-SEARCH-1), M9 Gallery + Export, M10 Threads: break
-each into items here when M5 is done.
+**P2**
+- [x] M8 Search (`V-SEARCH-1` resolved): `SearchPort` (`MessageSearchHit`, `SearchSnapshot`), `FakeSearchPort`, `MatrixSearchPort` over SDK `Client.searchService()` (contract-verified against `infra/dev` in `AdapterContractTests.messageSearch`), `SearchCoordinator`, `MessageSearchViewModel` / `MessageSearchView` (magnifying glass toolbar button in `HaloApp`, tap a result to jump straight to the event). Saved room remains open under M8.
+- [ ] M8 Saved room, M9 Gallery + Export, M10 Threads.
 
 **M7 Bot Activity** (exit: AC-A1–A3)
 - [x] Slice 1 (branch `feat/m7-bot-activity`): `BotTaskDerivation`, `bot_task` store (migration v5), `BotActivityCoordinator` fed by open timelines, `FeatureBotActivity` sheet with sections and room/bot filters, Rebuild list; unit-tested in every layer, seen in the simulator with the peer account as a bot (`infra/dev/send-sample-events.py`).

@@ -47,6 +47,8 @@ final class AppRoot {
     private let devicesPort: MatrixDevicesPort
     private let passwordPort: MatrixAccountPasswordPort
     private let botAllowlistPort: MatrixBotAllowlistPort
+    private let searchPort: MatrixSearchPort
+    private let searchCoordinator: SearchCoordinator
     private let roomCoordinator: RoomListCoordinator
     /// The signed-in account, once the session is ready (kept out of "New chat" results).
     private var signedInUser: UserID?
@@ -81,6 +83,9 @@ final class AppRoot {
         self.devicesPort = MatrixDevicesPort(session: session)
         self.passwordPort = MatrixAccountPasswordPort(session: session)
         botAllowlistPort = MatrixBotAllowlistPort(session: session)
+        let searchPort = MatrixSearchPort(session: session)
+        self.searchPort = searchPort
+        self.searchCoordinator = SearchCoordinator(port: searchPort)
         let suite = "group.\(HaloShared.namespace())"
         attentionCache = AttentionCache(suiteName: suite)
         let legacyStorageName = "notificationRecords.v1"
@@ -202,6 +207,7 @@ final class AppRoot {
         await botActivity.reset()
         await stickers.reset()
         await timelinePort.dropWarm()
+        searchPort.reset()
         AppPreferences().botSenders = []
     }
 
@@ -389,6 +395,16 @@ final class AppRoot {
 
     /// The "New chat" sheet (ROOM_MANAGEMENT FR-5); `onCreated` gets the room to open.
     func makeNewChat(onCreated: @escaping @MainActor (RoomID) -> Void) -> NewChatViewModel { NewChatViewModel(port: chatCreation, ownUserID: signedInUser, onCreated: onCreated) }
+
+    /// The message search sheet (M8 Search + Saved, V-SEARCH-1).
+    func makeMessageSearch() -> MessageSearchViewModel {
+        MessageSearchViewModel(coordinator: searchCoordinator) { [roomList] roomID in
+            if case .loaded(_, let rows) = roomList.content, let row = rows.first(where: { $0.id == roomID }) {
+                return row.name
+            }
+            return "Room"
+        }
+    }
 
     /// The profile sheet of a room member (USER_PROFILES); `nil` when the member's ID is not valid.
     func makeUserProfile(member: RoomMemberInfo, onOpenRoom: @escaping @MainActor (RoomID) -> Void) -> UserProfileViewModel? {

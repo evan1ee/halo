@@ -1248,6 +1248,62 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
+    @Test("SearchPort (V-SEARCH-1): MatrixSearchPort over SDK SearchService finds a known message in HALO_DEV_TIMELINE_ROOM", .enabled(if: env["HALO_DEV_TIMELINE_ROOM"] != nil))
+    func messageSearch() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract-search"),
+            on: details)
+        try await MatrixSyncPort(session: session).start()
+        let room = try RoomID(env["HALO_DEV_TIMELINE_ROOM"] ?? "")
+        var timeline: (any TimelineSession)?
+        for _ in 0..<60 {
+            if let opened = try? await MatrixTimelinePort(session: session).open(room: room) { timeline = opened; break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        let opened = try #require(timeline)
+        let needle = "searchtoken\(UUID().uuidString.prefix(8).lowercased())"
+        try await opened.send(text: "find me \(needle)", mentions: [])
+        let stream = opened.items()
+        let confirmed: Bool = try await within(seconds: 60) {
+            var items: [HaloDomain.TimelineItem] = []
+            for await diff in stream {
+                try ListReducer.apply(diff, to: &items)
+                if items.contains(where: { item in
+                    if case .event(let ev) = item.content, ev.eventID != nil, case .text(let body, _) = ev.kind {
+                        return body.contains(needle)
+                    }
+                    return false
+                }) { return true }
+            }
+            return false
+        }
+        #expect(confirmed)
+
+        let search = MatrixSearchPort(session: session)
+        let snapshots = search.snapshots()
+        try await search.setQuery(needle)
+        let found: MessageSearchHit? = try await within(seconds: 30) {
+            for await snap in snapshots {
+                if let hit = snap.hits.first(where: { $0.body.contains(needle) }) {
+                    return hit
+                }
+                if !snap.isLoading && !snap.hasMore && snap.hits.isEmpty {
+                    // Server/index may take a moment after send; re-query once if empty.
+                    try? await Task.sleep(for: .seconds(1))
+                    try? await search.setQuery(needle)
+                }
+            }
+            return nil
+        }
+        let hit = try #require(found, "SearchService did not return the sent message containing \(needle)")
+        #expect(hit.roomID == room && hit.body.contains(needle))
+        await opened.close()
+        search.reset()
+        try await session.logout()
+    }
+
     /// S01/S02/S09-style scenario with the real stack: the adapter's room list over classic sync feeds `ReadStatePolicy`.
     /// Peer messages and a mention make the room need attention (`.mentions(1)`); a read receipt from another device of the same
     /// account clears it within a sync; `m.marked_unread` from the other device brings attention back (E5).

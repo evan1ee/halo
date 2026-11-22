@@ -32,6 +32,7 @@ private struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var path: [RoomID] = []
     @State private var newChat: NewChatViewModel?
+    @State private var messageSearch: MessageSearchViewModel?
     @State private var roomInfo: RoomDetailsViewModel?
     @State private var activity: BotActivityViewModel?
     /// The message to scroll to in the room about to open (from Activity); consumed by that room's screen.
@@ -77,6 +78,11 @@ private struct RootView: View {
                             } label: { Image(systemName: "square.and.pencil") }
                                 .accessibilityLabel("New chat")
                                 .accessibilityIdentifier("newChat")
+                        }
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button { messageSearch = root.makeMessageSearch() } label: { Image(systemName: "magnifyingglass") }
+                                .accessibilityLabel("Search")
+                                .accessibilityIdentifier("search")
                         }
                         if !AppPreferences().botSenders.isEmpty {
                             ToolbarItem(placement: .topBarTrailing) {
@@ -140,6 +146,13 @@ private struct RootView: View {
                     }
                     .onChange(of: root.roomList.content) { Task { await root.scanBotRooms() } }
                     .sheet(item: $newChat) { NewChatView(model: $0) }
+                    .sheet(item: $messageSearch) { model in
+                        MessageSearchView(model: model) { room, event in
+                            messageSearch = nil
+                            pendingEvent = event
+                            path.append(room)
+                        }
+                    }
                     .sheet(item: $activity) { model in
                         BotActivityView(model: model) { room, event in
                             activity = nil
