@@ -26,4 +26,12 @@ public enum HaloShared {
             ?? URL.applicationSupportDirectory
         return base.appendingPathComponent("matrix", isDirectory: true)
     }
+
+    /// Where the share extension stages items for the app: inside the App Group container, else Application Support
+    /// (unsigned simulator builds, where the two processes don't share it).
+    public static func shareInboxDirectory(bundle: Bundle = .main) -> URL {
+        let base = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.\(namespace(bundle: bundle))")
+            ?? URL.applicationSupportDirectory
+        return base.appendingPathComponent("share-inbox", isDirectory: true)
+    }
 }

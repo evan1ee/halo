@@ -53,7 +53,7 @@ struct AcknowledgementsTests {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        for relPath in ["ios/App/Resources/PrivacyInfo.xcprivacy", "ios/NotificationService/PrivacyInfo.xcprivacy"] {
+        for relPath in ["ios/App/Resources/PrivacyInfo.xcprivacy", "ios/NotificationService/PrivacyInfo.xcprivacy", "ios/ShareExtension/PrivacyInfo.xcprivacy"] {
             let data = try Data(contentsOf: root.appendingPathComponent(relPath))
             let plist = try #require(
                 try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],

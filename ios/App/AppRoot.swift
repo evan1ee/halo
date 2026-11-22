@@ -20,6 +20,8 @@ final class AppRoot {
     let preferences: PreferencesStore
     let auth: AuthViewModel
     let roomList: RoomListViewModel
+    /// The "Send to…" sheet for what the share extension staged (M16).
+    let shareHandoff: ShareHandoffViewModel
     let sync: SyncCoordinator
     let recovery: RecoveryViewModel
     /// `nil` when no push gateway is configured (Beta/Release until one is deployed).
@@ -156,6 +158,9 @@ final class AppRoot {
             session: sessionCoordinator, rooms: roomCoordinator, readState: readState,
             sync: sync, receipts: receipts, actions: roomPort, media: media
         )
+        shareHandoff = ShareHandoffViewModel(coordinator: ShareCoordinator(
+            inbox: FileShareInbox(directory: HaloShared.shareInboxDirectory()), timelines: timelinePort
+        ))
         roomList.warm = { [timelinePort] rooms in await timelinePort.warm(rooms) }
         roomList.botSenders = { [preferences] in Set(preferences.botSenders) }
 
