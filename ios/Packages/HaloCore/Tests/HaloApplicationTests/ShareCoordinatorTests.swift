@@ -79,4 +79,26 @@ struct ShareCoordinatorTests {
         #expect(!payload.isExpired(at: created.addingTimeInterval(SharePayload.lifetime - 1)))
         #expect(payload.isExpired(at: created.addingTimeInterval(SharePayload.lifetime + 1)))
     }
+
+    @Test("asking for confirmation waits for the server's echo and reports it")
+    func confirmedDelivery() async throws {
+        let (coordinator, inbox, timelines) = setUp()
+        let payload = SharePayload(createdAt: Date(), items: [SharedItem(kind: .text, text: "hi")])
+        inbox.stage(payload)
+        let result = try await coordinator.deliver(payload, to: room, confirmingFor: .seconds(5))
+        #expect(result == .confirmed)
+        #expect(timelines.sentTexts(in: room) == ["hi"])
+        #expect(inbox.discarded == [payload.id])
+    }
+
+    @Test("a send the server hasn't confirmed in time is reported as queued, not lost")
+    func queuedDelivery() async throws {
+        let (coordinator, inbox, _) = setUp()
+        let photo = SharedItem(kind: .image, filename: "a.jpg", mimeType: "image/jpeg")
+        let payload = SharePayload(createdAt: Date(), items: [photo])
+        inbox.stage(payload, files: [photo.id: Data([1])])
+        let result = try await coordinator.deliver(payload, to: room, confirmingFor: .milliseconds(100))
+        #expect(result == .queued)
+        #expect(inbox.discarded == [payload.id])
+    }
 }

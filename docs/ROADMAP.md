@@ -88,6 +88,8 @@ Halo is ready for external testers when **all** of these hold; each line names h
 **M16 Post-1.0 backlog** (first item picked by the founder, 2026-11-22)
 - [x] Share extension (D87): `HaloShareExtension` stages text, a link, photos and files into the App Group `share-inbox/` (`FileShareInbox`); the app shows "Send to…" on activation (`ShareHandoffViewModel`, `ShareTargetPickerView`) and `ShareCoordinator` sends through the timeline path. Tests: `ShareCoordinatorTests`, `FileShareInboxTests`, `ShareHandoffViewModelTests`; privacy manifest checked in `AcknowledgementsTests`.
 - [x] App Intents + Spotlight (D88): opt-in "Chats in Siri and Spotlight"; `OpenChatIntent` / `ChatEntity` (Siri phrase "Open <chat> in Halo"), Spotlight results open the chat. Tests: `ChatShortcutPublisherTests`, `SystemChatShortcutStoreTests`, `AppPreferencesTests`.
+- [x] Share sends from the share sheet (D92, ADR-0023): `MatrixShareTargetPort`, `SendConfirmation`, `ShareCoordinator.deliver(confirmingFor:)`, extension picker via `ShareTargetPickerView`; fallback to staging + notification. Tests: `SendConfirmationTests`, `ShareTargetTests`, `ShareCoordinatorTests`.
+- [ ] 📱 V-SHARE-1: encrypted-room send from the extension on a device.
 - [ ] 📱 Share extension on a physical device: the App Group container is shared only in signed builds; check Safari (link), Photos (several photos), Files (PDF) and a > 50 MiB file end to end.
 - [x] Unread widget (D89): `HaloWidgetExtension`, small and lock-screen families, count only; `UnreadWidgetSnapshot` tests, privacy manifest check.
 - [x] Focus filter (D90): `HaloFocusFilter` + `FocusChats`; room list `effectiveFilter` with a "Show all chats" banner; `RoomListFocusTests`, `FocusChatsTests`.

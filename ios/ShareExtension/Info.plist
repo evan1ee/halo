@@ -4,6 +4,8 @@
 <dict>
 	<key>HaloNamespace</key>
 	<string>$(HALO_NAMESPACE)</string>
+	<key>HaloKeychainAccessGroup</key>
+	<string>$(HALO_KEYCHAIN_GROUP)</string>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionPointIdentifier</key>

@@ -1,13 +1,18 @@
+import FeatureRoomList
+import HaloApplication
 import HaloDomain
 import HaloFoundation
+import HaloMatrixAdapter
 import HaloPlatform
+import SwiftUI
 import UIKit
 import UserNotifications
 import UniformTypeIdentifiers
 
-/// The system share sheet's "Halo" target (M16). It only stages what was shared into the App Group inbox
-/// (`FileShareInbox`); the app asks which chat to send it to when it next opens. The extension has no session, never
-/// talks to the homeserver and never starts sync (AGENTS §17).
+/// The system share sheet's "Halo" target (M16, D87, D92). It stages what was shared into the App Group inbox
+/// (`FileShareInbox`) first, so nothing is lost, then offers the chats from the SDK's local store and sends to the one the
+/// person picks, waiting for the server before it closes. It never starts sync (AGENTS §17). Without a session, or when
+/// the store can't be read, it falls back to leaving the items for Halo and a notification that opens it.
 final class ShareViewController: UIViewController {
     private let label = UILabel()
     private let spinner = UIActivityIndicatorView(style: .large)
@@ -37,20 +42,82 @@ final class ShareViewController: UIViewController {
     private func stageAndFinish() async {
         let providers = (extensionContext?.inputItems as? [NSExtensionItem] ?? []).flatMap { $0.attachments ?? [] }
         let inbox = FileShareInbox(directory: HaloShared.shareInboxDirectory())
-        var failure: String?
-        var notified = false
+        let payload: SharePayload
         do {
             var staged: [FileShareInbox.Staged] = []
             for provider in providers {
                 if let item = try await ShareItemReader.read(provider) { staged.append(item) }
             }
-            try inbox.stage(staged)
-            notified = await Self.notifyReady()
+            payload = try inbox.stage(staged)
         } catch {
-            failure = Self.message(for: error)
+            spinner.stopAnimating()
+            finish(failure: Self.message(for: error), notified: false)
+            return
         }
-        spinner.stopAnimating()
-        finish(failure: failure, notified: notified)
+        do {
+            let targets = try await openTargets(inbox: inbox)
+            spinner.stopAnimating()
+            show(targets: targets, payload: payload, inbox: inbox)
+        } catch {
+            // No session, or the store isn't readable: Halo sends it when the person opens it.
+            let notified = await Self.notifyReady()
+            spinner.stopAnimating()
+            finish(failure: nil, notified: notified)
+        }
+    }
+
+    /// The SDK session, restored from the Keychain exactly as the notification extension does; kept for sending.
+    private var coordinator: ShareCoordinator?
+
+    private func openTargets(inbox: FileShareInbox) async throws -> [ShareTargetPickerView.Target] {
+        let keychain = HaloShared.keychain()
+        guard let data = try await keychain.read(.session) else { throw HaloError.unauthorized(soft: false) }
+        let stored = try JSONDecoder().decode(StoredSession.self, from: data)
+        let session = MatrixSessionPort(
+            baseDirectory: HaloShared.storeDirectory(),
+            holderName: "share",
+            sendsMessages: false,
+            lightweightRuntime: true,
+            enablesSlidingSync: false,
+            readStoredSession: {
+                (try? keychain.readSync(.session)).flatMap { try? JSONDecoder().decode(StoredSession.self, from: $0) }
+            },
+            persistRefreshedSession: { refreshed in
+                if let encoded = try? JSONEncoder().encode(refreshed) { try? keychain.writeSync(encoded, for: .session) }
+            })
+        try await session.restore(stored)
+        let targets = try await MatrixShareTargetPort(session: session).targets()
+        guard !targets.isEmpty else { throw HaloError.notFound }
+        coordinator = ShareCoordinator(inbox: inbox, timelines: MatrixTimelinePort(session: session))
+        return targets.map { ShareTargetPickerView.Target(id: $0.id, name: $0.name) }
+    }
+
+    private func show(targets: [ShareTargetPickerView.Target], payload: SharePayload, inbox: FileShareInbox) {
+        guard let coordinator else { return }
+        let model = ShareHandoffViewModel(coordinator: coordinator, confirmingFor: .seconds(90)) { [weak self] _ in
+            self?.complete()
+        }
+        model.present(payload)
+        let root = ShareRootView(model: model, targets: targets, onLater: { [weak self] in
+            Task { @MainActor in
+                _ = await Self.notifyReady()
+                self?.complete()
+            }
+        }, onDiscarded: { [weak self] in self?.complete() })
+        let host = UIHostingController(rootView: root)
+        addChild(host)
+        host.view.frame = view.bounds
+        host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(host.view)
+        host.didMove(toParent: self)
+    }
+
+    private var completed = false
+
+    private func complete() {
+        guard !completed else { return }
+        completed = true
+        extensionContext?.completeRequest(returningItems: nil)
     }
 
     private func finish(failure: String?, notified: Bool) {
@@ -74,7 +141,7 @@ final class ShareViewController: UIViewController {
     /// the chat picker. Only when notifications are already allowed (the extension never asks), and with no content.
     static let readyNotificationID = "halo.share.ready"
 
-    private static func notifyReady() async -> Bool {
+    static func notifyReady() async -> Bool {
         let center = UNUserNotificationCenter.current()
         switch await center.notificationSettings().authorizationStatus {
         case .authorized, .provisional, .ephemeral: break
@@ -163,5 +230,20 @@ enum ShareItemReader {
             }
         }
         return try result.get()
+    }
+}
+
+/// The picker, closing the extension once the model has nothing left to send (sent or discarded).
+private struct ShareRootView: View {
+    let model: ShareHandoffViewModel
+    let targets: [ShareTargetPickerView.Target]
+    let onLater: () -> Void
+    let onDiscarded: () -> Void
+
+    var body: some View {
+        ShareTargetPickerView(model: model, targets: targets, onLater: onLater)
+            .onChange(of: model.current) { _, payload in
+                if payload == nil { onDiscarded() }
+            }
     }
 }

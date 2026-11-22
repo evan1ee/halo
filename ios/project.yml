@@ -116,8 +116,14 @@ targets:
         product: HaloFoundation
       - package: HaloCore
         product: HaloDomain
+      - package: HaloCore
+        product: HaloApplication
       - package: HaloApple
         product: HaloPlatform
+      - package: HaloApple
+        product: HaloMatrixAdapter
+      - package: HaloApple
+        product: FeatureRoomList
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(HALO_SHARE_BUNDLE_ID)

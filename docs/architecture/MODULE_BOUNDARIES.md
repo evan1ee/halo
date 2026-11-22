@@ -24,7 +24,7 @@ manifests and by `scripts/check-boundaries.sh` (see [../development/CI_CD.md](..
 | `Halo` (app target) | root | `AppContainer`, scene setup, deep links | all | ❌ |
 | `HaloNotificationService` (NSE target) | root | NSE entry point; the notification pipeline | HaloApplication, HaloDomain, HaloMatrixAdapter, HaloPersistence, HaloPlatform, HaloFoundation | ❌ |
 | `HaloWidgetExtension` (WidgetKit target) | root | Unread widget over `AttentionCache`; no session, no network (D89) | HaloPlatform, HaloDomain, HaloFoundation | ❌ |
-| `HaloShareExtension` (share extension target) | root | Stages shared items into the App Group inbox; no session, no network (D87) | HaloPlatform, HaloDomain, HaloFoundation | ❌ |
+| `HaloShareExtension` (share extension target) | root | Stages shared items, lists chats from the SDK's local store and sends the chosen one; no `SyncService` (D87, D92, ADR-0023) | HaloApplication, HaloDomain, HaloMatrixAdapter, HaloPlatform, FeatureRoomList, HaloFoundation | ❌ |
 
 ```mermaid
 flowchart BT
