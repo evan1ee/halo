@@ -8,16 +8,20 @@ public struct RoomListView: View {
     @Bindable private var model: RoomListViewModel
     private let onSelect: (RoomID) -> Void
     private let onRoomInfo: ((RoomID) -> Void)?
+    private let onMediaGallery: (() -> Void)?
 
-    /// `onSelect` is called when a room is tapped; `onRoomInfo` opens the room info sheet from a row's context menu.
+    /// `onSelect` is called when a room is tapped; `onRoomInfo` opens the room info sheet from a row's context menu;
+    /// `onMediaGallery` opens the preset non-Matrix Global Media Gallery entry (D83).
     /// Navigation itself belongs to the composition root.
     public init(
         model: RoomListViewModel,
         onRoomInfo: ((RoomID) -> Void)? = nil,
+        onMediaGallery: (() -> Void)? = nil,
         onSelect: @escaping (RoomID) -> Void = { _ in }
     ) {
         self.model = model
         self.onRoomInfo = onRoomInfo
+        self.onMediaGallery = onMediaGallery
         self.onSelect = onSelect
     }
 
@@ -31,6 +35,41 @@ public struct RoomListView: View {
                 syncIndicator
                 List {
                     Section {
+                        if let onMediaGallery, model.filter == .all {
+                            Button { onMediaGallery() } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "photo.on.rectangle.angled")
+                                        .font(.system(size: 19, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 44, height: 44)
+                                        .background(
+                                            LinearGradient(
+                                                colors: [.blue, .indigo],
+                                                startPoint: .topLeading,
+                                                endPoint: .bottomTrailing
+                                            ),
+                                            in: Circle()
+                                        )
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        HStack {
+                                            Text("Media Gallery")
+                                                .fontWeight(.medium)
+                                                .lineLimit(1)
+                                            Spacer()
+                                            Image(systemName: "chevron.right")
+                                                .font(.caption.weight(.semibold))
+                                                .foregroundStyle(.tertiary)
+                                        }
+                                        Text("Photos, videos & files across rooms")
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
+                                }
+                            }
+                            .foregroundStyle(.primary)
+                            .accessibilityIdentifier("preset-media-gallery")
+                        }
                         ForEach(rows) { row in
                             if row.isInvite {
                                 HStack(alignment: .top, spacing: 12) {
@@ -111,7 +150,9 @@ public struct RoomListView: View {
                 .contentMargins(.top, 8, for: .scrollContent)
                 .accessibilityIdentifier("room-list")
                 .overlay {
-                    if rows.isEmpty { ContentUnavailableView(Self.emptyTitle(model.filter), systemImage: "bubble.left.and.bubble.right") }
+                    if rows.isEmpty && !(onMediaGallery != nil && model.filter == .all) {
+                        ContentUnavailableView(Self.emptyTitle(model.filter), systemImage: "bubble.left.and.bubble.right")
+                    }
                 }
                 .safeAreaInset(edge: .bottom) {
                     if let message = model.actionError {

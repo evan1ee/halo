@@ -27,10 +27,15 @@ struct HaloApp: App {
     }
 }
 
+private enum HomeRoute: Hashable {
+    case room(RoomID)
+    case globalMediaGallery
+}
+
 private struct RootView: View {
     let root: AppRoot
     @Environment(\.scenePhase) private var scenePhase
-    @State private var path: [RoomID] = []
+    @State private var path: [HomeRoute] = []
     @State private var newChat: NewChatViewModel?
     @State private var messageSearch: MessageSearchViewModel?
     @State private var roomInfo: RoomDetailsViewModel?
@@ -61,7 +66,11 @@ private struct RootView: View {
             switch root.auth.screen {
             case .signedIn:
                 NavigationStack(path: $path) {
-                    RoomListView(model: root.roomList, onRoomInfo: { roomInfo = root.makeRoomDetails(room: $0) }) { path.append($0) }
+                    RoomListView(
+                        model: root.roomList,
+                        onRoomInfo: { roomInfo = root.makeRoomDetails(room: $0) },
+                        onMediaGallery: { path.append(.globalMediaGallery) }
+                    ) { path.append(.room($0)) }
                     .navigationTitle("")
                     .navigationBarTitleDisplayMode(.inline)
                     .task { await refreshOwnProfile() }
@@ -108,7 +117,7 @@ private struct RootView: View {
                                     onNewChat: {
                                         newChat = root.makeNewChat { room in
                                             newChat = nil
-                                            path.append(room)
+                                            path.append(.room(room))
                                         }
                                     },
                                     onSignOut: { Task { await root.auth.signOut() } })
@@ -146,14 +155,14 @@ private struct RootView: View {
                         MessageSearchView(model: model) { room, event in
                             messageSearch = nil
                             pendingEvent = event
-                            path.append(room)
+                            path.append(.room(room))
                         }
                     }
                     .sheet(item: $activity) { model in
                         BotActivityView(model: model) { room, event in
                             activity = nil
                             pendingEvent = event
-                            path.append(room)
+                            path.append(.room(room))
                         }
                     }
                     .sheet(item: $roomInfo) {
@@ -162,13 +171,21 @@ private struct RootView: View {
                             profile: { member in
                                 root.makeUserProfile(member: member) { target in
                                     roomInfo = nil
-                                    path.append(target)
+                                    path.append(.room(target))
                                 }
                             })
                     }
-                    .navigationDestination(for: RoomID.self) { room in
-                        TimelineScreen(root: root, room: room, jumpTo: pendingEvent, openRoom: { path.append($0) })
-                            .onAppear { pendingEvent = nil }
+                    .navigationDestination(for: HomeRoute.self) { route in
+                        switch route {
+                        case .room(let room):
+                            TimelineScreen(root: root, room: room, jumpTo: pendingEvent, openRoom: { path.append(.room($0)) })
+                                .onAppear { pendingEvent = nil }
+                        case .globalMediaGallery:
+                            GlobalMediaGalleryScreen(root: root) { room, event in
+                                pendingEvent = event
+                                path.append(.room(room))
+                            }
+                        }
                     }
                 }
             default:
@@ -179,8 +196,8 @@ private struct RootView: View {
             PushDelegate.coordinator = root.push
             PushDelegate.onNotificationTap = { room, event in
                 pendingEvent = event
-                if path.last != room {
-                    path.append(room)
+                if path.last != .room(room) {
+                    path.append(.room(room))
                 }
             }
             await root.push?.begin()
@@ -360,5 +377,20 @@ final class PushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCen
             }
         }
         completionHandler()
+    }
+}
+
+/// Keeps the global media gallery view model alive for the lifetime of the pushed preset room screen (D34, D83).
+private struct GlobalMediaGalleryScreen: View {
+    @State private var model: GlobalMediaGalleryViewModel
+    private let onJumpToMessage: @MainActor (RoomID, EventID) -> Void
+
+    init(root: AppRoot, onJumpToMessage: @escaping @MainActor (RoomID, EventID) -> Void) {
+        _model = State(initialValue: root.makeGlobalMediaGallery())
+        self.onJumpToMessage = onJumpToMessage
+    }
+
+    var body: some View {
+        GlobalMediaGalleryView(model: model, onJumpToMessage: onJumpToMessage)
     }
 }

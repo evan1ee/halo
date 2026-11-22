@@ -406,6 +406,11 @@ final class AppRoot {
         }
     }
 
+    /// Global media gallery opened from the preset non-Matrix room entry in the room list (D34, D83).
+    func makeGlobalMediaGallery() -> GlobalMediaGalleryViewModel {
+        GlobalMediaGalleryViewModel(rooms: roomCoordinator, roomPort: roomPort, media: media)
+    }
+
     /// The profile sheet of a room member (USER_PROFILES); `nil` when the member's ID is not valid.
     func makeUserProfile(member: RoomMemberInfo, onOpenRoom: @escaping @MainActor (RoomID) -> Void) -> UserProfileViewModel? {
         guard let user = try? UserID(member.userID) else { return nil }
