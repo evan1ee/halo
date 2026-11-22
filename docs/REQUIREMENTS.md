@@ -65,6 +65,36 @@ Full design: [matrix/UNREAD_STATE.md](matrix/UNREAD_STATE.md). Must be prevented
 | R-P2-THREADS | Threads with per-thread receipts | ROADMAP M10 |
 | R-P2-CALLS | MatrixRTC calls | ROADMAP (later) |
 
+## UX quality and ship readiness (D84)
+
+Halo must feel like an Apple-native app while keeping its own identity. Findings and evidence: [design/UX_AUDIT.md](design/UX_AUDIT.md);
+work: [ROADMAP.md](ROADMAP.md) M11–M15.
+
+| ID | Requirement | Spec |
+|---|---|---|
+| R-UX-NATIVE | System components, iOS 26 materials and Apple interaction patterns first; custom controls need a written reason | [design/DESIGN_SYSTEM.md](design/DESIGN_SYSTEM.md) §1, §11 |
+| R-UX-TOKENS | All colour, type, spacing, radius and motion come from `HaloDesignSystem` tokens | DESIGN_SYSTEM §2–6 |
+| R-UX-NAV | App shell, compose entry point, state restoration and one router for all deep links | [design/NAVIGATION.md](design/NAVIGATION.md) |
+| R-UX-ONBOARD | First run: welcome, homeserver help, device verification, notification priming | [design/SCREEN_SPECIFICATIONS.md](design/SCREEN_SPECIFICATIONS.md) S1, S2, S14 |
+| R-UX-STATES | Loading, empty and error states on every screen; human error copy | DESIGN_SYSTEM §8, §12 |
+| R-UX-A11Y | VoiceOver, Dynamic Type AX5, Voice Control and the system accessibility settings | NFR-6, DESIGN_SYSTEM §9 |
+| R-UX-L10N | Localisation-ready strings, plurals and formats | NFR-9 |
+| R-SHIP | Privacy manifest, App Store metadata, legal review, beta feedback path, performance budgets | ROADMAP "Ship-ready definition" |
+
+### Acceptance criteria
+- **AC-UX-1** `scripts/check-design-tokens.sh` passes: no raw `Color.<name>` or `.font(.system(size:))` outside `HaloDesignSystem` (allow-list documented).
+- **AC-UX-2** The contrast test passes for every token pair in light, dark and Increase Contrast (≥ 4.5:1 text, ≥ 3:1 large text/UI).
+- **AC-UX-3** A new chat can be started from the room list in one tap (compose button); Settings, Stickers, Activity and message search are each reachable from the room list in at most two taps, without a sheet (D85).
+- **AC-UX-4** After a kill and relaunch the app reopens the previous navigation path (the open room if still joined).
+- **AC-UX-5** (moderated test) Three people with an existing Matrix account each go from first launch to a sent message in ≤ 3 minutes without help.
+- **AC-UX-6** Every screen in SCREEN_SPECIFICATIONS shows its loading, empty and error state in a UI test or `#Preview`; lists never show a bare spinner.
+- **AC-UX-7** The system notification prompt appears only after the user taps "Turn on" on the priming screen (S14).
+- **AC-UX-8** `performAccessibilityAudit()` reports zero issues on the Chats, Timeline, Stickers, Settings and sign-in screens.
+- **AC-UX-9** (manual) The golden path (sign in → open room → send → react → leave) works with VoiceOver only and at AX5 text size.
+- **AC-UX-10** Every user-facing string is in a String Catalog; a pseudo-language run shows no clipped or hard-coded text.
+- **AC-UX-11** NFR-1 and NFR-2 measured on an iPhone 15-class device with XCTest metrics and recorded in TEST_STRATEGY.
+- **AC-UX-12** The archive's privacy report lists the app's and NSE's privacy manifests, and App Store Connect accepts the build without warnings.
+
 ## Non-functional requirements
 
 | ID | Requirement |
@@ -77,3 +107,5 @@ Full design: [matrix/UNREAD_STATE.md](matrix/UNREAD_STATE.md). Must be prevented
 | NFR-6 | Accessibility: Dynamic Type up to AX5, VoiceOver labels on every control, Reduce Motion respected |
 | NFR-7 | Data at rest protected by iOS Data Protection; content columns in Halo's DB encrypted |
 | NFR-8 | Licence gate passes on every build; acknowledgements complete |
+| NFR-9 | Localisation-ready: every user-facing string in a String Catalog; plurals, dates and numbers locale-aware; layouts survive +100 % string length and right-to-left |
+| NFR-10 | App Store compliance: privacy manifests for every target, no tracking, privacy labels match [security/PRIVACY.md](security/PRIVACY.md) |

@@ -22,7 +22,10 @@ One place for account, notifications, privacy, appearance, storage, diagnostics 
 | Bots | Allowlisted bot user IDs for template cards (synced as `one.mbm.halo.bot_allowlist`, see BOT_MESSAGES §3) |
 | Storage | SDK store sizes, clear media cache (built: clears in-memory thumbnails and per-session `caches/` directories) |
 | Diagnostics | Auditor summary (debug/TestFlight), "Reconcile now", "Export diagnostics (.zip)" (`DiagnosticsZipArchive`, built) |
-| About | Version, SDK version, **Acknowledgements** (generated, D39), licence notice |
+| Privacy (app switcher) | "Hide content in app switcher" (D61, built) |
+| Setup | First-run checklist (SCREEN_SPECIFICATIONS S15) while a step is left (not built, ROADMAP M13) |
+| Feedback | "Send feedback": mail/share sheet with an optional diagnostics `.zip` the user chooses to attach (not built, ROADMAP M15) |
+| About | Version, SDK version, **Acknowledgements** (generated, D39), licence notice, privacy policy and support links, "What's New" (not built, ROADMAP M15) |
 
 ## 4. Non-functional requirements
 Every setting persisted immediately; server-backed settings show their sync state.

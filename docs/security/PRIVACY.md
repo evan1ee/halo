@@ -32,4 +32,6 @@ messages already in the user's rooms. Any future feature that sends content to a
 Covered in [SECURITY.md](SECURITY.md) §3–4. The Bot Activity index and audit log stay on the device.
 
 ## 5. App Store privacy (before public release)
+Every target (app, NSE, later extensions) ships a `PrivacyInfo.xcprivacy` declaring the required-reason APIs it uses, no tracking
+and no tracking domains (NFR-10, ROADMAP M15); the archive's privacy report is checked before each upload (AC-UX-12).
 Privacy nutrition labels: "Data not collected" for analytics; "Data linked to you" only as needed for the account at the user's own homeserver (to be reviewed with the legal review, D38).

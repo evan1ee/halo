@@ -5,7 +5,7 @@ Halo is an independent, proprietary Matrix client for iOS built with SwiftUI on 
 and engineering process. Code that contradicts these documents is a bug in either the code or
 the document: fix one of them in the same change.
 
-**Phase:** 0 — documentation complete and approved (2026-11-19); next is M0. See [PHASE0_REPORT.md](PHASE0_REPORT.md).
+**Phase:** M0–M10 implemented (2026-11-22); next is the Apple-native UX and ship-readiness phase M11–M15 (D84, [ROADMAP.md](ROADMAP.md)). Phase 0 record: [PHASE0_REPORT.md](PHASE0_REPORT.md).
 
 ## Statement labels
 
@@ -35,11 +35,11 @@ Documents mark important statements with one of these labels:
 | Architecture | [OVERVIEW](architecture/OVERVIEW.md) · [SYSTEM_DESIGN](architecture/SYSTEM_DESIGN.md) · [MODULE_BOUNDARIES](architecture/MODULE_BOUNDARIES.md) · [DATA_FLOW](architecture/DATA_FLOW.md) · [CONCURRENCY](architecture/CONCURRENCY.md) · [ERROR_HANDLING](architecture/ERROR_HANDLING.md) · [BACKGROUND_EXECUTION](architecture/BACKGROUND_EXECUTION.md) · [LOGGING_AND_DIAGNOSTICS](architecture/LOGGING_AND_DIAGNOSTICS.md) · [ARCHITECTURE_DECISIONS](architecture/ARCHITECTURE_DECISIONS.md) |
 | Matrix | [SDK_INTEGRATION](matrix/SDK_INTEGRATION.md) · [RUST_FFI](matrix/RUST_FFI.md) · [PORTS_CONTRACT](matrix/PORTS_CONTRACT.md) · [SYNC_ENGINE](matrix/SYNC_ENGINE.md) · [UNREAD_STATE](matrix/UNREAD_STATE.md) · [READ_RECEIPTS](matrix/READ_RECEIPTS.md) · [PUSH_NOTIFICATIONS](matrix/PUSH_NOTIFICATIONS.md) · [MEDIA](matrix/MEDIA.md) |
 | Features | [_TEMPLATE](features/_TEMPLATE.md) · [AUTHENTICATION](features/AUTHENTICATION.md) · [ENCRYPTION_AND_DEVICES](features/ENCRYPTION_AND_DEVICES.md) · [ROOM_LIST](features/ROOM_LIST.md) · [TIMELINE](features/TIMELINE.md) · [MESSAGING](features/MESSAGING.md) · [MEDIA_ATTACHMENTS](features/MEDIA_ATTACHMENTS.md) · [NOTIFICATIONS](features/NOTIFICATIONS.md) · [ROOM_MANAGEMENT](features/ROOM_MANAGEMENT.md) · [USER_PROFILES](features/USER_PROFILES.md) · [STICKERS](features/STICKERS.md) · [BOT_MESSAGES](features/BOT_MESSAGES.md) · [BOT_ACTIVITY](features/BOT_ACTIVITY.md) · [SETTINGS](features/SETTINGS.md) |
-| Design | [DESIGN_SYSTEM](design/DESIGN_SYSTEM.md) · [NAVIGATION](design/NAVIGATION.md) · [SCREEN_SPECIFICATIONS](design/SCREEN_SPECIFICATIONS.md) |
+| Design | [DESIGN_SYSTEM](design/DESIGN_SYSTEM.md) · [NAVIGATION](design/NAVIGATION.md) · [SCREEN_SPECIFICATIONS](design/SCREEN_SPECIFICATIONS.md) · [UX_AUDIT](design/UX_AUDIT.md) |
 | Data | [DATA_MODELS](data/DATA_MODELS.md) · [PERSISTENCE](data/PERSISTENCE.md) · [MIGRATIONS](data/MIGRATIONS.md) |
 | Security | [SECURITY](security/SECURITY.md) · [PRIVACY](security/PRIVACY.md) · [LICENSE_COMPLIANCE](security/LICENSE_COMPLIANCE.md) · [DEPENDENCY_INVENTORY](security/DEPENDENCY_INVENTORY.md) |
 | Testing | [TEST_STRATEGY](testing/TEST_STRATEGY.md) · [UNREAD_REGRESSION_TESTS](testing/UNREAD_REGRESSION_TESTS.md) · [INTEGRATION_TESTS](testing/INTEGRATION_TESTS.md) |
-| Development | [DEVELOPMENT_SETUP](development/DEVELOPMENT_SETUP.md) · [CODE_CONVENTIONS](development/CODE_CONVENTIONS.md) · [BUILD_AND_RELEASE](development/BUILD_AND_RELEASE.md) · [CI_CD](development/CI_CD.md) |
+| Development | [DEVELOPMENT_SETUP](development/DEVELOPMENT_SETUP.md) · [CODE_CONVENTIONS](development/CODE_CONVENTIONS.md) · [TECH_DEBT](development/TECH_DEBT.md) · [BUILD_AND_RELEASE](development/BUILD_AND_RELEASE.md) · [CI_CD](development/CI_CD.md) |
 
 ## Maintenance rules
 

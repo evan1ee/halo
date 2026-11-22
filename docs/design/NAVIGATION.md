@@ -1,32 +1,38 @@
 # Navigation
 
 ## 1. Structure
-**[DECISION D50]** A `TabView` with three tabs in the MVP and a fourth in P2. Each tab owns a `NavigationStack` with a typed path.
+**[DECISION D85]** (founder, 2026-11-22, supersedes D50; resolves Q-NAV-SHELL) **One `NavigationStack`, no tab bar**, in the
+style of Messages. The room list is the only root; everything else is pushed onto it or shown as a sheet.
 
-| Tab | Root screen | MVP? |
+| Element | Placement | Opens |
 |---|---|---|
-| Chats | Room list | ✅ |
-| Stickers | Sticker library (packs, favourites, create) | ✅ (D45) |
-| Settings | Settings | ✅ |
-| Activity | Bot Activity | P2 (M7) — inserted between Chats and Stickers |
+| Room list | Root, large title "Chats" | — |
+| Account avatar | Top-leading toolbar (shows a dot when this device needs verification) | Settings, pushed |
+| Compose (`square.and.pencil`) | Top-trailing toolbar | New chat, sheet |
+| More menu (`ellipsis.circle`) | Top-trailing toolbar, left of compose | Filters (All · Unread · People · Rooms · Favourites · Invites), Stickers, Activity (only when bot senders are set), pushed |
+| Search | `.searchable` field in the room list (pull down to reveal) | Filters rooms by name while typing; a "Messages" section shows `SearchPort` hits; tapping one opens the room at the event |
+| Media Gallery | Preset row in the room list (D83) | Global Media Gallery, pushed |
 
-The tab badge on Chats equals the app badge (same `BadgeCalculator` result).
+Rules: the app badge is the only unread count outside the list (no tab badge); Activity and the sticker library are pushed screens,
+not sheets; Settings → Stickers links to the same sticker library screen. Search, Activity and the sticker library stop being
+sheets (ROADMAP M12).
 
-**[DECISION D83]** Do **not** add a Photos/Media tab. The **Global Media Gallery** (D34, R-P2-GALLERY) is surfaced as a **preset virtual room entry** inside the Room list. It is a local navigation entry only—**not** a Matrix room (no server room ID, no Matrix sync state, no unread count, no read receipts, never contributes to the app badge). Tapping it pushes the Global Media Gallery screen on the Chats `NavigationStack`.
+**[DECISION D83]** Do **not** add a Photos/Media tab. The **Global Media Gallery** (D34, R-P2-GALLERY) is surfaced as a **preset virtual room entry** inside the Room list. It is a local navigation entry only—**not** a Matrix room (no server room ID, no Matrix sync state, no unread count, no read receipts, never contributes to the app badge). Tapping it pushes the Global Media Gallery screen on the `NavigationStack`.
 
 ```mermaid
 flowchart TB
   Root[RootView] -->|signed out| Onb[Onboarding / Login]
-  Root -->|signed in| Tabs
-  subgraph Tabs[TabView]
-    Chats --> RL[Room list] --> TL[Timeline] --> RD[Room details] --> MB[Members] --> PR[Profile]
+  Root -->|signed in| Stack
+  subgraph Stack["NavigationStack (D85)"]
+    RL[Room list] --> TL[Timeline] --> RD[Room details] --> MB[Members] --> PR[Profile]
     RL --> MG["Global Media Gallery (preset entry, non-Matrix)"]
     TL --> MV[Media viewer]
     TL --> TH["Thread (P2)"]
-    RL --> NC[New chat]
-    Stickers --> SL[Sticker library] --> PK[Pack detail] --> NP[New pack]
-    Act["Activity (P2)"] --> AL[Activity list] -.jump.-> TL
-    Settings --> ST[Settings] --> Sub[Account · Security · Notifications · Privacy · Appearance · Storage · Diagnostics · About]
+    RL -. sheet .-> NC[New chat]
+    RL --> SR["Search results (messages)"] -.jump.-> TL
+    RL -->|more menu| SL[Sticker library] --> PK[Pack detail] --> NP[New pack]
+    RL -->|more menu| AL["Activity (P2)"] -.jump.-> TL
+    RL -->|avatar| ST[Settings] --> Sub[Account · Security · Notifications · Privacy · Appearance · Stickers · Storage · Diagnostics · About]
   end
   TL -. sheet .-> SP[Sticker panel]
   Root -. full-screen .-> RA[Re-auth / Verify device]
@@ -34,15 +40,15 @@ flowchart TB
 
 ## 2. Routing
 - Routes are Halo enums in `HaloApplication/Navigation` (e.g. `ChatsRoute.room(RoomID, focus: EventID?)`, `.roomDetails`, `.profile(UserID)`). Features push routes; they don't import each other (MODULE_BOUNDARIES §2).
-- A `Router` per tab holds the `NavigationPath`; the app target maps routes to feature views (composition root).
+- One `Router` holds the typed path (`ChatsRoute`: `.room`, `.thread`, `.settings`, `.stickerLibrary`, `.activity`, `.globalMediaGallery`, …); notification taps, `matrix:` links, search hits and Activity items all go through it (no duplicated pushes). The app target maps routes to feature views (composition root).
 
 ## 3. Deep links
 | Source | Target |
 |---|---|
-| Notification tap | Chats → room at event |
+| Notification tap | Room at event (pushed on the stack) |
 | `matrix.to` / `matrix:` links | Room (join preview if not joined) / profile |
-| Activity item | Chats → room at source event |
+| Activity item | Room at source event |
 | Share extension (P2) | Room picker → composer |
 
 ## 4. Presentation rules
-Sheets for short tasks (new chat, room details on iPhone, sticker panel), full-screen covers only for blocking flows (re-auth, verification). State restoration: the selected tab + the open room are restored on relaunch (`@SceneStorage`).
+Sheets for short tasks (new chat, room details on iPhone, sticker panel), full-screen covers only for blocking flows (re-auth, verification). State restoration: the navigation path (open room, and Settings or Activity if they were open) is restored on relaunch (`@SceneStorage`), dropping a room that is no longer joined.

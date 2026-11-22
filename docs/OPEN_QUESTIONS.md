@@ -57,3 +57,8 @@
 | Q-CI-MAC | Use macOS CI runners for release candidates | Never / manual dispatch / always | **Deferred (D71)**: no macOS CI job for now; `scripts/prepush.sh` is the only Mac gate. Not blocking | M5 |
 | Q-BOT-OWNER | Allow ticking tasks owned by others (the bot ignores them) | Enable only for own tasks (needs reliable ownership) / enable all + timeout message | Enable all + clear timeout message in M6; refine when ownership is detectable | M6 |
 | Q-ACT-REFRESH | Offer a visible "refresh from bot" command in the Activity tab | Yes (visible message) / no | No in M7; reconsider after use | M7 |
+| Q-NAV-SHELL | App shell: D50's `TabView` vs the build's single stack (UX-02) | Tab bar / single stack / hybrid | **Decided (founder, 2026-11-22): single stack, Messages-style — D85** | — |
+| Q-BRAND | Final app icon and onboarding artwork (original, DESIGN_SYSTEM §5) | Commission / draw in-house / keep the placeholder for Beta 1 | Placeholder for Beta 1, final artwork before Beta 2 | M15 |
+| Q-ONBOARD-SERVER | What the sign-in screen suggests to people who don't know their homeserver | Founder's server prefilled / a short list of public servers / none, only help text | Help text plus the founder's server as an example while users are the trusted circle | M13 |
+| Q-L10N | Languages for the external beta and 1.0 | English only / English + the founder's languages / community translations later | English for Beta 1; add the founder's languages for Beta 2 once the String Catalog exists | M14 |
+| Q-APPSTORE | App Store identity: name, subtitle, category, age rating, keywords, support and privacy-policy URLs | — (founder content) | Category Social Networking; age rating per the questionnaire (user-generated content) | M15 |

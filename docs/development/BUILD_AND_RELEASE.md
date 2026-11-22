@@ -32,6 +32,9 @@ Archive from Xcode or `xcodebuild archive` on the founder's Mac; upload with Xco
 5. Device checklist ([../testing/TEST_STRATEGY.md](../testing/TEST_STRATEGY.md) §8).
 6. Archive → upload → release notes (features, SDK version, known issues).
 7. Auditor reports from the previous Beta reviewed (AC-U8).
+8. Privacy report of the archive checked: app and NSE privacy manifests present (AC-UX-12).
+9. For an external TestFlight build: the "Ship-ready definition" in [../ROADMAP.md](../ROADMAP.md) is met and the release plan
+   stage (Beta 1 → Beta 2 → 1.0) is named in the release notes.
 
 ## 5. Crash reporting and observability
 TestFlight/App Store crash reports + MetricKit + the diagnostics export ([../architecture/LOGGING_AND_DIAGNOSTICS.md](../architecture/LOGGING_AND_DIAGNOSTICS.md)). No third-party crash SDK (Q-CRASH before public release).

@@ -1,5 +1,10 @@
 # Roadmap
 
+**Where we are (2026-11-22):** the functional roadmap M0–M10 is done (blocked items: HANDOFF §5). The next phase, M11–M15,
+turns a correct app into a **shippable, Apple-native one** (D84): design-system foundation → navigation → core-flow polish →
+accessibility and localisation → ship readiness. Evidence for every item is in [design/UX_AUDIT.md](design/UX_AUDIT.md); the bar
+is the "Ship-ready definition" below.
+
 Capacity: solo, part-time (D24). Estimates are calendar weeks at ~15 h/week and are **[ASSUMPTION]**s,
 to be re-planned after M0. Each milestone ends with its exit criteria **verified by tests** (see AGENTS.md §0 and §12).
 
@@ -110,6 +115,76 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 - [x] Slice 5 (on `main`): rooms that aren't open — `BotActivityCoordinator.scan` (room list changes → `AppRoot.scanBotRooms`): for joined rooms whose newest message is from an allowlisted bot and that changed since the last scan, a timeline is opened just long enough to take its first non-empty snapshot (newest first, at most 8 per scan, one at a time). Seen in the simulator: index emptied, app relaunched, Activity filled without opening the room. Limit: only the first snapshot (the newest page) of such rooms is read, so older tasks appear when the room is opened.
 - [x] Slice 3 (on `main`): tick from the tab — `TimelineSession.addReaction` (idempotent 👍, contract-checked against the fake and `infra/dev`), `BotActionCoordinator` (short-lived timeline, confirmation through the index, 2-minute timeout, honest failed/no-response states), tick circle in Activity; seen in the simulator with a scripted bot (👍 on the server, spinner, completed only after the bot's `Marked task as done`). Not built: `bot_action` table (pending survives no restart), other reactions (👎 😝 🎉).
 
+**M11 Design-system foundation** (D84; exit: AC-UX-1, AC-UX-2; fixes UX-03, UX-04, UX-05, UX-13 of [design/UX_AUDIT.md](design/UX_AUDIT.md))
+- [ ] Asset catalogue `ios/App/Assets.xcassets` (also used by `HaloDesignSystem` through a bundle colour lookup) with the colour tokens of DESIGN_SYSTEM §2 (light, dark and Increase Contrast variants), `AccentColor` = `accent`, and a placeholder `AppIcon` (single 1024 pt image, light/dark/tinted) until Q-BRAND is answered.
+- [ ] `HaloDesignSystem` tokens: `HaloColor` (semantic names only), `HaloSpacing`, `HaloRadius`, `HaloMotion` (springs of §6 with Reduce Motion fallbacks), `HaloTypography` (Dynamic Type styles of §3). The contrast unit test promised in §2 (every pair, light/dark, ≥ 4.5:1).
+- [ ] Shared components of DESIGN_SYSTEM §7 moved out of feature views: `RoomRow`, `UnreadIndicator` (dot · count · `@n` · approximate), `Banner`, `LoadingState` (skeleton rows/bubbles via `.redacted(reason: .placeholder)`), `ErrorState` (inline + full screen with retry), `EmptyState` (wrapping `ContentUnavailableView`). Each with `#Preview`s in light/dark/AX5.
+- [ ] `HaloFeedback`: one place mapping app events to `.sensoryFeedback` (send = `.impact(weight: .light)`, reaction = `.selection`, swipe threshold, verification success = `.success`, failure = `.error`); off when the system setting is off.
+- [ ] Replace every raw system colour and fixed font size in `ios/Packages/Features` and `ios/App` with tokens; add a `scripts/check-design-tokens.sh` grep gate to `scripts/prepush.sh` (raw `Color.<name>`/`.font(.system(size:` outside `HaloDesignSystem` fails, with an allow-list for SF Symbol sizing that must stay fixed).
+- [ ] 👤 Q-BRAND: final app icon and the sign-in illustration (original artwork, DESIGN_SYSTEM §5).
+
+**M12 Navigation and information architecture** (exit: AC-UX-3, AC-UX-4; fixes UX-01, UX-02, UX-08)
+- [x] Q-NAV-SHELL decided by the founder (2026-11-22): single `NavigationStack`, Messages-style, no tab bar (D85, supersedes D50); NAVIGATION.md §1 rewritten.
+- [ ] Compose button (`square.and.pencil`, top-trailing) on the Chats root opens New chat as a sheet; the Settings "Find a person" row is removed (UX-01). Large title "Chats" on the root.
+- [ ] Shell per D85: one typed path `ChatsRoute` (`.room`, `.thread`, `.settings`, `.stickerLibrary`, `.activity`, `.globalMediaGallery`); Settings pushed from the avatar (its 25-closure initialiser replaced by a settings route factory in the composition root); a more menu (`ellipsis.circle`) with the filters, Stickers and Activity; Activity and the sticker library pushed instead of sheets.
+- [ ] Search per D85: `.searchable` on the room list (room names while typing, a "Messages" section from `SearchPort`), replacing the magnifying-glass sheet.
+- [ ] State restoration (NAVIGATION §4): the navigation path via `@SceneStorage`, dropping rooms no longer joined.
+- [ ] Notification tap, `matrix:` links, search hits and Activity items route through the one router (no duplicated pushes); unit-tested in `HaloApplication`.
+
+**M13 Core-flow polish — the first five minutes and the daily loop** (exit: AC-UX-5, AC-UX-6, AC-UX-7; fixes UX-06, UX-07, UX-09, UX-12, UX-14, UX-15)
+- [ ] First run (S1, S14): welcome screen with the value statement and Halo artwork, homeserver field with inline help ("What's a homeserver?") and the suggestion of Q-ONBOARD-SERVER, friendly discovery errors; after sign-in a short setup checklist: verify this device (S2) → notifications priming (S14, system prompt only after "Turn on") → done.
+- [ ] Room list: skeleton rows on the first-ever load, `.refreshable` triggering a sync round trip, swipe actions with SF Symbols + labels and semantic tints (Mail pattern), unread/mention indicators from `UnreadIndicator`, empty and filter-empty states per S3, invite rows as a compact card with Accept/Decline.
+- [ ] Timeline: bubble grouping and tails per DESIGN_SYSTEM §7, swipe-to-reply gesture with haptic, double-tap quick reaction (👍) and a reaction bar on long-press (Messages pattern), "↓ N new" / "Jump to unread" pills on system material, typing indicator animation (Reduce Motion: static), date separators as sticky headers, send button states (sending/failed) with haptics.
+- [ ] Composer: multi-line growth to 6 lines, attachment menu (Photos, Camera, Files) using `PhotosPicker` and the document picker, paste-image support, upload progress on the bubble, draft kept per room.
+- [ ] Room details and profiles: header in the style of Contacts (large avatar, name, quick actions Message · Mute · Search · Media), grouped rows, destructive actions last with confirmation.
+- [ ] Copy pass (UX-15): a voice-and-tone section in DESIGN_SYSTEM; every user-facing error mapped from `HaloError` to a short sentence plus an action; no adapter text in alerts.
+- [ ] Simulator walk-through of every screen in light/dark with screenshots attached to the pull request (AUTONOMOUS_LOOP §2 step 4).
+
+**M14 Accessibility and localisation** (exit: AC-UX-8, AC-UX-9, AC-UX-10; fixes UX-10, UX-11, SR-07)
+- [ ] VoiceOver pass per DESIGN_SYSTEM §9: rows read as one element ("Alice, 3 unread messages, last message …, 10:42"), custom actions (Reply, React, Mark read) through `.accessibilityActions`, bot-card states announced, focus moves sensibly after sheets close.
+- [ ] Dynamic Type up to AX5 on every screen (no truncated essential text, rows reflow to vertical), Bold Text, Increase Contrast, Reduce Transparency, Reduce Motion, Voice Control labels.
+- [ ] XCUITest target `HaloUITests`: golden path (sign in against `infra/dev` → open room → send → react → read clears the badge) plus `XCUIApplication.performAccessibilityAudit()` on each root screen; run by `scripts/prepush.sh` when the simulator is available.
+- [ ] String Catalog `Localizable.xcstrings` for the app and every feature package; view-model strings through `String(localized:)`; plurals via the catalogue; dates/numbers via `FormatStyle`; a pseudo-language run (double-length strings, RTL) checked on screen.
+- [ ] 👤 Q-L10N: languages for the external beta (recommendation: English only for Beta 1, then the founder's languages).
+
+**M15 Ship readiness — external TestFlight and App Store** (exit: AC-UX-11, AC-UX-12 and the "Ship-ready definition" below; fixes SR-01, SR-03…SR-06)
+- [ ] `PrivacyInfo.xcprivacy` for the app and the NSE (required-reason APIs actually used, no tracking, no collected data beyond the account on the user's homeserver); checked against the archive's privacy report.
+- [ ] In-app feedback: Settings → "Send feedback" opens a mail/share sheet with an optional diagnostics `.zip` (never automatic; PRIVACY §1); TestFlight screenshot feedback mentioned in What's New.
+- [ ] "What's New" sheet once per marketing version (local flag), and an About screen with privacy policy and support links.
+- [ ] Performance budgets on a physical device with XCTest metrics: cold start to an interactive room list ≤ 1 s for 300 rooms (NFR-1), timeline scroll hitch ratio < 5 ms/s (NFR-2), memory under 200 MB in a media-heavy room; MetricKit hang and launch reports reviewed.
+- [ ] 👤 Q-APPSTORE: name, subtitle, category, age rating, keywords; screenshots (6.9" and 6.3", light and dark) generated from the M14 UI test with fixture data; support and privacy-policy pages.
+- [ ] 👤 Legal review (D38), export compliance (V-LEGAL), privacy nutrition labels (PRIVACY §5), Q-SDK-BUILD and Q-CRASH decided before external testers.
+- [ ] 👤📱 Beta 1 (internal TestFlight) → Beta 2 (external TestFlight, ≤ 25 trusted testers) → 1.0 App Store, per the release plan below.
+
+**Tech debt (paid down alongside M11–M15; scores and evidence in [development/TECH_DEBT.md](development/TECH_DEBT.md))**
+- [ ] Phase A with M11: swift-format + SwiftLint configs enforced by `prepush.sh` (TD-06, D62); justify or replace `@unchecked Sendable` (TD-14); slim this queue — history to a "Done" appendix, one line per item (TD-09).
+- [ ] Phase B with M11–M12: `PreferencesPort` + observable preferences store, no `AppPreferences()` in the app (TD-02); move bot-allowlist sync, diagnostics and cache logic from `AppRoot` into `HaloApplication`, Settings built from a model factory (TD-10).
+- [ ] Phase C with M13: no `try?` on state-changing port calls — errors logged once and shown with M13 copy (TD-01); `ActionState` helper against double taps and orphaned tasks (TD-07); split `TimelineViewModel`/`TimelineView` below 600 lines per file (TD-11); replace the 1.5 s re-check in room details (TD-13).
+- [ ] Phase D with M14–M15: `HaloUITests` (TD-03); manual-dispatch macOS build workflow before TestFlight uploads, revisiting D71 (TD-04); `bot_action` table for pending ticks (TD-08).
+- [ ] 👤 TD-12 (R-16 field encryption) and 📤 TD-15 (upstream SDK filter / queued raw sends).
+
+## Ship-ready definition (D84)
+Halo is ready for external testers when **all** of these hold; each line names how it's checked.
+
+| Area | Bar | Check |
+|---|---|---|
+| Correctness | AC-U1–U7 green; AC-U8 soak with zero unexplained auditor findings | Scenario suite, auditor |
+| Native feel | No raw colours or fixed font sizes outside `HaloDesignSystem`; every screen uses system navigation, bars and sheets | AC-UX-1, `check-design-tokens.sh` |
+| First five minutes | Install → signed in → verified → first message sent in ≤ 3 minutes for a tester with an account, no dead ends | AC-UX-5, moderated test with 3 people |
+| States | Every screen has loading, empty and error states from DESIGN_SYSTEM §8; no blank screen, no spinner for lists | AC-UX-6 |
+| Accessibility | Zero issues from `performAccessibilityAudit()` on root screens; AX5 usable; VoiceOver golden path | AC-UX-8, AC-UX-9 |
+| Performance | NFR-1, NFR-2 met on an iPhone 15-class device | AC-UX-11 |
+| Stability | Crash-free sessions ≥ 99.5 % over the internal beta; no hang > 2 s in MetricKit | TestFlight + MetricKit |
+| Compliance | Privacy manifest, privacy labels, export compliance, licence gate, legal review | AC-UX-12, BUILD_AND_RELEASE §4 |
+
+## Release plan
+| Release | Contents | Audience | Entry |
+|---|---|---|---|
+| **Beta 1** (internal TestFlight) | M0–M10 + M11 + M12 + push gateway (R-24) | Founder + 1–3 people | M12 merged, Beta push gateway live |
+| **Beta 2** (external TestFlight) | + M13, M14, M15 compliance items | ≤ 25 trusted testers | Ship-ready definition met except the 1.0-only lines |
+| **1.0** (App Store) | + fixes from Beta 2, final icon/screenshots, legal sign-off | Public (Matrix power users) | Two weeks of Beta 2 with no P0/P1 bug open |
+| **Post-1.0 backlog (M16)** | Share extension, App Intents / Siri and Spotlight, Focus filter, widgets, iPad layout, calls (D43) | — | Re-plan after 1.0 |
+
 ## Milestones
 
 ```mermaid
@@ -129,6 +204,12 @@ gantt
   M8 Search + Saved      :m8, after m7, 6w
   M9 Gallery + Export    :m9, after m8, 5w
   M10 Threads            :m10, after m9, 6w
+  section Ship (D84)
+  M11 Design system      :m11, 2026-11-23, 2w
+  M12 Navigation         :m12, after m11, 2w
+  M13 Core-flow polish   :m13, after m12, 3w
+  M14 Accessibility+L10n :m14, after m11, 4w
+  M15 Ship readiness     :m15, after m13, 2w
 ```
 
 | # | Milestone | Scope | Exit criteria | Gates |
@@ -144,6 +225,11 @@ gantt
 | M8 | Search + Saved | Evaluate `SearchService` → decide; Saved room | Known message found in an E2EE room | V-SEARCH-1 |
 | M9 | Gallery + Export | Media index, gallery, encrypted export | — | — |
 | M10 | Threads | Thread UI + per-thread read state | Unread scenarios with threads green | — |
+| M11 | Design-system foundation | Asset catalogue, tokens, shared components, haptics, token gate | AC-UX-1, AC-UX-2 | Q-BRAND (icon only) |
+| M12 | Navigation & IA | Single-stack shell (D85), compose button, more menu, searchable list, state restoration, unified routing | AC-UX-3, AC-UX-4 | — |
+| M13 | Core-flow polish | First run, permission priming, room list/timeline/composer/details polish, copy pass | AC-UX-5–AC-UX-7 | Q-ONBOARD-SERVER |
+| M14 | Accessibility & localisation | VoiceOver/AX5 pass, UI tests + accessibility audit, String Catalog | AC-UX-8–AC-UX-10 | Q-L10N |
+| M15 | Ship readiness | Privacy manifest, feedback, What's New, perf budgets, App Store metadata, legal | AC-UX-11, AC-UX-12, Ship-ready definition | Q-APPSTORE, V-LEGAL |
 
 ## Gates
 
@@ -163,6 +249,9 @@ flowchart LR
   M5 --> M6 --> M7
   M5 --> M8 --> M9
   M1 -. media cache .-> M4
+  M10 --> M11 --> M12 --> M13 --> M15
+  M11 --> M14 --> M15
+  M5 -. push gateway .-> M15
 ```
 
 ## Technical risks per milestone

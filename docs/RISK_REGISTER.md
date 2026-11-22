@@ -53,3 +53,5 @@ don't collide with milestones (M0–M10), priorities (P0–P2), test properties 
 | PROJ-2 | Two ecosystems (Swift + Rust) | Med | Med | No Halo Rust unless G-FFI fails |
 | PROJ-3 | Self-hosted infrastructure upkeep | Med | Med | One compose file, stock configs, backups |
 | PROJ-4 | Bus factor 1 | High | Med | This documentation + AGENTS.md + scenario suite as specification |
+| PROJ-5 | The app is correct but feels unfinished or non-native, so testers fall back to their old client (UX_AUDIT) | High | High | D84 north star; M11–M15; moderated first-run test (AC-UX-5); Beta 2 gate |
+| PROJ-6 | App Store review rejects the build (privacy manifest, user-generated content rules: report/block, account deletion path) | Med | High | M15 compliance items; ignore user exists (USER_PROFILES); document the homeserver's account-deletion path in the App Store notes |

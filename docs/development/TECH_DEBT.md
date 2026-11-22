@@ -1,0 +1,67 @@
+# Technical debt register (2026-11-22)
+
+A scored list of the technical debt in the codebase at commit `8da66aa` and a plan to pay it down **alongside** the M11–M15
+feature work ([../ROADMAP.md](../ROADMAP.md)), not as a separate project. UX debt lives in
+[../design/UX_AUDIT.md](../design/UX_AUDIT.md); this file covers code, architecture, tests, tooling, dependencies and docs.
+Close an item by ticking its roadmap line; remove it here when merged.
+
+**Scoring.** Impact (how much it slows work, 1–5) · Risk (what happens if we leave it, 1–5) · Effort (1 = hours, 5 = weeks).
+**Priority = (Impact + Risk) × (6 − Effort).** ≥ 20 = do in the next milestone; 12–19 = schedule; < 12 = track.
+
+## 1. Snapshot
+| Area | Source lines | Test lines | Note |
+|---|---|---|---|
+| Features (7 packages) | 8,835 | 3,785 | `FeatureTimeline` alone is 2,941 |
+| HaloApplication | 2,943 | 3,429 | well covered |
+| HaloMatrixAdapter | 3,696 | 3,114 | contract + mapping tests |
+| HaloDomain | 3,540 | 1,403 | Linux CI |
+| App + NSE composition roots | 1,288 | **0** | `AppRoot.swift` 662, `HaloApp.swift` 419 |
+
+Healthy signals: no `TODO`/`FIXME`, no `print`, `as!`, `fatalError`, `DispatchQueue` or `Task.detached` in production code; module
+boundaries enforced by `scripts/check-boundaries.sh`; SDK and GRDB pinned exactly (`26.11.17`, `7.12.0`); `@unchecked Sendable`
+used 3 times, 2 with a written justification.
+
+## 2. Prioritised register
+
+| ID | Type | Debt | Evidence | I | R | E | **P** |
+|---|---|---|---|---|---|---|---|
+| TD-01 | Code | **Silent error swallowing.** 227 `try?` in production code; many on state-changing calls whose failure is turned into `nil`/`false` with no `HaloLog` line and no user-facing reason (join room, set display name/avatar, unignore, save bot allowlist, clear cache) | `App/AppRoot.swift` (34, e.g. lines 223, 421–427, 519–534, 610–611), `MatrixStickerPorts.swift` (15), `MatrixRoomListPort.swift` (12) | 4 | 4 | 3 | **24** |
+| TD-02 | Architecture | **Preferences without a port.** `AppPreferences` (in `FeatureSettings`) is created ad hoc 11 times by the app (`AppPreferences()`), not observable, read synchronously in a toolbar, so changing bot senders doesn't update the Activity button until relaunch; 16 `UserDefaults` call sites | `App/HaloApp.swift:145`, `App/AppRoot.swift:41,100,133,211–222,550,583,586` | 3 | 3 | 2 | **24** |
+| TD-03 | Test | **Composition roots and UI untested.** 0 tests for `App/` and the NSE target; no XCUITest; the golden path is only checked by hand | `ios/App`, `ios/NotificationService`; TEST_STRATEGY §1 "UI" row not built | 3 | 4 | 3 | **21** |
+| TD-04 | Infrastructure | **Only 4 of 12 packages in CI.** Adapter, persistence, platform, features and the app build are validated only by a local `scripts/prepush.sh` (D71); a skipped prepush lands unbuilt code on `main` | `.github/workflows/swift-linux.yml`; D71, Q-CI-MAC | 3 | 4 | 3 | **21** |
+| TD-05 | Code | **Design-system debt** (also UX-03/UX-05): 38 raw colours, 12 fixed font sizes, rows and states built inline per screen | UX_AUDIT §2 | 4 | 3 | 3 | **21** |
+| TD-06 | Tooling | **Formatting and lint not enforced.** D62 promises swift-format (120 cols) and SwiftLint custom rules; neither config exists, `prepush.sh` reports "swiftlint skipped" | `scripts/prepush.sh:46`; no `.swiftlint.yml` / `.swift-format` | 2 | 2 | 1 | **20** |
+| TD-07 | Code | **Unowned UI tasks.** 205 `Task { … }` in views and view models; button actions (Accept invite, Send, Save) aren't de-duplicated or cancelled, so a double tap can run an action twice and work continues after a sheet closes | `FeatureRoomList/RoomListView.swift:90-91` and similar | 2 | 3 | 2 | **20** |
+| TD-08 | Code | **Bot actions forget pending state on restart.** No `bot_action` table: a tick sent just before a kill shows as open again (Honest UI, AGENTS §4) | ROADMAP M7 slice 3 "Not built" | 2 | 3 | 2 | **20** |
+| TD-09 | Documentation | **Roadmap is hard to read.** "Remaining work" items are 1–3 KB single lines mixing history and status; M0 history sits above the queue; facts repeat between ROADMAP, HANDOFF and CODEBASE_REVIEW (AGENTS §15 "one fact, one place") | `docs/ROADMAP.md` lines 40–117 | 3 | 2 | 2 | **20** |
+| TD-10 | Architecture | **God-object composition root.** `AppRoot` (37 functions) builds closure bags for features — `SettingsView` takes about 25 closures — and holds logic (bot-allowlist merge, diagnostics, cache clearing, deep-link joins) that AGENTS §5 says belongs in `HaloApplication` | `App/AppRoot.swift`, `App/HaloApp.swift:82-124`, `SettingsView.swift:70` | 4 | 4 | 4 | **16** |
+| TD-11 | Code | **Oversized feature files.** `TimelineViewModel` 1,432 lines / 174 members; `TimelineView` 1,280 lines with 19 private types; `SettingsView` 626; `GlobalMediaGalleryView` 492. Slow to review, merge-conflict magnets for M13 | file sizes | 4 | 2 | 3 | **18** |
+| TD-12 | Security | **NFR-7 not met:** draft bodies and bot-task titles are stored in plaintext in `halo.sqlite` (protected only by file protection) | R-16, HANDOFF §5 (founder) | 2 | 4 | 3 | **18** |
+| TD-13 | Code | **Timing workarounds.** `RoomDetailsViewModel.load()` sleeps 1.5 s and re-checks power levels; member count uses `max(...)` because `joinedMembersCount()` is 0 under classic sync | `RoomDetailsViewModel.swift:170-180`; OUTSTANDING_ISSUES | 2 | 2 | 2 | **16** |
+| TD-14 | Code | **Concurrency escapes without justification:** `ResumeOnce` and `NotificationService` are `@unchecked Sendable` with no comment saying why it is safe (AGENTS §9) | `SessionCoordinator.swift:370`, `NotificationService.swift:13` | 1 | 2 | 1 | **15** |
+| TD-15 | Dependency | **Upstream SDK gaps.** Classic sync without a filter (R-18), no queued `sendRaw`/`sendSticker` (R-21), direct HTTP for devices and password (ADR-0018/0019); each bump must recheck the workarounds | HANDOFF §5, OUTSTANDING_ISSUES | 3 | 3 | 5 | **6** |
+
+## 3. Business justification (top items)
+- **TD-01 errors:** a messenger that silently fails "Join", "Save name" or "Unignore" breaks the Honest-UI principle and makes beta
+  bug reports unreproducible (nothing in the diagnostics). It is also needed by the M13 copy pass: there is no error to turn into copy.
+- **TD-02 preferences:** every new setting (M13 first-run checklist, M15 What's New) would add another `AppPreferences()` call;
+  a port now keeps settings testable and live.
+- **TD-03 / TD-04 tests and CI:** external testers raise the cost of a broken build; the M14 UI test and a minimal macOS job are the
+  cheapest insurance before Beta 2.
+- **TD-05 / TD-06 consistency:** the D84 native feel depends on one token set and one formatting style; both make M13 diffs smaller.
+- **TD-10 / TD-11 structure:** M12 rewrites the shell and M13 touches every timeline screen; splitting first avoids rewriting the
+  same 1,400-line files twice.
+
+## 4. Phased remediation (alongside feature work)
+
+| Phase | With | Items | Done when |
+|---|---|---|---|
+| **A — quick wins (≈ 1 week)** | M11 | TD-06 swift-format + SwiftLint configs and the token rule in `prepush.sh`; TD-14 justifications or a `Mutex`; TD-09 roadmap cleanup (history to a "Done" appendix, one line per item, details in specs) | prepush runs lint with zero findings; ROADMAP queue fits on two screens |
+| **B — foundations (≈ 2 weeks)** | M11–M12 | TD-05 (M11 itself); TD-02 `PreferencesPort` in `HaloDomain` + observable store in the app, all `AppPreferences()` call sites removed; TD-10 move bot-allowlist sync, diagnostics and cache logic into `HaloApplication` coordinators and replace Settings closures with a settings model factory during the M12 shell rewrite | `AppRoot` ≤ 300 lines, `SettingsView.init` ≤ 5 parameters, coordinators unit-tested |
+| **C — reliability (≈ 2 weeks)** | M13 | TD-01 audit every `try?` on a state-changing call: return `Result`/throw to the view model, log once with `HaloLog`, show copy from the M13 error map; a grep gate for new `try? await` on port mutations. TD-07 an `ActionState` helper (in-flight flag, disables the control, cancels on disappear) for view-model actions. TD-11 split `TimelineViewModel` (composer, media, reactions, read tracking) and `TimelineView` (one file per private view) before the M13 timeline polish. TD-13 replace the sleep with a room-info subscription | zero `try?` on port mutations; double-tap test per action; no feature file > 600 lines |
+| **D — safety net (≈ 2 weeks)** | M14–M15 | TD-03 `HaloUITests` golden path + accessibility audit (M14); TD-04 a manual-dispatch macOS workflow for the full build before every TestFlight upload (revisit D71); TD-08 `bot_action` table (append-only migration) | UI test green on every release candidate; macOS job green on the release commit |
+| **Founder / upstream** | any | TD-12 (R-16 decision); TD-15 upstream PRs for `SyncSettingsV2` filter and queued raw sends | decided / SDK bumped |
+
+## 5. Tracking
+Each phase's items are in the ROADMAP queue under "Tech debt"; re-score this register at every milestone exit together with the
+[../RISK_REGISTER.md](../RISK_REGISTER.md) review.

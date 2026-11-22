@@ -3,11 +3,18 @@
 Module: `HaloDesignSystem`. Halo has **its own visual identity** — it isn't derived from Element X's colours,
 icon set, layouts or component shapes (D37). Values below are the starting tokens; they change only via this document.
 
+**North star (D84):** Halo feels like a first-party Apple app — Messages, Mail and Photos are the reference for behaviour —
+with its own colours, icon and artwork. **Implementation status (2026-11-22):** the tokens of §2–6 and most components of §7
+are not built yet (features use raw system colours and inline rows, [UX_AUDIT.md](UX_AUDIT.md) UX-03/UX-05); ROADMAP M11 builds them.
+
 ## 1. Principles
 1. **Calm**: neutral surfaces, colour reserved for meaning (attention, mentions, errors).
 2. **Honest states**: pending, failed and uncertain states always look different from confirmed ones.
 3. **Native**: SF Pro, SF Symbols, system materials, standard gestures; no custom fonts in the MVP.
 4. **Accessible first**: Dynamic Type, VoiceOver, contrast ≥ WCAG AA (4.5:1 text, 3:1 large text/UI).
+5. **System before custom** (D84): use the SwiftUI/system component when one exists (`List`, `NavigationStack`, `.searchable`,
+   `.swipeActions`, `.contextMenu`, `ContentUnavailableView`, `PhotosPicker`, `ShareLink`, Quick Look); a custom control
+   needs a reason in its doc comment. Match Apple's interaction patterns before inventing new ones (§11).
 
 ## 2. Colour tokens
 Defined as asset-catalogue colours with light/dark variants; code uses semantic names only.
@@ -80,3 +87,23 @@ Dynamic Type up to AX5 without truncating essential info; colour is never the on
 
 ## 10. Themes
 System (default), Light, Dark. P2: accent colour choices.
+
+## 11. Apple-native patterns (D84)
+| Pattern | Rule |
+|---|---|
+| Materials (iOS 26) | Navigation bars, toolbars, sheets and menus keep the system Liquid Glass material; never paint an opaque background behind them. Floating controls (composer, jump pills, sticker preview) use system materials; Reduce Transparency falls back automatically. |
+| Titles | Large titles on the root ("Chats") and on Settings, Stickers and Activity; inline titles on deeper screens. No empty titles. |
+| Primary actions | Compose top-trailing (`square.and.pencil`), secondary destinations in a more menu (D85); destructive actions last, red, with confirmation. |
+| Rows | Swipe actions carry an SF Symbol and a label; leading = read/unread, trailing = mute/favourite (Mail). Long-press opens a context menu with a preview. |
+| Timeline | Swipe right to reply, double-tap to react 👍, long-press for the reaction bar and actions (Messages). |
+| Refresh | `.refreshable` only where a manual refresh does something (room list → a sync round trip). |
+| Permissions | Ask in context, after a priming screen that explains the benefit (notifications S14, photos on first attach). |
+| Haptics | Through `HaloFeedback` only (`.sensoryFeedback`): send `.impact(weight: .light)`, reaction `.selection`, swipe threshold `.impact`, success `.success`, failure `.error`. Never on scroll or on every sync change. |
+| Symbols | SF Symbols with `.symbolRenderingMode(.hierarchical)` by default; `.symbolEffect` for state changes (sending → sent), off under Reduce Motion. |
+
+## 12. Voice and tone
+Short, plain, sentence case, no blame, no jargon, one action. Say what happened and what to do: "Couldn't send. Tap to try again."
+— not "Error M_UNKNOWN (500)". Matrix words are allowed only where the user needs them (homeserver, recovery key) and get a
+one-line explanation the first time. Technical detail goes to diagnostics, never into an alert. Every `HaloError` case has a
+user-facing sentence (ROADMAP M13 copy pass).
+

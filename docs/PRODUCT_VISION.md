@@ -45,6 +45,8 @@ Discord's and native, structured rendering of personal assistant bots.
   Halo isn't sure of an exact count it shows a dot rather than a wrong number.
 - **Delightful expression.** The sticker panel slides up from the composer; favourites and recents come first; animated stickers play smoothly.
 - **Structured bots.** A todo list from your bot looks like a checklist; ticking an item shows "pending" until the bot confirms.
+- **Feels like an Apple app (D84).** Navigation, gestures, materials, text and haptics behave the way Messages and Mail do, so
+  nothing needs learning; the quality bar is the "Ship-ready definition" in [ROADMAP.md](ROADMAP.md).
 - **Own visual identity.** Halo's design language ([design/DESIGN_SYSTEM.md](design/DESIGN_SYSTEM.md)) is its own and isn't derived from Element X.
 
 ## Target users
