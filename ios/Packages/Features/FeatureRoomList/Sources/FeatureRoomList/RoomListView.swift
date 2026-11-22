@@ -91,7 +91,7 @@ public struct RoomListView: View {
                                 RoomRow(
                                     name: row.name,
                                     preview: row.preview,
-                                    timestamp: row.lastActivity.map(ActivityTime.text),
+                                    timestamp: row.lastActivity.map { ActivityTime.text($0) },
                                     hasUnread: row.hasUnread,
                                     isMuted: row.isMuted,
                                     isFavourite: row.isFavourite,

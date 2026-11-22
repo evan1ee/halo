@@ -1,4 +1,5 @@
 #if canImport(SwiftUI)
+import HaloDesignSystem
 import SwiftUI
 
 /// The account's media preview setting as the Settings screen offers it (MEDIA_ATTACHMENTS FR-7).
