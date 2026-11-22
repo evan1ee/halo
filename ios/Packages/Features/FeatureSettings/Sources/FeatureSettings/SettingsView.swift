@@ -20,42 +20,131 @@ public struct VerifyDeviceAction {
     }
 }
 
+/// Configuration bundle for `SettingsView` (TD-10: replaces the 25-closure initializer with a model factory).
+public struct SettingsConfiguration {
+    public let version: String
+    public let build: String
+    public let preferences: AppPreferences
+    public let onPrivateReceiptsChange: (Bool) -> Void
+    public let onPreferencesChanged: (@MainActor () -> Void)?
+    public let saveBotSenders: (@Sendable ([String]) async -> Bool)?
+    public let loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)?
+    public let saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)?
+    public let makeProfileView: (@MainActor () -> AnyView)?
+    public let stickerPacks: StickerPackSettingsActions?
+    public let onOpenStickers: (@MainActor () -> Void)?
+    public let devices: DevicesSettingsActions?
+    public let changePassword: ChangePasswordActions?
+    public let verifyDevice: VerifyDeviceAction?
+    public let diagnostics: (@Sendable () async -> String)?
+    public let exportDiagnosticsZip: (@Sendable () async -> URL?)?
+    public let reconcile: (@Sendable () async -> Void)?
+    public let unexplainedAuditCount: (@Sendable () async -> Int?)?
+    public let storageSizes: (@Sendable () async -> [StorageSize])?
+    public let clearCache: (@Sendable () async -> Bool)?
+    public let security: (@MainActor () -> [StorageSize])?
+    public let setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)?
+    public let replaceRecovery: (@MainActor () async -> Result<String, SettingsMessage>)?
+    public let notificationDefaults: NotificationDefaultsActions?
+    public let notificationStatus: (@Sendable () async -> String)?
+    public let openSystemSettings: (() -> Void)?
+    public let onSignOut: () -> Void
+
+    public init(
+        version: String,
+        build: String,
+        preferences: AppPreferences = AppPreferences(),
+        onPrivateReceiptsChange: @escaping (Bool) -> Void = { _ in },
+        onPreferencesChanged: (@MainActor () -> Void)? = nil,
+        saveBotSenders: (@Sendable ([String]) async -> Bool)? = nil,
+        loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)? = nil,
+        saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)? = nil,
+        makeProfileView: (@MainActor () -> AnyView)? = nil,
+        stickerPacks: StickerPackSettingsActions? = nil,
+        onOpenStickers: (@MainActor () -> Void)? = nil,
+        devices: DevicesSettingsActions? = nil,
+        changePassword: ChangePasswordActions? = nil,
+        verifyDevice: VerifyDeviceAction? = nil,
+        diagnostics: (@Sendable () async -> String)? = nil,
+        exportDiagnosticsZip: (@Sendable () async -> URL?)? = nil,
+        reconcile: (@Sendable () async -> Void)? = nil,
+        unexplainedAuditCount: (@Sendable () async -> Int?)? = nil,
+        storageSizes: (@Sendable () async -> [StorageSize])? = nil,
+        clearCache: (@Sendable () async -> Bool)? = nil,
+        security: (@MainActor () -> [StorageSize])? = nil,
+        setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil,
+        replaceRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil,
+        notificationDefaults: NotificationDefaultsActions? = nil,
+        notificationStatus: (@Sendable () async -> String)? = nil,
+        openSystemSettings: (() -> Void)? = nil,
+        onSignOut: @escaping () -> Void
+    ) {
+        self.version = version
+        self.build = build
+        self.preferences = preferences
+        self.onPrivateReceiptsChange = onPrivateReceiptsChange
+        self.onPreferencesChanged = onPreferencesChanged
+        self.saveBotSenders = saveBotSenders
+        self.loadMediaPreviews = loadMediaPreviews
+        self.saveMediaPreviews = saveMediaPreviews
+        self.makeProfileView = makeProfileView
+        self.stickerPacks = stickerPacks
+        self.onOpenStickers = onOpenStickers
+        self.devices = devices
+        self.changePassword = changePassword
+        self.verifyDevice = verifyDevice
+        self.diagnostics = diagnostics
+        self.exportDiagnosticsZip = exportDiagnosticsZip
+        self.reconcile = reconcile
+        self.unexplainedAuditCount = unexplainedAuditCount
+        self.storageSizes = storageSizes
+        self.clearCache = clearCache
+        self.security = security
+        self.setUpRecovery = setUpRecovery
+        self.replaceRecovery = replaceRecovery
+        self.notificationDefaults = notificationDefaults
+        self.notificationStatus = notificationStatus
+        self.openSystemSettings = openSystemSettings
+        self.onSignOut = onSignOut
+    }
+}
+
 public struct SettingsView: View {
-    private let version: String
-    private let build: String
-    private let onSignOut: () -> Void
-    private let preferences: AppPreferences
-    private let onPrivateReceiptsChange: (Bool) -> Void
-    private let saveBotSenders: (@Sendable ([String]) async -> Bool)?
-    private let loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)?
-    private let saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)?
-    private let diagnostics: (@Sendable () async -> String)?
-    private let exportDiagnosticsZip: (@Sendable () async -> URL?)?
-    private let reconcile: (@Sendable () async -> Void)?
-    private let unexplainedAuditCount: (@Sendable () async -> Int?)?
+    private let config: SettingsConfiguration
+    private var version: String { config.version }
+    private var build: String { config.build }
+    private var onSignOut: () -> Void { config.onSignOut }
+    private var preferences: AppPreferences { config.preferences }
+    private var onPrivateReceiptsChange: (Bool) -> Void { config.onPrivateReceiptsChange }
+    private var saveBotSenders: (@Sendable ([String]) async -> Bool)? { config.saveBotSenders }
+    private var loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)? { config.loadMediaPreviews }
+    private var saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)? { config.saveMediaPreviews }
+    private var diagnostics: (@Sendable () async -> String)? { config.diagnostics }
+    private var exportDiagnosticsZip: (@Sendable () async -> URL?)? { config.exportDiagnosticsZip }
+    private var reconcile: (@Sendable () async -> Void)? { config.reconcile }
+    private var unexplainedAuditCount: (@Sendable () async -> Int?)? { config.unexplainedAuditCount }
     @State private var unexplainedCount: Int?
-    private let profile: ProfileSettingsActions?
-    private let stickerPacks: StickerPackSettingsActions?
-    private let devices: DevicesSettingsActions?
-    private let changePassword: ChangePasswordActions?
+    private var makeProfileView: (@MainActor () -> AnyView)? { config.makeProfileView }
+    private var stickerPacks: StickerPackSettingsActions? { config.stickerPacks }
+    private var devices: DevicesSettingsActions? { config.devices }
+    private var changePassword: ChangePasswordActions? { config.changePassword }
     @State private var canChangePassword = false
     @State private var confirmingNewRecoveryKey = false
     @State private var changingRecoveryKey = false
-    private let verifyDevice: VerifyDeviceAction?
+    private var verifyDevice: VerifyDeviceAction? { config.verifyDevice }
     @State private var verifying = false
-    private let security: (@MainActor () -> [StorageSize])?
-    private let setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)?
+    private var security: (@MainActor () -> [StorageSize])? { config.security }
+    private var setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? { config.setUpRecovery }
     @State private var recoveryFailure: SettingsMessage?
-    private let replaceRecovery: (@MainActor () async -> Result<String, SettingsMessage>)?
+    private var replaceRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? { config.replaceRecovery }
     @State private var newRecoveryKey: String?
     @State private var settingUpRecovery = false
-    private let notificationDefaults: NotificationDefaultsActions?
-    private let notificationStatus: (@Sendable () async -> String)?
-    private let openSystemSettings: (() -> Void)?
-    private let onNewChat: (() -> Void)?
+    private var notificationDefaults: NotificationDefaultsActions? { config.notificationDefaults }
+    private var notificationStatus: (@Sendable () async -> String)? { config.notificationStatus }
+    private var openSystemSettings: (() -> Void)? { config.openSystemSettings }
     @State private var notifications = ""
-    private let storageSizes: (@Sendable () async -> [StorageSize])?
-    private let clearCache: (@Sendable () async -> Bool)?
+    private var storageSizes: (@Sendable () async -> [StorageSize])? { config.storageSizes }
+    private var clearCache: (@Sendable () async -> Bool)? { config.clearCache }
     @State private var storage: [StorageSize] = []
     @State private var clearingCache = false
     @AppStorage(AppPreferences.appearanceKey) private var appearance = Appearance.system.rawValue
@@ -67,65 +156,18 @@ public struct SettingsView: View {
     @State private var sendTypingNotices: Bool
     @State private var privacyBlur: Bool
 
-    /// `onPrivateReceiptsChange` applies a changed receipt privacy to the running app (the preference itself is stored here).
-    public init(
-        version: String, build: String, preferences: AppPreferences = AppPreferences(),
-        onPrivateReceiptsChange: @escaping (Bool) -> Void = { _ in },
-        saveBotSenders: (@Sendable ([String]) async -> Bool)? = nil,
-        loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)? = nil,
-        saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)? = nil,
-        profile: ProfileSettingsActions? = nil, stickerPacks: StickerPackSettingsActions? = nil, devices: DevicesSettingsActions? = nil, changePassword: ChangePasswordActions? = nil, verifyDevice: VerifyDeviceAction? = nil, diagnostics: (@Sendable () async -> String)? = nil,
-        exportDiagnosticsZip: (@Sendable () async -> URL?)? = nil,
-        reconcile: (@Sendable () async -> Void)? = nil, unexplainedAuditCount: (@Sendable () async -> Int?)? = nil,
-        storageSizes: (@Sendable () async -> [StorageSize])? = nil,
-        clearCache: (@Sendable () async -> Bool)? = nil,
-        security: (@MainActor () -> [StorageSize])? = nil, setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil,
-        replaceRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil, notificationDefaults: NotificationDefaultsActions? = nil, notificationStatus: (@Sendable () async -> String)? = nil, openSystemSettings: (() -> Void)? = nil, onNewChat: (() -> Void)? = nil, onSignOut: @escaping () -> Void
-    ) {
-        self.diagnostics = diagnostics
-        self.exportDiagnosticsZip = exportDiagnosticsZip
-        self.reconcile = reconcile
-        self.unexplainedAuditCount = unexplainedAuditCount
-        self.profile = profile
-        self.stickerPacks = stickerPacks
-        self.devices = devices
-        self.changePassword = changePassword
-        self.verifyDevice = verifyDevice
-        self.storageSizes = storageSizes
-        self.clearCache = clearCache
-        self.notificationStatus = notificationStatus
-        self.notificationDefaults = notificationDefaults
-        self.security = security
-        self.setUpRecovery = setUpRecovery
-        self.replaceRecovery = replaceRecovery
-        self.openSystemSettings = openSystemSettings
-        self.onNewChat = onNewChat
-        self.loadMediaPreviews = loadMediaPreviews
-        self.saveMediaPreviews = saveMediaPreviews
-        self.version = version
-        self.build = build
-        self.preferences = preferences
-        self.onPrivateReceiptsChange = onPrivateReceiptsChange
-        self.saveBotSenders = saveBotSenders
-        self.onSignOut = onSignOut
-        _privateReceipts = State(initialValue: preferences.privateReceipts)
-        _sendTypingNotices = State(initialValue: preferences.sendTypingNotices)
-        _privacyBlur = State(initialValue: preferences.privacyBlur)
+    public init(config: SettingsConfiguration) {
+        self.config = config
+        _privateReceipts = State(initialValue: config.preferences.privateReceipts)
+        _sendTypingNotices = State(initialValue: config.preferences.sendTypingNotices)
+        _privacyBlur = State(initialValue: config.preferences.privacyBlur)
     }
 
     public var body: some View {
         List {
-            if let onNewChat {
-                Section("Chats") {
-                    Button(action: onNewChat) {
-                        Label("Find a person or create a room", systemImage: "square.and.pencil")
-                    }
-                    .accessibilityIdentifier("newChat")
-                }
-            }
-            if let profile {
+            if let makeProfileView {
                 Section("Account") {
-                    NavigationLink { ProfileSettingsView(actions: profile) } label: { Label("Profile", systemImage: "person.crop.circle") }
+                    NavigationLink { makeProfileView() } label: { Label("Profile", systemImage: "person.crop.circle") }
                         .accessibilityIdentifier("profile")
                     if let devices {
                         NavigationLink { DevicesSettingsView(actions: devices) } label: { Label("Sessions", systemImage: "iphone.and.arrow.forward") }
@@ -137,12 +179,21 @@ public struct SettingsView: View {
                     }
                 }
             }
+            if let onOpenStickers = config.onOpenStickers {
+                Section("Stickers") {
+                    Button(action: onOpenStickers) {
+                        Label("Sticker library", systemImage: "sparkles.rectangle.stack")
+                    }
+                    .accessibilityIdentifier("settings-sticker-library")
+                }
+            }
             Section {
                 Toggle("Private read receipts", isOn: $privateReceipts)
                     .accessibilityIdentifier("private-receipts")
                     .onChange(of: privateReceipts) { _, value in
                         preferences.privateReceipts = value
                         onPrivateReceiptsChange(value)
+                        config.onPreferencesChanged?()
                     }
                 Toggle("Typing notices", isOn: $sendTypingNotices)
                     .accessibilityIdentifier("typing-notices")

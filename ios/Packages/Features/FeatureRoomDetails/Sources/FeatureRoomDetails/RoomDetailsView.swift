@@ -16,18 +16,18 @@ public struct RoomDetailsView: View {
 
     private let onLeft: @MainActor () -> Void
     private let onRenamed: @MainActor (String) -> Void
-    private let profile: (@MainActor (RoomMemberInfo) -> UserProfileViewModel?)?
-    @State private var shownProfile: UserProfileViewModel?
+    private let profileSheet: (@MainActor (RoomMemberInfo) -> AnyView?)?
+    @State private var shownMember: RoomMemberInfo?
 
     /// `onLeft` runs after the user left the room and the sheet closed (the caller closes the room's screen).
     /// `onRenamed` runs when the user saves a new room name so the caller can update its navigation title at once.
-    /// `profile` makes the profile sheet of a tapped member; without it members aren't tappable.
+    /// `profileSheet` builds the profile view for a tapped member (wired by the composition root so features don't import each other).
     public init(
-        model: RoomDetailsViewModel, profile: (@MainActor (RoomMemberInfo) -> UserProfileViewModel?)? = nil,
+        model: RoomDetailsViewModel, profileSheet: (@MainActor (RoomMemberInfo) -> AnyView?)? = nil,
         onRenamed: @escaping @MainActor (String) -> Void = { _ in }, onLeft: @escaping @MainActor () -> Void = {}
     ) {
         _model = State(initialValue: model)
-        self.profile = profile
+        self.profileSheet = profileSheet
         self.onRenamed = onRenamed
         self.onLeft = onLeft
     }
@@ -140,7 +140,7 @@ public struct RoomDetailsView: View {
             }
             Section("Members") {
                 ForEach(members) { member in
-                    Button { if let profile { shownProfile = profile(member) } } label: { HStack {
+                    Button { if profileSheet != nil { shownMember = member } } label: { HStack {
                         AvatarLoader(name: member.title, ref: member.avatar, size: 32) { await model.avatarData($0) }
                         Text(member.title)
                         if member.isInvited { Text("Invited").font(.caption).foregroundStyle(.secondary) }
@@ -152,7 +152,7 @@ public struct RoomDetailsView: View {
                         }
                     } }
                     .foregroundStyle(.primary)
-                    .disabled(profile == nil)
+                    .disabled(profileSheet == nil)
                 }
                 if model.hasMoreMembers {
                     Button("Show more members") { Task { await model.loadMoreMembers() } }
@@ -175,7 +175,9 @@ public struct RoomDetailsView: View {
                 Button("Leave room", role: .destructive) { model.confirmsLeave = true }.accessibilityIdentifier("leaveRoom")
             }
         }
-        .sheet(item: $shownProfile) { UserProfileView(model: $0) }
+        .sheet(item: $shownMember) { member in
+            if let view = profileSheet?(member) { view }
+        }
         .alert("Edit room", isPresented: $editing) {
             TextField("Name", text: $draftName)
             TextField("Topic", text: $draftTopic)

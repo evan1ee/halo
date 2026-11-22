@@ -27,6 +27,8 @@ packages:
   FeatureSettings: {path: Packages/Features/FeatureSettings}
   FeatureRoomDetails: {path: Packages/Features/FeatureRoomDetails}
   FeatureBotActivity: {path: Packages/Features/FeatureBotActivity}
+  FeatureSearch: {path: Packages/Features/FeatureSearch}
+  FeatureProfile: {path: Packages/Features/FeatureProfile}
 targets:
   Halo:
     type: application
@@ -47,6 +49,8 @@ targets:
       - package: FeatureSettings
       - package: FeatureRoomDetails
       - package: FeatureBotActivity
+      - package: FeatureSearch
+      - package: FeatureProfile
       - target: HaloNotificationService
         embed: true
     settings:

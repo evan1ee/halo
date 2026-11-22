@@ -62,6 +62,11 @@ public final class RoomListViewModel {
     }
 
     public private(set) var content: Content = .idle
+    /// Joined room IDs currently known to the room list (used by state restoration to prune left rooms, NAVIGATION §4).
+    public var joinedRoomIDs: Set<RoomID> {
+        guard case .loaded(_, let rows) = content else { return [] }
+        return Set(rows.filter { !$0.isInvite }.map(\.id))
+    }
     /// Non-nil while sync is offline or retrying after an error (ROOM_LIST FR-7); `nil` while healthy.
     public private(set) var syncNotice: SyncNotice?
 

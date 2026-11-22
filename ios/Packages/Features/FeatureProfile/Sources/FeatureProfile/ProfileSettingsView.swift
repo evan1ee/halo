@@ -4,18 +4,18 @@ import PhotosUI
 import SwiftUI
 
 /// Settings → Account → Profile: display name and ignored users.
-struct ProfileSettingsView: View {
+public struct ProfileSettingsView: View {
     @State private var model: ProfileSettingsModel
 
     @State private var picked: PhotosPickerItem?
     private let actions: ProfileSettingsActions
 
-    init(actions: ProfileSettingsActions) {
+    public init(actions: ProfileSettingsActions) {
         self.actions = actions
         _model = State(initialValue: ProfileSettingsModel(actions: actions))
     }
 
-    var body: some View {
+    public var body: some View {
         List {
             Section("Photo") {
                 let photoLabel = model.avatar == nil ? "Choose photo" : "Change photo"

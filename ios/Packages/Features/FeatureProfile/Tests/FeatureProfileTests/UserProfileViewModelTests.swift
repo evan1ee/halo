@@ -4,7 +4,7 @@ import HaloDomain
 import HaloFoundation
 import HaloTestSupport
 import Testing
-@testable import FeatureRoomDetails
+@testable import FeatureProfile
 
 @MainActor
 @Suite("UserProfileViewModel")
