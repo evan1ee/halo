@@ -269,12 +269,13 @@ final class MatrixTimelineSession: TimelineSession {
     static func stickerContent(_ sticker: Sticker) throws -> String {
         var info: [String: Any] = [:]
         if let i = sticker.info {
-            if let w = i.width { info["w"] = w }
-            if let h = i.height { info["h"] = h }
-            if let m = i.mimeType { info["mimetype"] = m }
-            if let size = i.size { info["size"] = size }
+            if let w = i.width, w > 0 { info["w"] = w }
+            if let h = i.height, h > 0 { info["h"] = h }
+            if let m = i.mimeType, !m.isEmpty { info["mimetype"] = m }
+            if let size = i.size, size > 0 { info["size"] = size }
         }
-        let content: [String: Any] = ["body": sticker.eventBody, "url": sticker.url, "info": info]
+        let body = sticker.eventBody.isEmpty ? "sticker" : sticker.eventBody
+        let content: [String: Any] = ["body": body, "url": sticker.url, "info": info]
         return String(decoding: try JSONSerialization.data(withJSONObject: content, options: [.sortedKeys]), as: UTF8.self)
     }
 

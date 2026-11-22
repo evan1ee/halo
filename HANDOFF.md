@@ -13,14 +13,13 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log` and [docs/CODEBASE_REVIEW.md](docs/CODEBASE_REVIEW.md) §13.
-- **Message search fixes (this push on `main`):**
-  - Enabled the SDK's encrypted local search index (`ClientBuilder.withSearchIndexStore(path:key:)` + `enableAutomaticBackPagination(true)` + `client.runSearchBackfill(strategy: .foreground)`) in `MatrixSessionPort` for main-app sessions (never NSE) so encrypted and cached rooms are indexed for `SearchService`.
-  - Fixed `MatrixSearchPort.setQuery` so clearing or re-searching the same query resets `SearchService` instead of hitting an SDK no-op (verified with clear + re-search regression in `AdapterContractTests.messageSearch`).
-  - Fixed `MessageSearchView` / `MessageSearchViewModel`: always-visible `.searchable(placement: .navigationBarDrawer(displayMode: .always))`, 300 ms debounced auto-search as you type, `searchedQuery` tracking so "No Results" never flashes before searching, and clearing stale results on sheet open.
+- **Sticker send UX/validation & multi-image sending (this push on `main`):**
+  - Sanitised `MatrixTimelinePort.stickerContent` (non-empty `body`, positive `w`/`h`/`size`), added `StickerPanelViewModel.isSending` double-tap guard, auto-dismissed `StickerPanelView` when a sticker sends (including after the one-time encryption notice), surfaced the error code on failure, and verified both unencrypted and encrypted-room sticker sends in `AdapterContractTests.stickers` (`17.38s`).
+  - Upgraded `TimelineViewModel` & `Composer` to multi-image picking and sending (`PhotosPicker(maxSelectionCount: 10)`, `pendingPhotos: [OutgoingImage]`, horizontal thumbnail strip with individual remove buttons, sequential send with caption on the first photo and partial-failure preservation; unit-tested in `TimelineViewModelTests.multiPhotoAttachAndSend`).
+- **Message search fixes (`071fff3`):**
+  - Enabled SDK encrypted local search index (`ClientBuilder.withSearchIndexStore(path:key:)`, `enableAutomaticBackPagination(true)`, `runSearchBackfill(.foreground)`) for main-app sessions, fixed `MatrixSearchPort.setQuery` clear/re-search reset (`AdapterContractTests.messageSearch`), and upgraded `MessageSearchView` with always-visible `.searchable` bar, 300 ms debounced auto-search, and `searchedQuery` tracking.
 - **Native emoji & emoji input support (`bd4a913`):**
-  - Added pure Swift `NativeEmoji` (`HaloDomain/Emoji/NativeEmoji.swift`, `NativeEmojiTests`), jumbo emoji rendering (`TimelineRow.isJumboEmoji` → 48 pt), composer `:shortcode` autocomplete strip, dedicated composer Emoji picker button (`face.smiling`) and upgraded `ReactionPicker` with recents, search, categories, and `NativeEmojiKeyboardField` preferring the iOS system Emoji keyboard.
-- **Physical iPhone 16 G-NSE 100-push soak & fault-injection (`16af4bf`, `F-DEV-2`):**
-  - 100/100 background pushes `outcome = "display"`, peak `phys_footprint` **7.40 MB**, `totalMs` p50 **60 ms** / p95 **144 ms** / max **495 ms**, 0 timeouts, 0 Jetsam; AC-NSE-5/6 fault-injection fallback (`2.17–2.21 s`, `7.40 MB`) and AC-NSE-4 post-kill cold-start recovery (`restoreMs = 162 ms`, `totalMs = 277 ms`, `6.8 MB`, zero `0xdead10cc`).
+  - Added pure Swift `NativeEmoji` (`HaloDomain/Emoji/NativeEmoji.swift`, `NativeEmojiTests`), jumbo emoji rendering (`TimelineRow.isJumboEmoji` → 48 pt), composer `:shortcode` autocomplete strip, dedicated composer Emoji picker button (`face.smiling`), and upgraded `ReactionPicker` with recents, search, categories, and `NativeEmojiKeyboardField`.
 
 ## 3. Key decisions
 Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D82), [docs/adr/README.md](docs/adr/README.md).
@@ -31,8 +30,9 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D82), [docs/adr/RE
 - **D82 / ADR-0021 (founder, supersedes D5):** app icon badge shows total unread messages across rooms needing attention (`BadgeCalculator.badge` sums `RoomReadState.badgeCount` for `attention == true`).
 
 ## 4. Modified files (this push)
-- **Adapter:** `ios/Packages/HaloMatrixAdapter/Sources/HaloMatrixAdapter/MatrixSessionPort.swift`, `ios/Packages/HaloMatrixAdapter/Sources/HaloMatrixAdapter/MatrixSearchPort.swift`, `ios/Packages/HaloMatrixAdapter/Tests/HaloMatrixAdapterTests/AdapterContractTests.swift`.
-- **FeatureRoomList:** `ios/Packages/Features/FeatureRoomList/Sources/FeatureRoomList/MessageSearchView.swift`.
+- **Adapter:** `ios/Packages/HaloMatrixAdapter/Sources/HaloMatrixAdapter/MatrixTimelinePort.swift`, `ios/Packages/HaloMatrixAdapter/Tests/HaloMatrixAdapterTests/AdapterContractTests.swift`.
+- **FeatureStickers:** `ios/Packages/Features/FeatureStickers/Sources/FeatureStickers/StickerPanelViewModel.swift`, `ios/Packages/Features/FeatureStickers/Sources/FeatureStickers/StickerPanelView.swift`.
+- **FeatureTimeline:** `ios/Packages/Features/FeatureTimeline/Sources/FeatureTimeline/TimelineViewModel.swift`, `ios/Packages/Features/FeatureTimeline/Sources/FeatureTimeline/TimelineView.swift`, `ios/Packages/Features/FeatureTimeline/Tests/FeatureTimelineTests/TimelineViewModelTests.swift`.
 - **Docs:** `HANDOFF.md`.
 
 ## 5. Outstanding issues

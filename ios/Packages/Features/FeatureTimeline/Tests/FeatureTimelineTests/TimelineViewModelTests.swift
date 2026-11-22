@@ -1243,6 +1243,37 @@ struct MediaPreviewPolicyTests {
 
         await vm.stop()
     }
+
+    @Test("multi-photo attach, individual remove, and sequential send with caption on first photo")
+    func multiPhotoAttachAndSend() async throws {
+        let room = try RoomID("!photos:x.org")
+        let port = FakeTimelinePort()
+        port.addRoom(room)
+        let vm = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room), images: StubPreparer())
+        await vm.start()
+        for _ in 0..<200_000 { if case .live = vm.content { break }; await Task.yield() }
+
+        let png = Data("png".utf8)
+        await vm.attachPhotos([
+            (data: png, filename: "one.jpg"),
+            (data: png, filename: "two.jpg"),
+            (data: png, filename: "three.jpg"),
+        ])
+        #expect(vm.pendingPhotos.count == 3)
+        vm.removePendingPhoto(at: 1)
+        #expect(vm.pendingPhotos.map(\.filename) == ["one.jpg", "three.jpg"])
+
+        vm.draft = "Trip photos"
+        await vm.send()
+        #expect(vm.pendingPhotos.isEmpty)
+        #expect(vm.draft.isEmpty)
+        let sent = port.sentImages(in: room)
+        #expect(sent.count == 2)
+        #expect(sent[0].filename == "one.jpg" && sent[0].caption == "Trip photos")
+        #expect(sent[1].filename == "three.jpg" && sent[1].caption == nil)
+
+        await vm.stop()
+    }
 }
 
 private extension TimelineRow {

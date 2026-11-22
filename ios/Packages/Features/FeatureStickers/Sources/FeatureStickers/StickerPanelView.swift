@@ -6,6 +6,7 @@ import SwiftUI
 public struct StickerPanelView: View {
     let model: StickerPanelViewModel
     @State private var newPack: NewPackViewModel?
+    @Environment(\.dismiss) private var dismiss
 
     public init(model: StickerPanelViewModel) { self.model = model }
 
@@ -105,7 +106,9 @@ public struct StickerPanelView: View {
         .sheet(item: $newPack) { NewPackView(model: $0) }
         #endif
         .alert("Stickers aren't encrypted", isPresented: Binding(get: { model.pendingNotice != nil }, set: { if !$0 { model.cancelNotice() } })) {
-            Button("Send anyway") { Task { await model.confirmNotice() } }
+            Button("Send anyway") {
+                Task { if await model.confirmNotice() { dismiss() } }
+            }
             Button("Cancel", role: .cancel) { model.cancelNotice() }
         } message: {
             Text("Your messages in this room are end-to-end encrypted, but this sticker's image is not. Sticker images are stored as ordinary media on your homeserver, so who can see them depends on the homeserver's media storage and access controls. This applies to sticker images only, not to your other messages.")
@@ -124,7 +127,7 @@ public struct StickerPanelView: View {
     private func grid(_ stickers: [Sticker]) -> some View {
         LazyVGrid(columns: columns, spacing: 8) {
             ForEach(stickers) { sticker in
-                StickerCell(sticker: sticker, model: model)
+                StickerCell(sticker: sticker, model: model) { dismiss() }
             }
         }
     }
@@ -133,13 +136,14 @@ public struct StickerPanelView: View {
 private struct StickerCell: View {
     let sticker: Sticker
     let model: StickerPanelViewModel
+    let onSent: () -> Void
     @State private var data: Data?
     /// The full file of an animated sticker while its cell is on screen (FR-9); `nil` otherwise, so memory is freed on scroll.
     @State private var animated: Data?
     @State private var animationCell = UUID()
 
     var body: some View {
-        Button { Task { await model.tap(sticker) } } label: {
+        Button { Task { if await model.tap(sticker) { onSent() } } } label: {
             Group {
                 #if canImport(UIKit)
                 // A UIKit view inside a button label takes the touch for itself, so the button never fired for animated stickers.
@@ -152,12 +156,13 @@ private struct StickerCell: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .disabled(model.isSending)
         .accessibilityLabel(sticker.body ?? sticker.shortcode)
         .contextMenu(menuItems: {
             Button(model.isFavourite(sticker) ? "Remove from favourites" : "Add to favourites", systemImage: model.isFavourite(sticker) ? "star.slash" : "star") {
                 Task { await model.toggleFavourite(sticker) }
             }
-            Button("Send", systemImage: "paperplane") { Task { await model.tap(sticker) } }
+            Button("Send", systemImage: "paperplane") { Task { if await model.tap(sticker) { onSent() } } }
         }, preview: { preview })
         .task { data = await model.thumbnail(for: sticker) }
         #if canImport(UIKit)

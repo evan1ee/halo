@@ -201,7 +201,7 @@ public struct TimelineView: View {
 private struct Composer: View {
     @Bindable var model: TimelineViewModel
     let onStickers: (() -> Void)?
-    @State private var picked: PhotosPickerItem?
+    @State private var picked: [PhotosPickerItem] = []
     @State private var choosingFile = false
     @State private var showingEmojiPicker = false
 
@@ -265,23 +265,51 @@ private struct Composer: View {
                     .padding(.horizontal, 4)
                 }
             }
-            if let photo = model.pendingPhoto {
-                HStack(spacing: 10) {
-                    #if canImport(UIKit)
-                    if let image = UIImage(data: photo.data) { Image(uiImage: image).resizable().scaledToFill().frame(width: 56, height: 56).clipShape(.rect(cornerRadius: 8)) }
-                    #endif
-                    Text("Photo ready. Add a caption below, or send as is.").font(.caption).foregroundStyle(.secondary)
-                    Spacer()
-                    Button { model.removePendingPhoto() } label: { Image(systemName: "xmark.circle.fill") }
-                        .accessibilityLabel("Remove photo")
-                        .accessibilityIdentifier("remove-photo")
+            if !model.pendingPhotos.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(Array(model.pendingPhotos.enumerated()), id: \.offset) { index, photo in
+                                ZStack(alignment: .topTrailing) {
+                                    #if canImport(UIKit)
+                                    if let image = UIImage(data: photo.data) {
+                                        Image(uiImage: image).resizable().scaledToFill()
+                                            .frame(width: 56, height: 56)
+                                            .clipShape(.rect(cornerRadius: 8))
+                                    }
+                                    #else
+                                    RoundedRectangle(cornerRadius: 8).fill(.secondary.opacity(0.2)).frame(width: 56, height: 56)
+                                    #endif
+                                    Button { model.removePendingPhoto(at: index) } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.caption)
+                                            .symbolRenderingMode(.palette)
+                                            .foregroundStyle(.white, .black.opacity(0.65))
+                                    }
+                                    .offset(x: 4, y: -4)
+                                    .accessibilityLabel("Remove photo")
+                                    .accessibilityIdentifier("remove-photo")
+                                }
+                                .padding(.top, 4)
+                            }
+                        }
+                        .padding(.horizontal, 4)
+                    }
+                    Text(model.pendingPhotos.count == 1
+                         ? "Photo ready. Add a caption below, or send as is."
+                         : "\(model.pendingPhotos.count) photos ready. Add a caption below, or send as is.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
             HStack(alignment: .bottom, spacing: 14) {
                 if model.canSendImages {
-                    PhotosPicker(selection: $picked, matching: .images) { Image(systemName: "photo").composerIcon() }
-                        .disabled(model.isSendingImage)
-                        .accessibilityLabel("Send a photo")
+                    PhotosPicker(
+                        selection: $picked,
+                        maxSelectionCount: max(1, TimelineViewModel.maxPendingPhotos - model.pendingPhotos.count),
+                        matching: .images
+                    ) { Image(systemName: "photo").composerIcon() }
+                        .disabled(model.isSendingImage || model.pendingPhotos.count >= TimelineViewModel.maxPendingPhotos)
+                        .accessibilityLabel("Send photos")
                         .accessibilityIdentifier("photo-button")
                 }
                 Button { choosingFile = true } label: { Image(systemName: "paperclip").composerIcon() }
@@ -355,12 +383,17 @@ private struct Composer: View {
                 await model.sendFile(data: data, filename: url.lastPathComponent, mimeType: type?.preferredMIMEType ?? "application/octet-stream")
             }
         }
-        .onChange(of: picked) { _, item in
-            guard let item else { return }
-            picked = nil
+        .onChange(of: picked) { _, items in
+            guard !items.isEmpty else { return }
+            picked = []
             Task {
-                guard let data = try? await item.loadTransferable(type: Data.self) else { return }
-                await model.attachPhoto(data: data, filename: item.itemIdentifier ?? "photo")
+                var loaded: [(data: Data, filename: String)] = []
+                for (index, item) in items.enumerated() {
+                    if let data = try? await item.loadTransferable(type: Data.self) {
+                        loaded.append((data: data, filename: item.itemIdentifier ?? "photo-\(index + 1)"))
+                    }
+                }
+                await model.attachPhotos(loaded)
             }
         }
     }

@@ -342,7 +342,7 @@ public final class TimelineViewModel {
     public private(set) var replyingTo: TimelineRow?
 
     public var canSend: Bool {
-        (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || pendingPhoto != nil) && !isSending && !isSendingImage
+        (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingPhotos.isEmpty) && !isSending && !isSendingImage
     }
 
     private let coordinator: TimelineCoordinator
@@ -709,7 +709,7 @@ public final class TimelineViewModel {
     /// Sends the draft (MESSAGING FR-2). The message shows up in the timeline as a local echo.
     public func send() async {
         guard canSend else { return }
-        if let photo = pendingPhoto { await sendPendingPhoto(photo); return }
+        if !pendingPhotos.isEmpty { await sendPendingPhotos(); return }
         let text = draft
         isSending = true
         sendError = nil
@@ -739,36 +739,81 @@ public final class TimelineViewModel {
     /// A photo is being prepared or uploaded.
     public private(set) var isSendingImage = false
 
-    /// A photo that was picked and prepared but not sent yet; the composer text becomes its caption when it is sent (FR-2).
-    public private(set) var pendingPhoto: OutgoingImage?
+    /// Maximum number of photos that can be attached together in one batch.
+    public static let maxPendingPhotos = 10
 
-    /// Prepares a picked photo and holds it in the composer, so a caption can be typed before sending.
+    /// Photos picked and prepared but not sent yet; the composer text becomes the first photo's caption when sent.
+    public private(set) var pendingPhotos: [OutgoingImage] = []
+
+    /// The first pending photo, or `nil` when none are attached.
+    public var pendingPhoto: OutgoingImage? { pendingPhotos.first }
+
+    /// Prepares a picked photo and appends it to the composer's pending photos (up to `maxPendingPhotos`).
     public func attachPhoto(data: Data, filename: String) async {
-        guard let imagePreparer, !isSendingImage else { return }
+        await attachPhotos([(data: data, filename: filename)])
+    }
+
+    /// Prepares multiple picked photos sequentially off the main actor and appends valid ones to `pendingPhotos`.
+    public func attachPhotos(_ items: [(data: Data, filename: String)]) async {
+        guard let imagePreparer, !isSendingImage, !items.isEmpty else { return }
         isSendingImage = true
         sendError = nil
         defer { isSendingImage = false }
-        do { pendingPhoto = try await Self.prepare(imagePreparer, data, filename) } catch {
-            sendError = error == .invalidInput("NOT_AN_IMAGE") ? "That file isn't a picture." : error == .invalidInput("IMAGE_TOO_LARGE") ? "That picture is too large to send." : "That picture couldn't be read."
+        var lastError: HaloError?
+        for item in items {
+            guard pendingPhotos.count < Self.maxPendingPhotos else { break }
+            do {
+                let prepared = try await Self.prepare(imagePreparer, item.data, item.filename)
+                pendingPhotos.append(prepared)
+            } catch {
+                lastError = error
+            }
+        }
+        if let error = lastError {
+            sendError = error == .invalidInput("NOT_AN_IMAGE")
+                ? "That file isn't a picture."
+                : error == .invalidInput("IMAGE_TOO_LARGE")
+                    ? "That picture is too large to send."
+                    : "That picture couldn't be read."
         }
     }
 
-    /// Drops the held photo; the typed text stays.
-    public func removePendingPhoto() { pendingPhoto = nil }
+    /// Drops one pending photo at `index`; the typed text and other photos stay.
+    public func removePendingPhoto(at index: Int) {
+        guard pendingPhotos.indices.contains(index) else { return }
+        pendingPhotos.remove(at: index)
+    }
 
-    /// Sends the held photo with the composer text as its caption. A failure keeps both, so nothing typed is lost.
-    private func sendPendingPhoto(_ photo: OutgoingImage) async {
+    /// Drops all held photos; the typed text stays.
+    public func removePendingPhoto() { pendingPhotos.removeAll() }
+
+    /// Sends all held photos in order, attaching the composer text as the first photo's caption.
+    /// Removes each photo as it succeeds so a mid-batch failure keeps only the unsent photos.
+    private func sendPendingPhotos() async {
         isSendingImage = true
         sendError = nil
         defer { isSendingImage = false }
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let captioned = OutgoingImage(data: photo.data, filename: photo.filename, mimeType: photo.mimeType, width: photo.width, height: photo.height, caption: text.isEmpty ? nil : text)
-        do {
-            try await coordinator.sendImage(captioned)
-            pendingPhoto = nil
-            draft = ""
-        } catch {
-            sendError = error == .network(retryable: true) ? "Can't reach the server. The picture wasn't sent." : "The picture couldn't be sent."
+        var caption: String? = {
+            let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }()
+        while let photo = pendingPhotos.first {
+            let outgoing = OutgoingImage(
+                data: photo.data, filename: photo.filename, mimeType: photo.mimeType,
+                width: photo.width, height: photo.height, caption: caption)
+            do {
+                try await coordinator.sendImage(outgoing)
+                pendingPhotos.removeFirst()
+                if caption != nil {
+                    caption = nil
+                    draft = ""
+                }
+            } catch {
+                sendError = error == .network(retryable: true)
+                    ? "Can't reach the server. The picture wasn't sent."
+                    : "The picture couldn't be sent."
+                return
+            }
         }
     }
 

@@ -14,6 +14,7 @@ public final class StickerPanelViewModel {
     /// Search results for `query`; empty while the query is blank.
     public private(set) var results: [Sticker] = []
     public private(set) var sendError: String?
+    public private(set) var isSending = false
     public var query = "" {
         didSet {
             guard query != oldValue else { return }
@@ -87,23 +88,28 @@ public final class StickerPanelViewModel {
         await library.flush()
     }
 
-    /// Tap: sends the sticker at once (AC-S1) and counts it as recent. A failure keeps the panel open and says so.
-    public func tap(_ sticker: Sticker) async {
+    /// Tap: sends the sticker at once (AC-S1) and counts it as recent. Returns `true` when sent; a failure keeps the panel open and says so.
+    @discardableResult
+    public func tap(_ sticker: Sticker) async -> Bool {
+        guard !isSending else { return false }
         sendError = nil
         // First sticker into an encrypted room: tell the user once that the image itself isn't encrypted.
         if let notice, !notice.isAcknowledged(), await notice.roomIsEncrypted() {
             pendingNotice = sticker
-            return
+            return false
         }
-        await deliver(sticker)
+        return await deliver(sticker)
     }
 
     /// The user accepted the notice: the held sticker is sent. The acknowledgement (per device, not per room) is recorded
     /// only once the send succeeded, so a failed send doesn't use up the consent and the notice comes back on the next try.
-    public func confirmNotice() async {
-        guard let sticker = pendingNotice else { return }
+    @discardableResult
+    public func confirmNotice() async -> Bool {
+        guard !isSending, let sticker = pendingNotice else { return false }
         pendingNotice = nil
-        if await deliver(sticker) { notice?.acknowledge() }
+        let sent = await deliver(sticker)
+        if sent { notice?.acknowledge() }
+        return sent
     }
 
     public func cancelNotice() { pendingNotice = nil }
@@ -119,12 +125,16 @@ public final class StickerPanelViewModel {
 
     @discardableResult
     private func deliver(_ sticker: Sticker) async -> Bool {
+        isSending = true
+        defer { isSending = false }
         do {
             try await send(sticker)
             await library.recordSent(sticker)
             return true
         } catch {
-            sendError = error == .network(retryable: true) ? "Can't reach the server. The sticker wasn't sent." : "The sticker couldn't be sent."
+            sendError = error == .network(retryable: true)
+                ? "Can't reach the server. The sticker wasn't sent."
+                : "The sticker couldn't be sent (\(error.code))."
             return false
         }
     }

@@ -232,12 +232,12 @@ struct AdapterContractTests {
         #expect(loaded == prefs)
 
         // Sending an m.sticker shows up in the timeline as a sticker.
+        let wave = try #require(pack.stickers.first { $0.shortcode == "wave" })
         let timeline = try await MatrixTimelinePort(session: session).open(room: room)
         let stream = timeline.items()
-        try await timeline.sendSticker(pack.stickers[1])
+        try await timeline.sendSticker(wave)
         // A pack entry without `info` (allowed by MSC2545) must still arrive as a sticker, not as an unsupported event.
-        let bare = pack.stickers[1]
-        try await timeline.sendSticker(Sticker(pack: bare.pack, shortcode: bare.shortcode, body: "Bare wave", url: bare.url, info: nil))
+        try await timeline.sendSticker(Sticker(pack: wave.pack, shortcode: wave.shortcode, body: "Bare wave", url: wave.url, info: nil))
         let seen: Bool = try await within(seconds: 60) {
             var items: [HaloDomain.TimelineItem] = []
             var found: Set<String> = []
@@ -252,6 +252,33 @@ struct AdapterContractTests {
         }
         #expect(seen)
         await timeline.close()
+
+        // Also verify sending a sticker into an encrypted room (m.room.encryption).
+        let client = try await session.signedInClient()
+        let encRoom = try RoomID(try await client.createRoom(request: CreateRoomParameters(
+            name: "Encrypted sticker check", isEncrypted: true, visibility: .private, preset: .privateChat)))
+        var encTimeline: (any TimelineSession)?
+        for _ in 0..<30 {
+            if let opened = try? await MatrixTimelinePort(session: session).open(room: encRoom) { encTimeline = opened; break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        let openedEnc = try #require(encTimeline)
+        let encStream = openedEnc.items()
+        try await openedEnc.sendSticker(wave)
+        let seenEnc: Bool = try await within(seconds: 60) {
+            var items: [HaloDomain.TimelineItem] = []
+            for await diff in encStream {
+                try ListReducer.apply(diff, to: &items)
+                if items.contains(where: { if case .event(let ev) = $0.content, case .sticker(let body, _) = ev.kind { return body == "Waving" } else { return false } }) {
+                    return true
+                }
+            }
+            return false
+        }
+        #expect(seenEnc)
+        await openedEnc.close()
+        if let r = try? await session.room(encRoom) { try? await r.leave(); try? await r.forget() }
+
         try await session.logout()
     }
 
