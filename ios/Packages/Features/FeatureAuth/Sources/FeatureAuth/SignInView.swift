@@ -11,20 +11,22 @@ public struct SignInView: View {
     public init(model: AuthViewModel) { self.model = model }
 
     public var body: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            Image(systemName: "bubble.left.and.bubble.right.fill")
-                .font(.largeTitle)
-                .imageScale(.large)
-                .foregroundStyle(HaloColor.accent)
-                .accessibilityHidden(true)
-            Text("Halo").font(.largeTitle.bold())
-            switch model.screen {
-            case .launching, .busy:
-                ProgressView().padding(.top, 8)
-            case .server:
-                Text("Enter your Matrix homeserver to sign in.")
-                    .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+        ScrollView {
+            VStack(spacing: HaloSpacing.l) {
+                Spacer(minLength: HaloSpacing.xl)
+                Image(systemName: "bubble.left.and.bubble.right.fill")
+                    .font(.largeTitle)
+                    .imageScale(.large)
+                    .foregroundStyle(HaloColor.accent)
+                    .accessibilityHidden(true)
+                Text("Halo").font(.largeTitle.bold())
+                switch model.screen {
+                case .launching, .busy:
+                    ProgressView().padding(.top, 8)
+                case .server:
+                    Text("Enter your Matrix homeserver to sign in.")
+                        .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                 TextField("Server (example.org)", text: $model.server)
                     .plainInput(.URL).textFieldStyle(.roundedBorder)
                     .focused($focus, equals: .server)
@@ -77,10 +79,14 @@ public struct SignInView: View {
             }
             if let message = model.errorMessage {
                 Text(message).foregroundStyle(HaloColor.danger).font(HaloTypography.meta).multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer()
+            Spacer(minLength: HaloSpacing.l)
+            }
+            .padding(.horizontal, HaloSpacing.xl)
+            .frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, 24)
+        .scrollDismissesKeyboard(.interactively)
         .onChange(of: model.screen, initial: true) { _, screen in
             switch screen {
             case .server: focus = .server
