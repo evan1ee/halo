@@ -51,7 +51,7 @@ targets:
         embed: true
     settings:
       base:
-        CODE_SIGN_ENTITLEMENTS: App/Halo.entitlements
+        CODE_SIGN_ENTITLEMENTS: App/Support/Halo.entitlements
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_CFBundleDisplayName: Halo
@@ -59,11 +59,11 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
       configs:
         Debug:
-          INFOPLIST_FILE: App/Info-Debug.plist
+          INFOPLIST_FILE: App/Support/Info-Debug.plist
         Beta:
-          INFOPLIST_FILE: App/Info.plist
+          INFOPLIST_FILE: App/Support/Info.plist
         Release:
-          INFOPLIST_FILE: App/Info.plist
+          INFOPLIST_FILE: App/Support/Info.plist
   HaloNotificationService:
     type: app-extension
     platform: iOS

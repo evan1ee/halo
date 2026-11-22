@@ -61,6 +61,7 @@
 /* Begin PBXFileReference section */
 		051D3819C868159F0F93E6B8 /* FeatureRoomDetails */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FeatureRoomDetails; path = Packages/Features/FeatureRoomDetails; sourceTree = SOURCE_ROOT; };
 		0A1D04D80D6CD558D0FA3E91 /* FeatureBotActivity */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FeatureBotActivity; path = Packages/Features/FeatureBotActivity; sourceTree = SOURCE_ROOT; };
+		0F8074686EE2413DD3A76477 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		1A18178C457536A080B74F82 /* FeatureRoomList */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FeatureRoomList; path = Packages/Features/FeatureRoomList; sourceTree = SOURCE_ROOT; };
 		26BC78D89D8CCE4267C675AB /* HaloApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloApp.swift; sourceTree = "<group>"; };
 		26F227D5CE9A6E4652F76421 /* HaloDesignSystem */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HaloDesignSystem; path = Packages/HaloDesignSystem; sourceTree = SOURCE_ROOT; };
@@ -69,13 +70,12 @@
 		42E309E4074E74D663AD652D /* HaloNotificationService.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HaloNotificationService.entitlements; sourceTree = "<group>"; };
 		42F80F910CDB8774DE53E357 /* NSEMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NSEMetrics.swift; sourceTree = "<group>"; };
 		44F03E7FED6CB68D3D556B1D /* HaloMatrixAdapter */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HaloMatrixAdapter; path = Packages/HaloMatrixAdapter; sourceTree = SOURCE_ROOT; };
-		60075C67A871701F70F07285 /* Info-Debug.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "Info-Debug.plist"; sourceTree = "<group>"; };
-		6F93CB45B41FD65E85481DAC /* Halo.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Halo.entitlements; sourceTree = "<group>"; };
+		46A5693D428F4FBDB6D39B2E /* Halo.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Halo.entitlements; sourceTree = "<group>"; };
+		5312809511AE2A016CFF2B93 /* Info-Debug.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "Info-Debug.plist"; sourceTree = "<group>"; };
 		7062871F2640DF75FF141840 /* HaloApplication */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HaloApplication; path = Packages/HaloApplication; sourceTree = SOURCE_ROOT; };
 		71941F9772E859615A1B26AD /* FeatureStickers */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FeatureStickers; path = Packages/Features/FeatureStickers; sourceTree = SOURCE_ROOT; };
 		76ED106E261A2A8948DB12F6 /* HaloNotificationService.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = HaloNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		7A3D76BB951E620E5C384DDA /* FeatureAuth */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FeatureAuth; path = Packages/Features/FeatureAuth; sourceTree = SOURCE_ROOT; };
-		7C81E2492135182A56A25D91 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		8D5F19FEA7E121DDBD3C6914 /* FeatureSettings */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FeatureSettings; path = Packages/Features/FeatureSettings; sourceTree = SOURCE_ROOT; };
 		97AB108BB6E92BAD05A9F942 /* AppRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRoot.swift; sourceTree = "<group>"; };
 		9EC8385BD07B8D6D9DF96F10 /* HaloDomain */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HaloDomain; path = Packages/HaloDomain; sourceTree = SOURCE_ROOT; };
@@ -169,6 +169,16 @@
 			path = Packages;
 			sourceTree = "<group>";
 		};
+		AA1F9D9C1A79D5F0EBFED349 /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				46A5693D428F4FBDB6D39B2E /* Halo.entitlements */,
+				5312809511AE2A016CFF2B93 /* Info-Debug.plist */,
+				0F8074686EE2413DD3A76477 /* Info.plist */,
+			);
+			path = Support;
+			sourceTree = "<group>";
+		};
 		BD68B0C91838E25BAB79DB31 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -193,10 +203,8 @@
 			isa = PBXGroup;
 			children = (
 				97AB108BB6E92BAD05A9F942 /* AppRoot.swift */,
-				6F93CB45B41FD65E85481DAC /* Halo.entitlements */,
 				26BC78D89D8CCE4267C675AB /* HaloApp.swift */,
-				60075C67A871701F70F07285 /* Info-Debug.plist */,
-				7C81E2492135182A56A25D91 /* Info.plist */,
+				AA1F9D9C1A79D5F0EBFED349 /* Support */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -404,9 +412,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = App/Halo.entitlements;
+				CODE_SIGN_ENTITLEMENTS = App/Support/Halo.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				INFOPLIST_FILE = App/Info.plist;
+				INFOPLIST_FILE = App/Support/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Halo;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -440,9 +448,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = App/Halo.entitlements;
+				CODE_SIGN_ENTITLEMENTS = App/Support/Halo.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				INFOPLIST_FILE = App/Info.plist;
+				INFOPLIST_FILE = App/Support/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Halo;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -531,9 +539,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = App/Halo.entitlements;
+				CODE_SIGN_ENTITLEMENTS = App/Support/Halo.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				INFOPLIST_FILE = "App/Info-Debug.plist";
+				INFOPLIST_FILE = "App/Support/Info-Debug.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Halo;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

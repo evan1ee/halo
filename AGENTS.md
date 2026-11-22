@@ -34,7 +34,7 @@ Composition roots: Halo app target, HaloNotificationService (NSE) target
 
 ## 3. Technology stack
 Swift 6 (strict concurrency), SwiftUI, Observation; upstream `MatrixRustSDK` (matrix-rust-components-swift, pinned exact version + checksum);
-GRDB (exact version); Apple frameworks only otherwise. Infrastructure: Synapse (native sliding sync), MAS (from M5, D64), Sygnal with Halo's pushkin (`infra/sygnal/`, Python, server-side only, ADR-0015). Rust: none of our own unless gate G-FFI fails (then `core/halo-ffi` with UniFFI).
+GRDB (exact version); Apple frameworks only otherwise. Infrastructure: Synapse (classic sync, D73/D74), MAS (from M5, D64), Sygnal with Halo's pushkin (template in `infra/dev/sygnal/`, Python, server-side only, ADR-0015). Rust: none of our own unless gate G-FFI fails (then `core/halo-ffi` with UniFFI).
 
 ## 4. Non-negotiable principles
 1. **Single source of truth.** Matrix state (events, receipts, room state, counts) lives on the server and in the SDK's replica. Halo stores only *derived, rebuildable* data and explicit *intents* (pending receipts) — never a second copy of Matrix sync state. **Never introduce a second source of truth for Matrix synchronization state.**
@@ -104,7 +104,7 @@ Before adding or upgrading **any** dependency: (1) justify it in the PR/commit; 
 | Pure package tests (Linux or macOS) | `swift test --package-path ios/Packages/<Package> -Xswiftc -warnings-as-errors` (Linux: `swift:6.2-noble` image) | **M0 (in place)**: HaloFoundation, HaloDomain, HaloTestSupport, HaloApplication |
 | App build | `xcodebuild -project ios/Halo.xcodeproj -scheme Halo-Debug -destination 'platform=iOS Simulator,name=<device>' build` | M0 (macOS only) |
 | Adapter/FFI tests | `xcodebuild … -scheme HaloMatrixAdapter test` (unit, in `prepush.sh`); contracts against `infra/dev`: `scripts/contract-test.sh [test …]` (settings in `~/.config/halo-dev/contract.env`) | **in place** |
-| Scenario suite | `docker compose -f infra/test/docker-compose.yml up -d && swift run --package-path tools/scenario-driver scenario-driver all` | M3 |
+| Scenario suite | `docker compose -f infra/dev/docker-compose.yml up -d && python3 tools/scenario-driver/run_scenarios.py` | **in place** |
 | Secret scan | `gitleaks git --redact .` (gitleaks 8.30.1) | **M0 (in place)** |
 | Rust licence gate | `scripts/rust-license-inventory.py --sdk <checkout at ios/SDKVERSION.md sdk_commit> --check docs/security/inventory/rust-deps-matrix-sdk-ffi.csv` | **M0 (in place)** |
 | Dev homeserver | `docker compose -f infra/dev/docker-compose.yml up -d && infra/dev/smoke.sh` | **M0 (in place)** |
