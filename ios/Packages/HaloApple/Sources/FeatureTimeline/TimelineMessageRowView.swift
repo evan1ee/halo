@@ -149,6 +149,20 @@ struct RowView: View {
                     .contextMenu {
                         if row.eventID != nil { actions } else if row.failedLocalID != nil { failedActions }
                     }
+                    .accessibilityActions {
+                        if row.eventID != nil {
+                            Button("Reply") { model.beginReply(row) }
+                            Button("React thumbs up") { Task { await model.toggleReaction(on: row, key: "👍") } }
+                            Button("More reactions") { model.beginReactionPicker(row) }
+                            if row.isOwn {
+                                if row.canEdit { Button("Edit") { model.beginEdit(row) } }
+                                Button("Delete") { confirmingDelete = true }
+                            }
+                        } else if row.failedLocalID != nil {
+                            Button("Try again") { Task { await model.retry(row) } }
+                            Button("Delete") { Task { await model.discard(row) } }
+                        }
+                    }
                 }
                 .padding(row.style == .ownMessage ? .leading : .trailing, 48)
             case .notice:

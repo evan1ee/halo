@@ -25,7 +25,6 @@ used 3 times, 2 with a written justification.
 
 | ID | Type | Debt | Evidence | I | R | E | **P** |
 |---|---|---|---|---|---|---|---|
-| TD-03 | Test | **Composition roots and UI untested.** 0 tests for `App/` and the NSE target; no XCUITest; the golden path is only checked by hand | `ios/App`, `ios/NotificationService`; TEST_STRATEGY §1 "UI" row not built | 3 | 4 | 3 | **21** |
 | TD-04 | Infrastructure | **Only 4 of 17 packages in CI.** Adapter, persistence, platform, features and the app build are validated only by a local `scripts/prepush.sh` (D71); a skipped prepush lands unbuilt code on `main` | `.github/workflows/swift-linux.yml`; D71, Q-CI-MAC | 3 | 4 | 3 | **21** |
 | TD-08 | Code | **Bot actions forget pending state on restart.** No `bot_action` table: a tick sent just before a kill shows as open again (Honest UI, AGENTS §4) | ROADMAP M7 slice 3 "Not built" | 2 | 3 | 2 | **20** |
 | TD-12 | Security | **NFR-7 not met:** draft bodies and bot-task titles are stored in plaintext in `halo.sqlite` (protected only by file protection) | R-16, HANDOFF §5 (founder) | 2 | 4 | 3 | **18** |

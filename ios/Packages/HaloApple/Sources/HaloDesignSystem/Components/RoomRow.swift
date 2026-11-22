@@ -36,9 +36,41 @@ public struct RoomRow<AvatarContent: View>: View {
         self.avatar = avatar()
     }
 
+    /// Combined VoiceOver label for a room row (`DESIGN_SYSTEM.md` §9).
+    public static func accessibilitySummary(
+        name: String,
+        preview: String?,
+        timestamp: String?,
+        isMuted: Bool,
+        isFavourite: Bool,
+        indicator: UnreadIndicator.Style
+    ) -> String {
+        var parts: [String] = [name]
+        if isFavourite { parts.append("Favourite") }
+        if isMuted { parts.append("Muted") }
+        switch indicator {
+        case .none:
+            break
+        case .dot, .approximate:
+            parts.append("unread messages")
+        case .count(let n):
+            parts.append(n == 1 ? "1 unread message" : "\(n) unread messages")
+        case .mentions(let n):
+            parts.append(n == 1 ? "1 mention" : "\(n) mentions")
+        }
+        if let preview, !preview.isEmpty {
+            parts.append("last message \(preview)")
+        }
+        if let timestamp, !timestamp.isEmpty {
+            parts.append(timestamp)
+        }
+        return parts.joined(separator: ", ")
+    }
+
     public var body: some View {
         HStack(spacing: HaloSpacing.m) {
             avatar
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: HaloSpacing.xxs) {
                 if dynamicTypeSize.isAccessibilitySize {
                     VStack(alignment: .leading, spacing: HaloSpacing.xxs) {
@@ -57,6 +89,18 @@ public struct RoomRow<AvatarContent: View>: View {
                 }
             }
         }
+        .frame(minHeight: 44)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            Self.accessibilitySummary(
+                name: name,
+                preview: preview,
+                timestamp: timestamp,
+                isMuted: isMuted,
+                isFavourite: isFavourite,
+                indicator: indicator
+            )
+        )
     }
 
     private var titleRow: some View {

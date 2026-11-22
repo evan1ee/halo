@@ -28,6 +28,16 @@ public struct BotCardView: View {
         self.tick = tick
     }
 
+    private static func stateDescription(_ state: BotCardRowState) -> String {
+        switch state {
+        case .open: "Open"
+        case .pending: "Waiting for bot"
+        case .completed: "Completed"
+        case .noResponse: "No response from bot. Tap to try again."
+        case .unavailable: "Not available"
+        }
+    }
+
     private func todoRow(_ row: BotCard.TodoRow) -> some View {
         let rowState = row.isDone ? .completed : state(row.id)
         let done = rowState == .completed
@@ -35,10 +45,14 @@ public struct BotCardView: View {
             Button { tick(row.id) } label: {
                 Image(systemName: done ? "checkmark.circle.fill" : (rowState == .pending ? "clock" : "circle"))
                     .foregroundStyle(done ? HaloColor.success : HaloColor.textSecondary)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(rowState != .open && rowState != .noResponse)
-            .accessibilityLabel(done ? "Done" : "Mark done")
+            .accessibilityLabel("\(row.text), item #\(row.id)")
+            .accessibilityValue(Self.stateDescription(rowState))
+            .accessibilityHint(rowState == .open || rowState == .noResponse ? "Double tap to mark done" : "")
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: HaloSpacing.xs) {
                     Text(row.text)
@@ -59,6 +73,7 @@ public struct BotCardView: View {
                     EmptyView()
                 }
             }
+            .accessibilityHidden(true)
         }
     }
 

@@ -28,12 +28,16 @@ public struct SignInView: View {
                     Text("Fast, private Matrix messaging with an honest unread badge.")
                         .font(HaloTypography.meta).foregroundStyle(HaloColor.textSecondary).multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
-                    TextField("Homeserver (e.g. matrix.org)", text: $model.server)
-                        .plainInput(.URL).textFieldStyle(.roundedBorder)
+                    TextField("Homeserver", text: $model.server)
+                        .plainInput(.URL)
+                        .font(HaloTypography.body)
+                        .padding(HaloSpacing.m)
+                        .background(HaloColor.bgSecondary, in: RoundedRectangle(cornerRadius: HaloRadius.medium, style: .continuous))
                         .focused($focus, equals: .server)
                         .submitLabel(.continue)
                         .onSubmit { if model.canSubmitServer { Task { await model.submitServer() } } }
                         .accessibilityLabel("Homeserver or Matrix ID")
+                        .accessibilityHint("For example, matrix.org")
                     DisclosureGroup("What's a homeserver?", isExpanded: $showingHomeserverHelp) {
                         Text("Matrix works like email: your account lives on a homeserver (the part after the colon in @you:example.org). Enter that domain to sign in.")
                             .font(HaloTypography.caption)
@@ -59,12 +63,18 @@ public struct SignInView: View {
                 }
                 if supportsPassword {
                     TextField("Username", text: $model.username)
-                        .plainInput(.username).textFieldStyle(.roundedBorder)
+                        .plainInput(.username)
+                        .font(HaloTypography.body)
+                        .padding(HaloSpacing.m)
+                        .background(HaloColor.bgSecondary, in: RoundedRectangle(cornerRadius: HaloRadius.medium, style: .continuous))
                         .focused($focus, equals: .username)
                         .submitLabel(.next)
                         .onSubmit { focus = .password }
                     SecureField("Password", text: $model.password)
-                        .plainInput(.password).textFieldStyle(.roundedBorder)
+                        .plainInput(.password)
+                        .font(HaloTypography.body)
+                        .padding(HaloSpacing.m)
+                        .background(HaloColor.bgSecondary, in: RoundedRectangle(cornerRadius: HaloRadius.medium, style: .continuous))
                         .focused($focus, equals: .password)
                         .submitLabel(.go)
                         .onSubmit { if model.canSubmitCredentials { Task { await model.submitCredentials() } } }

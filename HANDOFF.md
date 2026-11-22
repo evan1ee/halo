@@ -1,23 +1,24 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-22 · Branch: `refactor/adr0022-two-manifests` · PRs #1–#54 merged
+Last updated: 2026-11-22 · Branch: `feat/m14-accessibility-l10n` · PRs #1–#55 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
-- **Roadmap / Autonomous Loop:** functional roadmap M0–M10, **M11 (PR #52)**, **M12 (PR #53)**, **M13 (PR #54)**, and **ADR-0022 step 4 (two-manifest consolidation, D86)** are implemented (`refactor/adr0022-two-manifests`). Next: **M14 (Accessibility & localisation + `HaloUITests`)** → **M15 (Ship readiness + Tech Debt Phase D)**. Founder-blocked items in §5.
-- **Milestones:** M0–M13 + ADR-0022 steps 1–4 done except founder/device items (G-FFI/G-UNREAD/G-NSE confirmations, Beta/Release push gateway + TestFlight, 7-day AC-U8 soak, Q-BRAND sign-in illustration, Q-ONBOARD-SERVER, Q-L10N, Q-APPSTORE). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`).
-- **Checks (this branch):** `HALO_SIM="iPhone Air" scripts/prepush.sh` (`HaloCore` 165 tests, `HaloApple-Package` all 16 targets on iOS Simulator, `Halo-Debug` app build, `validate-docs.sh`, `check-boundaries.sh` incl. adapter public-API check, `test_check_boundaries.py`, `check-design-tokens.sh`, `swiftlint --strict`, `gitleaks`). `.build` size dropped from **6.5 GB** to **530 MB** (92% reduction).
-- **CI:** PRs #1–#54 merged. Linux CI runs `swift test --package-path ios/Packages/HaloCore -Xswiftc -warnings-as-errors`.
+- **Roadmap / Autonomous Loop:** functional roadmap M0–M10, **M11–M14** (Design-system foundation, D85 Navigation & IA, Core-flow polish, Accessibility & localisation + `HaloUITests`), and **ADR-0022 steps 1–4** (two-manifest `HaloCore` + `HaloApple`, D86) + Tech Debt Phases A–C + TD-03 are implemented (`feat/m14-accessibility-l10n`). Next: **M15 (Ship readiness + remaining Tech Debt Phase D: TD-04, TD-08)**. Founder-blocked items in §5.
+- **Milestones:** M0–M14 done except founder/device items (G-FFI/G-UNREAD/G-NSE confirmations, Beta/Release push gateway + TestFlight, 7-day AC-U8 soak, Q-BRAND sign-in illustration, Q-ONBOARD-SERVER, Q-L10N, Q-APPSTORE). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`).
+- **Checks (this branch):** `HALO_SIM="iPhone Air" scripts/prepush.sh` (`HaloCore` 165 tests, `HaloApple-Package` all 16 targets on iOS Simulator incl. `RoomRowAccessibilityTests`, `Halo-Debug` app build, `HaloUITests` with `performAccessibilityAudit()`, `validate-docs.sh`, `check-boundaries.sh`, `test_check_boundaries.py`, `check-design-tokens.sh`, `swiftlint --strict`, `gitleaks`).
+- **CI:** PRs #1–#55 merged. Linux CI runs `swift test --package-path ios/Packages/HaloCore -Xswiftc -warnings-as-errors`.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log`.
-- **ADR-0022 step 4 — two-manifest consolidation (`refactor/adr0022-two-manifests`, D86):**
-  - Replaced 20 local `Package.swift` manifests with `ios/Packages/HaloCore` (Linux-buildable: `HaloFoundation`, `HaloDomain`, `HaloApplication`, `HaloTestSupport`) and `ios/Packages/HaloApple` (16 iOS/Apple targets: adapter, persistence, platform, design system, bot rendering, and all 11 `Feature*` targets); all module/target names unchanged.
-  - Organized `HaloMatrixAdapter` and `HaloTestSupport` into the 12 matching area folders (`Session`, `Sync`, `RoomList`, `Timeline`, `Media`, `Stickers`, `Encryption`, `Notifications`, `Bots`, `Search`, `Account`, `Support`).
-  - Updated `ios/project.yml` + `Halo.xcodeproj`, `scripts/prepush.sh`, `scripts/check_boundaries.py` (target-level manifest + naming + adapter public-API checks) & `test_check_boundaries.py`, `scripts/check-design-tokens.sh`, `scripts/contract-test.sh`, `.github/workflows/swift-linux.yml`, and docs (`AGENTS.md` §5/§13, `MODULE_BOUNDARIES.md`, `DEVELOPMENT_SETUP.md`, `ROADMAP.md`, `TECH_DEBT.md` TD-16 removed).
+- **M14 Accessibility & localisation + `HaloUITests` (`feat/m14-accessibility-l10n`, TD-03, UX-10/UX-11/SR-07):**
+  - VoiceOver pass (DESIGN_SYSTEM §9): `RoomRow` combined accessible element (`RoomRow.accessibilitySummary`, unit-tested) with 44 pt minimum height; `.accessibilityActions` on `RoomListView` (Mark read/unread, Mute, Favourite) and `TimelineMessageRowView` (Reply, React 👍, More reactions, Edit, Delete); `BotCardView` 44×44 tick hit targets and explicit state values.
+  - Dynamic Type AX5 fix: replaced clipped `.roundedBorder` text fields in `SignInView` with Dynamic-Type-friendly padded containers (caught and verified by `performAccessibilityAudit()`).
+  - XCUITest target `HaloUITests` (`ios/UITests/HaloUITests.swift`, `ios/project.yml`, `scripts/prepush.sh`): automated `performAccessibilityAudit()` on root and inline-help screens + optional golden-path test against `infra/dev`.
+  - String Catalog `ios/App/Resources/Localizable.xcstrings` (`sourceLanguage: "en"`, plural rules for `%lld unread messages`, `%lld members`), validated by `RoomRowAccessibilityTests.stringCatalogIsValid`.
+- **ADR-0022 step 4 — two-manifest consolidation (`PR #55`, merged `433e337`, D86):** replaced 20 `Package.swift` manifests with `HaloCore` (Linux) and `HaloApple` (16 iOS/Apple targets), organized `HaloMatrixAdapter` and `HaloTestSupport` into 12 matching area folders; `.build` disk footprint dropped from **6.5 GB** to **530 MB** (92% reduction).
 - **M13 Core-flow polish + ADR-0022 step 3 + TD-11 split + Phase C (`PR #54`, merged `3ce949f`):** extracted `HaloBotRendering`, `FeatureComposer`, `FeatureMedia`, renamed `FeatureOnboarding`; split `TimelineView`/`TimelineViewModel`; S1/S14/S15 onboarding; room-list/timeline/composer polish; `HaloErrorCopy`, `ActionState`, TD-13 sleep removal.
-- **M12 Navigation & IA + ADR-0022 step 2 + Phase B (`PR #53`, merged `314c528`):** `PreferencesPort`/`PreferencesStore`, `ChatsRoute`/`ChatsRouter`, `FeatureSearch`, `FeatureProfile`, `App/Composition/*Assembly.swift`, `SettingsConfiguration`, D85 single-stack shell with `.searchable` room list and `@SceneStorage` restoration.
 
 ## 3. Key decisions
 Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D86), [docs/adr/README.md](docs/adr/README.md).
@@ -27,9 +28,9 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D86), [docs/adr/RE
 - **D84 / D85 / D86 (ADR-0022):** Apple-native north star; single `NavigationStack` shell; module layout v2 (all 4 steps complete).
 
 ## 4. Modified files (this push)
-- **Manifests & package layout:** `ios/Packages/HaloCore/Package.swift`, `ios/Packages/HaloApple/Package.swift`, moved sources/tests under `HaloCore/` and `HaloApple/`, area folders in `HaloMatrixAdapter` and `HaloTestSupport`, removed 20 old `Package.swift` manifests.
-- **Project, scripts & CI:** `ios/project.yml`, `ios/Halo.xcodeproj/project.pbxproj`, `scripts/check_boundaries.py`, `scripts/test_check_boundaries.py`, `scripts/prepush.sh`, `scripts/check-design-tokens.sh`, `scripts/contract-test.sh`, `.github/workflows/swift-linux.yml`.
-- **Docs:** `AGENTS.md`, `docs/architecture/MODULE_BOUNDARIES.md`, `docs/development/DEVELOPMENT_SETUP.md`, `docs/ROADMAP.md`, `docs/development/TECH_DEBT.md`, `HANDOFF.md`.
+- **Accessibility & UI:** `HaloDesignSystem/Components/RoomRow.swift`, `HaloBotRendering/BotCardView.swift`, `FeatureRoomList/RoomListView.swift`, `FeatureTimeline/TimelineMessageRowView.swift`, `FeatureOnboarding/SignInView.swift`.
+- **Localisation & Tests:** `ios/App/Resources/Localizable.xcstrings`, `ios/UITests/HaloUITests.swift`, `HaloDesignSystemTests/RoomRowAccessibilityTests.swift`, `ios/project.yml`, `ios/Halo.xcodeproj/project.pbxproj`, `scripts/prepush.sh`.
+- **Docs:** `docs/ROADMAP.md`, `docs/design/UX_AUDIT.md`, `docs/development/TECH_DEBT.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
@@ -45,17 +46,17 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 
 ## 6. Next steps
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §"Remaining work".
-1. **M14 (Accessibility & localisation + TD-03 `HaloUITests`)** on branch `feat/m14-accessibility-l10n`: VoiceOver pass (`RoomRow` combined element, `.accessibilityActions`, bot-card states), Dynamic Type AX5 + Reduce Motion/Transparency check, `HaloUITests` XCUITest target with `performAccessibilityAudit()`, String Catalog `Localizable.xcstrings`.
-2. **M15 (Ship readiness + Tech Debt Phase D)** on branch `feat/m15-ship-readiness`: `PrivacyInfo.xcprivacy` (app + NSE), in-app feedback, What's New sheet, About links, XCTest performance metrics, `bot_action` GRDB migration (TD-08), manual-dispatch macOS build workflow (TD-04).
+1. **M15 (Ship readiness + Tech Debt Phase D)** on branch `feat/m15-ship-readiness`: `PrivacyInfo.xcprivacy` (app + NSE), in-app feedback (Settings → "Send feedback" with optional diagnostics `.zip`), What's New sheet once per marketing version, About screen links, XCTest launch/list performance metrics, `bot_action` GRDB migration (TD-08), manual-dispatch macOS build workflow (TD-04).
 
 ## 7. Next Session Prompt
 ```text
 Read AGENTS.md, HANDOFF.md, and docs/ROADMAP.md (§"Remaining work").
-M0–M13 and ADR-0022 steps 1–4 (two-manifest HaloCore + HaloApple) are done.
+M0–M14 and ADR-0022 steps 1–4 are done.
 
-Task: execute M14 (Accessibility & localisation + HaloUITests) on branch
-feat/m14-accessibility-l10n, then M15 (Ship readiness + Tech Debt Phase D) on
-feat/m15-ship-readiness. Verify every PR with:
+Task: execute M15 (Ship readiness + Tech Debt Phase D: PrivacyInfo.xcprivacy
+for app & NSE, in-app feedback, What's New sheet, About links, XCTest metrics,
+bot_action GRDB migration TD-08, manual-dispatch macOS workflow TD-04) on
+branch feat/m15-ship-readiness. Verify with:
   HALO_SIM="iPhone Air" scripts/prepush.sh
   scripts/validate-docs.sh
 ```

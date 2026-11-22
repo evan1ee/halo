@@ -102,11 +102,28 @@ targets:
         CODE_SIGN_ENTITLEMENTS: NotificationService/HaloNotificationService.entitlements
         INFOPLIST_KEY_CFBundleDisplayName: Halo Notifications
         INFOPLIST_FILE: NotificationService/Info.plist
+  HaloUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: Halo
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(HALO_APP_BUNDLE_ID).uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Halo
 schemes:
   Halo-Debug:
-    build: {targets: {Halo: all}}
+    build:
+      targets:
+        Halo: all
+        HaloUITests: [test]
     run: {config: Debug}
-    test: {config: Debug}
+    test:
+      config: Debug
+      targets:
+        - HaloUITests
     profile: {config: Release}
     analyze: {config: Debug}
     archive: {config: Release}

@@ -31,9 +31,13 @@ if [[ "$(uname)" == Darwin ]] && command -v xcodebuild >/dev/null; then
   if [[ -f ios/Halo.xcodeproj/project.pbxproj ]]; then
     step "xcodebuild build Halo-Debug (iOS Simulator)" xcodebuild -project ios/Halo.xcodeproj -scheme Halo-Debug \
       -destination "platform=iOS Simulator,name=$sim" -quiet build
+    step "xcodebuild test HaloUITests (iOS Simulator)" xcodebuild -project ios/Halo.xcodeproj -scheme Halo-Debug \
+      -destination "platform=iOS Simulator,name=$sim" -only-testing:HaloUITests test -quiet
   elif command -v xcodegen >/dev/null; then
     step "xcodegen + build Halo-Debug (iOS Simulator)" bash -c 'cd ios && xcodegen generate -q && xcodebuild -project Halo.xcodeproj -scheme Halo-Debug -destination "platform=iOS Simulator,name=$1" -quiet build' _ "$sim"
-  else skipped+=("app build (no ios/Halo.xcodeproj; install xcodegen)"); fi
+    step "xcodebuild test HaloUITests (iOS Simulator)" xcodebuild -project ios/Halo.xcodeproj -scheme Halo-Debug \
+      -destination "platform=iOS Simulator,name=$sim" -only-testing:HaloUITests test -quiet
+  else skipped+=("app build and UI tests (no ios/Halo.xcodeproj; install xcodegen)"); fi
 else skipped+=("HaloApple tests and app build (not macOS / no xcodebuild)"); fi
 
 if command -v gitleaks >/dev/null; then step "gitleaks" gitleaks git --redact --no-banner .; else skipped+=("gitleaks (not installed)"); fi
