@@ -38,6 +38,10 @@ public struct TimelineView: View {
     }
 
     public var body: some View {
+        bodyContent.modifier(TimelineDropModifier(model: model))
+    }
+
+    private var bodyContent: some View {
         Group {
             switch model.content {
             case .opening:

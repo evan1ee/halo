@@ -100,7 +100,9 @@ Halo is ready for external testers when **all** of these hold; each line names h
 - [ ] 📱 App Intents on a device: the Siri phrase and a Spotlight result opening a chat (the simulator can't speak to Siri).
 - [x] Unread chats widget (D93): medium widget, names from the D88 opt-in; `UnreadChatsSnapshot` tests.
 - [x] Hardware-keyboard shortcuts (D91 extras): ⌘N new chat, ⌘, settings, ⌘F search, ⌘1–⌘6 filters (`HaloApp.swift`); no unit test (SwiftUI wiring), built for iPad simulator.
-- [ ] Send-by-Siri, iPad extras (three columns, drag and drop).
+- [x] Drag and drop into a conversation (`TimelineDropModifier`, `DropClassifier`): pictures join the pending photos, other files send at once (≤ 50 MiB), text and links go into the draft; a tinted border shows the target. `TimelineDropTests`.
+- [ ] 📱 Drag and drop on an iPad: from Photos, Files and Safari into an open chat, also between Halo and another app in Split View.
+- [ ] Send-by-Siri, iPad three-column layout and dragging items out of the timeline.
 - Calls: will not be implemented (D94, founder).
 
 ## Release plan
