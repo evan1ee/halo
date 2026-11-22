@@ -147,6 +147,16 @@ struct GlobalMediaGalleryViewModelTests {
         model.selectedRoomID = roomB
         #expect(model.filteredItems.map(\.item.eventID.rawValue) == ["$e3"])
 
+        // Search filter matches filename, sender, and room name case-insensitively.
+        model.selectedRoomID = nil
+        model.searchText = "SUNSET"
+        #expect(model.filteredItems.map(\.item.eventID.rawValue) == ["$e1"])
+        model.searchText = "family"
+        #expect(model.filteredItems.map(\.item.eventID.rawValue) == ["$e3"])
+        model.searchText = "bob"
+        #expect(model.filteredItems.map(\.item.eventID.rawValue) == ["$e2"])
+        model.searchText = ""
+
         // Export writes bytes to a temp file.
         let exported = await model.exportMediaFile(model.items[0])
         #expect(exported != nil)

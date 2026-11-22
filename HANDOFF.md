@@ -13,13 +13,13 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log` and [docs/CODEBASE_REVIEW.md](docs/CODEBASE_REVIEW.md) §13.
-- **Join room by alias or ID (`ROOM_MANAGEMENT FR-5`, this push on `main`):**
-  - Added `ChatCreationPort.joinRoom(_:)`, `FakeChatCreationPort.joinRoom`, and `MatrixChatCreationPort.joinRoom` over SDK `Client.joinRoomByIdOrAlias(roomIdOrAlias:serverNames:)`.
-  - Added "Or join a room by address" (`#room:server` or `!id:server`) in `NewChatViewModel` / `NewChatView` with address validation and unit tests in `NewChatViewModelTests.joinRoomByAliasOrID`.
+- **Matrix deep-link handling & Global Media Gallery search (`NAVIGATION §3`, D83, this push on `main`):**
+  - Added pure-Swift `MatrixLink` parser + `MatrixLinkTests` in `HaloDomain` (`https://matrix.to/#/...` and MSC2312 `matrix:` URIs for rooms, events, aliases, and users) and wired `.onOpenURL` → `AppRoot.resolveMatrixLink(_:)` in `HaloApp`.
+  - Added `.searchable` search filtering (by filename/caption, sender, or room name) to `GlobalMediaGalleryViewModel` / `GlobalMediaGalleryView` with unit tests.
+- **Join room by alias or ID (`7eb0ff0`, `ROOM_MANAGEMENT FR-5`):**
+  - Added `ChatCreationPort.joinRoom(_:)`, `FakeChatCreationPort`, `MatrixChatCreationPort` over `Client.joinRoomByIdOrAlias`, and "Or join a room by address" in `NewChatViewModel` / `NewChatView`.
 - **BlurHash media placeholders (`4dceb6b`, `MEDIA_ATTACHMENTS FR-1`):**
-  - Added pure-Swift `BlurHashDecoder` + `BlurHashDecoderTests`, `MediaAttachment.blurhash`, `TimelineMapper` mapping (`blurhash`, `mimeType`, `size`, `thumbnail`), `RGBAPlaceholderImage` in `HaloDesignSystem`, and placeholders in `TimelineView` & `GlobalMediaGalleryView`.
-- **Full-screen zoomable & swipeable media viewer (`18d01d7`, `MEDIA_ATTACHMENTS FR-1`):**
-  - Added reusable `ZoomableImageView` in `HaloDesignSystem`, full-screen swipeable `TimelinePhotoViewer` in `FeatureTimeline`, and swipeable `GlobalMediaDetailSheet` in `GlobalMediaGalleryView`.
+  - Added pure-Swift `BlurHashDecoder` + `BlurHashDecoderTests`, `MediaAttachment.blurhash`, `TimelineMapper` mapping, `RGBAPlaceholderImage`, and placeholders in `TimelineView` & `GlobalMediaGalleryView`.
 
 ## 3. Key decisions
 Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D83), [docs/adr/README.md](docs/adr/README.md).
@@ -31,8 +31,9 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D83), [docs/adr/RE
 - **D83 (founder, refines D34 & D50):** global media gallery is surfaced as a preset virtual room entry in the room list (not a tab); purely a local UI entry, not a Matrix room (no server room ID, no sync state, excluded from unread counts and badge).
 
 ## 4. Modified files (this push)
-- **HaloDomain, HaloTestSupport & HaloMatrixAdapter:** `ios/Packages/HaloDomain/Sources/HaloDomain/Ports/ChatCreationPort.swift`, `ios/Packages/HaloTestSupport/Sources/HaloTestSupport/FakeChatCreationPort.swift`, `ios/Packages/HaloMatrixAdapter/Sources/HaloMatrixAdapter/MatrixChatCreationPort.swift`.
-- **FeatureRoomList:** `ios/Packages/Features/FeatureRoomList/Sources/FeatureRoomList/NewChatViewModel.swift`, `ios/Packages/Features/FeatureRoomList/Sources/FeatureRoomList/NewChatView.swift`, `ios/Packages/Features/FeatureRoomList/Tests/FeatureRoomListTests/NewChatViewModelTests.swift`.
+- **HaloDomain:** `ios/Packages/HaloDomain/Sources/HaloDomain/Navigation/MatrixLink.swift`, `ios/Packages/HaloDomain/Tests/HaloDomainTests/MatrixLinkTests.swift`.
+- **FeatureRoomList:** `ios/Packages/Features/FeatureRoomList/Sources/FeatureRoomList/GlobalMediaGalleryViewModel.swift`, `ios/Packages/Features/FeatureRoomList/Sources/FeatureRoomList/GlobalMediaGalleryView.swift`, `ios/Packages/Features/FeatureRoomList/Tests/FeatureRoomListTests/GlobalMediaGalleryViewModelTests.swift`.
+- **App:** `ios/App/AppRoot.swift`, `ios/App/HaloApp.swift`.
 - **Docs:** `HANDOFF.md`.
 
 ## 5. Outstanding issues

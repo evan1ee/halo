@@ -411,6 +411,24 @@ final class AppRoot {
         GlobalMediaGalleryViewModel(rooms: roomCoordinator, roomPort: roomPort, media: media)
     }
 
+    /// Resolves a `matrix.to` or `matrix:` deep link into a joined room and optional target event (NAVIGATION §3).
+    func resolveMatrixLink(_ url: URL) async -> (room: RoomID, event: EventID?)? {
+        guard case .signedIn = auth.screen, let link = MatrixLink.parse(url) else { return nil }
+        switch link {
+        case .room(let id, let event):
+            let alreadyJoined = await roomCoordinator.rooms.contains { $0.id == id && $0.membership == .joined }
+            if alreadyJoined { return (id, event) }
+            guard let joined = try? await chatCreation.joinRoom(id.rawValue) else { return nil }
+            return (joined, event)
+        case .roomAlias(let alias, let event):
+            guard let joined = try? await chatCreation.joinRoom(alias) else { return nil }
+            return (joined, event)
+        case .user(let user):
+            guard let dm = try? await chatCreation.startDirectChat(with: user) else { return nil }
+            return (dm, nil)
+        }
+    }
+
     /// The profile sheet of a room member (USER_PROFILES); `nil` when the member's ID is not valid.
     func makeUserProfile(member: RoomMemberInfo, onOpenRoom: @escaping @MainActor (RoomID) -> Void) -> UserProfileViewModel? {
         guard let user = try? UserID(member.userID) else { return nil }

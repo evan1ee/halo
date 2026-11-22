@@ -53,6 +53,8 @@ public final class GlobalMediaGalleryViewModel: Identifiable {
     public var filter: GlobalMediaFilter = .all
     /// When non-nil, narrows the gallery to items from a single room.
     public var selectedRoomID: RoomID?
+    /// Case-insensitive search query matching filename/caption, sender name, or room name.
+    public var searchText = ""
 
     private let rooms: RoomListCoordinator
     private let roomPort: any RoomPort
@@ -82,10 +84,17 @@ public final class GlobalMediaGalleryViewModel: Identifiable {
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
-    /// Items matching the active media-type filter and optional room filter.
+    /// Items matching the active media-type filter, optional room filter, and search query.
     public var filteredItems: [GlobalMediaItem] {
-        items.filter { entry in
+        let needle = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return items.filter { entry in
             if let selectedRoomID, entry.roomID != selectedRoomID { return false }
+            if !needle.isEmpty {
+                let matchesBody = entry.item.attachment.body.localizedCaseInsensitiveContains(needle)
+                let matchesRoom = entry.roomName.localizedCaseInsensitiveContains(needle)
+                let matchesSender = entry.item.senderName.localizedCaseInsensitiveContains(needle)
+                if !matchesBody && !matchesRoom && !matchesSender { return false }
+            }
             switch filter {
             case .all:
                 return true

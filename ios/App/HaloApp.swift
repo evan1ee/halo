@@ -208,6 +208,15 @@ private struct RootView: View {
             await root.auth.start()
         }
         .preferredColorScheme(colorScheme)
+        .onOpenURL { url in
+            Task {
+                guard let target = await root.resolveMatrixLink(url) else { return }
+                pendingEvent = target.event
+                if path.last != .room(target.room) {
+                    path.append(.room(target.room))
+                }
+            }
+        }
         // Ask for notification permission once signed in; the token then arrives in `PushDelegate`.
         .task(id: root.auth.screen) {
             guard root.push != nil, case .signedIn = root.auth.screen else { return }

@@ -66,6 +66,7 @@ public struct GlobalMediaGalleryView: View {
             .background(.bar)
         }
         .navigationTitle("Media Gallery")
+        .searchable(text: $model.searchText, prompt: "Search photos, files, rooms")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
