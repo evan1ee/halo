@@ -166,4 +166,13 @@ struct RefreshDelegateTests {
         #expect(crossProcess.accessToken == "tok-2")
         #expect(crossProcess.refreshToken == "ref-2")
     }
+
+    @Test("defaultMediaRetentionPolicy matches D55 / V-MEDIA-1 (1 GiB, 50 MiB max file, 30 days, daily cleanup)")
+    func mediaRetentionPolicyDefaults() {
+        let policy = MatrixSessionPort.defaultMediaRetentionPolicy
+        #expect(policy.maxCacheSize == 1_073_741_824)
+        #expect(policy.maxFileSize == 52_428_800)
+        #expect(policy.lastAccessExpiry == TimeInterval(30 * 86_400))
+        #expect(policy.cleanupFrequency == TimeInterval(86_400))
+    }
 }

@@ -9,7 +9,7 @@ to be re-planned after M0. Each milestone ends with its exit criteria **verified
 - [x] Apple Developer Program membership active; namespace root `one.mbm.halo` recorded (D63, DEVELOPMENT_SETUP §3).
 - [x] Domain for the homeserver available; DNS control.
 - [x] Mac with Xcode supporting iOS 26 SDK — available from 2026-11-19 (Xcode 27.2, iOS 26+ simulators); M0 proceeds with its Linux part, see below; Rust toolchain installable (only needed on the G-FFI or G-NSE fail paths, or for Q-SDK-BUILD).
-- [ ] Open questions marked "blocks M0" in [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) resolved (the remaining ones are M0 validation items, done during M0).
+- [x] Open questions marked "blocks M0" in [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) resolved (all M0 blockers — `V-SDK-1`, `V-SQL-1`, `V-CI-1`, `V-CI-2`, `V-APPLE-1`, `Q-BUNDLE`, `Q-XCODEGEN`, `Q-DEV-AUTH`, `Q-NSE-GATE` — are resolved).
 
 ## M0 without a Mac (2026-11-19)
 M0 started before the Mac is available. Work that runs on Linux is done first; the rest waits for the Mac and is the only thing

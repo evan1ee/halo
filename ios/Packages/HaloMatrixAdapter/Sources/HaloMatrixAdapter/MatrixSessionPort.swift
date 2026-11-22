@@ -53,6 +53,15 @@ public actor MatrixSessionPort: SessionPort {
     public static let oauthRedirectURI = "one.mbm.halo:/oauth/callback"
     public static let oauthClientURI = "https://halo.mbm.one"
 
+    /// SDK media cache retention defaults (D55, V-MEDIA-1): 1 GiB total cache, 50 MiB max single file,
+    /// 30-day unaccessed expiry, daily cleanup. Applied to main-app sessions only (not the NSE).
+    static let defaultMediaRetentionPolicy = MediaRetentionPolicy(
+        maxCacheSize: 1_073_741_824,
+        maxFileSize: 52_428_800,
+        lastAccessExpiry: 30 * 86_400,
+        cleanupFrequency: 86_400
+    )
+
     /// - Parameters:
     ///   - baseDirectory: where per-login SDK stores live (the App Group container in the app).
     ///   - holderName: this process's name for the SDK's cross-process lock ("app" or "nse").
@@ -440,6 +449,7 @@ public actor MatrixSessionPort: SessionPort {
             sendQueueErrors = errors
             searchBackfillHandle?.cancel()
             searchBackfillHandle = client.runSearchBackfill(strategy: .foreground)
+            try? await client.setMediaRetentionPolicy(policy: Self.defaultMediaRetentionPolicy)
         }
         authDelegateHandle?.cancel()
         let auth = AuthDelegate { [weak self] isSoftLogout in
