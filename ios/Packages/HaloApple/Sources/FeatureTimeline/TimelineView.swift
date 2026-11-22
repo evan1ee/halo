@@ -18,6 +18,8 @@ public struct TimelineView: View {
     @State private var headerVisible = false
     /// History is only loaded after the opening scroll: rows prepended before it would push the landing row out of place.
     @State private var landed = false
+    /// The list stays invisible while it jumps to its landing row, so opening a room doesn't flash or visibly jump.
+    @State private var revealed = false
     /// Whether the unread marker row and the newest row are on screen (the marker is above the viewport when it isn't, and the newest is).
     @State private var markerVisible = true
     @State private var bottomVisible = false
@@ -104,6 +106,13 @@ public struct TimelineView: View {
                     }
                 }
                 .listStyle(.plain)
+                .opacity(revealed || rows.isEmpty ? 1 : 0)
+                .overlay { if !revealed && !rows.isEmpty { ProgressView() } }
+                .task {
+                    // Never leave the list hidden if landing doesn't complete (for example a room that stays offline).
+                    try? await Task.sleep(for: .seconds(2))
+                    revealed = true
+                }
                 .environment(\.defaultMinListRowHeight, 0)  // rows are as tall as their content, so a group reads as one
                 .listSectionSeparator(.hidden)
                 .listRowSeparatorTint(.clear)
@@ -118,7 +127,9 @@ public struct TimelineView: View {
                     try? await Task.sleep(for: .milliseconds(150))  // let the list lay the rows out first
                     // A lazy list estimates the height of rows it hasn't laid out, so one jump to a row far below the visible
                     // part lands short (seen in the simulator with 14 unread messages); jumping again after each layout converges.
-                    for _ in 0..<4 {
+                    // Keep going until the target is really on screen (a long room needs more than four jumps), at most ~2 s.
+                    for attempt in 0..<16 {
+                        if attempt >= 3, model.landingIsUnread ? markerVisible : bottomVisible { break }
                         // Landing at the bottom means the newest row now: history can still be arriving in batches after
                         // the landing row was chosen (seen on a reopened room), and that row would leave the list mid-history.
                         let target = model.landingIsUnread ? landing : (model.lastRowID ?? landing)
@@ -126,6 +137,7 @@ public struct TimelineView: View {
                         try? await Task.sleep(for: .milliseconds(120))
                     }
                     model.landingShown()
+                    revealed = true
                     try? await Task.sleep(for: .milliseconds(250))  // let the scroll settle before history may load
                     landed = true
                     model.setAtBottom(bottomVisible)
