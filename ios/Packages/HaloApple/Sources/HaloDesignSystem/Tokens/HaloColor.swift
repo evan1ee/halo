@@ -17,7 +17,7 @@ public enum HaloColor {
     /// Metadata and timestamps (`text.secondary`).
     public static let textSecondary = Color("TextSecondary", bundle: .module)
 
-    /// Primary actions, own bubbles, links (`accent`, Halo indigo).
+    /// Primary actions, own bubbles, links (`accent`, system blue).
     public static let accent = Color("Accent", bundle: .module)
     /// Text and glyphs on an `accent` fill (`onAccent`).
     public static let onAccent = Color("OnAccent", bundle: .module)
