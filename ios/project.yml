@@ -20,9 +20,12 @@ packages:
   HaloPlatform: {path: Packages/HaloPlatform}
   HaloPersistence: {path: Packages/HaloPersistence}
   HaloDesignSystem: {path: Packages/HaloDesignSystem}
-  FeatureAuth: {path: Packages/Features/FeatureAuth}
+  HaloBotRendering: {path: Packages/HaloBotRendering}
+  FeatureOnboarding: {path: Packages/Features/FeatureOnboarding}
   FeatureRoomList: {path: Packages/Features/FeatureRoomList}
   FeatureTimeline: {path: Packages/Features/FeatureTimeline}
+  FeatureComposer: {path: Packages/Features/FeatureComposer}
+  FeatureMedia: {path: Packages/Features/FeatureMedia}
   FeatureStickers: {path: Packages/Features/FeatureStickers}
   FeatureSettings: {path: Packages/Features/FeatureSettings}
   FeatureRoomDetails: {path: Packages/Features/FeatureRoomDetails}
@@ -42,9 +45,12 @@ targets:
       - package: HaloPlatform
       - package: HaloPersistence
       - package: HaloDesignSystem
-      - package: FeatureAuth
+      - package: HaloBotRendering
+      - package: FeatureOnboarding
       - package: FeatureRoomList
       - package: FeatureTimeline
+      - package: FeatureComposer
+      - package: FeatureMedia
       - package: FeatureStickers
       - package: FeatureSettings
       - package: FeatureRoomDetails

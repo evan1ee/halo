@@ -1,5 +1,7 @@
-import FeatureAuth
 import FeatureBotActivity
+import FeatureComposer
+import FeatureMedia
+import FeatureOnboarding
 import FeatureProfile
 import FeatureRoomDetails
 import FeatureRoomList

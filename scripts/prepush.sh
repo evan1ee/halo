@@ -28,7 +28,7 @@ fi
 # prebuilt SDK has no macOS slice; its contract tests are skipped unless HALO_DEV_* is exported as
 # TEST_RUNNER_HALO_DEV_* (docs/testing/INTEGRATION_TESTS.md).
 if [[ "$(uname)" == Darwin ]] && command -v swift >/dev/null; then
-  for p in HaloDesignSystem HaloPlatform HaloPersistence Features/FeatureAuth Features/FeatureRoomList Features/FeatureTimeline Features/FeatureStickers Features/FeatureSettings Features/FeatureRoomDetails Features/FeatureBotActivity Features/FeatureSearch Features/FeatureProfile; do
+  for p in HaloDesignSystem HaloBotRendering HaloPlatform HaloPersistence Features/FeatureOnboarding Features/FeatureRoomList Features/FeatureTimeline Features/FeatureComposer Features/FeatureMedia Features/FeatureStickers Features/FeatureSettings Features/FeatureRoomDetails Features/FeatureBotActivity Features/FeatureSearch Features/FeatureProfile; do
     step "swift test $p" swift test --package-path "ios/Packages/$p" -Xswiftc -warnings-as-errors
   done
   if command -v xcodebuild >/dev/null; then
