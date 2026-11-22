@@ -98,7 +98,8 @@ Halo is ready for external testers when **all** of these hold; each line names h
 - [ ] 📱 Focus filter on a device: add Halo to a Focus, turn it on and off, check the list narrows and restores.
 - [ ] 📱 Widgets on a device: add the small and lock-screen widgets, receive a push and check the count refreshes.
 - [ ] 📱 App Intents on a device: the Siri phrase and a Spotlight result opening a chat (the simulator can't speak to Siri).
-- [ ] Send-by-Siri, chat-list widget, iPad extras (three columns, shortcuts, drag and drop), calls (D43).
+- [x] Unread chats widget (D93): medium widget, names from the D88 opt-in; `UnreadChatsSnapshot` tests.
+- [ ] Send-by-Siri, iPad extras (three columns, shortcuts, drag and drop), calls (D43).
 
 ## Release plan
 | Release | Contents | Audience | Entry |

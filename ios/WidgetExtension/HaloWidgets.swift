@@ -7,7 +7,10 @@ import WidgetKit
 /// phone shows no more than the app icon badge does. Tapping opens the app.
 @main
 struct HaloWidgetBundle: WidgetBundle {
-    var body: some Widget { UnreadWidget() }
+    var body: some Widget {
+        UnreadWidget()
+        UnreadChatsWidget()
+    }
 }
 
 struct UnreadEntry: TimelineEntry {
@@ -91,5 +94,82 @@ struct UnreadWidgetView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
+    }
+}
+
+// MARK: Unread chats (medium)
+
+struct UnreadChatsEntry: TimelineEntry {
+    let date: Date
+    let snapshot: UnreadChatsSnapshot
+}
+
+/// Names come from the opt-in chat list (D88, D93); with the setting off the widget only says how to turn them on.
+struct UnreadChatsProvider: TimelineProvider {
+    private func current(at date: Date = Date()) -> UnreadChatsEntry {
+        let cache = AttentionCache(suiteName: "group.\(HaloShared.namespace())")
+        let names = Dictionary(
+            SystemChatShortcutStore(file: SystemChatShortcutStore.defaultFile()).load().map { ($0.id, $0.name) },
+            uniquingKeysWith: { first, _ in first })
+        return UnreadChatsEntry(date: date, snapshot: UnreadChatsSnapshot(counts: cache.counts(), names: names, updatedAt: cache.updatedAt()))
+    }
+
+    func placeholder(in context: Context) -> UnreadChatsEntry {
+        UnreadChatsEntry(date: Date(), snapshot: UnreadChatsSnapshot(
+            counts: ["!1:halo": 3, "!2:halo": 1], names: ["!1:halo": "Family", "!2:halo": "Project"], updatedAt: Date()))
+    }
+
+    func getSnapshot(in context: Context, completion: @escaping (UnreadChatsEntry) -> Void) {
+        completion(context.isPreview ? placeholder(in: context) : current())
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<UnreadChatsEntry>) -> Void) {
+        let entry = current()
+        completion(Timeline(entries: [entry], policy: .after(entry.date.addingTimeInterval(UnreadWidgetSnapshot.staleAfter + 60))))
+    }
+}
+
+struct UnreadChatsWidget: Widget {
+    let kind = "one.mbm.halo.widget.unread-chats"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: UnreadChatsProvider()) { entry in
+            UnreadChatsWidgetView(entry: entry)
+                .containerBackground(.fill.tertiary, for: .widget)
+        }
+        .configurationDisplayName("Unread chats")
+        .description("The chats with the most unread messages. Needs \"Chats in Siri and Spotlight\" in Halo's settings.")
+        .supportedFamilies([.systemMedium])
+    }
+}
+
+struct UnreadChatsWidgetView: View {
+    let entry: UnreadChatsEntry
+    private var snapshot: UnreadChatsSnapshot { entry.snapshot }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Halo", systemImage: "bubble.left.fill").font(.caption).foregroundStyle(.secondary)
+            if snapshot.rows.isEmpty {
+                Spacer(minLength: 0)
+                Text(snapshot.summary).font(.footnote).foregroundStyle(.secondary).lineLimit(3)
+                Spacer(minLength: 0)
+            } else {
+                ForEach(snapshot.rows) { row in
+                    HStack {
+                        Text(row.name).font(.subheadline).lineLimit(1).privacySensitive()
+                        Spacer()
+                        Text("\(row.unread)").font(.subheadline.bold()).monospacedDigit().privacySensitive()
+                    }
+                }
+                if snapshot.moreCount > 0 {
+                    Text("+\(snapshot.moreCount) more").font(.caption).foregroundStyle(.secondary)
+                }
+                if let updated = snapshot.updatedAt, UnreadWidgetSnapshot.isStale(updated, at: entry.date) {
+                    Text("As of \(updated, style: .time)").font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
