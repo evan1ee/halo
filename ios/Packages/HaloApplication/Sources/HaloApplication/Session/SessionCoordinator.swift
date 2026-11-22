@@ -165,6 +165,51 @@ public actor SessionCoordinator {
         becomeReady(session.userID)
     }
 
+    /// Starts an OIDC / OAuth 2.0 login flow on the selected server and returns the authorization URL to open in
+    /// `ASWebAuthenticationSession` (AUTHENTICATION FR-3, M5).
+    public func beginOAuth() async -> URL? {
+        guard case .choosingMethod(let details, _) = state else { return nil }
+        guard details.supportsOIDC else {
+            state = .choosingMethod(details, failure: .unsupported("NO_OIDC_LOGIN"))
+            return nil
+        }
+        state = .authenticating(details)
+        do {
+            return try await port.oauthURL(on: details)
+        } catch {
+            state = .choosingMethod(details, failure: error)
+            return nil
+        }
+    }
+
+    /// Completes an OIDC / OAuth 2.0 login flow with the redirect callback URL (AUTHENTICATION FR-3, M5).
+    public func completeOAuth(callbackURL: URL) async {
+        guard case .authenticating(let details) = state else { return }
+        let session: StoredSession
+        do {
+            session = try await port.completeOAuth(callbackURL: callbackURL)
+        } catch {
+            state = .choosingMethod(details, failure: error)
+            return
+        }
+        do {
+            try await persist(session)
+        } catch {
+            try? await port.logout()
+            state = .choosingMethod(details, failure: error)
+            return
+        }
+        sessionGeneration &+= 1
+        becomeReady(session.userID)
+    }
+
+    /// Cancels an in-progress OIDC / OAuth 2.0 login flow (for example when the user dismisses the web sheet).
+    public func cancelOAuth() async {
+        guard case .authenticating(let details) = state else { return }
+        await port.abortOAuth()
+        state = .choosingMethod(details, failure: nil)
+    }
+
     /// Signs out on the server and removes the stored session (AUTHENTICATION FR-8). Local data is
     /// removed even if the server can't be reached; that failure is reported in `.signedOut`.
     public func logout() async {

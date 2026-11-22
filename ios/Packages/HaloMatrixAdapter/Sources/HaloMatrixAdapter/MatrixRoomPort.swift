@@ -30,15 +30,21 @@ public final class MatrixRoomPort: RoomPort {
             avatar: MatrixRoomListPort.avatar(room.avatarUrl()))
     }
 
+    /// Upper bound on total members read across chunks in `members(_:limit:)` so huge public rooms don't block the UI thread
+    /// scanning tens of thousands of entries before sorting (`ROADMAP.md` M5 performance pass).
+    static let maxScannedMembers = 2_000
+
     public func members(_ id: RoomID, limit: Int) async throws(HaloError) -> [RoomMemberInfo] {
         let room = try await session.room(id)
         let own = try await session.ownUserID()
+        let scanCap = max(limit, Self.maxScannedMembers)
         var result: [RoomMemberInfo] = []
         do {
             let iterator = try await room.members()
-            while let chunk = iterator.nextChunk(chunkSize: 100) {
+            while result.count < scanCap, let chunk = iterator.nextChunk(chunkSize: 200) {
                 for member in chunk where member.membership == .join || member.membership == .invite {
                     result.append(RoomMemberInfo(userID: member.userId, displayName: member.displayName, role: Self.role(member.suggestedRoleForPowerLevel), isInvited: member.membership == .invite, isMe: member.userId == own, avatar: MatrixRoomListPort.avatar(member.avatarUrl)))
+                    if result.count >= scanCap { break }
                 }
             }
         } catch { throw ErrorMapper.map(error) }

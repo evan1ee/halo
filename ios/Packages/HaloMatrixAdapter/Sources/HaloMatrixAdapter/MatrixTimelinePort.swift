@@ -163,14 +163,19 @@ final class MatrixTimelineSession: TimelineSession {
         return formatted.users.isEmpty ? content : content.withMentions(mentions: Mentions(userIds: formatted.users.map(\.rawValue), room: false))
     }
 
+    /// Upper bound on `@`-mention autocomplete candidates scanned in `members()` so a 10,000-member room doesn't
+    /// exhaust the FFI iterator on the first `@` keystroke (`ROADMAP.md` M5 performance pass).
+    static let maxMentionCandidates = 1_000
+
     func members() async throws(HaloError) -> [HaloDomain.RoomMember] {
         do {
             let iterator = try await room.members()
             var result: [HaloDomain.RoomMember] = []
-            while let chunk = iterator.nextChunk(chunkSize: 200) {
+            while result.count < Self.maxMentionCandidates, let chunk = iterator.nextChunk(chunkSize: 200) {
                 for member in chunk where member.membership == .join {
                     guard let user = try? UserID(member.userId), member.userId != ownUserID else { continue }
                     result.append(HaloDomain.RoomMember(user: user, displayName: member.displayName))
+                    if result.count >= Self.maxMentionCandidates { break }
                 }
             }
             return result

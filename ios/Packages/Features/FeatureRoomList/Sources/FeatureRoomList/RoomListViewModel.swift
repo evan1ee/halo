@@ -67,7 +67,25 @@ public final class RoomListViewModel {
 
     /// The list filter (ROOM_LIST FR-2). Applied here to the rooms the coordinator holds; with classic sync every room is present.
     public var filter: RoomListFilter = .all {
-        didSet { if filter != oldValue { Task { await listChanged(lastStatus) } } }
+        didSet {
+            if filter != oldValue {
+                visibleLimit = pageSize
+                Task { await listChanged(lastStatus) }
+            }
+        }
+    }
+
+    /// How many matching rows are rendered at once before the user scrolls to the bottom of the list (`ROADMAP.md` M5 performance pass).
+    public let pageSize: Int
+    public private(set) var visibleLimit: Int
+    /// Whether more matching rooms exist below the currently rendered slice (`rows.count < totalMatching`).
+    public private(set) var canShowMore = false
+
+    /// Expands the rendered slice by one `pageSize` when the bottom of the room list is reached.
+    public func showMore() async {
+        guard canShowMore else { return }
+        visibleLimit += pageSize
+        await listChanged(lastStatus)
     }
 
     private let session: SessionCoordinator
@@ -108,8 +126,11 @@ public final class RoomListViewModel {
     public init(
         session: SessionCoordinator, rooms: RoomListCoordinator, readState: ReadStateCoordinator,
         sync: SyncCoordinator? = nil, receipts: ReadReceiptCoordinator? = nil,
-        actions: (any RoomPort)? = nil, media: MediaLoader? = nil
+        actions: (any RoomPort)? = nil, media: MediaLoader? = nil,
+        pageSize: Int = 50
     ) {
+        self.pageSize = max(1, pageSize)
+        self.visibleLimit = max(1, pageSize)
         self.media = media
         self.actions = actions
         self.session = session
@@ -264,7 +285,9 @@ public final class RoomListViewModel {
                     preview: room.preview?.line(isDirect: room.isDirect, botSenders: bots), avatar: room.avatar, inviter: room.inviter)
             }
             let matching = zip(currentRooms, rows).filter { Self.includes(filter, room: $0.0, row: $0.1) }.map(\.1)
-            content = .loaded(count: filter == .all ? count : matching.count, rows: matching)
+            let visible = Array(matching.prefix(visibleLimit))
+            canShowMore = matching.count > visible.count
+            content = .loaded(count: filter == .all ? count : matching.count, rows: visible)
             let invited = Set(rows.filter(\.isInvite).map(\.id))
             invitePreviews = invitePreviews.filter { invited.contains($0.key) }  // accepted or declined: the preview goes with it
             // Only a change at the top of the list asks for new timelines; most sync updates leave it as it is.

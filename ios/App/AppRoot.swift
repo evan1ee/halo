@@ -54,6 +54,7 @@ final class AppRoot {
     var signedInUserID: String? { signedInUser?.rawValue }
     private let log: HaloLog
     private let ringLog: RingLogSink
+    private let webAuth = WebAuthSessionPresenter()
     private var auditPort: (any AuditEventPort)?
 
     init() {
@@ -118,7 +119,10 @@ final class AppRoot {
                 await push?.unregister()
             }
         }
-        auth = AuthViewModel(coordinator: sessionCoordinator)
+        let webAuth = self.webAuth
+        auth = AuthViewModel(coordinator: sessionCoordinator, runWebAuth: { url in
+            await webAuth.authenticate(url: url, callbackScheme: "one.mbm.halo")
+        })
         roomList = RoomListViewModel(session: sessionCoordinator, rooms: roomCoordinator, readState: readState, sync: sync, receipts: receipts, actions: roomPort, media: media)
         roomList.warm = { [timelinePort] rooms in await timelinePort.warm(rooms) }
         roomList.botSenders = { Set(AppPreferences().botSenders) }

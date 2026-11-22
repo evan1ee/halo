@@ -435,4 +435,44 @@ struct RoomListWarmTests {
             Issue.record("expected loaded room list")
         }
     }
+
+    @Test("room list pages large accounts in slices of pageSize and resets visibleLimit on filter change")
+    func roomListPaging() async throws {
+        var summaries: [RoomSummary] = []
+        for i in 0..<5 {
+            summaries.append(RoomSummary(
+                id: try RoomID("!r\(i):x.org"), name: "Room \(i)",
+                isDirect: i == 0, isEncrypted: false, membership: .joined))
+        }
+        let coordinator = RoomListCoordinator(port: FakeRoomListPort(rooms: summaries))
+        let readState = await makeReadState(rooms: coordinator)
+        let model = RoomListViewModel(
+            session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()),
+            rooms: coordinator, readState: readState, pageSize: 2)
+        await coordinator.start()
+        for await status in await coordinator.statuses() {
+            if case .loaded = status { await model.listChanged(status); break }
+        }
+        if case .loaded(let count, let rows) = model.content {
+            #expect(count == 5 && rows.count == 2 && model.canShowMore)
+        } else {
+            Issue.record("expected loaded room list")
+        }
+
+        await model.showMore()
+        if case .loaded(let count, let rows) = model.content {
+            #expect(count == 5 && rows.count == 4 && model.canShowMore)
+        }
+
+        await model.showMore()
+        if case .loaded(let count, let rows) = model.content {
+            #expect(count == 5 && rows.count == 5 && !model.canShowMore)
+        }
+
+        model.filter = .rooms
+        await model.listChanged(.loaded(roomCount: 5))
+        if case .loaded(let count, let rows) = model.content {
+            #expect(count == 4 && rows.count == 2 && model.canShowMore && model.visibleLimit == 2)
+        }
+    }
 }

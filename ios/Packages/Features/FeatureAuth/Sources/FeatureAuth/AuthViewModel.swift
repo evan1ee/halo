@@ -1,3 +1,4 @@
+import Foundation
 import HaloApplication
 import HaloDomain
 import HaloFoundation
@@ -10,7 +11,7 @@ public final class AuthViewModel {
     public enum Screen: Equatable {
         case launching
         case server
-        case credentials(host: String)
+        case credentials(host: String, supportsPassword: Bool, supportsOIDC: Bool)
         case busy
         /// The stored session couldn't be restored for a reason that may pass; the user can retry.
         case restoreFailed
@@ -31,10 +32,13 @@ public final class AuthViewModel {
     public var canSubmitCredentials: Bool { !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !password.isEmpty }
 
     private let coordinator: SessionCoordinator
+    /// Presents the OIDC authorization URL in `ASWebAuthenticationSession` and returns the callback URL, or `nil` if cancelled.
+    public var runWebAuth: (@MainActor (URL) async -> URL?)?
     private var observation: Task<Void, Never>?
 
-    public init(coordinator: SessionCoordinator) {
+    public init(coordinator: SessionCoordinator, runWebAuth: (@MainActor (URL) async -> URL?)? = nil) {
         self.coordinator = coordinator
+        self.runWebAuth = runWebAuth
     }
 
     isolated deinit { observation?.cancel() }
@@ -63,6 +67,20 @@ public final class AuthViewModel {
         await coordinator.loginPassword(username: username, password: secret)
     }
 
+    /// Starts OIDC / OAuth 2.0 sign-in via the injected `runWebAuth` presenter (AUTHENTICATION FR-3).
+    public func signInWithOIDC() async {
+        guard let url = await coordinator.beginOAuth() else { return }
+        guard let presenter = runWebAuth else {
+            await coordinator.cancelOAuth()
+            return
+        }
+        if let callback = await presenter(url) {
+            await coordinator.completeOAuth(callbackURL: callback)
+        } else {
+            await coordinator.cancelOAuth()
+        }
+    }
+
     public func retryRestore() async { await coordinator.retryRestore() }
     public func signOut() async { await coordinator.logout() }
 
@@ -78,7 +96,10 @@ public final class AuthViewModel {
             screen = .busy
             errorMessage = nil  // a new attempt starts without the previous attempt's error
         case .choosingMethod(let details, let failure):
-            screen = .credentials(host: details.homeserverURL.host() ?? "")
+            screen = .credentials(
+                host: details.homeserverURL.host() ?? "",
+                supportsPassword: details.supportsPassword,
+                supportsOIDC: details.supportsOIDC)
             errorMessage = failure.map(AuthMessages.text)
         case .restoreFailed(let failure):
             screen = .restoreFailed

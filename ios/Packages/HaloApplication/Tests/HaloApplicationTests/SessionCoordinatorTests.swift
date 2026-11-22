@@ -317,4 +317,32 @@ struct SessionCoordinatorTests {
         for _ in 0..<5_000 { await Task.yield() }
         #expect(await relaunched3.state == .signedOut(failure: nil))
     }
+
+    @Test("OIDC login persists the session and reaches ready; cancel aborts and returns to choosingMethod")
+    func oidcFlow() async throws {
+        let port = FakeSessionPort()
+        let oidcServer = ServerDetails(
+            homeserverURL: try #require(URL(string: "https://oidc.halo.localhost")),
+            supportsPassword: false, supportsOIDC: true, supportsNativeSlidingSync: true)
+        port.addServer("oidc.halo.localhost", oidcServer)
+        port.addAccount(.init(localpart: "alice", password: "unused"))
+        let keychain = InMemoryKeychain()
+        let coordinator = SessionCoordinator(port: port, keychain: keychain)
+        await coordinator.start()
+        await coordinator.discover(server: "oidc.halo.localhost")
+        #expect(await coordinator.state == .choosingMethod(oidcServer, failure: nil))
+
+        let cancelURL = await coordinator.beginOAuth()
+        #expect(cancelURL?.absoluteString.contains("oauth/authorize") == true)
+        #expect(await coordinator.state == .authenticating(oidcServer))
+        await coordinator.cancelOAuth()
+        #expect(await coordinator.state == .choosingMethod(oidcServer, failure: nil))
+        #expect(port.calls.contains("abortOAuth"))
+
+        let authURL = await coordinator.beginOAuth()
+        #expect(authURL != nil)
+        await coordinator.completeOAuth(callbackURL: try #require(URL(string: "one.mbm.halo:/oauth/callback?code=xyz")))
+        #expect(await coordinator.state == .ready(try UserID("@alice:oidc.halo.localhost")))
+        #expect(keychain.stored(.session) != nil)
+    }
 }

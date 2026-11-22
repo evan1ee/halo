@@ -27,6 +27,7 @@ public final class FakeSessionPort: SessionPort {
         var restoreDelay: Duration?
         var restoreGates: [CheckedContinuation<Void, Never>] = []
         var waitForRestoreGate = false
+        var pendingOAuthServer: ServerDetails?
     }
 
     private let state = Mutex(State())
@@ -94,6 +95,42 @@ public final class FakeSessionPort: SessionPort {
             deviceID: try DeviceID("FAKEDEVICE\(token.count)"),
             payload: token
         )
+    }
+
+    public func oauthURL(on server: ServerDetails) async throws(HaloError) -> URL {
+        try begin("oauthURL")
+        guard server.supportsOIDC else { throw .unsupported("NO_OIDC_LOGIN") }
+        state.withLock { $0.pendingOAuthServer = server }
+        guard let url = URL(string: "\(server.homeserverURL.absoluteString)/oauth/authorize?client_id=halo") else {
+            throw .internal(code: "OAUTH_URL")
+        }
+        return url
+    }
+
+    public func completeOAuth(callbackURL: URL) async throws(HaloError) -> StoredSession {
+        try begin("completeOAuth")
+        let (server, token) = state.withLock { state -> (ServerDetails?, Data) in
+            let s = state.pendingOAuthServer
+            state.pendingOAuthServer = nil
+            state.issuedTokens += 1
+            return (s, Data("oauth-token-\(state.issuedTokens)".utf8))
+        }
+        guard let server else { throw .invalidInput("NO_PENDING_OAUTH") }
+        guard callbackURL.absoluteString.contains("code=") else { throw .unauthorized(soft: false) }
+        let host = server.homeserverURL.host() ?? "localhost"
+        let user = state.withLock { $0.accounts.keys.sorted().first } ?? "oidcuser"
+        return StoredSession(
+            userID: try UserID("@\(user):\(host)"),
+            deviceID: try DeviceID("OIDCDEVICE\(token.count)"),
+            payload: token
+        )
+    }
+
+    public func abortOAuth() async {
+        state.withLock {
+            $0.calls.append("abortOAuth")
+            $0.pendingOAuthServer = nil
+        }
     }
 
     public func restore(_ session: StoredSession) async throws(HaloError) {

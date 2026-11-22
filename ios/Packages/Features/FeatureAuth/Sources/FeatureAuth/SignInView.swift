@@ -31,21 +31,33 @@ public struct SignInView: View {
                 Button { Task { await model.submitServer() } } label: { Text("Continue").frame(maxWidth: .infinity) }
                     .buttonStyle(.borderedProminent).controlSize(.large)
                     .disabled(!model.canSubmitServer)
-            case .credentials(let host):
+            case .credentials(let host, let supportsPassword, let supportsOIDC):
                 Text("Sign in to \(host)").font(.subheadline).foregroundStyle(.secondary)
-                TextField("Username", text: $model.username)
-                    .plainInput(.username).textFieldStyle(.roundedBorder)
-                    .focused($focus, equals: .username)
-                    .submitLabel(.next)
-                    .onSubmit { focus = .password }
-                SecureField("Password", text: $model.password)
-                    .plainInput(.password).textFieldStyle(.roundedBorder)
-                    .focused($focus, equals: .password)
-                    .submitLabel(.go)
-                    .onSubmit { if model.canSubmitCredentials { Task { await model.submitCredentials() } } }
-                Button { Task { await model.submitCredentials() } } label: { Text("Sign in").frame(maxWidth: .infinity) }
+                if supportsOIDC {
+                    Button { Task { await model.signInWithOIDC() } } label: {
+                        Label("Continue with browser", systemImage: "safari").frame(maxWidth: .infinity)
+                    }
                     .buttonStyle(.borderedProminent).controlSize(.large)
-                    .disabled(!model.canSubmitCredentials)
+                    .accessibilityIdentifier("oidc-sign-in")
+                    if supportsPassword {
+                        Divider().padding(.vertical, 4)
+                    }
+                }
+                if supportsPassword {
+                    TextField("Username", text: $model.username)
+                        .plainInput(.username).textFieldStyle(.roundedBorder)
+                        .focused($focus, equals: .username)
+                        .submitLabel(.next)
+                        .onSubmit { focus = .password }
+                    SecureField("Password", text: $model.password)
+                        .plainInput(.password).textFieldStyle(.roundedBorder)
+                        .focused($focus, equals: .password)
+                        .submitLabel(.go)
+                        .onSubmit { if model.canSubmitCredentials { Task { await model.submitCredentials() } } }
+                    Button { Task { await model.submitCredentials() } } label: { Text("Sign in").frame(maxWidth: .infinity) }
+                        .buttonStyle(.borderedProminent).controlSize(.large)
+                        .disabled(!model.canSubmitCredentials)
+                }
                 Button("Change server") { Task { await model.changeServer() } }
             case .restoreFailed:
                 Text("Your saved session couldn't be restored.")
@@ -70,7 +82,7 @@ public struct SignInView: View {
         .onChange(of: model.screen, initial: true) { _, screen in
             switch screen {
             case .server: focus = .server
-            case .credentials: focus = .username
+            case .credentials(_, let supportsPassword, _): focus = supportsPassword ? .username : nil
             default: focus = nil
             }
         }

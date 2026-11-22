@@ -20,7 +20,7 @@ struct AuthViewModelTests {
         model.apply(.signedOut(failure: nil))
         #expect(model.screen == .server)
         model.apply(.choosingMethod(ServerDetails(homeserverURL: url, supportsPassword: true, supportsOIDC: false, supportsNativeSlidingSync: true), failure: .unauthorized(soft: false)))
-        #expect(model.screen == .credentials(host: "example.org"))
+        #expect(model.screen == .credentials(host: "example.org", supportsPassword: true, supportsOIDC: false))
         #expect(model.errorMessage?.contains("Wrong username or password") == true)
 
         model.password = "wrong"
@@ -79,8 +79,8 @@ struct AuthViewModelTests {
         model.server = "example.org"
         #expect(model.canSubmitServer)
         await model.submitServer()
-        for _ in 0..<200 where model.screen != .credentials(host: "example.org") { await Task.yield() }
-        #expect(model.screen == .credentials(host: "example.org"))
+        for _ in 0..<200 where model.screen != .credentials(host: "example.org", supportsPassword: true, supportsOIDC: false) { await Task.yield() }
+        #expect(model.screen == .credentials(host: "example.org", supportsPassword: true, supportsOIDC: false))
         #expect(!model.canSubmitCredentials)
         model.username = "alice"
         #expect(!model.canSubmitCredentials)
@@ -89,6 +89,38 @@ struct AuthViewModelTests {
         await model.changeServer()
         for _ in 0..<200 where model.screen != .server { await Task.yield() }
         #expect(model.screen == .server && model.password.isEmpty && model.errorMessage == nil)
+    }
+
+    @Test("OIDC login launches web auth presenter, completes callback and reaches signedIn; cancel returns to choosingMethod")
+    func oidcSignInAndCancel() async throws {
+        let port = FakeSessionPort()
+        let url = try #require(URL(string: "https://oidc.example.org"))
+        port.addServer("oidc.example.org", ServerDetails(homeserverURL: url, supportsPassword: false, supportsOIDC: true, supportsNativeSlidingSync: true))
+        port.addAccount(.init(localpart: "alice", password: "unused"))
+        final class Flag { var cancel = true }
+        let flag = Flag()
+        let model = AuthViewModel(
+            coordinator: SessionCoordinator(port: port, keychain: InMemoryKeychain()),
+            runWebAuth: { authURL in
+                #expect(authURL.absoluteString.contains("oauth/authorize"))
+                if flag.cancel { return nil }
+                return URL(string: "one.mbm.halo:/oauth/callback?code=abc123")
+            })
+        await model.start()
+        model.server = "oidc.example.org"
+        await model.submitServer()
+        for _ in 0..<200 where model.screen != .credentials(host: "oidc.example.org", supportsPassword: false, supportsOIDC: true) { await Task.yield() }
+        #expect(model.screen == .credentials(host: "oidc.example.org", supportsPassword: false, supportsOIDC: true))
+
+        await model.signInWithOIDC()
+        for _ in 0..<200 where model.screen != .credentials(host: "oidc.example.org", supportsPassword: false, supportsOIDC: true) { await Task.yield() }
+        #expect(model.screen == .credentials(host: "oidc.example.org", supportsPassword: false, supportsOIDC: true))
+        #expect(port.calls.contains("abortOAuth"))
+
+        flag.cancel = false
+        await model.signInWithOIDC()
+        for _ in 0..<200 where model.screen != .signedIn { await Task.yield() }
+        #expect(model.screen == .signedIn)
     }
 }
 

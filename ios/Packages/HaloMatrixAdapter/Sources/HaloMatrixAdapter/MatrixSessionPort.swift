@@ -46,6 +46,11 @@ public actor MatrixSessionPort: SessionPort {
     private var sendQueueErrors: SendQueueErrors?
     private var sendQueueErrorsHandle: TaskHandle?
     private var events: [UUID: AsyncStream<SessionEvent>.Continuation] = [:]
+    /// Pending OIDC / OAuth 2.0 login flow awaiting the redirect callback URL (AUTHENTICATION FR-3).
+    private var pendingOAuth: (client: Client, storeID: String, passphrase: String, authData: OAuthAuthorizationData)?
+
+    public static let oauthRedirectURI = "one.mbm.halo:/oauth/callback"
+    public static let oauthClientURI = "https://halo.mbm.one"
 
     /// - Parameters:
     ///   - baseDirectory: where per-login SDK stores live (the App Group container in the app).
@@ -143,6 +148,66 @@ public actor MatrixSessionPort: SessionPort {
         }
     }
 
+    public func oauthURL(on server: ServerDetails) async throws(HaloError) -> URL {
+        guard server.supportsOIDC else { throw .unsupported("NO_OIDC_LOGIN") }
+        try initialisePlatform(lightweightRuntime)
+        await abortOAuth()
+        let newStoreID = UUID().uuidString
+        let passphrase = Self.randomPassphrase()
+        do {
+            let client = try await makeClient(
+                homeserver: server.homeserverURL.absoluteString, storeID: newStoreID, passphrase: passphrase)
+            let config = OAuthConfiguration(
+                clientName: "Halo",
+                redirectUri: Self.oauthRedirectURI,
+                clientUri: Self.oauthClientURI,
+                logoUri: nil,
+                tosUri: nil,
+                policyUri: nil,
+                staticRegistrations: [:])
+            let authData = try await client.urlForOauth(
+                oauthConfiguration: config,
+                prompt: nil,
+                loginHint: nil,
+                deviceId: nil,
+                additionalScopes: nil)
+            guard let url = URL(string: authData.loginUrl()) else {
+                Self.removeStore(baseDirectory, newStoreID)
+                throw HaloError.internal(code: "OAUTH_URL")
+            }
+            pendingOAuth = (client, newStoreID, passphrase, authData)
+            return url
+        } catch let error as HaloError {
+            throw error
+        } catch {
+            Self.removeStore(baseDirectory, newStoreID)
+            throw ErrorMapper.map(error)
+        }
+    }
+
+    public func completeOAuth(callbackURL: URL) async throws(HaloError) -> StoredSession {
+        guard let pending = pendingOAuth else { throw .invalidInput("NO_PENDING_OAUTH") }
+        pendingOAuth = nil
+        do {
+            try await pending.client.loginWithOauthCallback(callbackUrl: callbackURL.absoluteString)
+            let sdkSession = try pending.client.session()
+            let stored = try Self.stored(from: sdkSession, storeID: pending.storeID, passphrase: pending.passphrase)
+            sessionGeneration &+= 1
+            await adopt(pending.client, storeID: pending.storeID, session: sdkSession, generation: sessionGeneration)
+            return stored
+        } catch {
+            Self.removeStore(baseDirectory, pending.storeID)
+            throw ErrorMapper.mapLogin(error)
+        }
+    }
+
+    public func abortOAuth() async {
+        guard let pending = pendingOAuth else { return }
+        pendingOAuth = nil
+        await pending.client.abortOauthAuth(authorizationData: pending.authData)
+        Self.removeStore(baseDirectory, pending.storeID)
+    }
+
     public func restore(_ session: StoredSession) async throws(HaloError) {
         try initialisePlatform(lightweightRuntime)
         if let existing = inFlightRestore, existing.payload == session.payload, existing.generation == sessionGeneration {
@@ -176,6 +241,7 @@ public actor MatrixSessionPort: SessionPort {
     public func logout() async throws(HaloError) {
         sessionGeneration &+= 1
         inFlightRestore = nil
+        await abortOAuth()
         let client = self.client
         let storeID = self.storeID
         await stopSync()

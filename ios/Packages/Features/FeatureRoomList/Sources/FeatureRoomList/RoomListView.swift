@@ -99,6 +99,14 @@ public struct RoomListView: View {
                                 }
                             }
                         }
+                        if model.canShowMore {
+                            Button("Show more rooms") {
+                                Task { await model.showMore() }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .accessibilityIdentifier("show-more-rooms")
+                            .onAppear { Task { await model.showMore() } }
+                        }
                     }
                 }
                 .contentMargins(.top, 8, for: .scrollContent)
