@@ -1,8 +1,8 @@
 # ADR-0022: Module and folder layout v2
 
-- **Status:** Proposed (2026-11-22) — waits for the founder; refines ADR-0008, does not replace its layering
+- **Status:** Accepted (founder, 2026-11-22) — refines ADR-0008, does not replace its layering
 - **Date:** 2026-11-22
-- **Decision IDs:** none yet (a Dnn is assigned when accepted)
+- **Decision IDs:** D86
 - **Validation:** none — mechanical moves, checked by `scripts/check-boundaries.sh`, `scripts/prepush.sh` and the app build
 
 ## Context
@@ -36,7 +36,7 @@ M11–M15 screens fit without more drift, and the build stays cheap — without 
    Apple targets by hand.
 4. **One app target with folders.** Rejected by ADR-0008: no compiler-enforced boundaries.
 
-## Decision (proposed)
+## Decision
 Option 2, done in the steps below. Each step is a separate commit that keeps `prepush.sh` green.
 
 ```text

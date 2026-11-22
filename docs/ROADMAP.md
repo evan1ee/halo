@@ -116,6 +116,8 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 - [x] Slice 3 (on `main`): tick from the tab — `TimelineSession.addReaction` (idempotent 👍, contract-checked against the fake and `infra/dev`), `BotActionCoordinator` (short-lived timeline, confirmation through the index, 2-minute timeout, honest failed/no-response states), tick circle in Activity; seen in the simulator with a scripted bot (👍 on the server, spinner, completed only after the bot's `Marked task as done`). Not built: `bot_action` table (pending survives no restart), other reactions (👎 😝 🎉).
 
 **M11 Design-system foundation** (D84; exit: AC-UX-1, AC-UX-2; fixes UX-03, UX-04, UX-05, UX-13 of [design/UX_AUDIT.md](design/UX_AUDIT.md))
+- [ ] ADR-0022 step 1 (layout, D86): fix doc paths that don't exist (AGENTS.md §5/§13 `infra/test/`, `infra/sygnal/`, the Swift scenario-driver command → `tools/scenario-driver/run_scenarios.py`); move `TimelineReadTracker` and its tests to `HaloDomain/ReadState/` (Linux CI then covers it); `HaloDesignSystem/{Tokens,Components,Media}/` folders; `ios/App/{Resources,Support}/` with `project.yml` updated.
+- [ ] Naming gate (MODULE_BOUNDARIES §1 "Module naming"): `scripts/check_boundaries.py` fails when a package under `Features/` isn't named `Feature<Area>`, a layer package isn't `Halo<Layer>`, or a module name equals a public type name in `HaloDomain`/`HaloApplication`; tested with a bad fixture tree.
 - [ ] Asset catalogue `ios/App/Assets.xcassets` (also used by `HaloDesignSystem` through a bundle colour lookup) with the colour tokens of DESIGN_SYSTEM §2 (light, dark and Increase Contrast variants), `AccentColor` = `accent`, and a placeholder `AppIcon` (single 1024 pt image, light/dark/tinted) until Q-BRAND is answered.
 - [ ] `HaloDesignSystem` tokens: `HaloColor` (semantic names only), `HaloSpacing`, `HaloRadius`, `HaloMotion` (springs of §6 with Reduce Motion fallbacks), `HaloTypography` (Dynamic Type styles of §3). The contrast unit test promised in §2 (every pair, light/dark, ≥ 4.5:1).
 - [ ] Shared components of DESIGN_SYSTEM §7 moved out of feature views: `RoomRow`, `UnreadIndicator` (dot · count · `@n` · approximate), `Banner`, `LoadingState` (skeleton rows/bubbles via `.redacted(reason: .placeholder)`), `ErrorState` (inline + full screen with retry), `EmptyState` (wrapping `ContentUnavailableView`). Each with `#Preview`s in light/dark/AX5.
@@ -124,6 +126,7 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 - [ ] 👤 Q-BRAND: final app icon and the sign-in illustration (original artwork, DESIGN_SYSTEM §5).
 
 **M12 Navigation and information architecture** (exit: AC-UX-3, AC-UX-4; fixes UX-01, UX-02, UX-08)
+- [ ] ADR-0022 step 2 (D86): route enums out of `HaloApp.swift` into `HaloApplication/Navigation/` (`ChatsRoute`, unit-tested); `AppRoot` split into `App/Composition/{Session,Chats,Settings,Notifications,Bots}Assembly.swift`; new `FeatureSearch` (message search from `FeatureRoomList`) and `FeatureProfile` (user profile from `FeatureRoomDetails` + profile settings from `FeatureSettings`), each with moved tests and `check-boundaries` green.
 - [x] Q-NAV-SHELL decided by the founder (2026-11-22): single `NavigationStack`, Messages-style, no tab bar (D85, supersedes D50); NAVIGATION.md §1 rewritten.
 - [ ] Compose button (`square.and.pencil`, top-trailing) on the Chats root opens New chat as a sheet; the Settings "Find a person" row is removed (UX-01). Large title "Chats" on the root.
 - [ ] Shell per D85: one typed path `ChatsRoute` (`.room`, `.thread`, `.settings`, `.stickerLibrary`, `.activity`, `.globalMediaGallery`); Settings pushed from the avatar (its 25-closure initialiser replaced by a settings route factory in the composition root); a more menu (`ellipsis.circle`) with the filters, Stickers and Activity; Activity and the sticker library pushed instead of sheets.
@@ -132,6 +135,7 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 - [ ] Notification tap, `matrix:` links, search hits and Activity items route through the one router (no duplicated pushes); unit-tested in `HaloApplication`.
 
 **M13 Core-flow polish — the first five minutes and the daily loop** (exit: AC-UX-5, AC-UX-6, AC-UX-7; fixes UX-06, UX-07, UX-09, UX-12, UX-14, UX-15)
+- [ ] ADR-0022 step 3 (D86, together with the TD-11 split, before any other M13 timeline item): new `HaloBotRendering` (`BotCardView`, `HTMLText`), `FeatureComposer` (composer, attachments, mentions), `FeatureMedia` (global gallery + **one** shared photo viewer replacing the two `TabView` copies + Quick Look); rename `FeatureAuth` → `FeatureOnboarding`; no behaviour change, tests moved with the code.
 - [ ] First run (S1, S14): welcome screen with the value statement and Halo artwork, homeserver field with inline help ("What's a homeserver?") and the suggestion of Q-ONBOARD-SERVER, friendly discovery errors; after sign-in a short setup checklist: verify this device (S2) → notifications priming (S14, system prompt only after "Turn on") → done.
 - [ ] Room list: skeleton rows on the first-ever load, `.refreshable` triggering a sync round trip, swipe actions with SF Symbols + labels and semantic tints (Mail pattern), unread/mention indicators from `UnreadIndicator`, empty and filter-empty states per S3, invite rows as a compact card with Accept/Decline.
 - [ ] Timeline: bubble grouping and tails per DESIGN_SYSTEM §7, swipe-to-reply gesture with haptic, double-tap quick reaction (👍) and a reaction bar on long-press (Messages pattern), "↓ N new" / "Jump to unread" pills on system material, typing indicator animation (Reduce Motion: static), date separators as sticky headers, send button states (sending/failed) with haptics.
@@ -139,6 +143,11 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 - [ ] Room details and profiles: header in the style of Contacts (large avatar, name, quick actions Message · Mute · Search · Media), grouped rows, destructive actions last with confirmation.
 - [ ] Copy pass (UX-15): a voice-and-tone section in DESIGN_SYSTEM; every user-facing error mapped from `HaloError` to a short sentence plus an action; no adapter text in alerts.
 - [ ] Simulator walk-through of every screen in light/dark with screenshots attached to the pull request (AUTONOMOUS_LOOP §2 step 4).
+
+**ADR-0022 step 4 — two-manifest consolidation** (D86; at a quiet point right after M13 merges, nothing else in flight; one pull request, no behaviour change)
+- [ ] `ios/Packages/HaloCore` (HaloFoundation, HaloDomain, HaloApplication, HaloTestSupport — Linux) and `ios/Packages/HaloApple` (adapter, persistence, platform, design system, bot rendering, every feature as a target) replace the 15 manifests; module and target names unchanged (MODULE_BOUNDARIES §1).
+- [ ] Same area folders in `HaloMatrixAdapter` and `HaloTestSupport` as in `HaloDomain`/`HaloApplication` (`Session`, `Sync`, `RoomList`, `Timeline`, `Media`, `Stickers`, `Encryption`, `Notifications`, `Bots`, `Search`, `Account`, `Support`).
+- [ ] Tooling and docs follow: `ios/project.yml`, `scripts/prepush.sh`, `scripts/check_boundaries.py` (target-level rules, same `Feature` prefix), `.github/workflows/swift-linux.yml`, MODULE_BOUNDARIES §1–2, AGENTS.md §5/§13, DEVELOPMENT_SETUP, ADR-0008 status note. Exit: `prepush.sh`, app build, contract tests and Linux CI green; `.build` size before/after recorded in the pull request.
 
 **M14 Accessibility and localisation** (exit: AC-UX-8, AC-UX-9, AC-UX-10; fixes UX-10, UX-11, SR-07)
 - [ ] VoiceOver pass per DESIGN_SYSTEM §9: rows read as one element ("Alice, 3 unread messages, last message …, 10:42"), custom actions (Reply, React, Mark read) through `.accessibilityActions`, bot-card states announced, focus moves sensibly after sheets close.
@@ -161,7 +170,7 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 - [ ] Phase B with M11–M12: `PreferencesPort` + observable preferences store, no `AppPreferences()` in the app (TD-02); move bot-allowlist sync, diagnostics and cache logic from `AppRoot` into `HaloApplication`, Settings built from a model factory (TD-10).
 - [ ] Phase C with M13: no `try?` on state-changing port calls — errors logged once and shown with M13 copy (TD-01); `ActionState` helper against double taps and orphaned tasks (TD-07); split `TimelineViewModel`/`TimelineView` below 600 lines per file (TD-11); replace the 1.5 s re-check in room details (TD-13).
 - [ ] Phase D with M14–M15: `HaloUITests` (TD-03); manual-dispatch macOS build workflow before TestFlight uploads, revisiting D71 (TD-04); `bot_action` table for pending ticks (TD-08).
-- [ ] 👤 ADR-0022 (module layout v2, TD-16) accepted, then its four steps ride on M11, M12, the TD-11 split and a quiet point after M13.
+- [x] ADR-0022 (module layout v2, TD-16) accepted by the founder (2026-11-22, D86); its four steps are queued in M11, M12, M13 and "ADR-0022 step 4" above.
 - [ ] 👤 TD-12 (R-16 field encryption) and 📤 TD-15 (upstream SDK filter / queued raw sends).
 
 ## Ship-ready definition (D84)

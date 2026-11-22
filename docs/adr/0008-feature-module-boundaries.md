@@ -1,6 +1,6 @@
 # ADR-0008: Local Swift packages per layer and per feature
 
-- **Status:** Accepted · **Date:** 2026-11-19 · **Decision IDs:** D42, D44 · **Validation:** none
+- **Status:** Accepted, refined by [ADR-0022](0022-module-layout-v2.md) (D86) · **Date:** 2026-11-19 · **Decision IDs:** D42, D44 · **Validation:** none
 
 ## Context
 Independent feature development, testability on Linux for logic, a replaceable Matrix binding, future collaborators.

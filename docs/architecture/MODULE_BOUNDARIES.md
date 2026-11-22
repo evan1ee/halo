@@ -55,7 +55,7 @@ feature without it escapes the checks; (2) a module must never share a name with
 module (`Timeline.Item` becomes ambiguous), and bare area names like `Timeline`, `RoomList` or `Settings` are already types in
 the SDK or `HaloDomain`; (3) the prefix shows the layer in import lists and sorts features together. `<Area>` is
 UpperCamelCase, singular for a thing (`FeatureProfile`) and the screen's name for a flow (`FeatureOnboarding`), and reuses the
-area names of the core layers ([../adr/0022-module-layout-v2.md](../adr/0022-module-layout-v2.md), proposed folder rule).
+area names of the core layers ([../adr/0022-module-layout-v2.md](../adr/0022-module-layout-v2.md) folder rule, D86).
 Renaming an existing module needs a reason beyond style.
 
 ## 2. Forbidden dependencies
