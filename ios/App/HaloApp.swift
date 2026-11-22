@@ -218,6 +218,7 @@ private struct RootView: View {
             }
         }
         // M16 Siri, Shortcuts and Spotlight: open a chat by name; chat names are offered only while the setting is on (D88).
+        .onChange(of: root.focus.chats, initial: true) { root.roomList.setFocus(root.focus.chats) }
         .onChange(of: root.openChat.pending, initial: true) { openRequestedChat() }
         .onChange(of: root.auth.screen) { openRequestedChat() }
         .onContinueUserActivity(CSSearchableItemActionType) { activity in
@@ -291,6 +292,8 @@ private struct RootView: View {
                 HaloDatabase.resumeAll()
                 await root.setForeground(true)
                 if case .signedIn = root.auth.screen { await root.shareHandoff.refresh() }
+                // M16 Focus filter: the system's current filter is the truth; a change missed in the background is caught here.
+                root.focus.chats = (try? await HaloFocusFilter.current)?.chats.domain
                 await root.receipts.flush()
             case .background:
                 let lease = BackgroundTaskLease(name: "halo.receipts.flush", onEnd: { HaloDatabase.suspendAll() })

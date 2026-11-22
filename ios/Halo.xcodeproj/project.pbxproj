@@ -31,6 +31,7 @@
 		83E00A7D41257DC48962814A /* HaloApplication in Frameworks */ = {isa = PBXBuildFile; productRef = 043F0A8364EBBFB616A15D66 /* HaloApplication */; };
 		841C80FBBAC957C8292082FE /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 37DF13476047C551C8A5B76A /* PrivacyInfo.xcprivacy */; };
 		98EDACC453719619C92B23D6 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E813B4DC62204A281544127 /* NotificationService.swift */; };
+		A09F4DD09565B9218C999F86 /* FocusFilterIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00E5F896F554FF077CD1F42C /* FocusFilterIntent.swift */; };
 		A15FAB26F86AEEFA1824DA90 /* HaloDomain in Frameworks */ = {isa = PBXBuildFile; productRef = 33A05919588C0772CFFAD019 /* HaloDomain */; };
 		A19909DE1ED1C7A18B7E875D /* FeatureSettings in Frameworks */ = {isa = PBXBuildFile; productRef = 7D43312B40716CAB6D1A8628 /* FeatureSettings */; };
 		A5A986CA81A802F03C89A37E /* HaloPersistence in Frameworks */ = {isa = PBXBuildFile; productRef = 4ECF4EEE4703FC700E76A8B3 /* HaloPersistence */; };
@@ -110,6 +111,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		00E5F896F554FF077CD1F42C /* FocusFilterIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusFilterIntent.swift; sourceTree = "<group>"; };
 		0F8074686EE2413DD3A76477 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		26BC78D89D8CCE4267C675AB /* HaloApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HaloApp.swift; sourceTree = "<group>"; };
 		364A4573FF5AC59B3F1FC07A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -348,6 +350,7 @@
 		E63259BF0D87252DD5FBF0F2 /* Intents */ = {
 			isa = PBXGroup;
 			children = (
+				00E5F896F554FF077CD1F42C /* FocusFilterIntent.swift */,
 				E7755C85ABFB47907E05E9EA /* OpenChatIntent.swift */,
 			);
 			path = Intents;
@@ -571,6 +574,7 @@
 				AB83EBCD52BA8ADAB584DA76 /* AppRoot.swift in Sources */,
 				10757F510EC7D763B9EB1108 /* BotsAssembly.swift in Sources */,
 				253C81C533CBE8AE3CD5E51D /* ChatsAssembly.swift in Sources */,
+				A09F4DD09565B9218C999F86 /* FocusFilterIntent.swift in Sources */,
 				5C97DDEAA552818CE3D396AA /* HaloApp.swift in Sources */,
 				4B6A949EC8518F7BD5D1AEF2 /* NotificationsAssembly.swift in Sources */,
 				7DAC1635A11A25F03C8ADFCD /* OpenChatIntent.swift in Sources */,

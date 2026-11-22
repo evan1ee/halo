@@ -476,3 +476,60 @@ struct RoomListWarmTests {
         }
     }
 }
+
+@Suite("RoomListViewModel Focus filter")
+struct RoomListFocusTests {
+    private func summary(_ id: String, name: String, direct: Bool = false, favourite: Bool = false) throws -> RoomSummary {
+        RoomSummary(id: try RoomID(id), name: name, isDirect: direct, isEncrypted: false, membership: .joined, isFavourite: favourite)
+    }
+
+    @MainActor
+    private func loaded() async throws -> RoomListViewModel {
+        let coordinator = RoomListCoordinator(port: FakeRoomListPort(rooms: [
+            try summary("!a:x.org", name: "Ann", direct: true), try summary("!b:x.org", name: "Book club", favourite: true),
+        ]))
+        let readState = await makeReadState(rooms: coordinator)
+        let model = RoomListViewModel(
+            session: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()), rooms: coordinator, readState: readState)
+        await coordinator.start()
+        for await status in await coordinator.statuses() {
+            if case .loaded = status { await model.listChanged(status); break }
+        }
+        return model
+    }
+
+    @MainActor
+    private func names(_ model: RoomListViewModel) -> [String] {
+        guard case .loaded(_, let rows) = model.content else { return [] }
+        return rows.map(\.name)
+    }
+
+    @Test("a Focus narrows the list without touching the person's own filter, and ending it restores the list")
+    @MainActor
+    func narrowsAndRestores() async throws {
+        let model = try await loaded()
+        model.filter = .favourites
+        model.setFocus(.people)
+        await model.listChanged(.loaded(roomCount: 2))
+        #expect(model.effectiveFilter == .people && model.filter == .favourites)
+        #expect(names(model) == ["Ann"])
+        model.setFocus(nil)
+        await model.listChanged(.loaded(roomCount: 2))
+        #expect(model.effectiveFilter == .favourites)
+        #expect(names(model) == ["Book club"])
+    }
+
+    @Test("Show all chats sets the Focus aside until the Focus changes")
+    @MainActor
+    func suspend() async throws {
+        let model = try await loaded()
+        model.setFocus(.people)
+        #expect(model.isFocusFiltering)
+        model.suspendFocusFilter()
+        await model.listChanged(.loaded(roomCount: 2))
+        #expect(!model.isFocusFiltering)
+        #expect(names(model).count == 2)
+        model.setFocus(.rooms)
+        #expect(model.isFocusFiltering)
+    }
+}

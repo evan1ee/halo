@@ -80,6 +80,37 @@ public final class RoomListViewModel {
         }
     }
 
+    /// What the active Focus allows (M16, D90); `nil` when no Focus filter is on. It overrides `filter` until the person
+    /// taps "Show all chats" or the Focus ends; their own `filter` choice is untouched.
+    public private(set) var focusChats: FocusChats?
+    private var focusSuspended = false
+
+    /// The filter the list applies: the Focus's while it is on and not set aside, else the person's.
+    public var effectiveFilter: RoomListFilter {
+        if let focusChats, !focusSuspended { return focusChats.listFilter }
+        return filter
+    }
+
+    /// Whether the list is currently narrowed by a Focus (for the banner).
+    public var isFocusFiltering: Bool { focusChats != nil && !focusSuspended }
+
+    /// Called when the Focus filter turns on, changes or off (`nil`).
+    public func setFocus(_ chats: FocusChats?) {
+        guard chats != focusChats else { return }
+        focusChats = chats
+        focusSuspended = false
+        visibleLimit = pageSize
+        Task { await listChanged(lastStatus) }
+    }
+
+    /// "Show all chats": sets the Focus filter aside until the Focus changes.
+    public func suspendFocusFilter() {
+        guard isFocusFiltering else { return }
+        focusSuspended = true
+        visibleLimit = pageSize
+        Task { await listChanged(lastStatus) }
+    }
+
     /// How many matching rows are rendered at once before the user scrolls to the bottom of the list (`ROADMAP.md` M5 performance pass).
     public let pageSize: Int
     public private(set) var visibleLimit: Int
@@ -289,10 +320,10 @@ public final class RoomListViewModel {
                     isFavourite: room.isFavourite, isMuted: room.read.mode == .mute, lastActivity: room.latestEvent?.timestamp,
                     preview: room.preview?.line(isDirect: room.isDirect, botSenders: bots), avatar: room.avatar, inviter: room.inviter)
             }
-            let matching = zip(currentRooms, rows).filter { Self.includes(filter, room: $0.0, row: $0.1) }.map(\.1)
+            let matching = zip(currentRooms, rows).filter { Self.includes(effectiveFilter, room: $0.0, row: $0.1) }.map(\.1)
             let visible = Array(matching.prefix(visibleLimit))
             canShowMore = matching.count > visible.count
-            content = .loaded(count: filter == .all ? count : matching.count, rows: visible)
+            content = .loaded(count: effectiveFilter == .all ? count : matching.count, rows: visible)
             let invited = Set(rows.filter(\.isInvite).map(\.id))
             invitePreviews = invitePreviews.filter { invited.contains($0.key) }  // accepted or declined: the preview goes with it
             // Only a change at the top of the list asks for new timelines; most sync updates leave it as it is.
