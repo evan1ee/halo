@@ -208,6 +208,7 @@ public struct SettingsView: View {
                     .accessibilityIdentifier("privacy-blur")
                     .onChange(of: privacyBlur) { _, value in
                         preferences.privacyBlur = value
+                        config.onPreferencesChanged?()
                     }
                 Toggle("Chats in Siri and Spotlight", isOn: $chatsInSystemSearch)
                     .accessibilityIdentifier("chats-in-system-search")
@@ -225,6 +226,8 @@ public struct SettingsView: View {
                     ForEach(Appearance.allCases) { Text($0.title).tag($0.rawValue) }
                 }
                 .accessibilityIdentifier("appearance")
+                // The picker stores to UserDefaults; the root view reads `PreferencesStore`, so refresh it.
+                .onChange(of: appearance) { config.onPreferencesChanged?() }
             }
             if let stickerPacks {
                 Section("Stickers") {
