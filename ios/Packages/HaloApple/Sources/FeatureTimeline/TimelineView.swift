@@ -30,6 +30,10 @@ public struct TimelineView: View {
     @State private var listPlaced = false
     /// The list is being scrolled (a drag, a fling, an animated scroll): it is not following the newest row then.
     @State private var scrollMoving = false
+    /// The user's finger is actively dragging the list (never re-anchor mid-drag).
+    @State private var scrollInteracting = false
+    /// Extra top content margin that keeps a short room anchored just above the composer.
+    @State private var shortRoomTopMargin: Double = 0
     /// Automatic history paging only runs with the newest row on screen (a short room that needs filling) or once the user has
     /// scrolled; right after history lands above the newest row the "Load earlier" row is briefly visible and paging then would
     /// move the content again.
@@ -121,6 +125,25 @@ public struct TimelineView: View {
                 .listSectionSeparator(.hidden)
                 .listRowSeparatorTint(.clear)
                 .defaultScrollAnchor(.bottom)
+                .contentMargins(.top, shortRoomTopMargin, for: .scrollContent)
+                .onScrollGeometryChange(for: ShortRoomGeometry.self) { geometry in
+                    ShortRoomGeometry(
+                        containerHeight: geometry.containerSize.height,
+                        topInset: geometry.contentInsets.top,
+                        bottomInset: geometry.contentInsets.bottom,
+                        contentHeight: geometry.contentSize.height,
+                        canLoadEarlier: canLoadEarlier
+                    )
+                } action: { _, value in
+                    shortRoomTopMargin = ShortRoomAlignment.topMargin(
+                        containerHeight: value.containerHeight,
+                        topInset: value.topInset,
+                        bottomInset: value.bottomInset,
+                        contentHeight: value.contentHeight,
+                        currentMargin: shortRoomTopMargin,
+                        canLoadEarlier: value.canLoadEarlier
+                    )
+                }
                 // "At the bottom" comes from the scroll geometry, not from one row's visibility: that flag could stay true after
                 // rows were added above the newest row and then hide that the list had moved away from the bottom.
                 // While the list follows the newest row and nothing is scrolling it, any change that leaves it short of the bottom
@@ -145,7 +168,22 @@ public struct TimelineView: View {
                         proxy.scrollTo(last, anchor: .bottom)
                     }
                 }
-                .onScrollPhaseChange { _, phase in scrollMoving = phase == .interacting || phase == .decelerating || phase == .animating }
+                .onScrollPhaseChange { _, phase in
+                    scrollMoving = phase == .interacting || phase == .decelerating || phase == .animating
+                    scrollInteracting = phase == .interacting
+                }
+                .onChange(of: rows.first?.id) { oldFirst, newFirst in
+                    if let anchor = PrependedAnchor.anchor(
+                        oldFirst: oldFirst,
+                        newFirst: newFirst,
+                        rowIDs: rows.map(\.id),
+                        landed: landed,
+                        pinnedToBottom: pinnedToBottom,
+                        interacting: scrollInteracting
+                    ) {
+                        proxy.scrollTo(anchor, anchor: .top)
+                    }
+                }
                 .accessibilityIdentifier("timeline")
                 // Opening a room: the newest row goes to the bottom. `.defaultScrollAnchor(.bottom)` already opens the list there, so
                 // when that row is on screen nothing is scrolled and the list never visibly moves.

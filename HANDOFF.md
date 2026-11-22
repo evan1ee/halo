@@ -1,6 +1,6 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-22 · Branch: `fix/chat-list-a11y-audit` (PR to `main` opened with this push) · PRs #1–#74 merged
+Last updated: 2026-11-22 · Branch: `main` · PRs #1–#75 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
@@ -13,7 +13,8 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log`.
-- **Chat-list accessibility audit passes signed in (`fix/chat-list-a11y-audit`):** letter avatars use `AvatarTint` (pale circle, letter darkened in light / lightened in dark mode, ≥ 4.5:1, unit-tested) instead of the system tint on itself; the Media Gallery row's two lines wrap instead of clipping at large type; "Show all chats" in the Focus banner has a 44 pt tap target. `testLaunchRootScreenPassesAccessibilityAudit` now also taps "Show all chats" and audits the full list, prints each finding's frame, and skips contrast findings only for text reaching the floating search field (D96). Run on a signed-in iPhone Air simulator: passes.
+- **Timeline scroll follow-ups (`main`):** when older history pages prepend while scrolled up (e.g. after a fling to the top), `PrependedAnchor` re-anchors at the previous top row instead of jumping to the start of the newly inserted page (skipped before landing, while pinned to bottom, or during an active drag). Short rooms with no earlier history to load are anchored just above the composer via top scroll content margins (`ShortRoomAlignment`), without changing `contentSize.height`. Tests: `TimelineScrollHelpersTests` (7 tests); `docs/features/TIMELINE.md` updated. Not checked on a device.
+- **Chat-list accessibility audit passes signed in (`fix/chat-list-a11y-audit`, PR #75 merged):** letter avatars use `AvatarTint` (pale circle, letter darkened in light / lightened in dark mode, ≥ 4.5:1, unit-tested) instead of the system tint on itself; the Media Gallery row's two lines wrap instead of clipping at large type; "Show all chats" in the Focus banner has a 44 pt tap target. `testLaunchRootScreenPassesAccessibilityAudit` now also taps "Show all chats" and audits the full list, prints each finding's frame, and skips contrast findings only for text reaching the floating search field (D96). Run on a signed-in iPhone Air simulator: passes.
 - **Signing team kept out of git:** the team set in Xcode lived only in an uncommitted `project.pbxproj` change, so a revert or `xcodegen` cleared it. `Base.xcconfig` now includes the git-ignored `ios/Config/Local.xcconfig` when present (`DEVELOPMENT_TEAM`; template `Local.xcconfig.example`); all configurations and extensions pick it up. Installed `Halo-Debug` on the founder's iPhone with it. `WebAuthSessionPresenter` no longer uses the deprecated `UIWindow(frame:)`: it picks its window before starting the sheet and returns nil (cancelled) when there is no window scene; not exercised against a real OIDC provider.
 - **A room opens instantly at its newest message — no flash, no spinner (`fix/timeline-land-newest`, D95, founder bug report on S10):**
   - D95: the landing goes to the newest row; the first unread message stays marked and the "Jump to unread" pill goes up to it (`TimelineViewModel+Mapping.swift`, tests, `TIMELINE.md`, `DECISION_LOG.md`).
@@ -57,7 +58,8 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D96), [docs/adr/RE
 - **D96:** the accessibility audit skips contrast only for text under the floating search field (system glass); every other finding fails.
 
 ## 4. Modified files (this push)
-- **Chat-list audit:** `HaloDesignSystem/Components/AvatarCircle.swift`, `HaloDesignSystemTests/AvatarTests.swift`, `FeatureRoomList/RoomListView.swift`, `ios/UITests/HaloUITests.swift`, `docs/design/DESIGN_SYSTEM.md`, `docs/DECISION_LOG.md`.
+- **Timeline scroll follow-ups:** `FeatureTimeline/{TimelineScrollHelpers,TimelineView}.swift`, `FeatureTimelineTests/TimelineScrollHelpersTests.swift`, `docs/features/TIMELINE.md`, `HANDOFF.md`.
+- **Chat-list audit (PR #75, merged):** `HaloDesignSystem/Components/AvatarCircle.swift`, `HaloDesignSystemTests/AvatarTests.swift`, `FeatureRoomList/RoomListView.swift`, `ios/UITests/HaloUITests.swift`, `docs/design/DESIGN_SYSTEM.md`, `docs/DECISION_LOG.md`.
 - **Personal signing team:** `ios/Config/Base.xcconfig` (`#include? "Local.xcconfig"`), `ios/Config/Local.xcconfig.example`, `.gitignore`, `docs/development/DEVELOPMENT_SETUP.md`, `docs/adr/0017-xcodegen-for-the-app-project.md`.
 - **iOS 26 deprecation:** `HaloPlatform/WebAuthSessionPresenter.swift`.
 - **Land at newest (PR #73, merged):** `HaloMatrixAdapter/Timeline/MatrixTimelinePort.swift`, `FeatureTimeline/{TimelineView,TimelineMediaViews,TimelineViewModel+Mapping}.swift`, `FeatureTimelineTests/{TimelineViewModelTests,ThumbnailSizeTests,BottomGapTests,UnreadPillTests}.swift`, `docs/features/TIMELINE.md`, `docs/DECISION_LOG.md`, `HANDOFF.md`.
@@ -81,8 +83,8 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D96), [docs/adr/RE
 ## 5. Outstanding issues
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
 
-**Engineering (not blocking this PR)**
-- **Timeline follow-ups seen while testing:** when a fling reaches the very top before older pages arrive, the inserted pages leave the reader at the start of the conversation instead of where they were; a short room sits at the top of the screen (Element X keeps it just above the composer); the room appears ~150 ms after the push starts (the list is hidden until placed).
+**Engineering (not blocking)**
+- **Timeline follow-up:** the room appears ~150 ms after the push starts (the list is hidden until placed).
 
 **Needs the founder (`👤`) or physical device (`📱`)**
 - 📱 **Opening rooms on the device (D95):** open S10 and other large rooms with photos 10+ times; each must land at the newest message with no frame of the room's top and no spinner; also from a notification tap and Spotlight, and in the iPad split view.
