@@ -29,6 +29,7 @@ public final class FakeTimelinePort: TimelinePort {
         var sentMentions: [[UserID]] = []
         /// Optional override for `latestEventID()` (e.g. a trailing hidden event like an encrypted poll vote, R-01/R-06).
         var latestEventOverride: EventID?
+        var openedThreads: [EventID] = []
     }
 
     private let rooms = Mutex<[RoomID: Room]>([:])
@@ -87,12 +88,23 @@ public final class FakeTimelinePort: TimelinePort {
     /// Overrides what `TimelineSession.latestEventID()` returns (models a trailing non-row event like a poll vote).
     public func setLatestEventID(_ eventID: EventID?, in id: RoomID) { rooms.withLock { $0[id]?.latestEventOverride = eventID } }
     public func paginateCalls(in id: RoomID) -> Int { rooms.withLock { $0[id]?.paginateCalls ?? 0 } }
+    public func openedThreads(in id: RoomID) -> [EventID] { rooms.withLock { $0[id]?.openedThreads ?? [] } }
 
     // MARK: TimelinePort
 
     public func open(room id: RoomID) async throws(HaloError) -> any TimelineSession {
         try rooms.withLock { (rooms) throws(HaloError) in
             guard rooms[id] != nil else { throw .notFound }
+            rooms[id]?.openSessions += 1
+            rooms[id]?.totalOpens += 1
+        }
+        return Session(port: self, room: id)
+    }
+
+    public func openThread(room id: RoomID, rootEvent: EventID) async throws(HaloError) -> any TimelineSession {
+        try rooms.withLock { (rooms) throws(HaloError) in
+            guard rooms[id] != nil else { throw .notFound }
+            rooms[id]?.openedThreads.append(rootEvent)
             rooms[id]?.openSessions += 1
             rooms[id]?.totalOpens += 1
         }

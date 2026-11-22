@@ -6,6 +6,9 @@ public protocol TimelinePort: Sendable {
     /// Opens `room`'s timeline. Throws `.notFound` if the client doesn't know the room.
     func open(room: RoomID) async throws(HaloError) -> any TimelineSession
 
+    /// Opens a thread timeline focused on `rootEvent` inside `room` (`TimelineFocus.thread`, M10 Threads).
+    func openThread(room: RoomID, rootEvent: EventID) async throws(HaloError) -> any TimelineSession
+
     /// Prepares the timelines of the rooms the user is most likely to open next (the top of the room list), so opening one
     /// shows its messages at once. Best effort: failures are ignored. Ports with nothing to prepare keep the default.
     func warm(_ rooms: [RoomID]) async
@@ -21,6 +24,9 @@ extension TimelineSession {
 }
 
 extension TimelinePort {
+    public func openThread(room: RoomID, rootEvent: EventID) async throws(HaloError) -> any TimelineSession {
+        try await open(room: room)
+    }
     public func warm(_ rooms: [RoomID]) async {}
     public func dropWarm() async {}
 }

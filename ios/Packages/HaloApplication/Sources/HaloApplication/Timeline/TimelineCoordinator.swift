@@ -39,6 +39,7 @@ public actor TimelineCoordinator {
 
     private let port: any TimelinePort
     private let room: RoomID
+    private let threadRoot: EventID?
     private var broadcaster = SnapshotBroadcaster<Status>()
     private var session: (any TimelineSession)?
     private var subscription: Task<Void, Never>?
@@ -53,9 +54,10 @@ public actor TimelineCoordinator {
     /// A typing notice is repeated at most this often while the user keeps typing (MESSAGING FR-4).
     public static let typingInterval: Duration = .seconds(4)
 
-    public init(port: any TimelinePort, room: RoomID, now: @escaping @Sendable () -> ContinuousClock.Instant = { .now }) {
+    public init(port: any TimelinePort, room: RoomID, threadRoot: EventID? = nil, now: @escaping @Sendable () -> ContinuousClock.Instant = { .now }) {
         self.port = port
         self.room = room
+        self.threadRoot = threadRoot
         self.now = now
     }
 
@@ -71,7 +73,11 @@ public actor TimelineCoordinator {
         guard status == .idle else { return }
         status = .opening
         do {
-            session = try await port.open(room: room)
+            if let threadRoot {
+                session = try await port.openThread(room: room, rootEvent: threadRoot)
+            } else {
+                session = try await port.open(room: room)
+            }
         } catch {
             status = .failed(error)
             return

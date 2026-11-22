@@ -104,6 +104,25 @@ public final class MatrixTimelinePort: TimelinePort {
             throw ErrorMapper.map(error)
         }
     }
+
+    public func openThread(room id: RoomID, rootEvent: EventID) async throws(HaloError) -> any TimelineSession {
+        let room = try await session.room(id)
+        let own = try await session.ownUserID()
+        let config = TimelineConfiguration(
+            focus: .thread(rootEventId: rootEvent.rawValue),
+            filter: .all,
+            internalIdPrefix: "thread-\(rootEvent.rawValue)",
+            dateDividerMode: .daily,
+            trackReadReceipts: .allEvents,
+            reportUtds: true)
+        do {
+            let timeline = try await room.timelineWithConfiguration(configuration: config)
+            Task { _ = try? await timeline.paginateBackwards(numEvents: 20) }
+            return MatrixTimelineSession(room: room, timeline: timeline, ownUserID: own)
+        } catch {
+            throw ErrorMapper.map(error)
+        }
+    }
 }
 
 final class MatrixTimelineSession: TimelineSession {

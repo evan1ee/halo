@@ -1,6 +1,7 @@
 #if canImport(SwiftUI)
 import HaloDesignSystem
 import HaloDomain
+import HaloFoundation
 import SwiftUI
 import UniformTypeIdentifiers
 #if canImport(UIKit)
@@ -11,6 +12,7 @@ import PhotosUI
 public struct TimelineView: View {
     private let model: TimelineViewModel
     private let stickerPanel: (@MainActor () -> AnyView)?
+    private let onOpenThread: (@MainActor (EventID) -> Void)?
     @State private var showsStickers = false
     @State private var headerVisible = false
     /// History is only loaded after the opening scroll: rows prepended before it would push the landing row out of place.
@@ -23,9 +25,15 @@ public struct TimelineView: View {
 
     /// - Parameter stickerPanel: the sticker panel for this room, made by the composition root (a feature never imports
     ///   another feature). Without it the composer has no sticker button.
-    public init(model: TimelineViewModel, stickerPanel: (@MainActor () -> AnyView)? = nil) {
+    /// - Parameter onOpenThread: opens a focused thread sheet for the chosen root event (M10 Threads).
+    public init(
+        model: TimelineViewModel,
+        stickerPanel: (@MainActor () -> AnyView)? = nil,
+        onOpenThread: (@MainActor (EventID) -> Void)? = nil
+    ) {
         self.model = model
         self.stickerPanel = stickerPanel
+        self.onOpenThread = onOpenThread
     }
 
     public var body: some View {
@@ -63,7 +71,7 @@ public struct TimelineView: View {
                         .task(id: PaginationTrigger(rows: rows.count, ready: headerVisible && landed)) { if headerVisible, landed, paginationError == nil { await model.loadEarlier() } }
                     }
                     ForEach(rows) { row in
-                        RowView(row: row, model: model)
+                        RowView(row: row, model: model, onOpenThread: onOpenThread)
                             .background(model.highlightedRowID == row.id ? Color.accentColor.opacity(0.18) : .clear, in: .rect(cornerRadius: 8))
                             .animation(.easeOut(duration: 0.4), value: model.highlightedRowID)
                             // The pill's target: whether the first row that was unread at open is on screen.
@@ -320,6 +328,7 @@ private struct Composer: View {
 private struct RowView: View {
     let row: TimelineRow
     let model: TimelineViewModel
+    let onOpenThread: ((EventID) -> Void)?
     @State private var showingSource = false
     @State private var showingReaders = false
     /// A sent message is removed for everyone and can't be brought back: ask first.
@@ -337,6 +346,9 @@ private struct RowView: View {
         }
         .controlGroupStyle(.compactMenu)
         Button("Reply", systemImage: "arrowshape.turn.up.left") { model.beginReply(row) }
+        if let onOpenThread, let eventID = row.eventID {
+            Button("Reply in thread", systemImage: "bubble.left.and.text.bubble.right") { onOpenThread(eventID) }
+        }
         #if canImport(UIKit)
         if row.file == nil, !row.isSticker, let text = row.source?.body ?? (row.showsText ? row.text : nil) {
             Button("Copy", systemImage: "doc.on.doc") { UIPasteboard.general.string = text }

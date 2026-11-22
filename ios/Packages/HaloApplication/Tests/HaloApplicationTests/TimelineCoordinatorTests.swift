@@ -200,4 +200,16 @@ struct TimelineCoordinatorTests {
         port.failNextSticker(with: .network(retryable: true), in: room)
         await #expect(throws: HaloError.network(retryable: true)) { try await coordinator.sendSticker(sticker) }
     }
+
+    @Test("opening with threadRoot calls openThread with the root event ID (M10 Threads)")
+    func opensThread() async throws {
+        let port = FakeTimelinePort()
+        let room = try RoomID("!r:x.org")
+        let root = try EventID("$root1")
+        port.addRoom(room)
+        let coordinator = TimelineCoordinator(port: port, room: room, threadRoot: root)
+        await coordinator.open()
+        _ = await wait(coordinator) { if case .live = $0 { true } else { false } }
+        #expect(port.openedThreads(in: room) == [root])
+    }
 }

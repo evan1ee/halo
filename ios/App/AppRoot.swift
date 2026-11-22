@@ -539,14 +539,23 @@ final class AppRoot {
     }
 
     /// A view model for the timeline of `room`; each screen gets its own coordinator and session.
-    func makeTimeline(room: RoomID) -> TimelineViewModel {
+    func makeTimeline(room: RoomID, threadRoot: EventID? = nil) -> TimelineViewModel {
+        let coordinator = TimelineCoordinator(port: timelinePort, room: room, threadRoot: threadRoot)
+        let readThroughClosure: (@Sendable () async -> Date?)? = threadRoot == nil
+            ? { @Sendable [roomCoordinator] in await roomCoordinator.rooms.first { $0.id == room }?.ownReadThrough }
+            : nil
         let model = TimelineViewModel(
-            coordinator: TimelineCoordinator(port: timelinePort, room: room), media: media, previewsAllowed: { [previewPolicy] in await previewPolicy.previewsAllowed(in: room) }, receipts: receipts, room: room, drafts: drafts, images: ImagePreparer(),
-            // Where to land on opening: the user's own read position (a receipt from any device) at that moment.
-            readThrough: { [roomCoordinator] in await roomCoordinator.rooms.first { $0.id == room }?.ownReadThrough })
+            coordinator: coordinator,
+            media: media,
+            previewsAllowed: { [previewPolicy] in await previewPolicy.previewsAllowed(in: room) },
+            receipts: threadRoot == nil ? receipts : nil,
+            room: room,
+            drafts: threadRoot == nil ? drafts : nil,
+            images: ImagePreparer(),
+            readThrough: readThroughClosure)
         model.botSenders = Set(AppPreferences().botSenders)
         model.unrecognisedBotMessages = unrecognisedBots
-        model.botActivity = botActivity
+        model.botActivity = threadRoot == nil ? botActivity : nil
         model.sendsTypingNotices = { AppPreferences().sendTypingNotices }
         return model
     }

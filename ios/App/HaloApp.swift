@@ -255,11 +255,17 @@ private struct TimelineScreen: View {
     @State private var model: TimelineViewModel
     @State private var stickers: StickerPanelViewModel
     @State private var details: RoomDetailsViewModel?
+    @State private var activeThread: ThreadSelection?
     @State private var title = ""
     @Environment(\.dismiss) private var dismiss
     private let root: AppRoot
     private let room: RoomID
     private let openRoom: @MainActor (RoomID) -> Void
+
+    private struct ThreadSelection: Identifiable {
+        let rootEvent: EventID
+        var id: String { rootEvent.rawValue }
+    }
 
     init(root: AppRoot, room: RoomID, jumpTo: EventID? = nil, openRoom: @escaping @MainActor (RoomID) -> Void) {
         self.openRoom = openRoom
@@ -272,7 +278,11 @@ private struct TimelineScreen: View {
     }
 
     var body: some View {
-        TimelineView(model: model, stickerPanel: { AnyView(StickerPanelView(model: stickers)) }).navigationBarTitleDisplayMode(.inline)
+        TimelineView(
+            model: model,
+            stickerPanel: { AnyView(StickerPanelView(model: stickers)) },
+            onOpenThread: { eventID in activeThread = ThreadSelection(rootEvent: eventID) }
+        ).navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 // The room's name, so it's clear where you are; tapping it opens the room info, like the button.
                 ToolbarItem(placement: .principal) {
@@ -294,7 +304,33 @@ private struct TimelineScreen: View {
                     onRenamed: { title = $0 },
                     onLeft: { dismiss() })
             }
+            .sheet(item: $activeThread) { thread in
+                ThreadSheet(root: root, room: room, rootEvent: thread.rootEvent)
+            }
             .task { title = await root.roomName(room) ?? "Unnamed room" }
+    }
+}
+
+/// Focused thread timeline sheet (M10 Threads, `TimelineFocus.thread`).
+private struct ThreadSheet: View {
+    @State private var model: TimelineViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    init(root: AppRoot, room: RoomID, rootEvent: EventID) {
+        _model = State(initialValue: root.makeTimeline(room: room, threadRoot: rootEvent))
+    }
+
+    var body: some View {
+        NavigationStack {
+            TimelineView(model: model)
+                .navigationTitle("Thread")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { dismiss() }
+                    }
+                }
+        }
     }
 }
 
