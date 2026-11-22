@@ -17,17 +17,64 @@ public func avatarColorIndex(for name: String, count: Int) -> Int {
     return Int(hash % UInt64(count))
 }
 
+/// The colours of a letter avatar, in sRGB components 0...1. The background is the hue washed out over the light or dark
+/// row colour, and the letter is the hue darkened (light) or lightened (dark) so it reads at WCAG AA against it
+/// (the system tints themselves at 18 % behind the same tint failed the accessibility audit, e.g. green "S" on pale green).
+public enum AvatarTint {
+    public struct RGB: Equatable, Sendable {
+        public let r: Double
+        public let g: Double
+        public let b: Double
+    }
+
+    /// iOS system blue, teal, pink, orange, green and mint (light-mode values); grey for a name with no letter.
+    public static let hues: [RGB] = [
+        RGB(r: 0 / 255, g: 122 / 255, b: 255 / 255),
+        RGB(r: 48 / 255, g: 176 / 255, b: 199 / 255),
+        RGB(r: 255 / 255, g: 45 / 255, b: 85 / 255),
+        RGB(r: 255 / 255, g: 149 / 255, b: 0 / 255),
+        RGB(r: 52 / 255, g: 199 / 255, b: 89 / 255),
+        RGB(r: 0 / 255, g: 199 / 255, b: 190 / 255),
+    ]
+    public static let neutral = RGB(r: 142 / 255, g: 142 / 255, b: 147 / 255)
+
+    private static let lightRow = RGB(r: 1, g: 1, b: 1)
+    private static let darkRow = RGB(r: 28 / 255, g: 28 / 255, b: 30 / 255)
+
+    public static func background(_ hue: RGB, dark: Bool) -> RGB {
+        blend(hue, over: dark ? darkRow : lightRow, amount: dark ? 0.3 : 0.18)
+    }
+
+    public static func letter(_ hue: RGB, dark: Bool) -> RGB {
+        dark ? blend(lightRow, over: hue, amount: 0.45) : blend(RGB(r: 0, g: 0, b: 0), over: hue, amount: 0.5)
+    }
+
+    /// The hue for `name`: a stable palette slot, or grey when there is nothing to take a letter from.
+    public static func hue(for name: String) -> RGB {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != "?" else { return neutral }
+        return hues[avatarColorIndex(for: trimmed, count: hues.count)]
+    }
+
+    private static func blend(_ top: RGB, over bottom: RGB, amount: Double) -> RGB {
+        RGB(
+            r: bottom.r + (top.r - bottom.r) * amount,
+            g: bottom.g + (top.g - bottom.g) * amount,
+            b: bottom.b + (top.b - bottom.b) * amount
+        )
+    }
+}
+
 #if canImport(SwiftUI)
 import SwiftUI
 
 /// A round avatar: the image when `imageData` decodes, otherwise the initial of `name` in a stable soft tint.
 /// Loading the bytes is the caller's job.
 public struct AvatarCircle: View {
-    private static let palette: [Color] = [.blue, .teal, .pink, .orange, .green, .mint]
-
     private let name: String
     private let imageData: Data?
     private let size: CGFloat
+    @Environment(\.colorScheme) private var colorScheme
 
     public init(name: String, imageData: Data?, size: CGFloat = 44) {
         self.name = name
@@ -35,10 +82,8 @@ public struct AvatarCircle: View {
         self.size = size
     }
 
-    private var tint: Color {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed != "?" else { return .secondary }
-        return Self.palette[avatarColorIndex(for: trimmed, count: Self.palette.count)]
+    private func color(_ rgb: AvatarTint.RGB) -> Color {
+        Color(.sRGB, red: rgb.r, green: rgb.g, blue: rgb.b)
     }
 
     public var body: some View {
@@ -47,10 +92,12 @@ public struct AvatarCircle: View {
                 Circle().fill(.quaternary)
                 image.resizable().scaledToFill()
             } else {
-                Circle().fill(tint.opacity(0.18))
+                let hue = AvatarTint.hue(for: name)
+                let dark = colorScheme == .dark
+                Circle().fill(color(AvatarTint.background(hue, dark: dark)))
                 Text(avatarInitial(for: name))
                     .font(.system(size: size * 0.4, weight: .semibold, design: .rounded))
-                    .foregroundStyle(tint)
+                    .foregroundStyle(color(AvatarTint.letter(hue, dark: dark)))
             }
         }
         .frame(width: size, height: size)

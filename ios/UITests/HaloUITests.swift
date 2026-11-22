@@ -9,6 +9,11 @@ final class HaloUITests: XCTestCase {
     @MainActor
     private func audit(_ app: XCUIApplication) throws {
         var failures: [String] = []
+        // iOS 26 floats the search field over the bottom of the chat list and blurs the strip around it, so the text of a
+        // row resting under it is measured through system glass. That row passes once scrolled up; only contrast findings
+        // for text reaching the field's top edge are skipped (founder decision, 2026-11-22).
+        let searchField = app.searchFields.firstMatch
+        let glassTop = searchField.exists ? searchField.frame.minY : .infinity
         try app.performAccessibilityAudit { issue in
             // WCAG 2.1 SC 1.4.3 exempts inactive/disabled controls (e.g. SwiftUI .borderedProminent .disabled(true)).
             if issue.auditType == .contrast, let element = issue.element, !element.isEnabled {
@@ -19,13 +24,17 @@ final class HaloUITests: XCTestCase {
             if issue.auditType == .contrast, issue.compactDescription.contains("nearly passed") {
                 return true
             }
+            if issue.auditType == .contrast, let element = issue.element, element.frame.maxY > glassTop {
+                return true
+            }
             // Ignore Apple's system keyboard predictive-text cells (TextInputUI), outside Halo's view hierarchy.
             if issue.detailedDescription.contains("TUIPredictionViewCell") {
                 return true
             }
             let label = issue.element?.label ?? "unknown"
             let type = issue.element?.elementType.rawValue ?? 0
-            failures.append("\(issue.compactDescription) | \(issue.detailedDescription) | label='\(label)' type=\(type)")
+            let frame = issue.element.map { "\($0.frame)" } ?? "?"
+            failures.append("\(issue.compactDescription) | \(issue.detailedDescription) | label='\(label)' type=\(type) frame=\(frame)")
             return true
         }
         if !failures.isEmpty {
@@ -44,6 +53,14 @@ final class HaloUITests: XCTestCase {
         XCTAssertTrue(signInVisible || chatsVisible, "Expected either Sign in or Chats root screen")
 
         try audit(app)
+
+        // A Focus filter shows a banner and hides most chats: audit the full chat list as well.
+        let showAll = app.buttons["focus-show-all"]
+        if showAll.exists {
+            showAll.tap()
+            XCTAssertTrue(showAll.waitForNonExistence(timeout: 2))
+            try audit(app)
+        }
     }
 
     @MainActor
