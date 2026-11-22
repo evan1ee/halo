@@ -61,10 +61,7 @@ private struct RootView: View {
             switch root.auth.screen {
             case .signedIn:
                 NavigationStack(path: $path) {
-                    VStack(spacing: 0) {
-                        RecoveryBanner(model: root.recovery)
-                        RoomListView(model: root.roomList, onRoomInfo: { roomInfo = root.makeRoomDetails(room: $0) }) { path.append($0) }
-                    }
+                    RoomListView(model: root.roomList, onRoomInfo: { roomInfo = root.makeRoomDetails(room: $0) }) { path.append($0) }
                     .navigationTitle("")
                     .navigationBarTitleDisplayMode(.inline)
                     .task { await refreshOwnProfile() }
