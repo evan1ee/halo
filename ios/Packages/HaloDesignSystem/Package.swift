@@ -8,7 +8,10 @@ let package = Package(
     platforms: [.iOS(.v26), .macOS(.v26)],
     products: [.library(name: "HaloDesignSystem", targets: ["HaloDesignSystem"])],
     targets: [
-        .target(name: "HaloDesignSystem"),
+        .target(
+            name: "HaloDesignSystem",
+            resources: [.process("Resources")]
+        ),
         .testTarget(name: "HaloDesignSystemTests", dependencies: ["HaloDesignSystem"]),
     ]
 )
