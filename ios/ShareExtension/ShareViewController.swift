@@ -2,6 +2,7 @@ import HaloDomain
 import HaloFoundation
 import HaloPlatform
 import UIKit
+import UserNotifications
 import UniformTypeIdentifiers
 
 /// The system share sheet's "Halo" target (M16). It only stages what was shared into the App Group inbox
@@ -37,22 +38,26 @@ final class ShareViewController: UIViewController {
         let providers = (extensionContext?.inputItems as? [NSExtensionItem] ?? []).flatMap { $0.attachments ?? [] }
         let inbox = FileShareInbox(directory: HaloShared.shareInboxDirectory())
         var failure: String?
+        var notified = false
         do {
             var staged: [FileShareInbox.Staged] = []
             for provider in providers {
                 if let item = try await ShareItemReader.read(provider) { staged.append(item) }
             }
             try inbox.stage(staged)
+            notified = await Self.notifyReady()
         } catch {
             failure = Self.message(for: error)
         }
         spinner.stopAnimating()
-        finish(failure: failure)
+        finish(failure: failure, notified: notified)
     }
 
-    private func finish(failure: String?) {
+    private func finish(failure: String?, notified: Bool) {
         let title = failure == nil ? String(localized: "Saved to Halo") : String(localized: "Couldn't share")
-        let text = failure ?? String(localized: "Open Halo to choose a chat to send it to.")
+        let text = failure ?? (notified
+            ? String(localized: "Tap the notification to choose a chat to send it to.")
+            : String(localized: "Open Halo to choose a chat to send it to."))
         label.text = title
         let alert = UIAlertController(title: title, message: text, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: String(localized: "Done"), style: .default) { [weak self] _ in
@@ -63,6 +68,26 @@ final class ShareViewController: UIViewController {
             }
         })
         present(alert, animated: true)
+    }
+
+    /// An extension can't open its app, so a local notification is the way back: tapping it opens Halo, which then offers
+    /// the chat picker. Only when notifications are already allowed (the extension never asks), and with no content.
+    static let readyNotificationID = "halo.share.ready"
+
+    private static func notifyReady() async -> Bool {
+        let center = UNUserNotificationCenter.current()
+        switch await center.notificationSettings().authorizationStatus {
+        case .authorized, .provisional, .ephemeral: break
+        default: return false
+        }
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "Ready to send in Halo")
+        content.body = String(localized: "Tap to choose a chat.")
+        content.sound = .default
+        let request = UNNotificationRequest(
+            identifier: readyNotificationID, content: content, trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        )
+        return (try? await center.add(request)) != nil
     }
 
     private static func message(for error: HaloError) -> String {
