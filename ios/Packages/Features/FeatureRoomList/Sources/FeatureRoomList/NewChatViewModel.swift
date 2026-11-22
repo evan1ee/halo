@@ -107,6 +107,11 @@ public final class NewChatViewModel: Identifiable {
         await run { () async throws(HaloError) -> RoomID in try await port.createRoom(name: name, invite: ids) }
     }
 
+    /// Opens the user's private encrypted Saved Messages room, creating it once if needed (M8).
+    public func openSavedMessages() async {
+        await run { () async throws(HaloError) -> RoomID in try await port.openOrCreateSavedRoom() }
+    }
+
     private func run(_ action: () async throws(HaloError) -> RoomID) async {
         guard !isWorking else { return }
         isWorking = true

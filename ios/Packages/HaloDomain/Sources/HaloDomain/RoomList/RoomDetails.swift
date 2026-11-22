@@ -102,3 +102,20 @@ public struct RoomInvitePreview: Sendable, Equatable {
         self.avatar = avatar
     }
 }
+
+/// One media item (image, video, audio or file) in a room's media gallery (M9 Gallery + Export).
+public struct RoomMediaItem: Sendable, Equatable, Identifiable {
+    public let eventID: EventID
+    public let senderName: String
+    public let timestamp: Date
+    public let attachment: MediaAttachment
+
+    public var id: String { eventID.rawValue }
+
+    public init(eventID: EventID, senderName: String, timestamp: Date, attachment: MediaAttachment) {
+        self.eventID = eventID
+        self.senderName = senderName
+        self.timestamp = timestamp
+        self.attachment = attachment
+    }
+}

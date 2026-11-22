@@ -101,4 +101,14 @@ struct NewChatViewModelTests {
         model.query = ""
         #expect(!model.isSearching && !model.foundNobody && model.candidates.isEmpty && model.errorText == nil)
     }
+
+    @Test("openSavedMessages opens the same private saved room across repeated calls (M8)")
+    func savedMessagesIdempotent() async {
+        let port = FakeChatCreationPort()
+        var opened: [RoomID] = []
+        let model = NewChatViewModel(port: port, onCreated: { opened.append($0) })
+        await model.openSavedMessages()
+        await model.openSavedMessages()
+        #expect(opened.count == 2 && opened[0] == opened[1] && model.errorText == nil)
+    }
 }

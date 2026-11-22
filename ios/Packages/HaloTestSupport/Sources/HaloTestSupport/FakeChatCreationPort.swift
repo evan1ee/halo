@@ -9,6 +9,7 @@ public final class FakeChatCreationPort: ChatCreationPort {
         var existing: [UserID: RoomID]
         var error: HaloError?
         var created: [(name: String, invite: [UserID])] = []
+        var savedRoom: RoomID?
         var counter = 0
     }
     private let state: Mutex<State>
@@ -39,6 +40,14 @@ public final class FakeChatCreationPort: ChatCreationPort {
         if let error = state.withLock({ $0.error }) { throw error }
         state.withLock { $0.created.append((name, invite)) }
         return try nextRoom()
+    }
+
+    public func openOrCreateSavedRoom() async throws(HaloError) -> RoomID {
+        if let error = state.withLock({ $0.error }) { throw error }
+        if let existing = state.withLock({ $0.savedRoom }) { return existing }
+        let id = try nextRoom()
+        state.withLock { $0.savedRoom = id }
+        return id
     }
 
     private func nextRoom() throws(HaloError) -> RoomID {

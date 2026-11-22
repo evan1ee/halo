@@ -97,8 +97,9 @@ founder" and don't block the queue). Tick an item in the pull request that finis
 - [ ] 👤📱 AC-U8: 7-day soak with zero unexplained auditor findings.
 
 **P2**
-- [x] M8 Search (`V-SEARCH-1` resolved): `SearchPort` (`MessageSearchHit`, `SearchSnapshot`), `FakeSearchPort`, `MatrixSearchPort` over SDK `Client.searchService()` (contract-verified against `infra/dev` in `AdapterContractTests.messageSearch`), `SearchCoordinator`, `MessageSearchViewModel` / `MessageSearchView` (magnifying glass toolbar button in `HaloApp`, tap a result to jump straight to the event). Saved room remains open under M8.
-- [ ] M8 Saved room, M9 Gallery + Export, M10 Threads.
+- [x] M8 Search + Saved (`V-SEARCH-1` resolved): `SearchPort` (`MessageSearchHit`, `SearchSnapshot`), `FakeSearchPort`, `MatrixSearchPort` over SDK `Client.searchService()` (contract-verified against `infra/dev` in `AdapterContractTests.messageSearch`), `SearchCoordinator`, `MessageSearchViewModel` / `MessageSearchView` (magnifying glass toolbar button in `HaloApp`, tap a result to jump straight to the event). Saved room: `ChatCreationPort.openOrCreateSavedRoom()` backed by `one.mbm.halo.saved_room` account data in `MatrixChatCreationPort`, wired into "New chat" → "Saved Messages" (`NewChatViewModel.openSavedMessages`, unit-tested).
+- [x] M9 Gallery + Export: `RoomMediaItem`, `RoomPort.mediaGallery(in:limit:)` backed by filtered `Room.timelineWithConfiguration` (`.onlyMessage([.image, .video, .audio, .file])`) in `MatrixRoomPort`, `RoomDetailsViewModel.loadGallery` & `exportMediaFile`, and `RoomMediaGalleryView` (All / Photos & Videos / Files & Audio filter + ShareLink export; unit-tested in `RoomDetailsViewModelTests.roomMediaGalleryAndExport`).
+- [ ] M10 Threads (thread UI + per-thread read state).
 
 **M7 Bot Activity** (exit: AC-A1–A3)
 - [x] Slice 1 (branch `feat/m7-bot-activity`): `BotTaskDerivation`, `bot_task` store (migration v5), `BotActivityCoordinator` fed by open timelines, `FeatureBotActivity` sheet with sections and room/bot filters, Rebuild list; unit-tested in every layer, seen in the simulator with the peer account as a bot (`infra/dev/send-sample-events.py`).

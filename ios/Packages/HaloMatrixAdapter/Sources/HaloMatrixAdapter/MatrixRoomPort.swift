@@ -112,6 +112,56 @@ public final class MatrixRoomPort: RoomPort {
         do { try await room.leave() } catch { throw ErrorMapper.map(error) }
     }
 
+    public func mediaGallery(in id: RoomID, limit: Int) async throws(HaloError) -> [RoomMediaItem] {
+        let room = try await session.room(id)
+        let own = try await session.ownUserID()
+        let config = TimelineConfiguration(
+            focus: .live(hideThreadedEvents: false),
+            filter: .onlyMessage(types: [.image, .video, .audio, .file]),
+            internalIdPrefix: "gallery-\(UUID().uuidString)",
+            dateDividerMode: .daily,
+            trackReadReceipts: .disabled,
+            reportUtds: false)
+        do {
+            let timeline = try await room.timelineWithConfiguration(configuration: config)
+            let (raw, continuation) = AsyncStream<[MatrixRustSDK.TimelineDiff]>.makeStream(bufferingPolicy: .unbounded)
+            let handle = await timeline.addListener(listener: GalleryListener(continuation))
+            defer { handle.cancel(); continuation.finish() }
+
+            // Paginate backwards until we have enough media items or reach the start of the room (bounded to 5 pages).
+            let paginateTask = Task {
+                for _ in 0..<5 {
+                    let reachedStart = (try? await timeline.paginateBackwards(numEvents: 40)) ?? true
+                    if reachedStart { break }
+                }
+                continuation.finish()
+            }
+            defer { paginateTask.cancel() }
+
+            var items: [HaloDomain.TimelineItem] = []
+            for await batch in raw {
+                for update in batch {
+                    let mapped = TimelineMapper.map(update, ownUserID: own)
+                    try? ListReducer.apply(mapped, to: &items)
+                }
+                if items.count >= limit { break }
+            }
+            var media: [RoomMediaItem] = []
+            for item in items.reversed() {
+                guard case .event(let event) = item.content,
+                      let eventID = event.eventID,
+                      case .media(let attachment) = event.kind else { continue }
+                media.append(RoomMediaItem(
+                    eventID: eventID,
+                    senderName: event.senderName ?? event.sender?.rawValue ?? "Unknown",
+                    timestamp: event.timestamp,
+                    attachment: attachment))
+                if media.count >= limit { break }
+            }
+            return media
+        } catch { throw ErrorMapper.map(error) }
+    }
+
     static func choice(_ mode: RoomNotificationMode) -> RoomNotificationChoice {
         switch mode { case .allMessages: .allMessages; case .mentionsAndKeywordsOnly: .mentionsAndKeywords; case .mute: .mute }
     }
@@ -119,4 +169,10 @@ public final class MatrixRoomPort: RoomPort {
     static func role(_ role: MatrixRustSDK.RoomMemberRole) -> HaloDomain.RoomMemberRole {
         switch role { case .creator, .administrator: .administrator; case .moderator: .moderator; case .user: .user }
     }
+}
+
+private final class GalleryListener: TimelineListener {
+    private let continuation: AsyncStream<[MatrixRustSDK.TimelineDiff]>.Continuation
+    init(_ continuation: AsyncStream<[MatrixRustSDK.TimelineDiff]>.Continuation) { self.continuation = continuation }
+    func onUpdate(diff: [MatrixRustSDK.TimelineDiff]) { continuation.yield(diff) }
 }

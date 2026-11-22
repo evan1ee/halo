@@ -122,6 +122,14 @@ public struct RoomDetailsView: View {
                 }
                 .accessibilityIdentifier("roomNotificationMode")
             }
+            Section("Media & Files") {
+                NavigationLink {
+                    RoomMediaGalleryView(model: model)
+                } label: {
+                    Label("Photos, videos & files", systemImage: "photo.on.rectangle.angled")
+                }
+                .accessibilityIdentifier("roomMediaGallery")
+            }
             Section("Members") {
                 ForEach(members) { member in
                     Button { if let profile { shownProfile = profile(member) } } label: { HStack {

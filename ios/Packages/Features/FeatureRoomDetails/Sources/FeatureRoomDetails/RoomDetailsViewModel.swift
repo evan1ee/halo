@@ -29,6 +29,40 @@ public final class RoomDetailsViewModel: Identifiable {
     public var confirmsLeave = false
     /// Bytes of a photo just uploaded during this sheet visit, shown immediately before the next sync delivers a new `MediaRef`.
     public private(set) var localAvatar: Data?
+    /// Recent media items loaded for the room's Media & Files gallery (M9 Gallery + Export).
+    public private(set) var galleryItems: [RoomMediaItem] = []
+    public private(set) var isLoadingGallery = false
+    public private(set) var galleryError: String?
+
+    /// Loads recent photos, videos, audio and files for this room (M9).
+    public func loadGallery(limit: Int = 50) async {
+        guard !isLoadingGallery else { return }
+        isLoadingGallery = true
+        galleryError = nil
+        defer { isLoadingGallery = false }
+        do throws(HaloError) {
+            galleryItems = try await port.mediaGallery(in: room, limit: limit)
+        } catch {
+            galleryError = Self.text(error)
+        }
+    }
+
+    /// Downloads full bytes of a gallery item to a temporary file so the user can share/export it (M9).
+    public func exportMediaFile(_ item: RoomMediaItem) async -> URL? {
+        guard let media, let ref = item.attachment.source else { return nil }
+        do {
+            let data = try await media.content(ref)
+            let dir = FileManager.default.temporaryDirectory.appendingPathComponent("halo-gallery-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let rawName = URL(fileURLWithPath: item.attachment.body).lastPathComponent
+            let name = rawName.isEmpty || rawName == "." || rawName == ".." ? "attachment" : rawName
+            let url = dir.appendingPathComponent(name)
+            try data.write(to: url, options: .atomic)
+            return url
+        } catch {
+            return nil
+        }
+    }
 
     /// `true` when the room currently has an avatar (either from the server or just uploaded).
     public var hasAvatar: Bool {

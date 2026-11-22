@@ -32,11 +32,34 @@ public final class MatrixChatCreationPort: ChatCreationPort {
         } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
     }
 
+    /// Account data key storing the user's private encrypted Saved Messages room (D63 namespace `one.mbm.halo.*`, M8).
+    public static let savedRoomAccountDataType = "one.mbm.halo.saved_room"
+
     public func createRoom(name: String, invite: [UserID]) async throws(HaloError) -> RoomID {
         let client = try await session.signedInClient()
         do {
             let id = try await client.createRoom(request: CreateRoomParameters(name: name, isEncrypted: true, visibility: .private, preset: .privateChat, invite: invite.map(\.rawValue)))
             return try RoomID(id)
+        } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
+    }
+
+    public func openOrCreateSavedRoom() async throws(HaloError) -> RoomID {
+        let client = try await session.signedInClient()
+        do {
+            if let raw = try await client.accountData(eventType: Self.savedRoomAccountDataType),
+               let obj = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any],
+               let existingID = obj["room_id"] as? String,
+               let room = try? client.getRoom(roomId: existingID),
+               room.membership() == .joined {
+                return try RoomID(existingID)
+            }
+            let created = try await client.createRoom(request: CreateRoomParameters(
+                name: "Saved Messages", isEncrypted: true, visibility: .private, preset: .privateChat, invite: []))
+            let payload = try JSONSerialization.data(withJSONObject: ["room_id": created, "version": 1], options: [.sortedKeys])
+            try await client.setAccountData(
+                eventType: Self.savedRoomAccountDataType,
+                content: String(decoding: payload, as: UTF8.self))
+            return try RoomID(created)
         } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
     }
 }

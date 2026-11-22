@@ -38,4 +38,11 @@ public protocol RoomPort: Sendable {
 
     /// Leaves the room (FR-4).
     func leave(_ room: RoomID) async throws(HaloError)
+
+    /// Recent media items (photos, videos, audio, files) in `room`, newest first (M9 Gallery + Export).
+    func mediaGallery(in room: RoomID, limit: Int) async throws(HaloError) -> [RoomMediaItem]
+}
+
+extension RoomPort {
+    public func mediaGallery(in room: RoomID, limit: Int) async throws(HaloError) -> [RoomMediaItem] { [] }
 }

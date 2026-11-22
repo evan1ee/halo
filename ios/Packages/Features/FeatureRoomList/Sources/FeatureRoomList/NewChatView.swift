@@ -14,6 +14,15 @@ public struct NewChatView: View {
     public var body: some View {
         NavigationStack {
             List {
+                Section {
+                    Button { Task { await model.openSavedMessages() } } label: {
+                        Label("Saved Messages", systemImage: "bookmark.fill")
+                    }
+                    .disabled(model.isWorking)
+                    .accessibilityIdentifier("savedMessages")
+                } footer: {
+                    Text("A private encrypted room just for your own notes and links.")
+                }
                 Section("Find a person") {
                     HStack(spacing: 8) {
                         TextField("Name or @user:server", text: $model.query)

@@ -184,6 +184,30 @@ extension RoomDetailsViewModelTests {
         #expect(await RoomDetailsViewModel(port: port, room: id).avatarData(ref) == nil)
     }
 
+    @Test("loadGallery populates room media items and exportMediaFile writes sanitized temporary file (M9)")
+    func roomMediaGalleryAndExport() async throws {
+        let id = try RoomID("!gal:x.org")
+        let ref = MediaRef(token: "photo-1")
+        let item = RoomMediaItem(
+            eventID: try EventID("$m1"),
+            senderName: "Alice",
+            timestamp: Date(timeIntervalSince1970: 500),
+            attachment: MediaAttachment(kind: .image, body: "../../sunset.png", source: ref, size: 4))
+        let details = RoomDetails(id: id, name: "Trips", topic: nil, isDirect: false, isEncrypted: true, joinedMemberCount: 2, notificationMode: .allMessages)
+        let port = FakeRoomPort(details: details, gallery: [item])
+        let mediaPort = FakeMediaPort()
+        mediaPort.add(ref, data: Data([9, 8, 7, 6]))
+        let model = RoomDetailsViewModel(port: port, room: id, media: MediaLoader(port: mediaPort))
+
+        await model.loadGallery()
+        #expect(model.galleryItems == [item] && model.galleryError == nil)
+
+        let exported = try #require(await model.exportMediaFile(item))
+        #expect(exported.lastPathComponent == "sunset.png")
+        #expect(try Data(contentsOf: exported) == Data([9, 8, 7, 6]))
+        try? FileManager.default.removeItem(at: exported.deletingLastPathComponent())
+    }
+
     @Test("load recovers after a failure and dismissActionError clears an action error")
     func retryAndDismiss() async throws {
         let (port, _, id) = try fixture()

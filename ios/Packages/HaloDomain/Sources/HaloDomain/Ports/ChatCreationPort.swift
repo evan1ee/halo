@@ -24,4 +24,14 @@ public protocol ChatCreationPort: Sendable {
 
     /// A new private, encrypted room that invites `invite`.
     func createRoom(name: String, invite: [UserID]) async throws(HaloError) -> RoomID
+
+    /// Returns the user's private encrypted Saved Messages room (stored in `one.mbm.halo.saved_room` account data),
+    /// creating it once if none exists or if the previously recorded room was left (M8 Search + Saved).
+    func openOrCreateSavedRoom() async throws(HaloError) -> RoomID
+}
+
+extension ChatCreationPort {
+    public func openOrCreateSavedRoom() async throws(HaloError) -> RoomID {
+        try await createRoom(name: "Saved Messages", invite: [])
+    }
 }
