@@ -130,11 +130,13 @@ struct RowView: View {
                                 .font(.largeTitle)
                                 .padding(.vertical, HaloSpacing.xxs)
                                 .opacity(row.status == nil ? 1 : 0.6)
+                                .modifier(OptionalTextDragModifier(text: TimelineDragExtractor.text(for: row)))
                         } else if row.showsText {
                             Text(row.styled ?? AttributedString(row.text))
                                 .padding(HaloSpacing.s)
                                 .background(row.style == .ownMessage ? HaloColor.bubbleOwn : HaloColor.bubbleOther, in: RoundedRectangle(cornerRadius: HaloRadius.bubble, style: .continuous))
                                 .opacity(row.status == nil ? 1 : 0.6)
+                                .modifier(OptionalTextDragModifier(text: TimelineDragExtractor.text(for: row)))
                             if row.card != nil { Button("Show card") { showingOriginal = false }.font(.caption2) }
                         }
                         if let status = row.status {
@@ -183,6 +185,7 @@ struct RowView: View {
                         Button("Show original") { showingOriginal = true }.font(.caption2)
                     } else {
                         Text(row.styled ?? AttributedString(row.text)).font(.callout).foregroundStyle(.secondary)
+                            .modifier(OptionalTextDragModifier(text: TimelineDragExtractor.text(for: row)))
                         if row.card != nil { Button("Show card") { showingOriginal = false }.font(.caption2) }
                     }
                     reactionBar
@@ -192,6 +195,7 @@ struct RowView: View {
             case .emote:
                 VStack(alignment: .leading, spacing: 2) {
                     Text(row.text).italic()
+                        .modifier(OptionalTextDragModifier(text: TimelineDragExtractor.text(for: row)))
                     reactionBar
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

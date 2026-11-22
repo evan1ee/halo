@@ -101,8 +101,9 @@ Halo is ready for external testers when **all** of these hold; each line names h
 - [x] Unread chats widget (D93): medium widget, names from the D88 opt-in; `UnreadChatsSnapshot` tests.
 - [x] Hardware-keyboard shortcuts (D91 extras): ⌘N new chat, ⌘, settings, ⌘F search, ⌘1–⌘6 filters (`HaloApp.swift`); no unit test (SwiftUI wiring), built for iPad simulator.
 - [x] Drag and drop into a conversation (`TimelineDropModifier`, `DropClassifier`): pictures join the pending photos, other files send at once (≤ 50 MiB), text and links go into the draft; a tinted border shows the target. `TimelineDropTests`.
-- [ ] 📱 Drag and drop on an iPad: from Photos, Files and Safari into an open chat, also between Halo and another app in Split View.
-- [ ] Send-by-Siri, iPad three-column layout and dragging items out of the timeline.
+- [x] Drag and drop out of a conversation (`TimelineDragExtractor`, `DraggedTimelineFile`): drag message text/captions/notices/emotes, loaded photos (not stickers), and file attachments (≤ 50 MiB, sanitized temp file) out to other apps or Halo windows. `TimelineDragTests`.
+- [ ] 📱 Drag and drop on an iPad: from Photos, Files and Safari into an open chat, and dragging text/photos/files out of a chat (also between Halo and another app in Split View).
+- [ ] Send-by-Siri and iPad three-column layout.
 - Calls: will not be implemented (D94, founder).
 
 ## Release plan

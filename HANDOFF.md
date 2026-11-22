@@ -13,6 +13,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log`.
+- **M16 drag items out of timeline (`main`):** messages (text, captions, notices, emotes), loaded photos (not stickers), and file attachments (≤ 50 MiB, via sanitized `downloadFileToTemp`) can be dragged out of a conversation (`TimelineDrag.swift`, `TimelineMessageRowView.swift`, `TimelineMediaViews.swift`, `TimelineViewModel+Actions.swift`). Tests: `TimelineDragTests` (5 tests). Not checked on a device.
 - **Timeline scroll follow-ups (`main`):** when older history pages prepend while scrolled up (e.g. after a fling to the top), `PrependedAnchor` re-anchors at the previous top row instead of jumping to the start of the newly inserted page (skipped before landing, while pinned to bottom, or during an active drag). Short rooms with no earlier history to load are anchored just above the composer via top scroll content margins (`ShortRoomAlignment`), without changing `contentSize.height`. Tests: `TimelineScrollHelpersTests` (7 tests); `docs/features/TIMELINE.md` updated. Not checked on a device.
 - **Chat-list accessibility audit passes signed in (`fix/chat-list-a11y-audit`, PR #75 merged):** letter avatars use `AvatarTint` (pale circle, letter darkened in light / lightened in dark mode, ≥ 4.5:1, unit-tested) instead of the system tint on itself; the Media Gallery row's two lines wrap instead of clipping at large type; "Show all chats" in the Focus banner has a 44 pt tap target. `testLaunchRootScreenPassesAccessibilityAudit` now also taps "Show all chats" and audits the full list, prints each finding's frame, and skips contrast findings only for text reaching the floating search field (D96). Run on a signed-in iPhone Air simulator: passes.
 - **Signing team kept out of git:** the team set in Xcode lived only in an uncommitted `project.pbxproj` change, so a revert or `xcodegen` cleared it. `Base.xcconfig` now includes the git-ignored `ios/Config/Local.xcconfig` when present (`DEVELOPMENT_TEAM`; template `Local.xcconfig.example`); all configurations and extensions pick it up. Installed `Halo-Debug` on the founder's iPhone with it. `WebAuthSessionPresenter` no longer uses the deprecated `UIWindow(frame:)`: it picks its window before starting the sheet and returns nil (cancelled) when there is no window scene; not exercised against a real OIDC provider.
@@ -58,6 +59,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D96), [docs/adr/RE
 - **D96:** the accessibility audit skips contrast only for text under the floating search field (system glass); every other finding fails.
 
 ## 4. Modified files (this push)
+- **M16 drag out of timeline:** `FeatureTimeline/{TimelineDrag,TimelineMessageRowView,TimelineMediaViews,TimelineViewModel+Actions}.swift`, `FeatureTimelineTests/TimelineDragTests.swift`, `docs/ROADMAP.md`, `HANDOFF.md`.
 - **Timeline scroll follow-ups:** `FeatureTimeline/{TimelineScrollHelpers,TimelineView}.swift`, `FeatureTimelineTests/TimelineScrollHelpersTests.swift`, `docs/features/TIMELINE.md`, `HANDOFF.md`.
 - **Chat-list audit (PR #75, merged):** `HaloDesignSystem/Components/AvatarCircle.swift`, `HaloDesignSystemTests/AvatarTests.swift`, `FeatureRoomList/RoomListView.swift`, `ios/UITests/HaloUITests.swift`, `docs/design/DESIGN_SYSTEM.md`, `docs/DECISION_LOG.md`.
 - **Personal signing team:** `ios/Config/Base.xcconfig` (`#include? "Local.xcconfig"`), `ios/Config/Local.xcconfig.example`, `.gitignore`, `docs/development/DEVELOPMENT_SETUP.md`, `docs/adr/0017-xcodegen-for-the-app-project.md`.
@@ -94,7 +96,7 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 - 👤 **R-18 & R-21 (upstream SDK gaps):** `SyncSettingsV2` filter and queued `sendRaw`/`sendSticker` need upstream `matrix-rust-sdk` PR + SDK bump.
 - 👤 **R-24 (pushkin & Beta/Release push gateway):** decide `infra/sygnal/` pushkin vs amending ADR-0015; configure Beta/Release push gateway + APNs keys + TestFlight.
 - 👤 **UX/ship open questions (D84):** **Q-BRAND** (sign-in illustration; halo disc `AppIcon` landed), **Q-ONBOARD-SERVER**, **Q-L10N**, **Q-APPSTORE** (App Store metadata, privacy policy & support pages), legal review (D38), export compliance (V-LEGAL), privacy nutrition labels ([docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md)).
-- 📱 **Drag and drop (iPad):** drop a photo, a PDF and a link from Photos/Files/Safari into an open chat (also Split View with another app); a > 50 MiB file shows the size error.
+- 📱 **Drag and drop (iPad):** drop a photo, a PDF and a link from Photos/Files/Safari into an open chat, and drag text, a photo, and a file out of a chat (also Split View with another app); a > 50 MiB file shows the size error.
 - 📱 **Keyboard shortcuts (iPad/hardware keyboard):** ⌘N, ⌘,, ⌘F, ⌘1–⌘6 work and ⌘F focuses the search field.
 - 📱 **Unread chats widget (device, D93):** add the medium widget with the setting on and off; names hidden on a locked screen.
 - 📱 **V-SHARE-1 (device, ADR-0023):** share a photo and a link to an encrypted room from Photos/Safari with Halo closed, then with it running; one copy each, no undecryptable event; also signed out (fallback) and with Airplane mode (queued).
@@ -110,7 +112,7 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §"Remaining work".
 1. Founder checks room opening on the device (`Halo-Debug` is installed on the iPhone) (§5 📱 "Opening rooms"); then the timeline follow-ups in §5 "Engineering".
 2. Founder resolves §5 items (gates, push gateway / APNs, Q-BRAND sign-in illustration, Q-APPSTORE, legal/export/privacy labels) and runs Beta 1 (internal TestFlight) on a physical device.
-3. Post-1.0 backlog (M16): send-by-Siri, iPad extras (three columns, dragging items out). Calls will not be implemented (D94).
+3. Post-1.0 backlog (M16): send-by-Siri, iPad three-column layout. Calls will not be implemented (D94).
 
 ## 7. Next Session Prompt
 ```text

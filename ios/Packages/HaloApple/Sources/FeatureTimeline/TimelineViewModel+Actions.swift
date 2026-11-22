@@ -16,10 +16,10 @@ extension TimelineViewModel {
 
     /// The id of the row whose file is downloading.
     /// Files are read into memory whole for now (`MediaPort.content`); bigger ones wait for a file-based download.
-    public static let openSizeLimit = 50 * 1024 * 1024
+    public nonisolated static let openSizeLimit = 50 * 1024 * 1024
 
     public func openFile(_ row: TimelineRow) async {
-        guard let file = row.file, let media, openingRow == nil else { return }
+        guard let file = row.file, media != nil, openingRow == nil else { return }
         openFileError = nil
         if let size = file.size, size > Self.openSizeLimit {
             openFileError = "This file is too large to open here yet (\(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)))."
@@ -28,17 +28,27 @@ extension TimelineViewModel {
         openingRow = row.id
         defer { openingRow = nil }
         do {
-            let data = try await media.content(file.ref)
-            let directory = FileManager.default.temporaryDirectory.appendingPathComponent("halo-open-\(UUID().uuidString)", isDirectory: true)
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            // The name comes from the sender: keep only its last path component so it can't leave the folder.
-            let last = URL(fileURLWithPath: file.name).lastPathComponent
-            let url = directory.appendingPathComponent(last.isEmpty || last == "." || last == ".." ? "file" : last)
-            try data.write(to: url, options: .atomic)
+            let url = try await downloadFileToTemp(file)
             openedFile = OpenedFile(url: url)
         } catch {
             openFileError = (error as? HaloError) == .network(retryable: true) ? "Can't reach the server. The file wasn't opened." : "The file couldn't be opened."
         }
+    }
+
+    /// Downloads a file attachment into a sanitized temporary directory (used by Quick Look and drag-out).
+    public func downloadFileToTemp(_ file: TimelineRow.FileTile) async throws -> URL {
+        guard let media else { throw HaloError.notFound }
+        if let size = file.size, size > Self.openSizeLimit {
+            throw HaloError.invalidInput("File exceeds the 50 MB size limit")
+        }
+        let data = try await media.content(file.ref)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("halo-open-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // The name comes from the sender: keep only its last path component so it can't leave the folder.
+        let last = URL(fileURLWithPath: file.name).lastPathComponent
+        let url = directory.appendingPathComponent(last.isEmpty || last == "." || last == ".." ? "file" : last)
+        try data.write(to: url, options: .atomic)
+        return url
     }
 
     /// Quick Look was dismissed: the temporary copy is deleted.

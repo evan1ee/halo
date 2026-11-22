@@ -60,7 +60,13 @@ struct ThumbnailView: View {
                 AnimatedStickerView(data: animated).allowsHitTesting(false)
             } else if let data, let uiImage = UIImage(data: data) {
                 // A photo fills its box (cropped when the event announced no size; the viewer shows all of it); a sticker fits.
-                Image(uiImage: uiImage).resizable().aspectRatio(contentMode: isSticker ? .fit : .fill)
+                let rendered = Image(uiImage: uiImage)
+                if TimelineDragExtractor.allowsPhotoDrag(isSticker: isSticker, hasImageData: true) {
+                    rendered.resizable().aspectRatio(contentMode: .fill)
+                        .draggable(rendered)
+                } else {
+                    rendered.resizable().aspectRatio(contentMode: isSticker ? .fit : .fill)
+                }
             } else if failed {
                 Button { failed = false; attempt += 1 } label: {
                     VStack(spacing: 6) {
@@ -150,6 +156,22 @@ struct FileTileView: View {
         .disabled(isOpening)
         .accessibilityLabel(file.name)
         .accessibilityHint("Opens the file")
+        .modifier(OptionalFileDragModifier(file: file, model: model))
+    }
+}
+
+private struct OptionalFileDragModifier: ViewModifier {
+    let file: TimelineRow.FileTile
+    let model: TimelineViewModel
+
+    func body(content: Content) -> some View {
+        if TimelineDragExtractor.allowsFileDrag(size: file.size) {
+            content.draggable(DraggedTimelineFile(filename: file.name) {
+                try await model.downloadFileToTemp(file)
+            })
+        } else {
+            content
+        }
     }
 }
 
