@@ -31,6 +31,9 @@ messages already in the user's rooms. Any future feature that sends content to a
 ## 4. Local data
 Covered in [SECURITY.md](SECURITY.md) §3–4. The Bot Activity index and audit log stay on the device.
 
+## 4b. Siri and Spotlight (D88)
+Off by default. When the person turns on "Chats in Siri and Spotlight", the names and room IDs of up to 100 joined chats are written to an App Group file and the system Spotlight index; no message text, preview or avatar. Turning it off or signing out deletes both.
+
 ## 5. App Store privacy (before public release)
 Every target (app, NSE, later extensions) ships a `PrivacyInfo.xcprivacy` declaring the required-reason APIs it uses, no tracking
 and no tracking domains (NFR-10, ROADMAP M15); the archive's privacy report is checked before each upload (AC-UX-12).

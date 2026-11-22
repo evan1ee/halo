@@ -157,12 +157,14 @@ public struct SettingsView: View {
     @State private var privateReceipts: Bool
     @State private var sendTypingNotices: Bool
     @State private var privacyBlur: Bool
+    @State private var chatsInSystemSearch: Bool
 
     public init(config: SettingsConfiguration) {
         self.config = config
         _privateReceipts = State(initialValue: config.preferences.privateReceipts)
         _sendTypingNotices = State(initialValue: config.preferences.sendTypingNotices)
         _privacyBlur = State(initialValue: config.preferences.privacyBlur)
+        _chatsInSystemSearch = State(initialValue: config.preferences.chatsInSystemSearch)
     }
 
     public var body: some View {
@@ -207,10 +209,16 @@ public struct SettingsView: View {
                     .onChange(of: privacyBlur) { _, value in
                         preferences.privacyBlur = value
                     }
+                Toggle("Chats in Siri and Spotlight", isOn: $chatsInSystemSearch)
+                    .accessibilityIdentifier("chats-in-system-search")
+                    .onChange(of: chatsInSystemSearch) { _, value in
+                        preferences.chatsInSystemSearch = value
+                        config.onPreferencesChanged?()
+                    }
             } header: {
                 Text("Privacy")
             } footer: {
-                Text("Private read receipts hide that you read messages from others while keeping your devices in sync (applies from now on). Typing notices let others see when you're writing. App-switcher blur hides your chats when switching apps.")
+                Text("Private read receipts hide that you read messages from others while keeping your devices in sync (applies from now on). Typing notices let others see when you're writing. App-switcher blur hides your chats when switching apps. Chats in Siri and Spotlight lets you open a chat by name; the chat names (not messages) are shared with the system and removed when you turn it off or sign out.")
             }
             Section("Appearance") {
                 Picker("Theme", selection: $appearance) {
