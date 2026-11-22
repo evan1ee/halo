@@ -1,0 +1,3 @@
+// Copy to Local.xcconfig (git-ignored) and fill in your own values. Base.xcconfig includes it when it exists.
+// Your team ID is in Xcode → Settings → Accounts, or `security find-identity -v -p codesigning` (the ID in brackets).
+DEVELOPMENT_TEAM = YOURTEAMID

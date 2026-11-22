@@ -23,7 +23,7 @@ The spec is short and reviewable; the generated project no longer drifts; the to
 One more tool (`brew install xcodegen`). Settings that Xcode writes into the project (for example the development team) are lost on regeneration, so they live in the spec, an xcconfig, or on the command line instead.
 
 ## Consequences
-Change targets, dependencies or schemes in `project.yml` and regenerate in the same commit. The development team is not in the spec (it is personal): pass `DEVELOPMENT_TEAM=<id>`.
+Change targets, dependencies or schemes in `project.yml` and regenerate in the same commit. The development team is not in the spec (it is personal): set it in the git-ignored `ios/Config/Local.xcconfig` (see `Local.xcconfig.example`) or pass `DEVELOPMENT_TEAM=<id>`.
 
 ## Verified facts and assumptions
 [VERIFIED locally] XcodeGen regenerates the current project, which builds for the iOS Simulator.
