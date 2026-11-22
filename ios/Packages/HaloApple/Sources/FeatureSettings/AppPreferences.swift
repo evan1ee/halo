@@ -11,6 +11,7 @@ public struct AppPreferences: Sendable {
     public static let privacyBlurKey = "halo.privacyBlur"
     public static let appearanceKey = "halo.appearance"
     public static let botSendersKey = "halo.botSenders"
+    public static let chatsInSystemSearchKey = "halo.chatsInSystemSearch"
 
     public init(defaults: UserDefaults = .standard) { box = Box(defaults: defaults) }
 
@@ -30,6 +31,12 @@ public struct AppPreferences: Sendable {
     public var privacyBlur: Bool {
         get { box.defaults.object(forKey: Self.privacyBlurKey) as? Bool ?? true }
         nonmutating set { box.defaults.set(newValue, forKey: Self.privacyBlurKey) }
+    }
+
+    /// `true`: chat names are offered to Siri, Shortcuts and Spotlight (M16, D88). Default `false`.
+    public var chatsInSystemSearch: Bool {
+        get { box.defaults.bool(forKey: Self.chatsInSystemSearchKey) }
+        nonmutating set { box.defaults.set(newValue, forKey: Self.chatsInSystemSearchKey) }
     }
 
     /// Local cache of user IDs whose recognised messages render as bot cards (Settings → Bots; synced via `one.mbm.halo.bot_allowlist`).

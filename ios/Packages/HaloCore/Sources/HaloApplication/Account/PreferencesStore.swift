@@ -45,6 +45,11 @@ public final class PreferencesStore {
         set { update { $0.lastSeenWhatsNewVersion = newValue } }
     }
 
+    public var chatsInSystemSearch: Bool {
+        get { snapshot.chatsInSystemSearch }
+        set { update { $0.chatsInSystemSearch = newValue } }
+    }
+
     /// Reloads from the backing port (e.g. if another view wrote via legacy `UserDefaults`).
     public func reload() {
         snapshot = port.load()

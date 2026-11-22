@@ -1,3 +1,4 @@
+import CoreSpotlight
 import FeatureBotActivity
 import FeatureComposer
 import FeatureMedia
@@ -13,6 +14,7 @@ import HaloApplication
 import HaloDesignSystem
 import HaloDomain
 import HaloFoundation
+import HaloPlatform
 import HaloPersistence
 import SwiftUI
 import UIKit
@@ -49,6 +51,18 @@ private struct RootView: View {
     init(root: AppRoot) {
         self.root = root
         _searchModel = State(initialValue: root.makeMessageSearch())
+    }
+
+    private struct ShortcutInputs: Equatable {
+        let content: RoomListViewModel.Content
+        let enabled: Bool
+        let auth: AuthViewModel.Screen
+    }
+
+    private func openRequestedChat() {
+        guard case .signedIn = root.auth.screen, let room = root.openChat.pending else { return }
+        root.openChat.pending = nil
+        router.openRoom(room)
     }
 
     /// The joined chats the share sheet offers.
@@ -202,6 +216,18 @@ private struct RootView: View {
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
             }
+        }
+        // M16 Siri, Shortcuts and Spotlight: open a chat by name; chat names are offered only while the setting is on (D88).
+        .onChange(of: root.openChat.pending, initial: true) { openRequestedChat() }
+        .onChange(of: root.auth.screen) { openRequestedChat() }
+        .onContinueUserActivity(CSSearchableItemActionType) { activity in
+            let identifier = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String
+            if let room = HaloSpotlight.roomID(fromIdentifier: identifier) { root.openChat.request(room) }
+        }
+        .task(id: ShortcutInputs(content: root.roomList.content, enabled: root.preferences.chatsInSystemSearch, auth: root.auth.screen)) {
+            var enabled = root.preferences.chatsInSystemSearch
+            if case .signedIn = root.auth.screen {} else { enabled = false }
+            await root.chatShortcuts.update(rooms: await root.roomCoordinator.rooms, enabled: enabled)
         }
         .onOpenURL { url in
             Task {

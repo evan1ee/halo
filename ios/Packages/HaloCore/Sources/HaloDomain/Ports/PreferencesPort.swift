@@ -24,6 +24,8 @@ public struct PreferencesSnapshot: Sendable, Equatable, Codable {
     public var appearance: AppAppearance
     /// Last marketing version (`CFBundleShortVersionString`) for which What's New was shown (M15).
     public var lastSeenWhatsNewVersion: String?
+    /// `true`: joined chat names are offered to Siri, Shortcuts and Spotlight (M16, D88). Default `false`: opt-in, names leave the app.
+    public var chatsInSystemSearch: Bool
 
     public init(
         privateReceipts: Bool = false,
@@ -31,7 +33,8 @@ public struct PreferencesSnapshot: Sendable, Equatable, Codable {
         privacyBlur: Bool = true,
         botSenders: [String] = [],
         appearance: AppAppearance = .system,
-        lastSeenWhatsNewVersion: String? = nil
+        lastSeenWhatsNewVersion: String? = nil,
+        chatsInSystemSearch: Bool = false
     ) {
         self.privateReceipts = privateReceipts
         self.sendTypingNotices = sendTypingNotices
@@ -39,6 +42,7 @@ public struct PreferencesSnapshot: Sendable, Equatable, Codable {
         self.botSenders = botSenders
         self.appearance = appearance
         self.lastSeenWhatsNewVersion = lastSeenWhatsNewVersion
+        self.chatsInSystemSearch = chatsInSystemSearch
     }
 }
 

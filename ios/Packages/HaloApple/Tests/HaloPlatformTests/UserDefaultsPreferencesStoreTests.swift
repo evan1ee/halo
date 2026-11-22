@@ -20,7 +20,8 @@ struct UserDefaultsPreferencesStoreTests {
             sendTypingNotices: false,
             privacyBlur: false,
             botSenders: ["@todo:example.org"],
-            appearance: .dark
+            appearance: .dark,
+            chatsInSystemSearch: true
         )
         store.save(updated)
         #expect(store.load() == updated)
