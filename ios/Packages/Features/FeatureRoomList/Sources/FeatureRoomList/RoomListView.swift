@@ -4,25 +4,49 @@ import HaloDomain
 import HaloFoundation
 import SwiftUI
 
-public struct RoomListView: View {
+public struct RoomListView<SearchResults: View>: View {
     @Bindable private var model: RoomListViewModel
+    private let searchQuery: String
     private let onSelect: (RoomID) -> Void
     private let onRoomInfo: ((RoomID) -> Void)?
     private let onMediaGallery: (() -> Void)?
+    private let searchResults: SearchResults
 
     /// `onSelect` is called when a room is tapped; `onRoomInfo` opens the room info sheet from a row's context menu;
-    /// `onMediaGallery` opens the preset non-Matrix Global Media Gallery entry (D83).
+    /// `onMediaGallery` opens the preset non-Matrix Global Media Gallery entry (D83);
+    /// `searchQuery` filters rooms by name while typing and `searchResults` embeds a "Messages" section (D85).
     /// Navigation itself belongs to the composition root.
     public init(
         model: RoomListViewModel,
+        searchQuery: String = "",
         onRoomInfo: ((RoomID) -> Void)? = nil,
         onMediaGallery: (() -> Void)? = nil,
-        onSelect: @escaping (RoomID) -> Void = { _ in }
+        onSelect: @escaping (RoomID) -> Void = { _ in },
+        @ViewBuilder searchResults: () -> SearchResults
     ) {
         self.model = model
+        self.searchQuery = searchQuery
         self.onRoomInfo = onRoomInfo
         self.onMediaGallery = onMediaGallery
         self.onSelect = onSelect
+        self.searchResults = searchResults()
+    }
+
+    public init(
+        model: RoomListViewModel,
+        searchQuery: String = "",
+        onRoomInfo: ((RoomID) -> Void)? = nil,
+        onMediaGallery: (() -> Void)? = nil,
+        onSelect: @escaping (RoomID) -> Void = { _ in }
+    ) where SearchResults == EmptyView {
+        self.init(
+            model: model,
+            searchQuery: searchQuery,
+            onRoomInfo: onRoomInfo,
+            onMediaGallery: onMediaGallery,
+            onSelect: onSelect,
+            searchResults: { EmptyView() }
+        )
     }
 
     public var body: some View {
@@ -31,11 +55,18 @@ public struct RoomListView: View {
             case .idle, .loading:
                 LoadingState(.roomList())
             case .loaded(_, let rows):
+                let trimmedQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+                let visibleRows = trimmedQuery.isEmpty
+                    ? rows
+                    : rows.filter { $0.name.localizedCaseInsensitiveContains(trimmedQuery) }
+                let showMediaGallery = onMediaGallery != nil
+                    && model.filter == .all
+                    && (trimmedQuery.isEmpty || "Media Gallery".localizedCaseInsensitiveContains(trimmedQuery))
                 VStack(spacing: 0) {
                 syncIndicator
                 List {
                     Section {
-                        if let onMediaGallery, model.filter == .all {
+                        if let onMediaGallery, showMediaGallery {
                             Button { onMediaGallery() } label: {
                                 HStack(spacing: HaloSpacing.m) {
                                     Image(systemName: "photo.on.rectangle.angled")
@@ -63,7 +94,7 @@ public struct RoomListView: View {
                             .foregroundStyle(HaloColor.textPrimary)
                             .accessibilityIdentifier("preset-media-gallery")
                         }
-                        ForEach(rows) { row in
+                        ForEach(visibleRows) { row in
                             if row.isInvite {
                                 HStack(alignment: .top, spacing: 12) {
                                     AvatarView(name: row.name, ref: model.invitePreviews[row.id]?.avatar ?? row.avatar) { await model.avatarData($0) }
@@ -125,7 +156,7 @@ public struct RoomListView: View {
                                 }
                             }
                         }
-                        if model.canShowMore {
+                        if model.canShowMore && trimmedQuery.isEmpty {
                             Button("Show more rooms") {
                                 Task { await model.showMore() }
                             }
@@ -134,11 +165,12 @@ public struct RoomListView: View {
                             .onAppear { Task { await model.showMore() } }
                         }
                     }
+                    searchResults
                 }
                 .contentMargins(.top, 8, for: .scrollContent)
                 .accessibilityIdentifier("room-list")
                 .overlay {
-                    if rows.isEmpty && !(onMediaGallery != nil && model.filter == .all) {
+                    if trimmedQuery.isEmpty && visibleRows.isEmpty && !showMediaGallery {
                         EmptyState(icon: "bubble.left.and.bubble.right", title: Self.emptyTitle(model.filter))
                     }
                 }

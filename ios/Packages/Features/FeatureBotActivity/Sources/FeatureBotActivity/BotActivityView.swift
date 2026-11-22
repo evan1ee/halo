@@ -19,31 +19,29 @@ public struct BotActivityView: View {
     }
 
     public var body: some View {
-        NavigationStack {
-            Group {
-                switch model.phase {
-                case .loading: ProgressView()
-                case .failed:
-                    ContentUnavailableView {
-                        Label("Couldn't load Activity", systemImage: "exclamationmark.triangle")
-                    } actions: {
-                        Button("Try again") { Task { await model.load() } }.buttonStyle(.borderedProminent)
-                    }
-                case .loaded: content
+        Group {
+            switch model.phase {
+            case .loading: LoadingState(.roomList(count: 5))
+            case .failed:
+                ErrorState(title: "Couldn't load Activity", message: "Check your connection and try again.") {
+                    Task { await model.load() }
                 }
+            case .loaded: content
             }
-            .navigationTitle("Activity")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
-                if model.phase == .loaded {
-                    ToolbarItem(placement: .cancellationAction) { filterMenu }
-                }
+        }
+        .navigationTitle("Activity")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.large)
+        #endif
+        .toolbar {
+            if model.phase == .loaded {
+                ToolbarItem(placement: .primaryAction) { filterMenu }
             }
-            .confirmationDialog("Rebuild the list?", isPresented: $confirmingRebuild, titleVisibility: .visible) {
-                Button("Rebuild", role: .destructive) { Task { await model.rebuild() } }
-            } message: {
-                Text("This empties the list. It fills again as you open rooms with your bots and as they write.")
-            }
+        }
+        .confirmationDialog("Rebuild the list?", isPresented: $confirmingRebuild, titleVisibility: .visible) {
+            Button("Rebuild", role: .destructive) { Task { await model.rebuild() } }
+        } message: {
+            Text("This empties the list. It fills again as you open rooms with your bots and as they write.")
         }
         .task { await model.load() }
         .task { await model.observeActions() }

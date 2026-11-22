@@ -1,6 +1,6 @@
 # Roadmap
 
-**Where we are (2026-11-22):** functional roadmap M0–M10 and **M11 (Design-system foundation + Phase A tech debt)** are done (founder-blocked items: HANDOFF §5). Next: **M12 Navigation & IA (D85)** → M13 Core-flow polish → ADR-0022 step 4 → M14 Accessibility & localisation → M15 Ship readiness. Evidence: [design/UX_AUDIT.md](design/UX_AUDIT.md); bar: "Ship-ready definition" below.
+**Where we are (2026-11-22):** functional roadmap M0–M10, **M11 (Design-system foundation + Phase A)**, and **M12 (Navigation & IA, D85 + Phase B)** are done (founder-blocked items: HANDOFF §5). Next: **M13 Core-flow polish (ADR-0022 step 3 + TD-11 split + Phase C)** → ADR-0022 step 4 → M14 Accessibility & localisation → M15 Ship readiness. Evidence: [design/UX_AUDIT.md](design/UX_AUDIT.md); bar: "Ship-ready definition" below.
 
 Capacity: solo, part-time (D24). Estimates are calendar weeks at ~15 h/week and are **[ASSUMPTION]**s. Each milestone ends with its exit criteria **verified by tests** (AGENTS.md §0, §12).
 
@@ -23,14 +23,14 @@ Ordered work queue for the autonomous loop ([development/AUTONOMOUS_LOOP.md](dev
 - [x] Replaced raw system colours and fixed font sizes across `Features/` and `ios/App/`; added `scripts/check-design-tokens.sh` to `scripts/prepush.sh` (AC-UX-1).
 - [ ] 👤 Q-BRAND: final app icon and the sign-in illustration (original artwork, DESIGN_SYSTEM §5).
 
-**M12 Navigation and information architecture** (exit: AC-UX-3, AC-UX-4; fixes UX-01, UX-02, UX-08)
-- [ ] ADR-0022 step 2 (D86): route enums out of `HaloApp.swift` into `HaloApplication/Navigation/` (`ChatsRoute`, unit-tested); `AppRoot` split into `App/Composition/{Session,Chats,Settings,Notifications,Bots}Assembly.swift`; new `FeatureSearch` (message search from `FeatureRoomList`) and `FeatureProfile` (user profile from `FeatureRoomDetails` + profile settings from `FeatureSettings`), each with moved tests and `check-boundaries` green.
+**M12 Navigation and information architecture** (exit: AC-UX-3, AC-UX-4; fixes UX-01, UX-02, UX-08; **done**)
+- [x] ADR-0022 step 2 (D86): `ChatsRoute` + `ChatsRouter` in `HaloApplication/Navigation/` (unit-tested); `AppRoot` split into `App/Composition/{Session,Chats,Settings,Notifications,Bots}Assembly.swift`; extracted `FeatureSearch` and `FeatureProfile` with moved tests and `check-boundaries` green.
 - [x] Q-NAV-SHELL decided by the founder (2026-11-22): single `NavigationStack`, Messages-style, no tab bar (D85, supersedes D50); NAVIGATION.md §1 rewritten.
-- [ ] Compose button (`square.and.pencil`, top-trailing) on the Chats root opens New chat as a sheet; the Settings "Find a person" row is removed (UX-01). Large title "Chats" on the root.
-- [ ] Shell per D85: one typed path `ChatsRoute` (`.room`, `.thread`, `.settings`, `.stickerLibrary`, `.activity`, `.globalMediaGallery`); Settings pushed from the avatar (its 25-closure initialiser replaced by a settings route factory in the composition root); a more menu (`ellipsis.circle`) with the filters, Stickers and Activity; Activity and the sticker library pushed instead of sheets.
-- [ ] Search per D85: `.searchable` on the room list (room names while typing, a "Messages" section from `SearchPort`), replacing the magnifying-glass sheet.
-- [ ] State restoration (NAVIGATION §4): the navigation path via `@SceneStorage`, dropping rooms no longer joined.
-- [ ] Notification tap, `matrix:` links, search hits and Activity items route through the one router (no duplicated pushes); unit-tested in `HaloApplication`.
+- [x] Compose button (`square.and.pencil`, top-trailing) on the Chats root opens New chat as a sheet; the Settings "Find a person" row is removed (UX-01). Large title "Chats" on the root.
+- [x] Shell per D85: one typed path `ChatsRoute` (`.room`, `.thread`, `.settings`, `.stickerLibrary`, `.activity`, `.globalMediaGallery`); Settings pushed from the avatar (`SettingsConfiguration` model factory replaces the 25-closure init); more menu (`ellipsis.circle`) with filters, Stickers and Activity; Activity and Sticker library pushed instead of sheets.
+- [x] Search per D85: `.searchable` on the room list (room names while typing + `"Messages"` section from `SearchPort` via `MessageSearchResultsSection`), replacing the magnifying-glass sheet.
+- [x] State restoration (NAVIGATION §4): navigation path persisted via `@SceneStorage`, dropping rooms no longer joined (`ChatsRouter.pruneInvalidRooms`).
+- [x] Notification tap, `matrix:` links, search hits and Activity items route through `ChatsRouter` (no duplicated pushes); unit-tested in `HaloApplicationTests/ChatsRouterTests.swift`.
 
 **M13 Core-flow polish — the first five minutes and the daily loop** (exit: AC-UX-5, AC-UX-6, AC-UX-7; fixes UX-06, UX-07, UX-09, UX-12, UX-14, UX-15)
 - [ ] ADR-0022 step 3 (D86, together with the TD-11 split, before any other M13 timeline item): new `HaloBotRendering` (`BotCardView`, `HTMLText`), `FeatureComposer` (composer, attachments, mentions), `FeatureMedia` (global gallery + **one** shared photo viewer replacing the two `TabView` copies + Quick Look); rename `FeatureAuth` → `FeatureOnboarding`; no behaviour change, tests moved with the code.
@@ -65,7 +65,7 @@ Ordered work queue for the autonomous loop ([development/AUTONOMOUS_LOOP.md](dev
 
 **Tech debt (paid down alongside M11–M15; scores and evidence in [development/TECH_DEBT.md](development/TECH_DEBT.md))**
 - [x] Phase A with M11: `.swift-format` + `.swiftlint.yml` enforced by `prepush.sh` (TD-06, D62); `@unchecked Sendable` justifications added (TD-14); roadmap queue slimmed to one-line items with M0–M10 history in the appendix below (TD-09).
-- [ ] Phase B with M11–M12: `PreferencesPort` + observable preferences store, no `AppPreferences()` in the app (TD-02); move bot-allowlist sync, diagnostics and cache logic from `AppRoot` into `HaloApplication`, Settings built from a model factory (TD-10).
+- [x] Phase B with M11–M12: `PreferencesPort` + observable `PreferencesStore`, no `AppPreferences()` in `ios/App/` (TD-02); `AppRoot` split into `ios/App/Composition/*Assembly.swift` (≤ 300 lines) and `SettingsView` built from `SettingsConfiguration` model factory (TD-10).
 - [ ] Phase C with M13: no `try?` on state-changing port calls — errors logged once and shown with M13 copy (TD-01); `ActionState` helper against double taps and orphaned tasks (TD-07); split `TimelineViewModel`/`TimelineView` below 600 lines per file (TD-11); replace the 1.5 s re-check in room details (TD-13).
 - [ ] Phase D with M14–M15: `HaloUITests` (TD-03); manual-dispatch macOS build workflow before TestFlight uploads, revisiting D71 (TD-04); `bot_action` table for pending ticks (TD-08).
 - [x] ADR-0022 (module layout v2, TD-16) accepted by the founder (2026-11-22, D86); its four steps are queued in M11, M12, M13 and "ADR-0022 step 4" above.

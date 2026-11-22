@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import FeatureSettings
+@testable import FeatureProfile
 
 @MainActor
 @Suite("ProfileSettingsModel")

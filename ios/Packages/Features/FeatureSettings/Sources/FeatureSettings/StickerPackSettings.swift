@@ -47,12 +47,12 @@ public final class StickerPackSettingsModel {
     }
 }
 
-struct StickerPackSettingsView: View {
+public struct StickerPackSettingsView: View {
     @State private var model: StickerPackSettingsModel
 
-    init(actions: StickerPackSettingsActions) { _model = State(initialValue: StickerPackSettingsModel(actions: actions)) }
+    public init(actions: StickerPackSettingsActions) { _model = State(initialValue: StickerPackSettingsModel(actions: actions)) }
 
-    var body: some View {
+    public var body: some View {
         List {
             if let error = model.error {
                 Section { Text(error).foregroundStyle(HaloColor.danger) }

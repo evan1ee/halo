@@ -118,7 +118,7 @@ public struct MessageSearchView: View {
                             HStack {
                                 Text(row.roomName).font(.caption.weight(.semibold)).foregroundStyle(.secondary).lineLimit(1)
                                 Spacer()
-                                Text(ActivityTime.text(row.timestamp)).font(.caption2).foregroundStyle(.secondary)
+                                Text(Self.formatTime(row.timestamp)).font(.caption2).foregroundStyle(.secondary)
                             }
                             Text(row.sender).font(.subheadline.weight(.medium)).lineLimit(1)
                             Text(row.body).font(.subheadline).foregroundStyle(.primary).lineLimit(2)
@@ -169,6 +169,69 @@ public struct MessageSearchView: View {
                 }
             }
             .task { await model.start() }
+        }
+    }
+
+    static func formatTime(_ date: Date, calendar: Calendar = .current) -> String {
+        if calendar.isDateInToday(date) {
+            return date.formatted(date: .omitted, time: .shortened)
+        }
+        return date.formatted(date: .abbreviated, time: .omitted)
+    }
+}
+
+/// Reusable "Messages" section for embedding `SearchPort` results inside the `.searchable` room list (D85, M12).
+public struct MessageSearchResultsSection: View {
+    private let model: MessageSearchViewModel
+    private let onSelect: (RoomID, EventID) -> Void
+
+    public init(model: MessageSearchViewModel, onSelect: @escaping (RoomID, EventID) -> Void) {
+        self.model = model
+        self.onSelect = onSelect
+    }
+
+    public var body: some View {
+        let trimmed = model.query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            Section("Messages") {
+                if let error = model.errorMessage {
+                    Text(error).foregroundStyle(HaloColor.danger).font(HaloTypography.meta)
+                }
+                if model.isLoading && model.rows.isEmpty {
+                    HStack(spacing: HaloSpacing.s) {
+                        ProgressView()
+                        Text("Searching messages…").font(HaloTypography.meta).foregroundStyle(HaloColor.textSecondary)
+                    }
+                } else if model.rows.isEmpty && model.searchedQuery == trimmed && model.errorMessage == nil {
+                    Text("No matching messages").font(HaloTypography.meta).foregroundStyle(HaloColor.textSecondary)
+                } else {
+                    ForEach(model.rows) { row in
+                        Button {
+                            onSelect(row.roomID, row.eventID)
+                        } label: {
+                            VStack(alignment: .leading, spacing: HaloSpacing.xs) {
+                                HStack {
+                                    Text(row.roomName).font(HaloTypography.captionEmphasis).foregroundStyle(HaloColor.textSecondary).lineLimit(1)
+                                    Spacer()
+                                    Text(MessageSearchView.formatTime(row.timestamp)).font(.caption2).foregroundStyle(HaloColor.textSecondary)
+                                }
+                                Text(row.sender).font(HaloTypography.meta.weight(.medium)).foregroundStyle(HaloColor.textPrimary).lineLimit(1)
+                                Text(row.body).font(HaloTypography.meta).foregroundStyle(HaloColor.textSecondary).lineLimit(2)
+                            }
+                            .padding(.vertical, HaloSpacing.xxs)
+                        }
+                        .foregroundStyle(HaloColor.textPrimary)
+                        .accessibilityIdentifier("search-hit-\(row.id)")
+                    }
+                    if model.hasMore {
+                        Button(model.isLoading ? "Loading…" : "Load more messages") {
+                            Task { await model.loadMore() }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .disabled(model.isLoading)
+                    }
+                }
+            }
         }
     }
 }

@@ -1,7 +1,9 @@
 import FeatureAuth
 import FeatureBotActivity
+import FeatureProfile
 import FeatureRoomDetails
 import FeatureRoomList
+import FeatureSearch
 import FeatureSettings
 import FeatureStickers
 import FeatureTimeline
@@ -14,7 +16,7 @@ import SwiftUI
 import UIKit
 import UserNotifications
 
-/// Composition root of the app (AGENTS.md §5: wiring only). Screens live in the Feature packages.
+/// Composition root of the app (AGENTS.md §5: wiring only; D85 single-stack navigation).
 @main
 struct HaloApp: App {
     @State private var root = AppRoot()
@@ -27,28 +29,25 @@ struct HaloApp: App {
     }
 }
 
-private enum HomeRoute: Hashable {
-    case room(RoomID)
-    case globalMediaGallery
-}
-
 private struct RootView: View {
     let root: AppRoot
     @Environment(\.scenePhase) private var scenePhase
-    @State private var path: [HomeRoute] = []
+    @SceneStorage("halo.navigation.path") private var savedPath: Data?
+    @State private var router = ChatsRouter()
+    @State private var pathRestored = false
+    @State private var searchModel: MessageSearchViewModel
     @State private var newChat: NewChatViewModel?
-    @State private var messageSearch: MessageSearchViewModel?
     @State private var roomInfo: RoomDetailsViewModel?
-    @State private var activity: BotActivityViewModel?
-    /// The message to scroll to in the room about to open (from Activity); consumed by that room's screen.
-    @State private var pendingEvent: EventID?
     @State private var ownName = ""
     @State private var ownAvatar: Data?
-    @AppStorage(AppPreferences.appearanceKey) private var appearance = Appearance.system.rawValue
-    @AppStorage(AppPreferences.privacyBlurKey) private var privacyBlur = true
+
+    init(root: AppRoot) {
+        self.root = root
+        _searchModel = State(initialValue: root.makeMessageSearch())
+    }
 
     private var colorScheme: ColorScheme? {
-        switch Appearance(rawValue: appearance) ?? .system {
+        switch root.preferences.appearance {
         case .system: nil
         case .light: .light
         case .dark: .dark
@@ -62,131 +61,103 @@ private struct RootView: View {
         ownAvatar = await profile.loadAvatar()
     }
 
+    private static let filterOptions: [(filter: RoomListFilter, title: String, symbol: String)] = [
+        (.all, "All", "tray.full"),
+        (.unread, "Unread", "envelope.badge"),
+        (.people, "People", "person.2"),
+        (.rooms, "Rooms", "bubble.left.and.bubble.right"),
+        (.favourites, "Favourites", "star"),
+        (.invites, "Invites", "envelope.open"),
+    ]
+
     var body: some View {
         Group {
             switch root.auth.screen {
             case .signedIn:
-                NavigationStack(path: $path) {
+                NavigationStack(path: $router.path) {
                     RoomListView(
                         model: root.roomList,
+                        searchQuery: searchModel.query,
                         onRoomInfo: { roomInfo = root.makeRoomDetails(room: $0) },
-                        onMediaGallery: { path.append(.globalMediaGallery) }
-                    ) { path.append(.room($0)) }
-                    .navigationTitle("")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .task { await refreshOwnProfile() }
+                        onMediaGallery: { router.push(.globalMediaGallery) },
+                        onSelect: { router.openRoom($0) }
+                    ) {
+                        MessageSearchResultsSection(model: searchModel) { room, event in
+                            router.openRoom(room, focus: event)
+                        }
+                    }
+                    .navigationTitle("Chats")
+                    .navigationBarTitleDisplayMode(.large)
+                    .searchable(text: $searchModel.query, prompt: "Search chats & messages")
+                    .onSubmit(of: .search) { Task { await searchModel.submit() } }
+                    .task(id: searchModel.query) {
+                        let trimmed = searchModel.query.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if trimmed.isEmpty {
+                            await searchModel.submit()
+                            return
+                        }
+                        try? await Task.sleep(for: .milliseconds(300))
+                        guard !Task.isCancelled else { return }
+                        await searchModel.submit()
+                    }
+                    .task {
+                        await searchModel.start()
+                        await refreshOwnProfile()
+                    }
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
-                            // Destination-based: the stack's path is typed to `RoomID`, so a value link of another type can't push.
-                            NavigationLink {
-                                SettingsView(
-                                    version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?",
-                                    build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?",
-                                    onPrivateReceiptsChange: { value in Task { await root.receipts.setPrivateReceipts(value) } },
-                                    saveBotSenders: { await root.saveBotSenders($0) },
-                                    loadMediaPreviews: { await root.mediaPreviewChoice() },
-                                    saveMediaPreviews: { await root.setMediaPreviewChoice($0) },
-                                    profile: root.profileSettings(),
-                                    stickerPacks: root.stickerPackSettings(),
-                                    devices: root.deviceSettings(),
-                                    changePassword: root.changePasswordActions(),
-                                    verifyDevice: VerifyDeviceAction(isNeeded: { root.recovery.needsRecovery }, makeView: { AnyView(RecoveryView(model: root.recovery)) }),
-                                    diagnostics: { await root.diagnosticsReport() },
-                                    exportDiagnosticsZip: { await root.exportDiagnosticsZip() },
-                                    reconcile: { await root.reconcileNow() },
-                                    unexplainedAuditCount: { await root.unexplainedAuditCount() },
-                                    storageSizes: { await root.storageSizes() },
-                                    clearCache: { await root.clearMediaCache() },
-                                    security: { [StorageSize(name: "This device", text: root.recovery.deviceStatus), StorageSize(name: "Recovery key", text: root.recovery.recoveryStatus)] },
-                                    setUpRecovery: {
-                                        switch await root.recovery.setUpRecovery() {
-                                        case .success(let key): .success(key)
-                                        case .failure(let failure): .failure(SettingsMessage(failure.text, offersReplace: failure.backupExists))
+                            Button { router.push(.settings) } label: {
+                                AvatarCircle(name: ownName.isEmpty ? (root.signedInUserID ?? "?") : ownName, imageData: ownAvatar, size: 30)
+                                    .overlay(alignment: .topTrailing) {
+                                        if root.recovery.needsRecovery {
+                                            Circle().fill(HaloColor.warning).frame(width: 10, height: 10)
+                                                .overlay(Circle().stroke(.background, lineWidth: 1.5))
+                                                .accessibilityIdentifier("verify-dot")
                                         }
-                                    },
-                                    replaceRecovery: {
-                                        switch await root.recovery.replaceRecovery() {
-                                        case .success(let key): .success(key)
-                                        case .failure(let failure): .failure(SettingsMessage(failure.text))
-                                        }
-                                    },
-                                    notificationDefaults: root.notificationDefaults(),
-                                    notificationStatus: { await root.notificationStatus() },
-                                    openSystemSettings: {
-                                        if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
-                                    },
-                                    onNewChat: {
-                                        newChat = root.makeNewChat { room in
-                                            newChat = nil
-                                            path.append(.room(room))
-                                        }
-                                    },
-                                    onSignOut: { Task { await root.auth.signOut() } })
-                                .navigationBarTitleDisplayMode(.large)
-                            } label: { AvatarCircle(name: ownName.isEmpty ? (root.signedInUserID ?? "?") : ownName, imageData: ownAvatar, size: 30)
-                                .overlay(alignment: .topTrailing) {
-                                    if root.recovery.needsRecovery {
-                                        Circle().fill(HaloColor.warning).frame(width: 10, height: 10)
-                                            .overlay(Circle().stroke(.background, lineWidth: 1.5))
-                                            .accessibilityIdentifier("verify-dot")
                                     }
-                                } }
-                                .accessibilityLabel("Settings")
-                                .accessibilityIdentifier("settings")
-                        }
-                        ToolbarItem(placement: .topBarTrailing) {
-                            RoomListFilterMenu(model: root.roomList)
-                        }
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button { messageSearch = root.makeMessageSearch() } label: { Image(systemName: "magnifyingglass") }
-                                .accessibilityLabel("Search")
-                                .accessibilityIdentifier("search")
-                        }
-                        if !AppPreferences().botSenders.isEmpty {
-                            ToolbarItem(placement: .topBarTrailing) {
-                                Button { activity = root.makeBotActivity() } label: { Image(systemName: "checklist") }
-                                    .accessibilityLabel("Activity")
-                                    .accessibilityIdentifier("activity")
                             }
+                            .accessibilityLabel("Settings")
+                            .accessibilityIdentifier("settings")
+                        }
+                        ToolbarItemGroup(placement: .topBarTrailing) {
+                            moreMenu
+                            Button {
+                                newChat = root.makeNewChat { room in
+                                    newChat = nil
+                                    router.openRoom(room)
+                                }
+                            } label: {
+                                Image(systemName: "square.and.pencil")
+                            }
+                            .accessibilityLabel("New chat")
+                            .accessibilityIdentifier("compose-chat")
                         }
                     }
-                    .onChange(of: root.roomList.content) { Task { await root.scanBotRooms() } }
+                    .onChange(of: root.roomList.content) {
+                        if !pathRestored, case .loaded = root.roomList.content {
+                            pathRestored = true
+                            router.restorePath(from: savedPath)
+                            router.pruneInvalidRooms(joinedRoomIDs: root.roomList.joinedRoomIDs)
+                        }
+                        Task { await root.scanBotRooms() }
+                    }
+                    .onChange(of: router.path) { _, _ in
+                        savedPath = router.encodePath()
+                    }
                     .sheet(item: $newChat) { NewChatView(model: $0) }
-                    .sheet(item: $messageSearch) { model in
-                        MessageSearchView(model: model) { room, event in
-                            messageSearch = nil
-                            pendingEvent = event
-                            path.append(.room(room))
-                        }
-                    }
-                    .sheet(item: $activity) { model in
-                        BotActivityView(model: model) { room, event in
-                            activity = nil
-                            pendingEvent = event
-                            path.append(.room(room))
-                        }
-                    }
-                    .sheet(item: $roomInfo) {
+                    .sheet(item: $roomInfo) { model in
                         RoomDetailsView(
-                            model: $0,
-                            profile: { member in
+                            model: model,
+                            profileSheet: { member in
                                 root.makeUserProfile(member: member) { target in
                                     roomInfo = nil
-                                    path.append(.room(target))
-                                }
-                            })
-                    }
-                    .navigationDestination(for: HomeRoute.self) { route in
-                        switch route {
-                        case .room(let room):
-                            TimelineScreen(root: root, room: room, jumpTo: pendingEvent, openRoom: { path.append(.room($0)) })
-                                .onAppear { pendingEvent = nil }
-                        case .globalMediaGallery:
-                            GlobalMediaGalleryScreen(root: root) { room, event in
-                                pendingEvent = event
-                                path.append(.room(room))
+                                    router.openRoom(target)
+                                }.map { AnyView(UserProfileView(model: $0)) }
                             }
-                        }
+                        )
+                    }
+                    .navigationDestination(for: ChatsRoute.self) { route in
+                        destination(for: route)
                     }
                 }
             default:
@@ -196,10 +167,7 @@ private struct RootView: View {
         .task {
             PushDelegate.coordinator = root.push
             PushDelegate.onNotificationTap = { room, event in
-                pendingEvent = event
-                if path.last != .room(room) {
-                    path.append(.room(room))
-                }
+                router.openRoom(room, focus: event)
             }
             await root.push?.begin()
             await root.readState.begin()
@@ -210,7 +178,7 @@ private struct RootView: View {
         }
         .preferredColorScheme(colorScheme)
         .overlay {
-            if privacyBlur && scenePhase != .active {
+            if root.preferences.privacyBlur && scenePhase != .active {
                 ZStack {
                     Rectangle().fill(.ultraThinMaterial)
                     Image(systemName: "lock.shield.fill")
@@ -226,10 +194,7 @@ private struct RootView: View {
         .onOpenURL { url in
             Task {
                 guard let target = await root.resolveMatrixLink(url) else { return }
-                pendingEvent = target.event
-                if path.last != .room(target.room) {
-                    path.append(.room(target.room))
-                }
+                router.openRoom(target.room, focus: target.event)
             }
         }
         // Ask for notification permission once signed in; the token then arrives in `PushDelegate`.
@@ -240,8 +205,6 @@ private struct RootView: View {
             }
         }
         // Sync and periodic read-state auditing run only in the foreground (SYNC_ENGINE §2 rule 1, LOGGING_AND_DIAGNOSTICS §2).
-        // Wrap the background receipt flush in a UIKit background task (R-22) and suspend GRDB pools before iOS suspends
-        // the process so no SQLite lock is held in the shared App Group container (R-25 / 0xdead10cc).
         .task(id: scenePhase) {
             switch scenePhase {
             case .active:
@@ -260,6 +223,78 @@ private struct RootView: View {
                 await root.receipts.flush()
             @unknown default:
                 await root.setForeground(false)
+            }
+        }
+    }
+
+    private var moreMenu: some View {
+        Menu {
+            Section("Filter") {
+                ForEach(Self.filterOptions, id: \.title) { option in
+                    Button {
+                        root.roomList.filter = option.filter
+                    } label: {
+                        if root.roomList.filter == option.filter {
+                            Label(option.title, systemImage: "checkmark")
+                        } else {
+                            Label(option.title, systemImage: option.symbol)
+                        }
+                    }
+                    .accessibilityIdentifier("filter-\(option.title)")
+                }
+            }
+            Section {
+                Button {
+                    router.push(.stickerLibrary)
+                } label: {
+                    Label("Stickers", systemImage: "sparkles.rectangle.stack")
+                }
+                .accessibilityIdentifier("more-stickers")
+                if !root.preferences.botSenders.isEmpty {
+                    Button {
+                        router.push(.activity)
+                    } label: {
+                        Label("Activity", systemImage: "checklist")
+                    }
+                    .accessibilityIdentifier("more-activity")
+                }
+            }
+        } label: {
+            Image(systemName: root.roomList.filter == .all ? "ellipsis.circle" : "ellipsis.circle.fill")
+        }
+        .accessibilityLabel("More")
+        .accessibilityIdentifier("more-menu")
+    }
+
+    @ViewBuilder
+    private func destination(for route: ChatsRoute) -> some View {
+        switch route {
+        case .room(let room, let focus):
+            TimelineScreen(
+                root: root,
+                room: room,
+                jumpTo: focus,
+                openRoom: { router.openRoom($0) },
+                openThread: { router.openThread(room: room, rootEvent: $0) }
+            )
+        case .thread(let room, let rootEvent):
+            ThreadScreen(root: root, room: room, rootEvent: rootEvent)
+        case .settings:
+            SettingsView(config: root.makeSettingsConfiguration(onOpenStickers: {
+                router.push(.stickerLibrary)
+            }))
+            .navigationBarTitleDisplayMode(.large)
+        case .stickerLibrary:
+            StickerPackSettingsView(actions: root.stickerPackSettings())
+                .navigationTitle("Stickers")
+                .navigationBarTitleDisplayMode(.large)
+        case .activity:
+            BotActivityView(model: root.makeBotActivity()) { room, event in
+                router.openRoom(room, focus: event)
+            }
+        case .globalMediaGallery:
+            GlobalMediaGalleryScreen(root: root) { room, event in
+                router.openRoom(room, focus: event)
             }
         }
     }
@@ -287,25 +322,27 @@ private final class BackgroundTaskLease {
     }
 }
 
-/// Keeps the view model alive for the lifetime of the pushed screen.
+/// Keeps the view model alive for the lifetime of the pushed room screen.
 private struct TimelineScreen: View {
     @State private var model: TimelineViewModel
     @State private var stickers: StickerPanelViewModel
     @State private var details: RoomDetailsViewModel?
-    @State private var activeThread: ThreadSelection?
     @State private var title = ""
     @Environment(\.dismiss) private var dismiss
     private let root: AppRoot
     private let room: RoomID
     private let openRoom: @MainActor (RoomID) -> Void
+    private let openThread: @MainActor (EventID) -> Void
 
-    private struct ThreadSelection: Identifiable {
-        let rootEvent: EventID
-        var id: String { rootEvent.rawValue }
-    }
-
-    init(root: AppRoot, room: RoomID, jumpTo: EventID? = nil, openRoom: @escaping @MainActor (RoomID) -> Void) {
+    init(
+        root: AppRoot,
+        room: RoomID,
+        jumpTo: EventID? = nil,
+        openRoom: @escaping @MainActor (RoomID) -> Void,
+        openThread: @escaping @MainActor (EventID) -> Void
+    ) {
         self.openRoom = openRoom
+        self.openThread = openThread
         self.root = root
         self.room = room
         let timeline = root.makeTimeline(room: room)
@@ -318,56 +355,49 @@ private struct TimelineScreen: View {
         TimelineView(
             model: model,
             stickerPanel: { AnyView(StickerPanelView(model: stickers)) },
-            onOpenThread: { eventID in activeThread = ThreadSelection(rootEvent: eventID) }
-        ).navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                // The room's name, so it's clear where you are; tapping it opens the room info, like the button.
-                ToolbarItem(placement: .principal) {
-                    Button { details = root.makeRoomDetails(room: room) } label: {
-                        Text(title).font(.headline).lineLimit(1).foregroundStyle(.primary)
-                    }
-                    .accessibilityIdentifier("roomTitle")
+            onOpenThread: openThread
+        )
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Button { details = root.makeRoomDetails(room: room) } label: {
+                    Text(title).font(.headline).lineLimit(1).foregroundStyle(.primary)
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { details = root.makeRoomDetails(room: room) } label: { Image(systemName: "info.circle") }
-                        .accessibilityLabel("Room info")
-                        .accessibilityIdentifier("roomInfo")
-                }
+                .accessibilityIdentifier("roomTitle")
             }
-            .sheet(item: $details, onDismiss: { Task { title = await root.roomName(room) ?? title } }) { model in
-                RoomDetailsView(
-                    model: model,
-                    profile: { member in root.makeUserProfile(member: member, onOpenRoom: { room in details = nil; openRoom(room) }) },
-                    onRenamed: { title = $0 },
-                    onLeft: { dismiss() })
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { details = root.makeRoomDetails(room: room) } label: { Image(systemName: "info.circle") }
+                    .accessibilityLabel("Room info")
+                    .accessibilityIdentifier("roomInfo")
             }
-            .sheet(item: $activeThread) { thread in
-                ThreadSheet(root: root, room: room, rootEvent: thread.rootEvent)
-            }
-            .task { title = await root.roomName(room) ?? "Unnamed room" }
+        }
+        .sheet(item: $details, onDismiss: { Task { title = await root.roomName(room) ?? title } }) { model in
+            RoomDetailsView(
+                model: model,
+                profileSheet: { member in
+                    root.makeUserProfile(member: member, onOpenRoom: { room in details = nil; openRoom(room) })
+                        .map { AnyView(UserProfileView(model: $0)) }
+                },
+                onRenamed: { title = $0 },
+                onLeft: { dismiss() }
+            )
+        }
+        .task { title = await root.roomName(room) ?? "Unnamed room" }
     }
 }
 
-/// Focused thread timeline sheet (M10 Threads, `TimelineFocus.thread`).
-private struct ThreadSheet: View {
+/// Focused thread timeline pushed on the single `NavigationStack` (M10 Threads, D85).
+private struct ThreadScreen: View {
     @State private var model: TimelineViewModel
-    @Environment(\.dismiss) private var dismiss
 
     init(root: AppRoot, room: RoomID, rootEvent: EventID) {
         _model = State(initialValue: root.makeTimeline(room: room, threadRoot: rootEvent))
     }
 
     var body: some View {
-        NavigationStack {
-            TimelineView(model: model)
-                .navigationTitle("Thread")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Done") { dismiss() }
-                    }
-                }
-        }
+        TimelineView(model: model)
+            .navigationTitle("Thread")
+            .navigationBarTitleDisplayMode(.inline)
     }
 }
 
