@@ -47,6 +47,27 @@ struct AcknowledgementsTests {
 
         #expect(Acknowledgements.all().count == Acknowledgements.swiftPackages.count + Acknowledgements.bundled().count)
     }
+
+    @Test("AC-UX-12 / SR-01: app and NSE PrivacyInfo.xcprivacy manifests are valid and declare required-reason APIs")
+    func privacyManifestsAreValid() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        for relPath in ["ios/App/Resources/PrivacyInfo.xcprivacy", "ios/NotificationService/PrivacyInfo.xcprivacy"] {
+            let data = try Data(contentsOf: root.appendingPathComponent(relPath))
+            let plist = try #require(
+                try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+                "Invalid plist at \(relPath)"
+            )
+            #expect(plist["NSPrivacyTracking"] as? Bool == false)
+            #expect((plist["NSPrivacyCollectedDataTypes"] as? [Any])?.isEmpty == true)
+            let apiTypes = try #require(plist["NSPrivacyAccessedAPITypes"] as? [[String: Any]])
+            let categories = Set(apiTypes.compactMap { $0["NSPrivacyAccessedAPIType"] as? String })
+            #expect(categories.contains("NSPrivacyAccessedAPICategoryUserDefaults"))
+            #expect(categories.contains("NSPrivacyAccessedAPICategoryFileTimestamp"))
+            #expect(categories.contains("NSPrivacyAccessedAPICategoryDiskSpace"))
+        }
+    }
 }
 
 @Suite("DiagnosticsZipArchive")

@@ -123,6 +123,16 @@ public struct HaloDatabase: Sendable {
         migrator.registerMigration("v8-read-intent-order") { db in
             try db.execute(sql: "ALTER TABLE read_intent ADD COLUMN timeline_order INTEGER NOT NULL DEFAULT 0")
         }
+        migrator.registerMigration("v9-bot-action") { db in
+            try db.execute(sql: """
+                CREATE TABLE bot_action (
+                  account TEXT NOT NULL, room_id TEXT NOT NULL, bot_sender TEXT NOT NULL,
+                  item_id TEXT NOT NULL, state TEXT NOT NULL CHECK (state IN ('pending','no_response')),
+                  updated_at INTEGER NOT NULL,
+                  PRIMARY KEY (account, room_id, bot_sender, item_id)
+                )
+                """)
+        }
         return migrator
     }
 }

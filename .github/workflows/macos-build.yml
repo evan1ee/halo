@@ -1,0 +1,40 @@
+# Manual-dispatch macOS build & test workflow (TD-04, revisiting D71).
+# Run before TestFlight uploads or release candidates without consuming macOS minutes on every PR.
+name: macos-build
+
+on:
+  workflow_dispatch:
+    inputs:
+      simulator:
+        description: "iOS Simulator device name"
+        required: false
+        default: "iPhone 16"
+
+jobs:
+  ios-simulator:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: cd ios && xcodegen generate -q
+      - name: Test HaloCore
+        run: swift test --package-path ios/Packages/HaloCore -Xswiftc -warnings-as-errors
+      - name: Test HaloApple-Package (iOS Simulator)
+        run: |
+          cd ios/Packages/HaloApple
+          xcodebuild -scheme HaloApple-Package \
+            -destination "platform=iOS Simulator,name=${{ inputs.simulator }}" \
+            test -quiet
+      - name: Build Halo-Debug & run HaloUITests (iOS Simulator)
+        run: |
+          xcodebuild -project ios/Halo.xcodeproj -scheme Halo-Debug \
+            -destination "platform=iOS Simulator,name=${{ inputs.simulator }}" \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO \
+            build -quiet
+          xcodebuild -project ios/Halo.xcodeproj -scheme Halo-Debug \
+            -destination "platform=iOS Simulator,name=${{ inputs.simulator }}" \
+            -only-testing:HaloUITests \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO \
+            test -quiet

@@ -22,19 +22,23 @@ public struct PreferencesSnapshot: Sendable, Equatable, Codable {
     public var botSenders: [String]
     /// System / Light / Dark theme preference.
     public var appearance: AppAppearance
+    /// Last marketing version (`CFBundleShortVersionString`) for which What's New was shown (M15).
+    public var lastSeenWhatsNewVersion: String?
 
     public init(
         privateReceipts: Bool = false,
         sendTypingNotices: Bool = true,
         privacyBlur: Bool = true,
         botSenders: [String] = [],
-        appearance: AppAppearance = .system
+        appearance: AppAppearance = .system,
+        lastSeenWhatsNewVersion: String? = nil
     ) {
         self.privateReceipts = privateReceipts
         self.sendTypingNotices = sendTypingNotices
         self.privacyBlur = privacyBlur
         self.botSenders = botSenders
         self.appearance = appearance
+        self.lastSeenWhatsNewVersion = lastSeenWhatsNewVersion
     }
 }
 

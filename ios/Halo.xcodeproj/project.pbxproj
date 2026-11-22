@@ -19,6 +19,7 @@
 		5C97DDEAA552818CE3D396AA /* HaloApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26BC78D89D8CCE4267C675AB /* HaloApp.swift */; };
 		6540BF7F2E6040D0A2FCECA5 /* HaloMatrixAdapter in Frameworks */ = {isa = PBXBuildFile; productRef = 5F3A636705396CB5897C994D /* HaloMatrixAdapter */; };
 		71F4D3D5F0C15AEC925F539D /* SessionAssembly.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9372E57DDA275246046E5388 /* SessionAssembly.swift */; };
+		730CC79B0AF60C7960E81F40 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7B1FFC724B23663BCBD3B43E /* PrivacyInfo.xcprivacy */; };
 		75CAA59DD21250B3641AE203 /* FeatureMedia in Frameworks */ = {isa = PBXBuildFile; productRef = 84318732D188D72FB105A06B /* FeatureMedia */; };
 		7ED932F94ABCFE4452073394 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 83605BC369A2723B3B4D357A /* Localizable.xcstrings */; };
 		83E00A7D41257DC48962814A /* HaloApplication in Frameworks */ = {isa = PBXBuildFile; productRef = 043F0A8364EBBFB616A15D66 /* HaloApplication */; };
@@ -38,6 +39,7 @@
 		C6BD8DC5AF51B09789033F38 /* FeatureStickers in Frameworks */ = {isa = PBXBuildFile; productRef = AAFD571766A64EDC98FF89D7 /* FeatureStickers */; };
 		CCB0B01A6280350891123F8F /* SettingsAssembly.swift in Sources */ = {isa = PBXBuildFile; fileRef = C16D71590F85662C76E571D5 /* SettingsAssembly.swift */; };
 		CD91777DE3051ABFC38DAEA0 /* HaloApplication in Frameworks */ = {isa = PBXBuildFile; productRef = FE20A87397D67554B36F46E5 /* HaloApplication */; };
+		CFCE5E387A9CB8CF8F6CA759 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = CA7ADFA3DD899A545A8E13A0 /* PrivacyInfo.xcprivacy */; };
 		D716ED9E9EF4E2A6AC3B868A /* HaloMatrixAdapter in Frameworks */ = {isa = PBXBuildFile; productRef = 7791BFB85A0966B448BF45C0 /* HaloMatrixAdapter */; };
 		DF5EF2DF43E9B0888704F724 /* HaloDesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 1CC814B922718CEDA15B621C /* HaloDesignSystem */; };
 		E8553A487B6F3ABD3324C076 /* FeatureRoomList in Frameworks */ = {isa = PBXBuildFile; productRef = 0C836EFC11F76DCA8283F9D9 /* FeatureRoomList */; };
@@ -90,6 +92,7 @@
 		46A5693D428F4FBDB6D39B2E /* Halo.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Halo.entitlements; sourceTree = "<group>"; };
 		5312809511AE2A016CFF2B93 /* Info-Debug.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "Info-Debug.plist"; sourceTree = "<group>"; };
 		76ED106E261A2A8948DB12F6 /* HaloNotificationService.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = HaloNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		7B1FFC724B23663BCBD3B43E /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		83605BC369A2723B3B4D357A /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		8F90361C223365FE98857942 /* ChatsAssembly.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatsAssembly.swift; sourceTree = "<group>"; };
 		9372E57DDA275246046E5388 /* SessionAssembly.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionAssembly.swift; sourceTree = "<group>"; };
@@ -99,6 +102,7 @@
 		C02129F24C211154F50ADD8A /* Beta.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Beta.xcconfig; sourceTree = "<group>"; };
 		C16D71590F85662C76E571D5 /* SettingsAssembly.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsAssembly.swift; sourceTree = "<group>"; };
 		C39E1DD7E1B18BA46D103E0D /* NotificationsAssembly.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsAssembly.swift; sourceTree = "<group>"; };
+		CA7ADFA3DD899A545A8E13A0 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		DA3E1B8904AC903EF6240A91 /* Halo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Halo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E3D88711EB462A1A12171D80 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		E564C282FF13C235D2277912 /* BotsAssembly.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotsAssembly.swift; sourceTree = "<group>"; };
@@ -176,6 +180,7 @@
 			children = (
 				EA92F2A6CA157BE383ECF58F /* Assets.xcassets */,
 				83605BC369A2723B3B4D357A /* Localizable.xcstrings */,
+				CA7ADFA3DD899A545A8E13A0 /* PrivacyInfo.xcprivacy */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -236,6 +241,7 @@
 				364A4573FF5AC59B3F1FC07A /* Info.plist */,
 				3E813B4DC62204A281544127 /* NotificationService.swift */,
 				42F80F910CDB8774DE53E357 /* NSEMetrics.swift */,
+				7B1FFC724B23663BCBD3B43E /* PrivacyInfo.xcprivacy */,
 			);
 			path = NotificationService;
 			sourceTree = "<group>";
@@ -278,6 +284,7 @@
 			buildConfigurationList = AC7CBEC6B658E12979ACDF3A /* Build configuration list for PBXNativeTarget "HaloNotificationService" */;
 			buildPhases = (
 				274C7E9995819BA8FC3EFBFE /* Sources */,
+				BC1E5EA0BDCBF7A85E0A2E66 /* Resources */,
 				8940C51041ADDD980D41ABC8 /* Frameworks */,
 			);
 			buildRules = (
@@ -383,6 +390,15 @@
 			files = (
 				B031455926755AA1DD7B30BC /* Assets.xcassets in Resources */,
 				7ED932F94ABCFE4452073394 /* Localizable.xcstrings in Resources */,
+				CFCE5E387A9CB8CF8F6CA759 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BC1E5EA0BDCBF7A85E0A2E66 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				730CC79B0AF60C7960E81F40 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
