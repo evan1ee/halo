@@ -13,6 +13,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log`.
+- **M16 Send-by-Siri (`main`, builds on D88):** `SendMessageIntent` ("Send a message to <chat> in Halo" / "Message <chat> in Halo") reuses the opt-in `ChatEntity` list, requests explicit Siri confirmation before sending, and runs through `SiriSendCoordinator` (restores session if woken in the background, sends via `TimelinePort`, waits briefly on `SendConfirmation` and reports confirmed vs queued). Tests: `SiriSendCoordinatorTests` (4 tests); `PRIVACY.md` §4b and `ROADMAP.md` updated. Not checked on a device.
 - **M16 drag items out of timeline (`main`):** messages (text, captions, notices, emotes), loaded photos (not stickers), and file attachments (≤ 50 MiB, via sanitized `downloadFileToTemp`) can be dragged out of a conversation (`TimelineDrag.swift`, `TimelineMessageRowView.swift`, `TimelineMediaViews.swift`, `TimelineViewModel+Actions.swift`). Tests: `TimelineDragTests` (5 tests). Not checked on a device.
 - **Timeline scroll follow-ups (`main`):** when older history pages prepend while scrolled up (e.g. after a fling to the top), `PrependedAnchor` re-anchors at the previous top row instead of jumping to the start of the newly inserted page (skipped before landing, while pinned to bottom, or during an active drag). Short rooms with no earlier history to load are anchored just above the composer via top scroll content margins (`ShortRoomAlignment`), without changing `contentSize.height`. Tests: `TimelineScrollHelpersTests` (7 tests); `docs/features/TIMELINE.md` updated. Not checked on a device.
 - **Chat-list accessibility audit passes signed in (`fix/chat-list-a11y-audit`, PR #75 merged):** letter avatars use `AvatarTint` (pale circle, letter darkened in light / lightened in dark mode, ≥ 4.5:1, unit-tested) instead of the system tint on itself; the Media Gallery row's two lines wrap instead of clipping at large type; "Show all chats" in the Focus banner has a 44 pt tap target. `testLaunchRootScreenPassesAccessibilityAudit` now also taps "Show all chats" and audits the full list, prints each finding's frame, and skips contrast findings only for text reaching the floating search field (D96). Run on a signed-in iPhone Air simulator: passes.
@@ -59,6 +60,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D96), [docs/adr/RE
 - **D96:** the accessibility audit skips contrast only for text under the floating search field (system glass); every other finding fails.
 
 ## 4. Modified files (this push)
+- **M16 Send-by-Siri:** `HaloApplication/Shortcuts/SiriSendCoordinator.swift`, `HaloApplicationTests/SiriSendCoordinatorTests.swift`, `ios/App/Intents/{SendMessageIntent,OpenChatIntent}.swift`, `ios/App/AppRoot.swift`, `ios/Halo.xcodeproj/project.pbxproj`, `docs/security/PRIVACY.md`, `docs/ROADMAP.md`, `HANDOFF.md`.
 - **M16 drag out of timeline:** `FeatureTimeline/{TimelineDrag,TimelineMessageRowView,TimelineMediaViews,TimelineViewModel+Actions}.swift`, `FeatureTimelineTests/TimelineDragTests.swift`, `docs/ROADMAP.md`, `HANDOFF.md`.
 - **Timeline scroll follow-ups:** `FeatureTimeline/{TimelineScrollHelpers,TimelineView}.swift`, `FeatureTimelineTests/TimelineScrollHelpersTests.swift`, `docs/features/TIMELINE.md`, `HANDOFF.md`.
 - **Chat-list audit (PR #75, merged):** `HaloDesignSystem/Components/AvatarCircle.swift`, `HaloDesignSystemTests/AvatarTests.swift`, `FeatureRoomList/RoomListView.swift`, `ios/UITests/HaloUITests.swift`, `docs/design/DESIGN_SYSTEM.md`, `docs/DECISION_LOG.md`.
@@ -104,7 +106,7 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 - 📱 **iPad on a device / dev homeserver (D91):** only the signed-out screen was checked in the iPad simulator. Check sidebar selection, Slide Over / Split View collapse, rotation, and Settings/Stickers in the detail column.
 - 📱 **Focus filter on a device (D90):** add Halo's filter to a Focus, toggle the Focus, check the list narrows, "Show all chats" works, and it restores when the Focus ends (also whether the system calls the intent on deactivation).
 - 📱 **Widgets on a device (D89):** add the small and lock-screen widgets, receive a message and check the count refreshes; check the lock-screen redaction.
-- 📱 **App Intents on a device (D88):** turn on "Chats in Siri and Spotlight", then say "Open <chat> in Halo" and tap a Spotlight result.
+- 📱 **App Intents on a device (D88):** turn on "Chats in Siri and Spotlight", then say "Open <chat> in Halo", "Send a message to <chat> in Halo" (confirm online and offline), and tap a Spotlight result.
 - 📱 **Share extension on a device (D87):** App Group sharing needs a signed build; check Safari link, several Photos, a Files PDF and a > 50 MiB file end to end. The simulator build only proves it compiles and the inbox logic.
 - 📱 **Physical-device validation:** 7-day AC-U8 daily-driver soak, Release/TestFlight G-NSE spot check, NFR-1/NFR-2 XCTest metrics on iPhone 15-class device (`HALO_RUN_PERF_TESTS=1`), MetricKit hang/launch review, and Beta 1 → Beta 2 → 1.0 release.
 
@@ -112,7 +114,7 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §"Remaining work".
 1. Founder checks room opening on the device (`Halo-Debug` is installed on the iPhone) (§5 📱 "Opening rooms"); then the timeline follow-ups in §5 "Engineering".
 2. Founder resolves §5 items (gates, push gateway / APNs, Q-BRAND sign-in illustration, Q-APPSTORE, legal/export/privacy labels) and runs Beta 1 (internal TestFlight) on a physical device.
-3. Post-1.0 backlog (M16): send-by-Siri, iPad three-column layout. Calls will not be implemented (D94).
+3. Post-1.0 backlog (M16): iPad three-column layout. Calls will not be implemented (D94).
 
 ## 7. Next Session Prompt
 ```text

@@ -53,5 +53,14 @@ final class OpenChatRequestBox: @unchecked Sendable {  // holds a @MainActor obj
 struct HaloShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(intent: OpenChatIntent(), phrases: ["Open \(\.$chat) in \(.applicationName)"], shortTitle: "Open Chat", systemImageName: "bubble.left")
+        AppShortcut(
+            intent: SendMessageIntent(),
+            phrases: [
+                "Send a message to \(\.$chat) in \(.applicationName)",
+                "Message \(\.$chat) in \(.applicationName)",
+            ],
+            shortTitle: "Send Message",
+            systemImageName: "paperplane"
+        )
     }
 }

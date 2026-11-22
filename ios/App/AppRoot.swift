@@ -168,8 +168,10 @@ final class AppRoot {
         shareHandoff = ShareHandoffViewModel(coordinator: ShareCoordinator(
             inbox: FileShareInbox(directory: HaloShared.shareInboxDirectory()), timelines: timelinePort
         ))
+        let siriSend = SiriSendCoordinatorBox(SiriSendCoordinator(session: sessionCoordinator, timelines: timelinePort))
         AppDependencyManager.shared.add(dependency: OpenChatRequestBox(self.openChat))
         AppDependencyManager.shared.add(dependency: FocusFilterStateBox(self.focus))
+        AppDependencyManager.shared.add(dependency: siriSend)
         roomList.warm = { [timelinePort] rooms in await timelinePort.warm(rooms) }
         roomList.botSenders = { [preferences] in Set(preferences.botSenders) }
 

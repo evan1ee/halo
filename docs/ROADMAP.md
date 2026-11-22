@@ -103,7 +103,9 @@ Halo is ready for external testers when **all** of these hold; each line names h
 - [x] Drag and drop into a conversation (`TimelineDropModifier`, `DropClassifier`): pictures join the pending photos, other files send at once (≤ 50 MiB), text and links go into the draft; a tinted border shows the target. `TimelineDropTests`.
 - [x] Drag and drop out of a conversation (`TimelineDragExtractor`, `DraggedTimelineFile`): drag message text/captions/notices/emotes, loaded photos (not stickers), and file attachments (≤ 50 MiB, sanitized temp file) out to other apps or Halo windows. `TimelineDragTests`.
 - [ ] 📱 Drag and drop on an iPad: from Photos, Files and Safari into an open chat, and dragging text/photos/files out of a chat (also between Halo and another app in Split View).
-- [ ] Send-by-Siri and iPad three-column layout.
+- [x] Send-by-Siri (`SendMessageIntent`, `SiriSendCoordinator`, builds on D88): reuses the opt-in `ChatEntity` list, asks for Siri confirmation before sending, restores the session if woken in the background, sends through the normal timeline path and speaks honestly whether confirmed or queued. `SiriSendCoordinatorTests`.
+- [ ] 📱 Send-by-Siri on a device: turn on "Chats in Siri and Spotlight", then say "Send a message to <chat> in Halo" and confirm; check both online (confirmed) and offline (queued).
+- [ ] iPad three-column layout.
 - Calls: will not be implemented (D94, founder).
 
 ## Release plan
