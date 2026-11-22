@@ -227,7 +227,7 @@ private struct Composer: View {
             if let typing = model.typingText { Text(typing).font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading) }
             if let error = model.sendError {
                 HStack(spacing: 8) {
-                    Text(error).font(.caption).foregroundStyle(.red)
+                    Text(error).font(HaloTypography.caption).foregroundStyle(HaloColor.danger)
                     Spacer()
                     Button { model.dismissSendError() } label: { Image(systemName: "xmark").font(.caption2.weight(.semibold)) }
                         .buttonStyle(.plain)
@@ -301,7 +301,7 @@ private struct Composer: View {
                                         Image(systemName: "xmark.circle.fill")
                                             .font(.caption)
                                             .symbolRenderingMode(.palette)
-                                            .foregroundStyle(.white, .black.opacity(0.65))
+                                            .foregroundStyle(HaloColor.mediaOverlayForeground, HaloColor.mediaOverlayBackground)
                                     }
                                     .offset(x: 4, y: -4)
                                     .accessibilityLabel("Remove photo")
@@ -352,8 +352,8 @@ private struct Composer: View {
                         .accessibilityIdentifier("composer")
                     if model.canSend {
                         Button { Task { await model.send() } } label: {
-                            Image(systemName: "arrow.up.circle.fill").font(.system(size: 28)).symbolRenderingMode(.palette)
-                                .foregroundStyle(.white, .tint)
+                            Image(systemName: "arrow.up.circle.fill").font(.title2).symbolRenderingMode(.palette)
+                                .foregroundStyle(HaloColor.onAccent, HaloColor.accent)
                         }
                         .padding(3)
                         .accessibilityLabel("Send")
@@ -522,13 +522,13 @@ private struct RowView: View {
                             Button("Show original") { showingOriginal = true }.font(.caption2)
                         } else if row.isJumboEmoji {
                             Text(row.text)
-                                .font(.system(size: 48))
-                                .padding(.vertical, 2)
+                                .font(.largeTitle)
+                                .padding(.vertical, HaloSpacing.xxs)
                                 .opacity(row.status == nil ? 1 : 0.6)
                         } else if row.showsText {
                             Text(row.styled ?? AttributedString(row.text))
-                                .padding(8)
-                                .background(row.style == .ownMessage ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.15), in: .rect(cornerRadius: 12))
+                                .padding(HaloSpacing.s)
+                                .background(row.style == .ownMessage ? HaloColor.bubbleOwn : HaloColor.bubbleOther, in: RoundedRectangle(cornerRadius: HaloRadius.bubble, style: .continuous))
                                 .opacity(row.status == nil ? 1 : 0.6)
                             if row.card != nil { Button("Show card") { showingOriginal = false }.font(.caption2) }
                         }
@@ -881,7 +881,7 @@ private struct FileTileView: View {
             VStack(alignment: .leading, spacing: 8) {
             if let thumbnail = file.thumbnail {
                 ThumbnailView(image: thumbnail, model: model)
-                    .overlay { Image(systemName: "play.circle.fill").font(.system(size: 44)).foregroundStyle(.white).shadow(radius: 4) }
+                    .overlay { Image(systemName: "play.circle.fill").font(.largeTitle).imageScale(.large).foregroundStyle(HaloColor.mediaOverlayForeground).shadow(radius: 4) }
             }
             HStack(spacing: 10) {
                 if isOpening { ProgressView() } else { Image(systemName: symbol).font(.title2) }
@@ -989,7 +989,7 @@ private struct BotCardView: View {
         return HStack(alignment: .firstTextBaseline, spacing: 6) {
             Button { tick(row.id) } label: {
                 Image(systemName: done ? "checkmark.circle.fill" : (rowState == .pending ? "clock" : "circle"))
-                    .foregroundStyle(done ? .green : .secondary)
+                    .foregroundStyle(done ? HaloColor.success : HaloColor.textSecondary)
             }
             .buttonStyle(.plain)
             .disabled(rowState != .open && rowState != .noResponse)
@@ -1001,7 +1001,7 @@ private struct BotCardView: View {
                 }
                 switch rowState {
                 case .pending: Text("Waiting for bot…").font(.caption2).foregroundStyle(.secondary)
-                case .noResponse: Text("No response from bot. Tap to try again.").font(.caption2).foregroundStyle(.orange)
+                case .noResponse: Text("No response from bot. Tap to try again.").font(.caption2).foregroundStyle(HaloColor.warning)
                 case .unavailable where !row.isDone: Text("Not available").font(.caption2).foregroundStyle(.secondary)
                 default: EmptyView()
                 }
@@ -1024,7 +1024,7 @@ private struct BotCardView: View {
                 Text(title)
                 if let when { Text(when).font(.caption).foregroundStyle(.secondary) }
             case .taskDone(let title):
-                Label("Done: \(title)", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                Label("Done: \(title)", systemImage: "checkmark.circle.fill").foregroundStyle(HaloColor.success)
             case .taskDeleted(let title):
                 Label("Deleted: \(title)", systemImage: "trash").foregroundStyle(.secondary)
             }
@@ -1176,7 +1176,7 @@ private struct TimelinePhotoViewer: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
-                Color.black.ignoresSafeArea()
+                HaloColor.mediaBackdrop.ignoresSafeArea()
                 TabView(selection: $currentID) {
                     ForEach(photos) { item in
                         TimelinePhotoPage(item: item, model: model)
@@ -1189,13 +1189,13 @@ private struct TimelinePhotoViewer: View {
 
                 if let caption = currentPhoto.caption {
                     Text(caption)
-                        .font(.subheadline)
-                        .foregroundStyle(.white)
+                        .font(HaloTypography.meta)
+                        .foregroundStyle(HaloColor.mediaOverlayForeground)
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, HaloSpacing.l)
+                        .padding(.vertical, HaloSpacing.m)
                         .frame(maxWidth: .infinity)
-                        .background(.black.opacity(0.6))
+                        .background(HaloColor.mediaOverlayBackground)
                 }
             }
             .navigationTitle(photos.count > 1 ? "\(currentIndex + 1) of \(photos.count)" : (currentPhoto.sender ?? "Photo"))
@@ -1226,7 +1226,7 @@ private struct TimelinePhotoViewer: View {
                             }
                         } label: {
                             if isExporting {
-                                ProgressView().tint(.white)
+                                ProgressView().tint(HaloColor.mediaOverlayForeground)
                             } else {
                                 Image(systemName: "square.and.arrow.up")
                             }
@@ -1256,16 +1256,18 @@ private struct TimelinePhotoPage: View {
             if let data, let image = UIImage(data: data) {
                 ZoomableImageView(image: image)
             } else if isLoading {
-                ProgressView().tint(.white)
+                ProgressView().tint(HaloColor.mediaOverlayForeground)
             } else {
                 Image(systemName: "photo")
-                    .font(.system(size: 48))
-                    .foregroundStyle(.secondary)
+                    .font(.largeTitle)
+                    .imageScale(.large)
+                    .foregroundStyle(HaloColor.textSecondary)
             }
             #else
             Image(systemName: "photo")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
+                .font(.largeTitle)
+                .imageScale(.large)
+                .foregroundStyle(HaloColor.textSecondary)
             #endif
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

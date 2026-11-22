@@ -1,4 +1,5 @@
 #if canImport(SwiftUI)
+import HaloDesignSystem
 import SwiftUI
 
 /// The screens of the sign-in flow; the root view shows the signed-in content itself.
@@ -13,8 +14,9 @@ public struct SignInView: View {
         VStack(spacing: 16) {
             Spacer()
             Image(systemName: "bubble.left.and.bubble.right.fill")
-                .font(.system(size: 44))
-                .foregroundStyle(.tint)
+                .font(.largeTitle)
+                .imageScale(.large)
+                .foregroundStyle(HaloColor.accent)
                 .accessibilityHidden(true)
             Text("Halo").font(.largeTitle.bold())
             switch model.screen {
@@ -74,7 +76,7 @@ public struct SignInView: View {
                 EmptyView()
             }
             if let message = model.errorMessage {
-                Text(message).foregroundStyle(.red).font(.footnote).multilineTextAlignment(.center)
+                Text(message).foregroundStyle(HaloColor.danger).font(HaloTypography.meta).multilineTextAlignment(.center)
             }
             Spacer()
         }

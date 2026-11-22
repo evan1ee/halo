@@ -44,6 +44,13 @@ public enum HaloColor {
     /// Others' message bubble fill (`bubble.other`).
     public static let bubbleOther = Color("BubbleOther", bundle: .module)
 
+    /// Full-screen media viewer backdrop (always dark for photo/video legibility).
+    public static let mediaBackdrop = Color.black
+    /// Translucent dark scrim behind media chrome and duration badges.
+    public static let mediaOverlayBackground = Color.black.opacity(0.62)
+    /// High-contrast foreground on media overlays and dark viewer chrome.
+    public static let mediaOverlayForeground = Color.white
+
     /// Asset names for every semantic colour token (used by contrast tests, AC-UX-2).
     public static let assetBundle: Bundle = .module
 }

@@ -1,5 +1,6 @@
 #if canImport(SwiftUI)
 import HaloApplication
+import HaloDesignSystem
 import HaloDomain
 import HaloFoundation
 import SwiftUI
@@ -96,7 +97,7 @@ public struct BotActivityView: View {
             ProgressView().frame(width: 28, height: 28).accessibilityLabel("Waiting for the bot")
         } else {
             Button { Task { await model.tick(item) } } label: {
-                Image(systemName: item.tickState == nil ? "circle" : "exclamationmark.circle").font(.title2).foregroundStyle(item.tickState == nil ? Color.accentColor : .orange)
+                Image(systemName: item.tickState == nil ? "circle" : "exclamationmark.circle").font(.title2).foregroundStyle(item.tickState == nil ? HaloColor.accent : HaloColor.warning)
                     .frame(width: 28, height: 28)
             }
             .buttonStyle(.plain)
@@ -112,7 +113,7 @@ public struct BotActivityView: View {
             Text("\(item.roomName) · \(item.botName) · as of \(item.asOf.formatted(.relative(presentation: .named)))")
                 .font(.caption).foregroundStyle(.secondary)
             if item.sourceDeleted { Text("Its message was deleted").font(.caption).foregroundStyle(.secondary) }
-            if let status = tickStatus(item.tickState) { Text(status).font(.caption).foregroundStyle(.orange) }
+            if let status = tickStatus(item.tickState) { Text(status).font(HaloTypography.caption).foregroundStyle(HaloColor.warning) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())

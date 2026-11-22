@@ -9,6 +9,8 @@ step() { echo "== $1"; shift; "$@" || failed=1; }
 step "handoff (tip commit + structure, AGENTS.md §18)" python3 scripts/check_handoff.py commit HEAD
 step "docs" scripts/validate-docs.sh
 step "boundaries" scripts/check-boundaries.sh
+step "boundaries unit tests" python3 scripts/test_check_boundaries.py
+step "design tokens" scripts/check-design-tokens.sh
 
 packages=(HaloFoundation HaloDomain HaloTestSupport HaloApplication)
 if command -v swift >/dev/null; then

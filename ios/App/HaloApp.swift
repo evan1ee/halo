@@ -126,7 +126,7 @@ private struct RootView: View {
                             } label: { AvatarCircle(name: ownName.isEmpty ? (root.signedInUserID ?? "?") : ownName, imageData: ownAvatar, size: 30)
                                 .overlay(alignment: .topTrailing) {
                                     if root.recovery.needsRecovery {
-                                        Circle().fill(.yellow).frame(width: 10, height: 10)
+                                        Circle().fill(HaloColor.warning).frame(width: 10, height: 10)
                                             .overlay(Circle().stroke(.background, lineWidth: 1.5))
                                             .accessibilityIdentifier("verify-dot")
                                     }
@@ -214,8 +214,9 @@ private struct RootView: View {
                 ZStack {
                     Rectangle().fill(.ultraThinMaterial)
                     Image(systemName: "lock.shield.fill")
-                        .font(.system(size: 44))
-                        .foregroundStyle(.secondary)
+                        .font(.largeTitle)
+                        .imageScale(.large)
+                        .foregroundStyle(HaloColor.textSecondary)
                 }
                 .ignoresSafeArea()
                 .allowsHitTesting(false)

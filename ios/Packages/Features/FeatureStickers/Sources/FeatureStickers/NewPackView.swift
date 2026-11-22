@@ -1,4 +1,5 @@
 #if canImport(SwiftUI) && canImport(UIKit)
+import HaloDesignSystem
 import HaloDomain
 import PhotosUI
 import SwiftUI
@@ -52,7 +53,7 @@ public struct NewPackView: View {
         if case .failed(let message) = model.phase {
             Section {
                 HStack(spacing: 10) {
-                    Text(message).foregroundStyle(.red)
+                    Text(message).foregroundStyle(HaloColor.danger)
                     Spacer()
                     Button { model.dismissError() } label: { Image(systemName: "xmark").font(.footnote.weight(.semibold)) }
                         .buttonStyle(.plain)
@@ -96,7 +97,7 @@ private struct ItemRow: View {
                 TextField("Shortcode", text: Binding(get: { item.shortcode }, set: { model.setShortcode($0, for: item) }))
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                if let problem = model.problem(with: item) { Text(problem).font(.caption).foregroundStyle(.red) }
+                if let problem = model.problem(with: item) { Text(problem).font(HaloTypography.caption).foregroundStyle(HaloColor.danger) }
             }
         }
         .task(id: item.id) { thumbnail = await Self.makeThumbnail(item.data) }

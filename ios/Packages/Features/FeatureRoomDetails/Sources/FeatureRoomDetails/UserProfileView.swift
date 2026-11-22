@@ -28,8 +28,9 @@ public struct UserProfileView: View {
     }
 
     private func list(_ profile: UserProfile, ignored: Bool) -> some View {
-        let name = profile.displayName?.isEmpty == false ? profile.displayName! : "No display name"
-        let initialSeed = profile.displayName?.isEmpty == false ? profile.displayName! : profile.userID.rawValue
+        let nonEmptyName = profile.displayName.flatMap { $0.isEmpty ? nil : $0 }
+        let name = nonEmptyName ?? "No display name"
+        let initialSeed = nonEmptyName ?? profile.userID.rawValue
         return List {
             Section {
                 VStack(spacing: 8) {
@@ -67,7 +68,7 @@ public struct UserProfileView: View {
                     Text(ignored ? "You don't see this person's messages." : "Ignoring hides this person's messages and invitations everywhere.")
                 }
             }
-            if let error = model.actionError { Section { Text(error).foregroundStyle(.red) } }
+            if let error = model.actionError { Section { Text(error).foregroundStyle(HaloColor.danger) } }
         }
         .disabled(model.isWorking)
         .task(id: copied) {

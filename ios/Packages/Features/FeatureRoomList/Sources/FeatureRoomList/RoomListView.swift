@@ -29,7 +29,7 @@ public struct RoomListView: View {
         Group {
             switch model.content {
             case .idle, .loading:
-                ProgressView()
+                LoadingState(.roomList())
             case .loaded(_, let rows):
                 VStack(spacing: 0) {
                 syncIndicator
@@ -37,37 +37,30 @@ public struct RoomListView: View {
                     Section {
                         if let onMediaGallery, model.filter == .all {
                             Button { onMediaGallery() } label: {
-                                HStack(spacing: 12) {
+                                HStack(spacing: HaloSpacing.m) {
                                     Image(systemName: "photo.on.rectangle.angled")
-                                        .font(.system(size: 19, weight: .semibold))
-                                        .foregroundStyle(.white)
+                                        .font(HaloTypography.headline)
+                                        .foregroundStyle(HaloColor.onAccent)
                                         .frame(width: 44, height: 44)
-                                        .background(
-                                            LinearGradient(
-                                                colors: [.blue, .indigo],
-                                                startPoint: .topLeading,
-                                                endPoint: .bottomTrailing
-                                            ),
-                                            in: Circle()
-                                        )
-                                    VStack(alignment: .leading, spacing: 2) {
+                                        .background(HaloColor.accent, in: Circle())
+                                    VStack(alignment: .leading, spacing: HaloSpacing.xxs) {
                                         HStack {
                                             Text("Media Gallery")
-                                                .fontWeight(.medium)
+                                                .font(HaloTypography.bodyEmphasis)
                                                 .lineLimit(1)
                                             Spacer()
                                             Image(systemName: "chevron.right")
-                                                .font(.caption.weight(.semibold))
+                                                .font(HaloTypography.captionEmphasis)
                                                 .foregroundStyle(.tertiary)
                                         }
                                         Text("Photos, videos & files across rooms")
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
+                                            .font(HaloTypography.meta)
+                                            .foregroundStyle(HaloColor.textSecondary)
                                             .lineLimit(1)
                                     }
                                 }
                             }
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(HaloColor.textPrimary)
                             .accessibilityIdentifier("preset-media-gallery")
                         }
                         ForEach(rows) { row in
@@ -95,32 +88,27 @@ public struct RoomListView: View {
                                 .accessibilityIdentifier("invite-\(row.name)")
                             } else {
                             Button { onSelect(row.id) } label: {
-                                HStack(spacing: 12) {
-                                AvatarView(name: row.name, ref: row.avatar) { await model.avatarData($0) }
-                                VStack(alignment: .leading, spacing: 2) {
-                                HStack {
-                                    if row.isFavourite { Image(systemName: "star.fill").foregroundStyle(.yellow).imageScale(.small).accessibilityLabel("Favourite") }
-                                    Text(row.name).fontWeight(row.hasUnread ? .bold : .regular).lineLimit(1)
-                                    if row.isMuted { Image(systemName: "bell.slash").foregroundStyle(.secondary).imageScale(.small).accessibilityLabel("Muted") }
-                                    Spacer()
-                                    if let when = row.lastActivity { Text(ActivityTime.text(when)).font(.caption).foregroundStyle(.secondary) }
-                                    indicator(row.display)
-                                }
-                                if let preview = row.preview {
-                                    Text(preview).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
-                                        .accessibilityIdentifier("preview-\(row.name)")
-                                }
-                                }
+                                RoomRow(
+                                    name: row.name,
+                                    preview: row.preview,
+                                    timestamp: row.lastActivity.map(ActivityTime.text),
+                                    hasUnread: row.hasUnread,
+                                    isMuted: row.isMuted,
+                                    isFavourite: row.isFavourite,
+                                    indicator: Self.indicatorStyle(row.display),
+                                    previewIdentifier: "preview-\(row.name)"
+                                ) {
+                                    AvatarView(name: row.name, ref: row.avatar) { await model.avatarData($0) }
                                 }
                             }
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(HaloColor.textPrimary)
                                 .swipeActions(edge: .leading) {
-                                    Button("Read") { Task { await model.markRead(row.id) } }.tint(.blue)
-                                    Button(row.isFavourite ? "Unfavourite" : "Favourite") { Task { await model.toggleFavourite(row) } }.tint(.yellow)
+                                    Button("Read") { Task { await model.markRead(row.id) } }.tint(HaloColor.accent)
+                                    Button(row.isFavourite ? "Unfavourite" : "Favourite") { Task { await model.toggleFavourite(row) } }.tint(HaloColor.warning)
                                 }
                                 .swipeActions(edge: .trailing) {
-                                    Button("Unread") { Task { await model.markUnread(row.id) } }.tint(.orange)
-                                    Button(row.isMuted ? "Unmute" : "Mute") { Task { await model.toggleMute(row) } }.tint(.gray)
+                                    Button("Unread") { Task { await model.markUnread(row.id) } }.tint(HaloColor.attention)
+                                    Button(row.isMuted ? "Unmute" : "Mute") { Task { await model.toggleMute(row) } }.tint(HaloColor.textSecondary)
                                 }
                                 .contextMenu {
                                     if let onRoomInfo {
@@ -151,32 +139,23 @@ public struct RoomListView: View {
                 .accessibilityIdentifier("room-list")
                 .overlay {
                     if rows.isEmpty && !(onMediaGallery != nil && model.filter == .all) {
-                        ContentUnavailableView(Self.emptyTitle(model.filter), systemImage: "bubble.left.and.bubble.right")
+                        EmptyState(icon: "bubble.left.and.bubble.right", title: Self.emptyTitle(model.filter))
                     }
                 }
                 .safeAreaInset(edge: .bottom) {
                     if let message = model.actionError {
-                        HStack(spacing: 10) {
-                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red).accessibilityHidden(true)
-                            Text(message).font(.footnote).foregroundStyle(.primary)
-                            Spacer()
-                            Button { model.dismissActionError() } label: { Image(systemName: "xmark").font(.footnote.weight(.semibold)) }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(.secondary)
-                                .accessibilityLabel("Dismiss")
-                        }
-                        .padding(.horizontal, 14).padding(.vertical, 10)
-                        .background(.bar)
+                        HaloBanner(
+                            tone: .danger,
+                            icon: "exclamationmark.triangle.fill",
+                            message: message,
+                            onDismiss: { model.dismissActionError() }
+                        )
                     }
                 }
                 }
             case .failed(let message):
-                ContentUnavailableView {
-                    Label("Couldn't load rooms", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(message)
-                } actions: {
-                    Button("Try again") { Task { await model.retry() } }.buttonStyle(.borderedProminent)
+                ErrorState(title: "Couldn't load rooms", message: message) {
+                    Task { await model.retry() }
                 }
             }
         }
@@ -216,12 +195,12 @@ public struct RoomListView: View {
         }
     }
 
-    @ViewBuilder private func indicator(_ display: DisplayCount) -> some View {
+    private static func indicatorStyle(_ display: DisplayCount) -> UnreadIndicator.Style {
         switch display {
-        case .none: EmptyView()
-        case .dot: Circle().fill(.blue).frame(width: 10, height: 10).accessibilityLabel("Unread")
-        case .count(let n): Text("\(n)").font(.caption.bold()).padding(.horizontal, 7).background(.blue, in: Capsule()).foregroundStyle(.white)
-        case .mentions(let n): Text("@\(n)").font(.caption.bold()).padding(.horizontal, 7).background(.red, in: Capsule()).foregroundStyle(.white)
+        case .none: .none
+        case .dot: .dot
+        case .count(let n): .count(n)
+        case .mentions(let n): .mentions(n)
         }
     }
 }

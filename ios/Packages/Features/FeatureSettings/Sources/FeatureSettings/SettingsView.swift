@@ -206,7 +206,7 @@ public struct SettingsView: View {
                             HStack {
                                 Label("Verify this device", systemImage: "lock.shield")
                                 Spacer()
-                                Circle().fill(.yellow).frame(width: 10, height: 10)
+                                Circle().fill(HaloColor.warning).frame(width: 10, height: 10)
                             }
                         }
                         .accessibilityIdentifier("verify-device")
@@ -289,10 +289,10 @@ public struct SettingsView: View {
                             if let count = unexplainedCount {
                                 if count > 0 {
                                     Text("\(count) unexplained")
-                                        .font(.caption.bold())
-                                        .padding(.horizontal, 7).padding(.vertical, 2)
-                                        .background(.orange, in: Capsule())
-                                        .foregroundStyle(.white)
+                                        .font(HaloTypography.captionEmphasis)
+                                        .padding(.horizontal, 7).padding(.vertical, HaloSpacing.xxs)
+                                        .background(HaloColor.attention, in: Capsule())
+                                        .foregroundStyle(HaloColor.onAttention)
                                 } else {
                                     Text("0 unexplained").font(.caption).foregroundStyle(.secondary)
                                 }

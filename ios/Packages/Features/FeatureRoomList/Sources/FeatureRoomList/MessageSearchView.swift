@@ -1,5 +1,6 @@
 import Foundation
 import HaloApplication
+import HaloDesignSystem
 import HaloDomain
 import HaloFoundation
 import Observation
@@ -107,7 +108,7 @@ public struct MessageSearchView: View {
         NavigationStack {
             List {
                 if let error = model.errorMessage {
-                    Text(error).foregroundStyle(.red).font(.footnote)
+                    Text(error).foregroundStyle(HaloColor.danger).font(HaloTypography.meta)
                 }
                 ForEach(model.rows) { row in
                     Button {

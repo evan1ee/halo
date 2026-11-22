@@ -162,7 +162,7 @@ public struct RoomDetailsView: View {
             if let error = model.actionError {
                 Section {
                     HStack(spacing: 10) {
-                        Text(error).foregroundStyle(.red)
+                        Text(error).foregroundStyle(HaloColor.danger)
                         Spacer()
                         Button { model.dismissActionError() } label: { Image(systemName: "xmark").font(.footnote.weight(.semibold)) }
                             .buttonStyle(.plain)

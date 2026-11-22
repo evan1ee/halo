@@ -367,6 +367,8 @@ public actor SessionCoordinator {
 }
 
 /// Resumes a continuation exactly once; later calls are ignored.
+/// `@unchecked Sendable` justification (AGENTS.md §9, TD-14): the only mutable state (`continuation`) is
+/// exclusively guarded by `lock` (`NSLock`), taken and cleared atomically before resuming outside the lock.
 private final class ResumeOnce<Value: Sendable>: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<Value, Never>?

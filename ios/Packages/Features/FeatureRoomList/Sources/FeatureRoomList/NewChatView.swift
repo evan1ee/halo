@@ -97,7 +97,7 @@ public struct NewChatView: View {
                 } footer: {
                     Text("Enter a Matrix room alias (#room:server) or room ID (!id:server) to join directly.")
                 }
-                if let error = model.errorText { Section { Text(error).foregroundStyle(.red) } }
+                if let error = model.errorText { Section { Text(error).foregroundStyle(HaloColor.danger) } }
             }
             .navigationTitle("New chat")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(model.isWorking) } }
