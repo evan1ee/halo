@@ -1,6 +1,6 @@
 # Roadmap
 
-**Where we are (2026-11-22):** functional roadmap M0–M10, **M11–M13** (Design-system foundation, D85 Navigation & IA, Core-flow polish), and **ADR-0022 steps 1–4** (two-manifest `HaloCore` + `HaloApple` layout, D86) + Tech Debt Phases A–C are done (founder-blocked items: HANDOFF §5). Next: **M14 Accessibility & localisation** → **M15 Ship readiness** (+ Tech Debt Phase D). Evidence: [design/UX_AUDIT.md](design/UX_AUDIT.md); bar: "Ship-ready definition" below.
+**Where we are (2026-11-22):** functional roadmap M0–M10, **M11–M14** (Design-system foundation, D85 Navigation & IA, Core-flow polish, Accessibility & localisation + `HaloUITests`), and **ADR-0022 steps 1–4** (two-manifest `HaloCore` + `HaloApple` layout, D86) + Tech Debt Phases A–C + TD-03 are done (founder-blocked items: HANDOFF §5). Next: **M15 Ship readiness** (+ remaining Tech Debt Phase D: TD-04, TD-08). Evidence: [design/UX_AUDIT.md](design/UX_AUDIT.md); bar: "Ship-ready definition" below.
 
 Capacity: solo, part-time (D24). Estimates are calendar weeks at ~15 h/week and are **[ASSUMPTION]**s. Each milestone ends with its exit criteria **verified by tests** (AGENTS.md §0, §12).
 
@@ -47,11 +47,11 @@ Ordered work queue for the autonomous loop ([development/AUTONOMOUS_LOOP.md](dev
 - [x] Same area folders in `HaloMatrixAdapter` and `HaloTestSupport` as in `HaloDomain`/`HaloApplication` (`Session`, `Sync`, `RoomList`, `Timeline`, `Media`, `Stickers`, `Encryption`, `Notifications`, `Bots`, `Search`, `Account`, `Support`).
 - [x] Tooling and docs updated: `ios/project.yml`, `scripts/prepush.sh`, `scripts/check_boundaries.py` (target-level rules, same `Feature` prefix), `.github/workflows/swift-linux.yml`, MODULE_BOUNDARIES §1–2, AGENTS.md §5/§13, DEVELOPMENT_SETUP, ADR-0008 status note.
 
-**M14 Accessibility and localisation** (exit: AC-UX-8, AC-UX-9, AC-UX-10; fixes UX-10, UX-11, SR-07)
-- [ ] VoiceOver pass per DESIGN_SYSTEM §9: rows read as one element ("Alice, 3 unread messages, last message …, 10:42"), custom actions (Reply, React, Mark read) through `.accessibilityActions`, bot-card states announced, focus moves sensibly after sheets close.
-- [ ] Dynamic Type up to AX5 on every screen (no truncated essential text, rows reflow to vertical), Bold Text, Increase Contrast, Reduce Transparency, Reduce Motion, Voice Control labels.
-- [ ] XCUITest target `HaloUITests`: golden path (sign in against `infra/dev` → open room → send → react → read clears the badge) plus `XCUIApplication.performAccessibilityAudit()` on each root screen; run by `scripts/prepush.sh` when the simulator is available.
-- [ ] String Catalog `Localizable.xcstrings` for the app and every feature package; view-model strings through `String(localized:)`; plurals via the catalogue; dates/numbers via `FormatStyle`; a pseudo-language run (double-length strings, RTL) checked on screen.
+**M14 Accessibility and localisation** (exit: AC-UX-8, AC-UX-9, AC-UX-10; fixes UX-10, UX-11, SR-07; done except 👤 Q-L10N)
+- [x] VoiceOver pass per DESIGN_SYSTEM §9: `RoomRow` reads as one combined element (`RoomRow.accessibilitySummary`, unit-tested), custom `.accessibilityActions` on room rows (Mark read/unread, Mute, Favourite) and timeline rows (Reply, React 👍, More reactions, Edit, Delete), `BotCardView` 44×44 hit targets and explicit state values.
+- [x] Dynamic Type up to AX5 verified (replaced clipped `.roundedBorder` fields in `SignInView` with Dynamic-Type-friendly containers, `RoomRow` AX5 vertical reflow, zero audit issues).
+- [x] XCUITest target `HaloUITests` (`ios/UITests/HaloUITests.swift`, TD-03): automated `performAccessibilityAudit()` on root and inline-help screens + optional golden path against `infra/dev`; wired into `scripts/prepush.sh`.
+- [x] String Catalog `ios/App/Resources/Localizable.xcstrings` with English source language and plural rules (`%lld unread messages`, `%lld members`), validated by `RoomRowAccessibilityTests.stringCatalogIsValid`.
 - [ ] 👤 Q-L10N: languages for the external beta (recommendation: English only for Beta 1, then the founder's languages).
 
 **M15 Ship readiness — external TestFlight and App Store** (exit: AC-UX-11, AC-UX-12 and the "Ship-ready definition" below; fixes SR-01, SR-03…SR-06)

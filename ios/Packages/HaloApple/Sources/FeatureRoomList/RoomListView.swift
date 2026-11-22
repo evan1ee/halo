@@ -118,54 +118,7 @@ public struct RoomListView<SearchResults: View>: View {
                                 }
                                 .accessibilityIdentifier("invite-\(row.name)")
                             } else {
-                            Button { onSelect(row.id) } label: {
-                                RoomRow(
-                                    name: row.name,
-                                    preview: row.preview,
-                                    timestamp: row.lastActivity.map { ActivityTime.text($0) },
-                                    hasUnread: row.hasUnread,
-                                    isMuted: row.isMuted,
-                                    isFavourite: row.isFavourite,
-                                    indicator: Self.indicatorStyle(row.display),
-                                    previewIdentifier: "preview-\(row.name)"
-                                ) {
-                                    AvatarView(name: row.name, ref: row.avatar) { [model] in await model.avatarData($0) }
-                                }
-                            }
-                            .foregroundStyle(HaloColor.textPrimary)
-                                .swipeActions(edge: .leading) {
-                                    Button { Task { await model.markRead(row.id) } } label: {
-                                        Label("Read", systemImage: "envelope.open")
-                                    }
-                                    .tint(HaloColor.accent)
-                                    Button { Task { await model.toggleFavourite(row) } } label: {
-                                        Label(row.isFavourite ? "Unfavourite" : "Favourite", systemImage: row.isFavourite ? "star.slash" : "star.fill")
-                                    }
-                                    .tint(HaloColor.warning)
-                                }
-                                .swipeActions(edge: .trailing) {
-                                    Button { Task { await model.markUnread(row.id) } } label: {
-                                        Label("Unread", systemImage: "envelope.badge")
-                                    }
-                                    .tint(HaloColor.attention)
-                                    Button { Task { await model.toggleMute(row) } } label: {
-                                        Label(row.isMuted ? "Unmute" : "Mute", systemImage: row.isMuted ? "bell" : "bell.slash")
-                                    }
-                                    .tint(HaloColor.textSecondary)
-                                }
-                                .contextMenu {
-                                    if let onRoomInfo {
-                                        Button("Room info", systemImage: "info.circle") { onRoomInfo(row.id) }
-                                    }
-                                    Button("Mark as read", systemImage: "envelope.open") { Task { await model.markRead(row.id) } }
-                                    Button("Mark as unread", systemImage: "envelope.badge") { Task { await model.markUnread(row.id) } }
-                                    Button(row.isFavourite ? "Unfavourite" : "Favourite", systemImage: row.isFavourite ? "star.slash" : "star") {
-                                        Task { await model.toggleFavourite(row) }
-                                    }
-                                    Button(row.isMuted ? "Unmute" : "Mute", systemImage: row.isMuted ? "bell" : "bell.slash") {
-                                        Task { await model.toggleMute(row) }
-                                    }
-                                }
+                                joinedRoomRow(row)
                             }
                         }
                         if model.canShowMore && trimmedQuery.isEmpty {
@@ -247,6 +200,75 @@ public struct RoomListView<SearchResults: View>: View {
         case .count(let n): .count(n)
         case .mentions(let n): .mentions(n)
         }
+    }
+
+    @ViewBuilder
+    private func joinedRoomRow(_ row: RoomListViewModel.Row) -> some View {
+        let content = Button { onSelect(row.id) } label: {
+            RoomRow(
+                name: row.name,
+                preview: row.preview,
+                timestamp: row.lastActivity.map { ActivityTime.text($0) },
+                hasUnread: row.hasUnread,
+                isMuted: row.isMuted,
+                isFavourite: row.isFavourite,
+                indicator: Self.indicatorStyle(row.display),
+                previewIdentifier: "preview-\(row.name)"
+            ) {
+                AvatarView(name: row.name, ref: row.avatar) { [model] in await model.avatarData($0) }
+            }
+        }
+        .foregroundStyle(HaloColor.textPrimary)
+
+        content
+            .accessibilityAction(named: row.hasUnread ? "Mark read" : "Mark unread") {
+                Task {
+                    if row.hasUnread {
+                        await model.markRead(row.id)
+                    } else {
+                        await model.markUnread(row.id)
+                    }
+                }
+            }
+            .accessibilityAction(named: row.isMuted ? "Unmute" : "Mute") {
+                Task { await model.toggleMute(row) }
+            }
+            .accessibilityAction(named: row.isFavourite ? "Unfavourite" : "Favourite") {
+                Task { await model.toggleFavourite(row) }
+            }
+            .swipeActions(edge: .leading) {
+                Button { Task { await model.markRead(row.id) } } label: {
+                    Label("Read", systemImage: "envelope.open")
+                }
+                .tint(HaloColor.accent)
+                Button { Task { await model.toggleFavourite(row) } } label: {
+                    Label(row.isFavourite ? "Unfavourite" : "Favourite", systemImage: row.isFavourite ? "star.slash" : "star.fill")
+                }
+                .tint(HaloColor.warning)
+            }
+            .swipeActions(edge: .trailing) {
+                Button { Task { await model.markUnread(row.id) } } label: {
+                    Label("Unread", systemImage: "envelope.badge")
+                }
+                .tint(HaloColor.attention)
+                Button { Task { await model.toggleMute(row) } } label: {
+                    Label(row.isMuted ? "Unmute" : "Mute", systemImage: row.isMuted ? "bell" : "bell.slash")
+                }
+                .tint(HaloColor.textSecondary)
+            }
+            .contextMenu {
+                if let onRoomInfo {
+                    Button("Room info", systemImage: "info.circle") { onRoomInfo(row.id) }
+                }
+                Button("Mark as read", systemImage: "envelope.open") { Task { await model.markRead(row.id) } }
+                Button("Mark as unread", systemImage: "envelope.badge") { Task { await model.markUnread(row.id) } }
+                Button(row.isFavourite ? "Unfavourite" : "Favourite", systemImage: row.isFavourite ? "star.slash" : "star") {
+                    Task { await model.toggleFavourite(row) }
+                }
+                Button(row.isMuted ? "Unmute" : "Mute", systemImage: row.isMuted ? "bell" : "bell.slash") {
+                    Task { await model.toggleMute(row) }
+                }
+            }
     }
 }
 

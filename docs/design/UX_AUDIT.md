@@ -27,8 +27,6 @@ Halo should be indistinguishable in feel from Messages, Mail and Photos while ke
 | ID | Sev. | Finding | Evidence | Breaks | Fix |
 |---|---|---|---|---|---|
 | UX-04 | Blocker | Sign-in artwork pending Q-BRAND (founder's halo disc `AppIcon` and `Assets.xcassets` landed in M11) | `ios/App/Resources/Assets.xcassets`; `FeatureOnboarding/SignInView.swift` | App Store submission; DESIGN_SYSTEM §5 | Q-BRAND (👤) |
-| UX-10 | High | Accessibility is unverified: VoiceOver pass, AX5 Dynamic Type check across all screens, automated `performAccessibilityAudit()` | NFR-6 | NFR-6, DESIGN_SYSTEM §9 | M14 |
-| UX-11 | High | Not localisation-ready: no String Catalog, view-model strings are plain `String`s, plurals built by hand | no `*.xcstrings` | NFR-9 | M14 (Q-L10N) |
 | UX-16 | Low | No system integrations users expect from a native messenger: share extension, App Intents / Siri, Spotlight, Focus filter, Live Activity for uploads | none present | NAVIGATION §3 (share extension P2) | Post-1.0 (M16 backlog) |
 
 ## 3. Findings — ship readiness
@@ -41,7 +39,6 @@ Halo should be indistinguishable in feel from Messages, Mail and Photos while ke
 | SR-04 | High | No App Store Connect metadata: name, subtitle, keywords, screenshots (6.9" and 6.3"), support URL, privacy-policy URL (Q-APPSTORE) | M15, 👤 |
 | SR-05 | High | No in-app path for beta feedback; testers must find the diagnostics export themselves | M15 |
 | SR-06 | Medium | Performance targets NFR-1/NFR-2 were never measured on a device with XCTest metrics | M15 |
-| SR-07 | Medium | No UI smoke test (XCUITest) of the golden path; BUILD_AND_RELEASE §4 step 1 asks for one | M14 |
 
 ## 4. What is already good (keep it)
 `ContentUnavailableView` for empty states (16 uses), `.searchable` lists, swipe actions and context menus on rows, `ShareLink`
