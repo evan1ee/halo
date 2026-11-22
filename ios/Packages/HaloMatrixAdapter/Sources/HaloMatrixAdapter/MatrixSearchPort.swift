@@ -10,6 +10,7 @@ import Synchronization
 public final class MatrixSearchPort: SearchPort {
     private struct State {
         var service: SearchService?
+        var lastQuery = ""
         var hits: [MessageSearchHit] = []
         var isLoading = false
         var hasMore = false
@@ -46,15 +47,16 @@ public final class MatrixSearchPort: SearchPort {
     public func setQuery(_ query: String) async throws(HaloError) {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            update { state in
-                state.hits = []
-                state.isLoading = false
-                state.hasMore = false
-            }
+            reset()
             return
         }
+        // If re-searching the exact same query (e.g. after new messages arrived or reopening the sheet),
+        // recreate the SearchService so the SDK does not treat `setQuery` as a no-op.
+        let needsReset = state.withLock { $0.service != nil && $0.lastQuery == trimmed }
+        if needsReset { reset() }
         let service = try await ensureService()
         update { state in
+            state.lastQuery = trimmed
             state.hits = []
             state.isLoading = true
             state.hasMore = false
@@ -84,6 +86,7 @@ public final class MatrixSearchPort: SearchPort {
             for handle in state.handles { handle.cancel() }
             state.handles.removeAll()
             state.service = nil
+            state.lastQuery = ""
             state.hits = []
             state.isLoading = false
             state.hasMore = false

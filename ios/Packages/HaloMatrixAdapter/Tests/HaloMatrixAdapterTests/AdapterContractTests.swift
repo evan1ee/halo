@@ -1299,6 +1299,20 @@ struct AdapterContractTests {
         }
         let hit = try #require(found, "SearchService did not return the sent message containing \(needle)")
         #expect(hit.roomID == room && hit.body.contains(needle))
+
+        // Regression: clearing and re-searching the same query must still return results.
+        try await search.setQuery("")
+        try await search.setQuery(needle)
+        let refound: MessageSearchHit? = try await within(seconds: 30) {
+            for await snap in snapshots {
+                if let hit = snap.hits.first(where: { $0.body.contains(needle) }) {
+                    return hit
+                }
+            }
+            return nil
+        }
+        #expect(refound?.eventID == hit.eventID)
+
         await opened.close()
         search.reset()
         try await session.logout()

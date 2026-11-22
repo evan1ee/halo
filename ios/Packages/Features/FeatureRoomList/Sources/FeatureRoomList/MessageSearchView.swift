@@ -20,6 +20,7 @@ public final class MessageSearchViewModel: Identifiable {
     }
 
     public var query = ""
+    public private(set) var searchedQuery = ""
     public private(set) var rows: [ResultRow] = []
     public private(set) var isLoading = false
     public private(set) var hasMore = false
@@ -39,6 +40,9 @@ public final class MessageSearchViewModel: Identifiable {
     public func start() async {
         guard observation == nil else { return }
         await coordinator.begin()
+        if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            await coordinator.clear()
+        }
         let stream = await coordinator.snapshots()
         observation = Task { [weak self] in
             for await snap in stream {
@@ -48,7 +52,12 @@ public final class MessageSearchViewModel: Identifiable {
     }
 
     public func submit() async {
-        await coordinator.search(query)
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            await coordinator.clear()
+        } else {
+            await coordinator.search(trimmed)
+        }
     }
 
     public func loadMore() async {
@@ -61,6 +70,7 @@ public final class MessageSearchViewModel: Identifiable {
     }
 
     private func apply(_ snap: SearchCoordinator.Snapshot) {
+        searchedQuery = snap.query
         isLoading = snap.isLoading
         hasMore = snap.hasMore
         errorMessage = snap.error.map { error in
@@ -125,20 +135,33 @@ public struct MessageSearchView: View {
                 }
             }
             .overlay {
+                let trimmed = model.query.trimmingCharacters(in: .whitespacesAndNewlines)
                 if model.isLoading && model.rows.isEmpty {
                     ProgressView()
-                } else if model.rows.isEmpty && !model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && model.errorMessage == nil {
-                    ContentUnavailableView.search(text: model.query)
-                } else if model.rows.isEmpty && model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                } else if model.rows.isEmpty && !trimmed.isEmpty && model.searchedQuery == trimmed && model.errorMessage == nil {
+                    ContentUnavailableView.search(text: trimmed)
+                } else if model.rows.isEmpty && trimmed.isEmpty {
                     ContentUnavailableView("Search messages", systemImage: "magnifyingglass", description: Text("Find messages across your rooms."))
                 }
             }
             .navigationTitle("Search")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .searchable(text: $model.query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search messages")
+            #else
             .searchable(text: $model.query, prompt: "Search messages")
+            #endif
             .onSubmit(of: .search) { Task { await model.submit() } }
+            .task(id: model.query) {
+                let trimmed = model.query.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.isEmpty {
+                    await model.submit()
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled else { return }
+                await model.submit()
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }

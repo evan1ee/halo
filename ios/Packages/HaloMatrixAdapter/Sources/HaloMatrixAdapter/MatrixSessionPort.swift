@@ -45,6 +45,7 @@ public actor MatrixSessionPort: SessionPort {
     /// Set when a room's send queue reported an error (which disables that queue); the next successful sync re-enables them.
     private var sendQueueErrors: SendQueueErrors?
     private var sendQueueErrorsHandle: TaskHandle?
+    private var searchBackfillHandle: TaskHandle?
     private var events: [UUID: AsyncStream<SessionEvent>.Continuation] = [:]
     /// Pending OIDC / OAuth 2.0 login flow awaiting the redirect callback URL (AUTHENTICATION FR-3).
     private var pendingOAuth: (client: Client, storeID: String, passphrase: String, authData: OAuthAuthorizationData)?
@@ -437,6 +438,8 @@ public actor MatrixSessionPort: SessionPort {
             sendQueueErrorsHandle?.cancel()
             sendQueueErrorsHandle = client.subscribeToSendQueueStatus(listener: errors)
             sendQueueErrors = errors
+            searchBackfillHandle?.cancel()
+            searchBackfillHandle = client.runSearchBackfill(strategy: .foreground)
         }
         authDelegateHandle?.cancel()
         let auth = AuthDelegate { [weak self] isSoftLogout in
@@ -473,6 +476,8 @@ public actor MatrixSessionPort: SessionPort {
         sendQueueErrorsHandle?.cancel()
         sendQueueErrorsHandle = nil
         sendQueueErrors = nil
+        searchBackfillHandle?.cancel()
+        searchBackfillHandle = nil
     }
 
     fileprivate func emit(_ event: SessionEvent) {
@@ -499,7 +504,7 @@ public actor MatrixSessionPort: SessionPort {
         }
         self.delegate = delegate
         let slidingSyncBuilder: SlidingSyncVersionBuilder = enablesSlidingSync ? .native : .none
-        return try await ClientBuilder()
+        var builder = ClientBuilder()
             .serverNameOrHomeserverUrl(serverNameOrUrl: homeserver)
             .sessionPaths(dataPath: data.path, cachePath: cache.path)
             .sqliteStore(config: SqliteStoreBuilder(dataPath: data.path, cachePath: cache.path).passphrase(passphrase: passphrase))
@@ -508,7 +513,14 @@ public actor MatrixSessionPort: SessionPort {
             .autoEnableBackups(autoEnableBackups: true)
             .crossProcessLockConfig(crossProcessLockConfig: .multiProcess(holderName: holderName))
             .setSessionDelegate(sessionDelegate: delegate)
-            .build()
+        if sendsMessages {
+            let searchIndex = baseDirectory.appendingPathComponent(storeID, isDirectory: true).appendingPathComponent("search-index")
+            try FileManager.default.createDirectory(at: searchIndex, withIntermediateDirectories: true)
+            builder = builder
+                .withSearchIndexStore(path: searchIndex.path, key: passphrase)
+                .enableAutomaticBackPagination(enableAutomaticBackPagination: true)
+        }
+        return try await builder.build()
     }
 
     static func sdkSession(from stored: StoredSession) throws(HaloError) -> Session {
