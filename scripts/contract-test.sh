@@ -40,10 +40,10 @@ else
   done
 fi
 
-cd "$(dirname "$0")/../ios/Packages/HaloMatrixAdapter"
+cd "$(dirname "$0")/../ios/Packages/HaloApple"
 log="$(mktemp -t halo-contract)"
 status=0
-xcodebuild -scheme HaloMatrixAdapter -destination "platform=iOS Simulator,name=${HALO_SIM:-iPhone 17}" test "${only[@]}" >"$log" 2>&1 || status=$?
+xcodebuild -scheme HaloApple-Package -destination "platform=iOS Simulator,name=${HALO_SIM:-iPhone 17}" test "${only[@]}" >"$log" 2>&1 || status=$?
 grep -E '^(✔|✘) (Test|Suite)|Test run with' "$log" || true
 [[ $status -eq 0 ]] || echo "contract-test: failed (exit $status); full log: $log" >&2
 exit "$status"

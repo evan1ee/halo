@@ -1,4 +1,5 @@
-# Source of truth for ios/Halo.xcodeproj (ADR-0017). Regenerate after editing: `cd ios && xcodegen --spec project.yml --project .`
+# Source of truth for ios/Halo.xcodeproj (ADR-0017, ADR-0022 step 4).
+# Regenerate after editing: `cd ios && xcodegen --spec project.yml --project .`
 # The development team is deliberately not set here: pass DEVELOPMENT_TEAM=<id> to xcodebuild or choose it in Xcode.
 name: Halo
 options:
@@ -13,50 +14,52 @@ configs:
   Beta: release
   Release: release
 packages:
-  HaloMatrixAdapter: {path: Packages/HaloMatrixAdapter}
-  HaloApplication: {path: Packages/HaloApplication}
-  HaloDomain: {path: Packages/HaloDomain}
-  HaloFoundation: {path: Packages/HaloFoundation}
-  HaloPlatform: {path: Packages/HaloPlatform}
-  HaloPersistence: {path: Packages/HaloPersistence}
-  HaloDesignSystem: {path: Packages/HaloDesignSystem}
-  HaloBotRendering: {path: Packages/HaloBotRendering}
-  FeatureOnboarding: {path: Packages/Features/FeatureOnboarding}
-  FeatureRoomList: {path: Packages/Features/FeatureRoomList}
-  FeatureTimeline: {path: Packages/Features/FeatureTimeline}
-  FeatureComposer: {path: Packages/Features/FeatureComposer}
-  FeatureMedia: {path: Packages/Features/FeatureMedia}
-  FeatureStickers: {path: Packages/Features/FeatureStickers}
-  FeatureSettings: {path: Packages/Features/FeatureSettings}
-  FeatureRoomDetails: {path: Packages/Features/FeatureRoomDetails}
-  FeatureBotActivity: {path: Packages/Features/FeatureBotActivity}
-  FeatureSearch: {path: Packages/Features/FeatureSearch}
-  FeatureProfile: {path: Packages/Features/FeatureProfile}
+  HaloCore: {path: Packages/HaloCore}
+  HaloApple: {path: Packages/HaloApple}
 targets:
   Halo:
     type: application
     platform: iOS
     sources: [App]
     dependencies:
-      - package: HaloMatrixAdapter
-      - package: HaloApplication
-      - package: HaloDomain
-      - package: HaloFoundation
-      - package: HaloPlatform
-      - package: HaloPersistence
-      - package: HaloDesignSystem
-      - package: HaloBotRendering
-      - package: FeatureOnboarding
-      - package: FeatureRoomList
-      - package: FeatureTimeline
-      - package: FeatureComposer
-      - package: FeatureMedia
-      - package: FeatureStickers
-      - package: FeatureSettings
-      - package: FeatureRoomDetails
-      - package: FeatureBotActivity
-      - package: FeatureSearch
-      - package: FeatureProfile
+      - package: HaloCore
+        product: HaloFoundation
+      - package: HaloCore
+        product: HaloDomain
+      - package: HaloCore
+        product: HaloApplication
+      - package: HaloApple
+        product: HaloMatrixAdapter
+      - package: HaloApple
+        product: HaloPlatform
+      - package: HaloApple
+        product: HaloPersistence
+      - package: HaloApple
+        product: HaloDesignSystem
+      - package: HaloApple
+        product: HaloBotRendering
+      - package: HaloApple
+        product: FeatureOnboarding
+      - package: HaloApple
+        product: FeatureRoomList
+      - package: HaloApple
+        product: FeatureTimeline
+      - package: HaloApple
+        product: FeatureComposer
+      - package: HaloApple
+        product: FeatureMedia
+      - package: HaloApple
+        product: FeatureStickers
+      - package: HaloApple
+        product: FeatureSettings
+      - package: HaloApple
+        product: FeatureRoomDetails
+      - package: HaloApple
+        product: FeatureBotActivity
+      - package: HaloApple
+        product: FeatureSearch
+      - package: HaloApple
+        product: FeatureProfile
       - target: HaloNotificationService
         embed: true
     settings:
@@ -81,12 +84,18 @@ targets:
     platform: iOS
     sources: [NotificationService]
     dependencies:
-      - package: HaloApplication
-      - package: HaloMatrixAdapter
-      - package: HaloDomain
-      - package: HaloFoundation
-      - package: HaloPersistence
-      - package: HaloPlatform
+      - package: HaloCore
+        product: HaloFoundation
+      - package: HaloCore
+        product: HaloDomain
+      - package: HaloCore
+        product: HaloApplication
+      - package: HaloApple
+        product: HaloMatrixAdapter
+      - package: HaloApple
+        product: HaloPersistence
+      - package: HaloApple
+        product: HaloPlatform
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(HALO_NSE_BUNDLE_ID)
