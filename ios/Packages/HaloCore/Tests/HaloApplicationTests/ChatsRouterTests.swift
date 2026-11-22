@@ -94,3 +94,42 @@ struct ChatsRouterTests {
         #expect(saved.privacyBlur == false)
     }
 }
+
+@Suite("ChatsRouter on iPad (M16, D91)")
+struct ChatsRouterSplitTests {
+    private let roomA = try! RoomID("!a:x.org")
+    private let roomB = try! RoomID("!b:x.org")
+
+    @Test("opening another room replaces the detail instead of stacking, and a thread still stacks on its room")
+    func roomsReplace() {
+        var router = ChatsRouter(replacesDetail: true)
+        router.openRoom(roomA)
+        router.openRoom(roomB)
+        #expect(router.path == [.room(roomB, focus: nil)])
+        router.openThread(room: roomB, rootEvent: try! EventID("$t"))
+        #expect(router.path.count == 2)
+        router.openRoom(roomA)
+        #expect(router.path == [.room(roomA, focus: nil)])
+    }
+
+    @Test("a top-level destination replaces a room; one opened from another destination stacks on it")
+    func destinations() {
+        var router = ChatsRouter(replacesDetail: true)
+        router.openRoom(roomA)
+        router.push(.settings)
+        #expect(router.path == [.settings])
+        router.push(.stickerLibrary)
+        #expect(router.path == [.settings, .stickerLibrary])
+        router.openRoom(roomB)
+        #expect(router.path == [.room(roomB, focus: nil)])
+    }
+
+    @Test("the iPhone router still stacks")
+    func phoneStacks() {
+        var router = ChatsRouter()
+        router.openRoom(roomA)
+        router.openRoom(roomB)
+        router.push(.settings)
+        #expect(router.path.count == 3)
+    }
+}

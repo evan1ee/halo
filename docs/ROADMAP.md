@@ -91,10 +91,12 @@ Halo is ready for external testers when **all** of these hold; each line names h
 - [ ] 📱 Share extension on a physical device: the App Group container is shared only in signed builds; check Safari (link), Photos (several photos), Files (PDF) and a > 50 MiB file end to end.
 - [x] Unread widget (D89): `HaloWidgetExtension`, small and lock-screen families, count only; `UnreadWidgetSnapshot` tests, privacy manifest check.
 - [x] Focus filter (D90): `HaloFocusFilter` + `FocusChats`; room list `effectiveFilter` with a "Show all chats" banner; `RoomListFocusTests`, `FocusChatsTests`.
+- [x] iPad layout (D91): iPhone + iPad target, split view with the chat list as sidebar, `ChatsRouter.replacesDetail` + `ChatsRouterSplitTests`, readable sign-in column. Built and launched on iPad Pro 13-inch (M5) simulator (sign-in only; signed-in needs a homeserver).
+- [ ] 📱 iPad on a device or with the dev homeserver: sidebar selection, collapse in Slide Over / Split View, rotation, Settings and Stickers in the detail column.
 - [ ] 📱 Focus filter on a device: add Halo to a Focus, turn it on and off, check the list narrows and restores.
 - [ ] 📱 Widgets on a device: add the small and lock-screen widgets, receive a push and check the count refreshes.
 - [ ] 📱 App Intents on a device: the Siri phrase and a Spotlight result opening a chat (the simulator can't speak to Siri).
-- [ ] Send-by-Siri, chat-list widget, iPad layout, calls (D43).
+- [ ] Send-by-Siri, chat-list widget, iPad extras (three columns, shortcuts, drag and drop), calls (D43).
 
 ## Release plan
 | Release | Contents | Audience | Entry |

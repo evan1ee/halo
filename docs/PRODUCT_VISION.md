@@ -25,7 +25,7 @@ Discord's and native, structured rendering of personal assistant bots.
 - Voice/video calls in the MVP (D43).
 - An in-app LLM or AI backend (D18).
 - Feature parity with Element X in every corner (e.g. spaces management, polls creation, location sharing, widgets) before the MVP.
-- Android, macOS, iPad-optimised layouts (iPad runs the iPhone layout).
+- Android, macOS, iPad-optimised layouts for 1.0 (iPad runs the iPhone layout until M16; the split-view layout landed after 1.0, D91).
 
 ## Core principles
 

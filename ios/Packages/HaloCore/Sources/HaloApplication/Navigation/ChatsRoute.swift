@@ -20,9 +20,13 @@ public enum ChatsRoute: Hashable, Codable, Sendable {
 /// route through `ChatsRouter` so pushes are never duplicated and left rooms are pruned on relaunch.
 public struct ChatsRouter: Sendable, Equatable {
     public var path: [ChatsRoute]
+    /// `true` on iPad (M16, D91): the path is the detail column of a split view, so opening a room or a top-level
+    /// destination from the sidebar replaces the detail instead of stacking on it.
+    public var replacesDetail: Bool
 
-    public init(path: [ChatsRoute] = []) {
+    public init(path: [ChatsRoute] = [], replacesDetail: Bool = false) {
         self.path = path
+        self.replacesDetail = replacesDetail
     }
 
     /// Opens `room` (optionally focusing `focus`). Avoids pushing a duplicate room when it is already on top;
@@ -34,6 +38,7 @@ public struct ChatsRouter: Sendable, Equatable {
             }
             return
         }
+        if replacesDetail { path.removeAll() }
         path.append(.room(room, focus: focus))
     }
 
@@ -53,6 +58,9 @@ public struct ChatsRouter: Sendable, Equatable {
             openThread(room: room, rootEvent: rootEvent)
         case .settings, .stickerLibrary, .activity, .globalMediaGallery:
             guard path.last != route else { return }
+            // A destination opened from the sidebar replaces a room; one opened from another destination (Settings →
+            // Stickers) stacks on it.
+            if replacesDetail, case .room = path.last { path.removeAll() }
             path.append(route)
         }
     }
