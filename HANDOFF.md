@@ -1,6 +1,6 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-22 · Branch: `feat/m16-focus-filter` · PRs #1–#57 merged
+Last updated: 2026-11-22 · Branch: `feat/m16-ipad` · PRs #1–#57 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
@@ -12,6 +12,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log`.
+- **M16 iPad layout (`feat/m16-ipad`, stacked on PR #61, D91):** app targets iPad (`TARGETED_DEVICE_FAMILY = 1,2`, all orientations); on iPad `RootView` shows a `NavigationSplitView` (room list sidebar, router path as detail, `preferredCompactColumn` follows the path); `ChatsRouter.replacesDetail` + tests; `roomListRoot`/`splitShell` extracted in `HaloApp.swift`; sign-in column capped at 520 pt. iPhone path unchanged.
 - **M16 Focus filter (`feat/m16-focus-filter`, stacked on PR #60, D90):** `HaloFocusFilter` (`SetFocusFilterIntent`, People/Rooms/Favourites/Unread) sets `FocusFilterState`; `RoomListViewModel.setFocus`/`effectiveFilter`/`suspendFocusFilter` and a "Show all chats" banner; the app re-reads `HaloFocusFilter.current` on activation. Notifications and badge untouched.
 - **M16 Unread widget (`feat/m16-widgets`, stacked on PR #59, D89):** `HaloWidgetExtension` (small + lock-screen families) shows the `AttentionCache` total from the App Group, count only, `privacySensitive`, stale after 6 h; `SystemBadge` reloads timelines; `UnreadWidgetSnapshot` (HaloDomain) + tests; extension privacy manifest checked.
 - **M16 App Intents + Spotlight (`feat/m16-app-intents`, stacked on PR #58, D88):** opt-in setting "Chats in Siri and Spotlight" (default off); `ChatShortcutPublisher` (HaloApplication) → `SystemChatShortcutStore` (App Group JSON + `CSSearchableIndex`, names only, ≤ 100); `OpenChatIntent`/`ChatEntity`/`HaloShortcuts` in `ios/App/Intents/`; intent and Spotlight activity set `OpenChatRequest`, the root view opens the room via `ChatsRouter`. Tests: `ChatShortcutPublisherTests`, `SystemChatShortcutStoreTests`, preference tests.
@@ -32,6 +33,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D86), [docs/adr/RE
 - **D84 / D85 / D86 (ADR-0022):** Apple-native north star; single `NavigationStack` shell; module layout v2 (all 4 steps complete).
 
 ## 4. Modified files (this push)
+- **M16 iPad:** `ios/App/HaloApp.swift`, `ios/Config/Base.xcconfig`, `ios/project.yml`, `HaloApplication/Navigation/ChatsRoute.swift` + `ChatsRouterTests.swift`, `FeatureOnboarding/SignInView.swift`, `docs/{DECISION_LOG,ROADMAP,PRODUCT_VISION}.md`.
 - **M16 Focus filter:** `HaloDomain/RoomList/RoomList.swift` (`FocusChats`), `HaloApplication/Shortcuts/FocusFilterState.swift`, `FeatureRoomList/RoomListViewModel.swift` + `RoomListView.swift`, `ios/App/Intents/FocusFilterIntent.swift`, `AppRoot.swift`, `HaloApp.swift`, tests, `docs/{DECISION_LOG,ROADMAP}.md`.
 - **M16 widget:** `ios/WidgetExtension/*`, `ios/project.yml`, `ios/Config/Base.xcconfig`, `HaloDomain/Widgets/UnreadWidgetSnapshot.swift` + test, `HaloPlatform/SystemBadge.swift`, `AcknowledgementsTests.swift`, `docs/{DECISION_LOG,ROADMAP}.md`, `docs/architecture/MODULE_BOUNDARIES.md`.
 - **M16 App Intents:** `HaloDomain/Shortcuts/ChatShortcut.swift`, `HaloApplication/Shortcuts/ChatShortcutPublisher.swift`, `HaloTestSupport/Shortcuts/FakeChatShortcutPort.swift`, `HaloPlatform/SystemChatShortcutStore.swift`, preferences (`PreferencesPort`, `PreferencesStore`, `UserDefaultsPreferencesStore`, `AppPreferences`, `SettingsView`), `ios/App/Intents/OpenChatIntent.swift`, `AppRoot.swift`, `HaloApp.swift`, tests, `docs/{DECISION_LOG,ROADMAP}.md`, `docs/security/PRIVACY.md`.
@@ -51,6 +53,7 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 - 👤 **R-18 & R-21 (upstream SDK gaps):** `SyncSettingsV2` filter and queued `sendRaw`/`sendSticker` need upstream `matrix-rust-sdk` PR + SDK bump.
 - 👤 **R-24 (pushkin & Beta/Release push gateway):** decide `infra/sygnal/` pushkin vs amending ADR-0015; configure Beta/Release push gateway + APNs keys + TestFlight.
 - 👤 **UX/ship open questions (D84):** **Q-BRAND** (sign-in illustration; halo disc `AppIcon` landed), **Q-ONBOARD-SERVER**, **Q-L10N**, **Q-APPSTORE** (App Store metadata, privacy policy & support pages), legal review (D38), export compliance (V-LEGAL), privacy nutrition labels ([docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md)).
+- 📱 **iPad on a device / dev homeserver (D91):** only the signed-out screen was checked in the iPad simulator. Check sidebar selection, Slide Over / Split View collapse, rotation, and Settings/Stickers in the detail column.
 - 📱 **Focus filter on a device (D90):** add Halo's filter to a Focus, toggle the Focus, check the list narrows, "Show all chats" works, and it restores when the Focus ends (also whether the system calls the intent on deactivation).
 - 📱 **Widgets on a device (D89):** add the small and lock-screen widgets, receive a message and check the count refreshes; check the lock-screen redaction.
 - 📱 **App Intents on a device (D88):** turn on "Chats in Siri and Spotlight", then say "Open <chat> in Halo" and tap a Spotlight result.

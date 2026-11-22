@@ -76,6 +76,7 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: Halo
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.social-networking
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
       configs:
         Debug:
           INFOPLIST_FILE: App/Support/Info-Debug.plist

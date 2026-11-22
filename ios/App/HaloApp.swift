@@ -37,7 +37,8 @@ private struct RootView: View {
     let root: AppRoot
     @Environment(\.scenePhase) private var scenePhase
     @SceneStorage("halo.navigation.path") private var savedPath: Data?
-    @State private var router = ChatsRouter()
+    @State private var router = ChatsRouter(replacesDetail: UIDevice.current.userInterfaceIdiom == .pad)
+    @State private var compactColumn: NavigationSplitViewColumn = .sidebar
     @State private var pathRestored = false
     @State private var searchModel: MessageSearchViewModel
     @State private var newChat: NewChatViewModel?
@@ -95,11 +96,8 @@ private struct RootView: View {
         (.invites, "Invites", "envelope.open"),
     ]
 
-    var body: some View {
-        Group {
-            switch root.auth.screen {
-            case .signedIn:
-                NavigationStack(path: $router.path) {
+    /// The chat list with its toolbar, search and sheets: the whole screen on iPhone, the sidebar on iPad.
+    @ViewBuilder private var roomListRoot: some View {
                     RoomListView(
                         model: root.roomList,
                         searchQuery: searchModel.query,
@@ -181,8 +179,37 @@ private struct RootView: View {
                             }
                         )
                     }
+    }
+
+    /// iPad (M16, D91): the chat list as a sidebar and the router's path as the detail; narrow windows collapse to one column.
+    private var splitShell: some View {
+        NavigationSplitView(preferredCompactColumn: $compactColumn) {
+            roomListRoot
+        } detail: {
+            NavigationStack(path: $router.path) {
+                ContentUnavailableView("Select a chat", systemImage: "bubble.left.and.bubble.right")
                     .navigationDestination(for: ChatsRoute.self) { route in
                         destination(for: route)
+                    }
+            }
+        }
+        .onChange(of: router.path, initial: true) { compactColumn = router.path.isEmpty ? .sidebar : .detail }
+    }
+
+    private static var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
+
+    var body: some View {
+        Group {
+            switch root.auth.screen {
+            case .signedIn:
+                if Self.isPad {
+                    splitShell
+                } else {
+                    NavigationStack(path: $router.path) {
+                        roomListRoot
+                            .navigationDestination(for: ChatsRoute.self) { route in
+                                destination(for: route)
+                            }
                     }
                 }
             default:
