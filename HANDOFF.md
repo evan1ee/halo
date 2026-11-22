@@ -13,13 +13,13 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log` and [docs/CODEBASE_REVIEW.md](docs/CODEBASE_REVIEW.md) §13.
-- **Physical iPhone 16 G-NSE 100-push soak & fault-injection (`F-DEV-2`, this push on `main`):**
-  - Installed latest `Halo-Debug` onto physical iPhone 16 (`iPhone17,3`, iOS 26) and ran 100 background pushes (80 steady + 4 bursts of 5): **100/100** `outcome = "display"`, peak `phys_footprint` **7.40 MB** (~30.8% of ~24 MB limit), `totalMs` p50 **60 ms** / p95 **144 ms** / max **495 ms**, 0 timeouts, 0 Jetsam.
-  - Verified AC-NSE-5/6 fault injection (2 nonexistent-event pushes with `counts.unread = 99` → clean `outcome = "error"` fallback in `2.17–2.21 s`, `7.40 MB`) and AC-NSE-4 extension-kill recovery (`restoreMs = 162 ms`, `totalMs = 277 ms`, `6.8 MB`, zero `0xdead10cc`).
+- **Native emoji & emoji input support (this push on `main`):**
+  - Added pure Swift `NativeEmoji` (`HaloDomain/Emoji/NativeEmoji.swift`, `NativeEmojiTests`): Unicode emoji detection (`isEmojiOnly` incl. skin tones, ZWJ, flags, keycaps, `U+FE0F`), `firstEmoji(in:)`, searchable categorised catalog, and `:shortcode` autocomplete.
+  - Added jumbo emoji rendering (`TimelineRow.isJumboEmoji` → 48 pt without bubble fill), composer `:shortcode` autocomplete strip, dedicated composer Emoji picker button (`face.smiling` → `NativeEmojiPicker` sheet with search, recents, categories, and `NativeEmojiKeyboardField` preferring the iOS system Emoji keyboard), and upgraded `ReactionPicker` with the same native Emoji keyboard + search + recents (`TimelineViewModelTests.nativeEmojiSupport`).
+- **Physical iPhone 16 G-NSE 100-push soak & fault-injection (`16af4bf`, `F-DEV-2`):**
+  - 100/100 background pushes `outcome = "display"`, peak `phys_footprint` **7.40 MB**, `totalMs` p50 **60 ms** / p95 **144 ms** / max **495 ms**, 0 timeouts, 0 Jetsam; AC-NSE-5/6 fault-injection fallback (`2.17–2.21 s`, `7.40 MB`) and AC-NSE-4 post-kill cold-start recovery (`restoreMs = 162 ms`, `totalMs = 277 ms`, `6.8 MB`, zero `0xdead10cc`).
 - **M5 MAS dev stack & OIDC contract (`99d7311`, `V-AUTH-1` resolved):**
   - Added isolated Synapse + Matrix Authentication Service `v1.29.0` stack (`infra/dev/docker-compose.mas.yml`, `infra/dev/mas/*`, `infra/dev/smoke-mas.sh`) on ports `8009`/`8080` and verified `AdapterContractTests.oidcDiscovery` (`0.821s`).
-- **M10 Threads (`4e87c55`):**
-  - Added `TimelinePort.openThread(room:rootEvent:)` over SDK `TimelineFocus.thread(rootEventId:)`, `TimelineCoordinator(port:room:threadRoot:)`, "Reply in thread" in `TimelineView`, and `ThreadSheet` in `HaloApp` / `AppRoot`.
 
 ## 3. Key decisions
 Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D82), [docs/adr/README.md](docs/adr/README.md).
@@ -30,7 +30,9 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D82), [docs/adr/RE
 - **D82 / ADR-0021 (founder, supersedes D5):** app icon badge shows total unread messages across rooms needing attention (`BadgeCalculator.badge` sums `RoomReadState.badgeCount` for `attention == true`).
 
 ## 4. Modified files (this push)
-- **Docs:** `docs/SOURCES.md`, `docs/ROADMAP.md`, `HANDOFF.md`.
+- **Domain:** `ios/Packages/HaloDomain/Sources/HaloDomain/Emoji/NativeEmoji.swift`, `ios/Packages/HaloDomain/Tests/HaloDomainTests/NativeEmojiTests.swift`.
+- **FeatureTimeline:** `ios/Packages/Features/FeatureTimeline/Sources/FeatureTimeline/TimelineViewModel.swift`, `ios/Packages/Features/FeatureTimeline/Sources/FeatureTimeline/TimelineView.swift`, `ios/Packages/Features/FeatureTimeline/Tests/FeatureTimelineTests/TimelineViewModelTests.swift`.
+- **Docs:** `HANDOFF.md`.
 
 ## 5. Outstanding issues
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).

@@ -1201,6 +1201,48 @@ struct MediaPreviewPolicyTests {
 
         await vm.stop()
     }
+
+    @Test("native emoji support: jumbo rows, :shortcode autocomplete, direct insert, custom keyboard reaction and recents")
+    func nativeEmojiSupport() async throws {
+        let room = try RoomID("!emoji:x.org")
+        let me = try UserID("@me:x.org")
+        let jumbo = TimelineItem(id: TimelineItemID("e1"), content: .event(TimelineEvent(
+            eventID: try EventID("$e1"), sender: me, senderName: "Me",
+            timestamp: Date(timeIntervalSince1970: 10), isOwn: true, kind: .text("🔥🚀", isEdited: false))))
+        let normal = TimelineItem(id: TimelineItemID("e2"), content: .event(TimelineEvent(
+            eventID: try EventID("$e2"), sender: me, senderName: "Me",
+            timestamp: Date(timeIntervalSince1970: 20), isOwn: true, kind: .text("hello 🔥", isEdited: false))))
+        let port = FakeTimelinePort()
+        port.addRoom(room, items: [jumbo, normal])
+        let vm = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room))
+        await vm.start()
+        for _ in 0..<200_000 where vm.lastRowID != "e2" { await Task.yield() }
+        guard case .live(let rows, _, _, _) = vm.content else { Issue.record("expected live"); return }
+        #expect(rows.first { $0.id == "e1" }?.isJumboEmoji == true)
+        #expect(rows.first { $0.id == "e2" }?.isJumboEmoji == false)
+
+        // :shortcode autocomplete and direct insertion into draft.
+        vm.draft = "ship it :rock"
+        let rocket = try #require(vm.emojiSuggestions.first { $0.emoji == "🚀" })
+        vm.pickEmojiSuggestion(rocket)
+        #expect(vm.draft == "ship it 🚀 ")
+        #expect(vm.recentEmoji.first == "🚀")
+
+        vm.insertEmoji("🎉")
+        #expect(vm.draft == "ship it 🚀 🎉")
+        #expect(vm.recentEmoji.first == "🎉")
+
+        // Custom reaction extracted from native emoji keyboard input.
+        let target = try #require(rows.first { $0.id == "e2" })
+        vm.beginReactionPicker(target)
+        let picked = await vm.pickCustomReaction(from: "🫶")
+        #expect(picked && vm.reactionTarget == nil)
+        #expect(vm.recentEmoji.first == "🫶")
+        let rejected = await vm.pickCustomReaction(from: "not emoji")
+        #expect(!rejected)
+
+        await vm.stop()
+    }
 }
 
 private extension TimelineRow {

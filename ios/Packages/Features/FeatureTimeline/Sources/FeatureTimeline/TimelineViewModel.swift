@@ -92,6 +92,11 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     /// body is just its file name ("photo.jpg", which clients put in `body` when there is no caption); a real caption is shown.
     public var showsText: Bool { !isSticker && file == nil && !(image != nil && Self.looksLikeFilename(text)) }
 
+    /// Whether a plain text message consists solely of 1–3 native Unicode emoji and renders jumbo-sized without a bubble fill.
+    public var isJumboEmoji: Bool {
+        showsText && image == nil && file == nil && card == nil && NativeEmoji.isEmojiOnly(text, maxCount: 3)
+    }
+
     /// Whether the user can edit this row's text (own confirmed text message; never photos, files or stickers).
     public var canEdit: Bool { isOwn && style == .ownMessage && eventID != nil && image == nil && file == nil && !isSticker }
 
@@ -286,6 +291,36 @@ public final class TimelineViewModel {
         Task {
             if let loaded = try? await coordinator.members() { members = loaded } else { membersRequested = false }
         }
+    }
+
+    /// Up to six native emoji matching a trailing `:shortcode` query in `draft`.
+    public var emojiSuggestions: [NativeEmoji.Entry] {
+        NativeEmoji.shortcodeSuggestions(forDraft: draft)?.entries ?? []
+    }
+
+    /// Replaces the trailing `:shortcode` in `draft` with the selected native emoji and records it as recent.
+    public func pickEmojiSuggestion(_ entry: NativeEmoji.Entry) {
+        guard let match = NativeEmoji.shortcodeSuggestions(forDraft: draft) else { return }
+        draft.replaceSubrange(match.range, with: entry.emoji + " ")
+        recordRecentEmoji(entry.emoji)
+    }
+
+    /// Inserts a native emoji into the composer draft and records it as recent.
+    public func insertEmoji(_ emoji: String) {
+        draft += emoji
+        recordRecentEmoji(emoji)
+    }
+
+    /// Most recently used native emoji for reactions and composer input (persisted per device, newest first, max 16).
+    public private(set) var recentEmoji: [String] = UserDefaults.standard.stringArray(forKey: "halo.emoji.recents") ?? []
+
+    private func recordRecentEmoji(_ emoji: String) {
+        let trimmed = emoji.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        recentEmoji.removeAll { $0 == trimmed }
+        recentEmoji.insert(trimmed, at: 0)
+        if recentEmoji.count > 16 { recentEmoji.removeLast(recentEmoji.count - 16) }
+        UserDefaults.standard.set(recentEmoji, forKey: "halo.emoji.recents")
     }
 
     /// "Alice is typing…", or `nil` when nobody else is.
@@ -808,8 +843,18 @@ public final class TimelineViewModel {
     /// Reacts with `key` to the picker's message and closes the picker.
     public func pickReaction(_ key: String) async {
         guard let target = reactionTarget else { return }
+        recordRecentEmoji(key)
         reactionTarget = nil
         await toggleReaction(on: target, key: key)
+    }
+
+    /// Extracts the first native emoji from arbitrary keyboard input (e.g. the iOS system emoji keyboard)
+    /// and reacts to the active `reactionTarget`.
+    @discardableResult
+    public func pickCustomReaction(from input: String) async -> Bool {
+        guard let emoji = NativeEmoji.firstEmoji(in: input) else { return false }
+        await pickReaction(emoji)
+        return true
     }
 
     /// Deletes the user's own confirmed message.
