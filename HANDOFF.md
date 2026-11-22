@@ -13,13 +13,14 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log` and [docs/CODEBASE_REVIEW.md](docs/CODEBASE_REVIEW.md) §13.
-- **V-MEDIA-1 SDK media retention policy & open-question closures (this push on `main`):**
-  - Wired `Client.setMediaRetentionPolicy(policy:)` in `MatrixSessionPort.adopt` for main-app sessions with D55 defaults (`MatrixSessionPort.defaultMediaRetentionPolicy`: 1 GiB cache, 50 MiB max file, 30-day expiry, daily cleanup; unit-tested in `AdapterSmokeTests.mediaRetentionPolicyDefaults` and exercised live in `AdapterContractTests.stickers` against `infra/dev`).
-  - Closed `V-MEDIA-1` and `V-SQL-2` (verified on iPhone 16 in `F-DEV-2`) in `docs/OPEN_QUESTIONS.md` and ticked M0 open-question resolution in `docs/ROADMAP.md`.
+- **M9 Encrypted room export (D32, R-P2-EXPORT, this push on `main`):**
+  - Added `RoomExportMessage`, `RoomExportDocument`, `RoomExportEncryptor`, and `RoomPort.exportMessages` in `HaloDomain` / `FakeRoomPort` / `MatrixRoomPort`.
+  - Implemented `CryptoKitRoomExportEncryptor` (PBKDF2-HMAC-SHA256 + AES-256-GCM, format `one.mbm.halo.room_export.v1`) in `HaloPlatform` with round-trip, wrong-passphrase, tampering, and short-passphrase tests.
+  - Added `RoomDetailsViewModel.exportEncryptedRoom` and `RoomEncryptedExportView` ("Export encrypted history" under Room Info → Media & Files) with passphrase confirmation and `ShareLink` export, wired in `AppRoot`.
+- **V-MEDIA-1 SDK media retention policy & open-question closures (`1a8d05d`):**
+  - Wired `Client.setMediaRetentionPolicy(policy:)` in `MatrixSessionPort.adopt` with D55 defaults (1 GiB / 50 MiB / 30 days / daily cleanup) and closed `V-MEDIA-1` & `V-SQL-2` in `docs/OPEN_QUESTIONS.md`.
 - **Global Media Gallery preset virtual room entry (`e34596c`, D83):**
-  - Added `GlobalMediaGalleryViewModel`, `GlobalMediaGalleryView`, and `GlobalMediaGalleryViewModelTests` in `FeatureRoomList`, the preset non-Matrix "Media Gallery" row in `RoomListView`, and `HomeRoute.globalMediaGallery` in `HaloApp` / `AppRoot`.
-- **Global Media Gallery architecture decision (`6dccbd2`):**
-  - Recorded founder decision **D83** in `docs/DECISION_LOG.md`, `docs/REQUIREMENTS.md`, `docs/design/NAVIGATION.md`, `docs/features/ROOM_LIST.md`, and `docs/ROADMAP.md`.
+  - Added `GlobalMediaGalleryViewModel`, `GlobalMediaGalleryView`, the preset non-Matrix "Media Gallery" row in `RoomListView`, and `HomeRoute.globalMediaGallery` in `HaloApp` / `AppRoot`.
 
 ## 3. Key decisions
 Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D83), [docs/adr/README.md](docs/adr/README.md).
@@ -31,8 +32,10 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D83), [docs/adr/RE
 - **D83 (founder, refines D34 & D50):** global media gallery is surfaced as a preset virtual room entry in the room list (not a tab); purely a local UI entry, not a Matrix room (no server room ID, no sync state, excluded from unread counts and badge).
 
 ## 4. Modified files (this push)
-- **HaloMatrixAdapter:** `ios/Packages/HaloMatrixAdapter/Sources/HaloMatrixAdapter/MatrixSessionPort.swift`, `ios/Packages/HaloMatrixAdapter/Tests/HaloMatrixAdapterTests/AdapterSmokeTests.swift`.
-- **Docs:** `docs/OPEN_QUESTIONS.md`, `docs/ROADMAP.md`, `HANDOFF.md`.
+- **HaloDomain & HaloTestSupport:** `ios/Packages/HaloDomain/Sources/HaloDomain/RoomList/RoomExport.swift`, `ios/Packages/HaloDomain/Sources/HaloDomain/Ports/RoomPort.swift`, `ios/Packages/HaloTestSupport/Sources/HaloTestSupport/FakeRoomPort.swift`.
+- **HaloPlatform & HaloMatrixAdapter:** `ios/Packages/HaloPlatform/Sources/HaloPlatform/CryptoKitRoomExportEncryptor.swift`, `ios/Packages/HaloPlatform/Tests/HaloPlatformTests/CryptoKitRoomExportEncryptorTests.swift`, `ios/Packages/HaloMatrixAdapter/Sources/HaloMatrixAdapter/MatrixRoomPort.swift`.
+- **FeatureRoomDetails & App:** `ios/Packages/Features/FeatureRoomDetails/Sources/FeatureRoomDetails/RoomDetailsViewModel.swift`, `ios/Packages/Features/FeatureRoomDetails/Sources/FeatureRoomDetails/RoomEncryptedExportView.swift`, `ios/Packages/Features/FeatureRoomDetails/Sources/FeatureRoomDetails/RoomDetailsView.swift`, `ios/Packages/Features/FeatureRoomDetails/Tests/FeatureRoomDetailsTests/RoomDetailsViewModelTests.swift`, `ios/App/AppRoot.swift`.
+- **Docs:** `docs/ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).

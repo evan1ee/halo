@@ -208,6 +208,57 @@ extension RoomDetailsViewModelTests {
         try? FileManager.default.removeItem(at: exported.deletingLastPathComponent())
     }
 
+    @Test("exportEncryptedRoom validates passphrase, encrypts RoomExportDocument, and writes .halo-export.json (D32)")
+    func encryptedRoomExport() async throws {
+        struct ReverseEncryptor: RoomExportEncryptor {
+            func encrypt(_ plaintext: Data, passphrase: String) throws(HaloError) -> Data {
+                guard passphrase.count >= Self.minimumPassphraseLength else { throw .invalidInput("PASSPHRASE_TOO_SHORT") }
+                return Data(plaintext.reversed())
+            }
+            func decrypt(_ archive: Data, passphrase: String) throws(HaloError) -> Data {
+                Data(archive.reversed())
+            }
+        }
+
+        let id = try RoomID("!exp:x.org")
+        let details = RoomDetails(id: id, name: "Project / Alpha", topic: "Plans", isDirect: false, isEncrypted: true, joinedMemberCount: 2, notificationMode: .allMessages)
+        let msg = RoomExportMessage(
+            eventID: "$e1",
+            senderID: "@alice:x.org",
+            senderName: "Alice",
+            timestamp: Date(timeIntervalSince1970: 1_700_000_000),
+            kind: "text",
+            body: "Ship it"
+        )
+        let port = FakeRoomPort(details: details, exportedMessages: [msg])
+        let encryptor = ReverseEncryptor()
+        let model = RoomDetailsViewModel(port: port, room: id, encryptor: encryptor)
+
+        #expect(model.canExportEncryptedRoom)
+
+        // Short passphrase is rejected before writing anything.
+        let rejected = await model.exportEncryptedRoom(passphrase: "short")
+        #expect(rejected == nil)
+        #expect(model.roomExportError != nil)
+
+        // Valid passphrase produces a sanitized .halo-export.json archive containing the encrypted RoomExportDocument.
+        let result = try #require(await model.exportEncryptedRoom(passphrase: "strong-passphrase"))
+        #expect(model.roomExportError == nil)
+        #expect(result.messageCount == 1)
+        #expect(result.url.lastPathComponent == "Project _ Alpha.halo-export.json")
+
+        let archive = try Data(contentsOf: result.url)
+        let plaintext = try encryptor.decrypt(archive, passphrase: "strong-passphrase")
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(RoomExportDocument.self, from: plaintext)
+        #expect(decoded.roomID == id.rawValue)
+        #expect(decoded.roomName == "Project / Alpha")
+        #expect(decoded.roomTopic == "Plans")
+        #expect(decoded.messages == [msg])
+        try? FileManager.default.removeItem(at: result.url.deletingLastPathComponent())
+    }
+
     @Test("load recovers after a failure and dismissActionError clears an action error")
     func retryAndDismiss() async throws {
         let (port, _, id) = try fixture()

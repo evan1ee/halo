@@ -41,8 +41,12 @@ public protocol RoomPort: Sendable {
 
     /// Recent media items (photos, videos, audio, files) in `room`, newest first (M9 Gallery + Export).
     func mediaGallery(in room: RoomID, limit: Int) async throws(HaloError) -> [RoomMediaItem]
+
+    /// Recent messages in `room` in chronological order (oldest first) for on-demand encrypted export (D32, R-P2-EXPORT).
+    func exportMessages(in room: RoomID, limit: Int) async throws(HaloError) -> [RoomExportMessage]
 }
 
 extension RoomPort {
     public func mediaGallery(in room: RoomID, limit: Int) async throws(HaloError) -> [RoomMediaItem] { [] }
+    public func exportMessages(in room: RoomID, limit: Int) async throws(HaloError) -> [RoomExportMessage] { [] }
 }

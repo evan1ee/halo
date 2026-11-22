@@ -162,6 +162,85 @@ public final class MatrixRoomPort: RoomPort {
         } catch { throw ErrorMapper.map(error) }
     }
 
+    public func exportMessages(in id: RoomID, limit: Int) async throws(HaloError) -> [RoomExportMessage] {
+        let room = try await session.room(id)
+        let own = try await session.ownUserID()
+        let config = TimelineConfiguration(
+            focus: .live(hideThreadedEvents: false),
+            filter: .all,
+            internalIdPrefix: "export-\(UUID().uuidString)",
+            dateDividerMode: .daily,
+            trackReadReceipts: .disabled,
+            reportUtds: true)
+        do {
+            let timeline = try await room.timelineWithConfiguration(configuration: config)
+            let (raw, continuation) = AsyncStream<[MatrixRustSDK.TimelineDiff]>.makeStream(bufferingPolicy: .unbounded)
+            let handle = await timeline.addListener(listener: GalleryListener(continuation))
+            defer { handle.cancel(); continuation.finish() }
+
+            let paginateTask = Task {
+                for _ in 0..<10 {
+                    let reachedStart = (try? await timeline.paginateBackwards(numEvents: 50)) ?? true
+                    if reachedStart { break }
+                }
+                continuation.finish()
+            }
+            defer { paginateTask.cancel() }
+
+            var items: [HaloDomain.TimelineItem] = []
+            for await batch in raw {
+                for update in batch {
+                    let mapped = TimelineMapper.map(update, ownUserID: own)
+                    try? ListReducer.apply(mapped, to: &items)
+                }
+                if items.count >= limit { break }
+            }
+            var messages: [RoomExportMessage] = []
+            for item in items {
+                guard case .event(let event) = item.content, let eventID = event.eventID else { continue }
+                guard let mapped = Self.exportMessage(event, eventID: eventID) else { continue }
+                messages.append(mapped)
+            }
+            if messages.count > limit {
+                return Array(messages.suffix(limit))
+            }
+            return messages
+        } catch { throw ErrorMapper.map(error) }
+    }
+
+    private static func exportMessage(_ event: HaloDomain.TimelineEvent, eventID: EventID) -> RoomExportMessage? {
+        let senderName = event.senderName ?? event.sender?.rawValue ?? "Unknown"
+        let senderID = event.sender?.rawValue
+        switch event.kind {
+        case .text(let body, _):
+            return RoomExportMessage(eventID: eventID.rawValue, senderID: senderID, senderName: senderName, timestamp: event.timestamp, kind: "text", body: body)
+        case .notice(let body, _):
+            return RoomExportMessage(eventID: eventID.rawValue, senderID: senderID, senderName: senderName, timestamp: event.timestamp, kind: "notice", body: body)
+        case .emote(let body, _):
+            return RoomExportMessage(eventID: eventID.rawValue, senderID: senderID, senderName: senderName, timestamp: event.timestamp, kind: "emote", body: body)
+        case .media(let attachment):
+            let kindName: String = switch attachment.kind {
+            case .image: "image"
+            case .video: "video"
+            case .audio: "audio"
+            case .file: "file"
+            }
+            return RoomExportMessage(eventID: eventID.rawValue, senderID: senderID, senderName: senderName, timestamp: event.timestamp, kind: kindName, body: attachment.body, mediaFilename: attachment.body)
+        case .sticker(let body, _):
+            return RoomExportMessage(eventID: eventID.rawValue, senderID: senderID, senderName: senderName, timestamp: event.timestamp, kind: "sticker", body: body)
+        case .location(let body, let geoURI):
+            return RoomExportMessage(eventID: eventID.rawValue, senderID: senderID, senderName: senderName, timestamp: event.timestamp, kind: "location", body: "\(body) (\(geoURI))")
+        case .poll(let question, _, _):
+            return RoomExportMessage(eventID: eventID.rawValue, senderID: senderID, senderName: senderName, timestamp: event.timestamp, kind: "poll", body: question)
+        case .redacted:
+            return RoomExportMessage(eventID: eventID.rawValue, senderID: senderID, senderName: senderName, timestamp: event.timestamp, kind: "redacted", body: "[Message deleted]")
+        case .undecryptable:
+            return RoomExportMessage(eventID: eventID.rawValue, senderID: senderID, senderName: senderName, timestamp: event.timestamp, kind: "undecryptable", body: "[Unable to decrypt]")
+        case .membership, .call, .otherState, .unsupported:
+            return nil
+        }
+    }
+
     static func choice(_ mode: RoomNotificationMode) -> RoomNotificationChoice {
         switch mode { case .allMessages: .allMessages; case .mentionsAndKeywordsOnly: .mentionsAndKeywords; case .mute: .mute }
     }

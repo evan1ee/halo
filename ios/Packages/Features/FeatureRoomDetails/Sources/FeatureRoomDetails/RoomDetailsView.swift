@@ -129,6 +129,14 @@ public struct RoomDetailsView: View {
                     Label("Photos, videos & files", systemImage: "photo.on.rectangle.angled")
                 }
                 .accessibilityIdentifier("roomMediaGallery")
+                if model.canExportEncryptedRoom {
+                    NavigationLink {
+                        RoomEncryptedExportView(model: model)
+                    } label: {
+                        Label("Export encrypted history", systemImage: "lock.doc")
+                    }
+                    .accessibilityIdentifier("roomEncryptedExport")
+                }
             }
             Section("Members") {
                 ForEach(members) { member in

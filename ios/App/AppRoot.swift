@@ -520,7 +520,11 @@ final class AppRoot {
     func roomName(_ room: RoomID) async -> String? { await roomCoordinator.rooms.first { $0.id == room }?.name }
 
     /// The room info sheet for `room` (ROOM_MANAGEMENT).
-    func makeRoomDetails(room: RoomID) -> RoomDetailsViewModel { RoomDetailsViewModel(port: roomPort, room: room, images: ImagePreparer(maximumDimension: 512), media: media) }
+    func makeRoomDetails(room: RoomID) -> RoomDetailsViewModel {
+        RoomDetailsViewModel(
+            port: roomPort, room: room, images: ImagePreparer(maximumDimension: 512),
+            media: media, encryptor: CryptoKitRoomExportEncryptor())
+    }
 
     /// Reads rooms whose newest message is from an allowlisted bot and that changed since the last scan, so Activity knows their tasks
     /// without the user opening each room (BOT_ACTIVITY FR-1). Cheap when nothing changed.

@@ -64,6 +64,73 @@ public final class RoomDetailsViewModel: Identifiable {
         }
     }
 
+    /// Output of an on-demand encrypted room export (D32, R-P2-EXPORT).
+    public struct EncryptedRoomExportResult: Sendable, Equatable {
+        public let url: URL
+        public let messageCount: Int
+    }
+
+    public private(set) var isExportingRoom = false
+    public private(set) var roomExportError: String?
+    public var canExportEncryptedRoom: Bool { encryptor != nil }
+
+    /// Exports recent room messages into a passphrase-encrypted `.halo-export.json` archive (D32, R-P2-EXPORT).
+    public func exportEncryptedRoom(passphrase: String, limit: Int = 500) async -> EncryptedRoomExportResult? {
+        guard let encryptor else {
+            roomExportError = "Encrypted export is not available."
+            return nil
+        }
+        guard !isExportingRoom else { return nil }
+        let minLen = type(of: encryptor).minimumPassphraseLength
+        guard passphrase.count >= minLen else {
+            roomExportError = "Passphrase must be at least \(minLen) characters."
+            return nil
+        }
+        isExportingRoom = true
+        roomExportError = nil
+        defer { isExportingRoom = false }
+
+        do {
+            let details: RoomDetails
+            if case .loaded(let loaded, _) = content {
+                details = loaded
+            } else {
+                details = try await port.details(room)
+            }
+            let messages = try await port.exportMessages(in: room, limit: limit)
+            let doc = RoomExportDocument(
+                exportedAt: Date(),
+                roomID: room.rawValue,
+                roomName: details.name ?? room.rawValue,
+                roomTopic: details.topic,
+                messages: messages
+            )
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let plaintext = try encoder.encode(doc)
+            let encrypted = try encryptor.encrypt(plaintext, passphrase: passphrase)
+
+            let dir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("halo-room-export-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let base = (details.name ?? "room")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: "/", with: "_")
+                .replacingOccurrences(of: ":", with: "_")
+            let filename = "\(base.isEmpty ? "room" : base).halo-export.json"
+            let url = dir.appendingPathComponent(filename)
+            try encrypted.write(to: url, options: .atomic)
+            return EncryptedRoomExportResult(url: url, messageCount: messages.count)
+        } catch let error as HaloError {
+            roomExportError = Self.text(error)
+            return nil
+        } catch {
+            roomExportError = "Couldn't create encrypted export."
+            return nil
+        }
+    }
+
     /// `true` when the room currently has an avatar (either from the server or just uploaded).
     public var hasAvatar: Bool {
         if localAvatar != nil { return true }
@@ -76,6 +143,7 @@ public final class RoomDetailsViewModel: Identifiable {
 
     private let images: (any ImagePreparing)?
     private let media: MediaLoader?
+    private let encryptor: (any RoomExportEncryptor)?
     private let sleep: @Sendable (Duration) async throws -> Void
 
     /// An avatar's image bytes (a small thumbnail); `nil` without a loader or when the download failed, so the initial stays.
@@ -86,10 +154,12 @@ public final class RoomDetailsViewModel: Identifiable {
 
     public init(
         port: any RoomPort, room: RoomID, images: (any ImagePreparing)? = nil, media: MediaLoader? = nil,
+        encryptor: (any RoomExportEncryptor)? = nil,
         sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         self.images = images
         self.media = media
+        self.encryptor = encryptor
         self.port = port
         self.room = room
         self.sleep = sleep

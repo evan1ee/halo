@@ -19,11 +19,17 @@ public final class FakeRoomPort: RoomPort {
         var accepted: [RoomID] = []
         var declined: [RoomID] = []
         var gallery: [RoomMediaItem] = []
+        var exportedMessages: [RoomExportMessage] = []
     }
     private let state: Mutex<State>
 
-    public init(details: RoomDetails, members: [RoomMemberInfo] = [], gallery: [RoomMediaItem] = []) {
-        state = Mutex(State(details: details, members: members, gallery: gallery))
+    public init(
+        details: RoomDetails,
+        members: [RoomMemberInfo] = [],
+        gallery: [RoomMediaItem] = [],
+        exportedMessages: [RoomExportMessage] = []
+    ) {
+        state = Mutex(State(details: details, members: members, gallery: gallery, exportedMessages: exportedMessages))
     }
 
     /// Makes every following call throw (nil: stop failing).
@@ -116,5 +122,11 @@ public final class FakeRoomPort: RoomPort {
         let (items, error) = state.withLock { ($0.gallery, $0.error) }
         if let error { throw error }
         return Array(items.prefix(limit))
+    }
+
+    public func exportMessages(in room: RoomID, limit: Int) async throws(HaloError) -> [RoomExportMessage] {
+        let (items, error) = state.withLock { ($0.exportedMessages, $0.error) }
+        if let error { throw error }
+        return Array(items.suffix(limit))
     }
 }
