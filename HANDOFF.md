@@ -12,6 +12,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; details in `git log`.
+- **Chat-list menu layout (`fix/more-menu-layout`, founder request):** the New chat button left the toolbar and is now in the ⋯ menu with Saved Messages (moved out of the New chat sheet) under the filters; Stickers left the menu (still in Settings). `HaloApp.swift` (`moreMenu`, `openSavedMessages`), `NewChatView.swift`, `docs/ROADMAP.md`. Not checked on a device. ⌘N still opens New chat.
 - **M16 drag and drop (`feat/m16-ipad-drop`):** a conversation accepts dropped pictures (pending photos, like the picker), files (sent at once, ≤ 50 MiB) and text/links (appended to the draft); `TimelineDropModifier` + `DropClassifier` in `FeatureTimeline/TimelineDrop.swift`, tests in `TimelineDropTests`. Dragging items out is not done.
 - **M16 keyboard shortcuts:** ⌘N new chat, ⌘, settings, ⌘F search, ⌘1–⌘6 filters on the chat list (`HaloApp.swift`); built for iPad, not exercised with a hardware keyboard.
 - **M16 Unread chats widget (`feat/m16-chat-list-widget`, D93):** medium widget with up to four chats and counts; names from the D88 chat-shortcuts file (opt-in), counts from `AttentionCache`; off → explains how to turn names on. `UnreadChatsSnapshot` + tests.
@@ -39,6 +40,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D86), [docs/adr/RE
 - **D84 / D85 / D86 (ADR-0022):** Apple-native north star; single `NavigationStack` shell; module layout v2 (all 4 steps complete).
 
 ## 4. Modified files (this push)
+- **Menu layout:** `ios/App/HaloApp.swift`, `FeatureRoomList/NewChatView.swift`, `docs/ROADMAP.md`, `HANDOFF.md`.
 - **M16 chat-list widget:** `HaloDomain/Widgets/{UnreadChatsSnapshot,UnreadWidgetSnapshot}.swift` + test, `ios/WidgetExtension/HaloWidgets.swift`, `docs/{DECISION_LOG,ROADMAP}.md`, `docs/security/PRIVACY.md`.
 - **M16 share send:** `ios/ShareExtension/*`, `ios/project.yml`, `HaloDomain/Share/ShareTarget.swift`, `HaloApplication/Share/{SendConfirmation,ShareCoordinator}.swift`, `HaloMatrixAdapter/Share/MatrixShareTargetPort.swift`, `FeatureRoomList/Share*.swift`, tests, `docs/adr/0023-*`, `docs/{DECISION_LOG,ROADMAP,OPEN_QUESTIONS}.md`, `docs/architecture/MODULE_BOUNDARIES.md`.
 - **M16 iPad:** `ios/App/HaloApp.swift`, `ios/Config/Base.xcconfig`, `ios/project.yml`, `HaloApplication/Navigation/ChatsRoute.swift` + `ChatsRouterTests.swift`, `FeatureOnboarding/SignInView.swift`, `docs/{DECISION_LOG,ROADMAP,PRODUCT_VISION}.md`.
