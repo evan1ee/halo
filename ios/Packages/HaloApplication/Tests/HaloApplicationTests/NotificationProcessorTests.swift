@@ -101,38 +101,65 @@ struct NotificationProcessorTests {
 
     @Test("R-23: SingleFlightCache reuses one initialized client across concurrent pushes and rebuilds when the session key changes")
     func singleFlightClientCache() async throws {
+        actor Gate {
+            var builds = 0
+            var started: CheckedContinuation<Void, Never>?
+            var release: CheckedContinuation<Void, Never>?
+
+            func beginBuild() -> Int {
+                builds += 1
+                if let cont = started {
+                    started = nil
+                    cont.resume()
+                }
+                return builds
+            }
+
+            func waitUntilStarted() async {
+                if builds > 0 { return }
+                await withCheckedContinuation { cont in started = cont }
+            }
+
+            func waitForRelease() async {
+                await withCheckedContinuation { cont in release = cont }
+            }
+
+            func triggerRelease() {
+                if let cont = release {
+                    release = nil
+                    cont.resume()
+                }
+            }
+
+            func buildCount() -> Int { builds }
+        }
+
         let cache = SingleFlightCache<String, Int>()
-        let builds = Mutex(0)
-        let started = Mutex<CheckedContinuation<Void, Never>?>(nil)
-        let release = Mutex<CheckedContinuation<Void, Never>?>(nil)
+        let gate = Gate()
 
         let first = Task {
             try await cache.value(for: "alice:dev1") {
-                let n = builds.withLock { count -> Int in count += 1; return count }
-                started.withLock { $0 }?.resume()
-                await withCheckedContinuation { cont in release.withLock { $0 = cont } }
+                let n = await gate.beginBuild()
+                await gate.waitForRelease()
                 return n
             }
         }
-        await withCheckedContinuation { cont in
-            let alreadyStarted = builds.withLock { $0 > 0 }
-            if alreadyStarted { cont.resume() } else { started.withLock { $0 = cont } }
-        }
+        await gate.waitUntilStarted()
         let second = Task {
             try await cache.value(for: "alice:dev1") {
-                builds.withLock { count -> Int in count += 1; return count }
+                await gate.beginBuild()
             }
         }
         for _ in 0..<2_000 { await Task.yield() }
-        release.withLock { $0 }?.resume()
+        await gate.triggerRelease()
 
         #expect(try await first.value == 1)
         #expect(try await second.value == 1)
-        #expect(builds.withLock { $0 } == 1)
+        #expect(await gate.buildCount() == 1)
 
         // Subsequent push for the same session reuses cached value; different session rebuilds.
-        #expect(try await cache.value(for: "alice:dev1") { builds.withLock { $0 += 1; return $0 } } == 1)
-        #expect(try await cache.value(for: "bob:dev2") { builds.withLock { $0 += 1; return $0 } } == 2)
-        #expect(builds.withLock { $0 } == 2)
+        #expect(try await cache.value(for: "alice:dev1") { await gate.beginBuild() } == 1)
+        #expect(try await cache.value(for: "bob:dev2") { await gate.beginBuild() } == 2)
+        #expect(await gate.buildCount() == 2)
     }
 }

@@ -11,7 +11,10 @@ public struct UserSummary: Sendable, Equatable, Identifiable {
     }
 
     /// The name to show: the display name, else the user ID.
-    public var title: String { displayName?.isEmpty == false ? displayName! : id.rawValue }
+    public var title: String {
+        if let displayName, !displayName.isEmpty { return displayName }
+        return id.rawValue
+    }
 }
 
 /// Starting conversations (ROOM_MANAGEMENT FR-5). Implemented by `HaloMatrixAdapter`; faked in `HaloTestSupport`.

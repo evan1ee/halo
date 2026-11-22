@@ -57,8 +57,8 @@ public struct GlobalMediaGalleryView: View {
 
                 if let error = model.error {
                     Text(error)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
+                        .font(HaloTypography.meta)
+                        .foregroundStyle(HaloColor.danger)
                         .padding(.horizontal)
                         .padding(.bottom, 4)
                 }
@@ -272,9 +272,9 @@ private struct GlobalMediaGridTile: View {
             if entry.item.attachment.kind == .video {
                 Image(systemName: "video.fill")
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(HaloColor.mediaOverlayForeground)
                     .padding(4)
-                    .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 4))
+                    .background(HaloColor.mediaOverlayBackground, in: RoundedRectangle(cornerRadius: HaloRadius.small))
                     .padding(4)
             }
         }
@@ -449,8 +449,9 @@ private struct GlobalMediaPreviewPage: View {
                     ProgressView()
                 } else {
                     Image(systemName: "photo")
-                        .font(.system(size: 52))
-                        .foregroundStyle(.secondary)
+                        .font(.largeTitle)
+                        .imageScale(.large)
+                        .foregroundStyle(HaloColor.textSecondary)
                 }
             } else {
                 nonImagePreview
@@ -479,8 +480,9 @@ private struct GlobalMediaPreviewPage: View {
                 case .file: "doc.fill"
                 }
             }())
-                .font(.system(size: 56))
-                .foregroundStyle(.secondary)
+                .font(.largeTitle)
+                .imageScale(.large)
+                .foregroundStyle(HaloColor.textSecondary)
             Text(entry.item.attachment.body)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)

@@ -1,4 +1,5 @@
 #if canImport(SwiftUI)
+import HaloDesignSystem
 import HaloDomain
 import SwiftUI
 
@@ -22,20 +23,13 @@ public struct RecoveryBanner: View {
                 Button {
                     isPresented = true
                 } label: {
-                    HStack(spacing: 8) {
-                        Label(
-                            hasIncomingRequest
-                                ? "Verification request from another device"
-                                : "Verify this device to read older encrypted messages",
-                            systemImage: "lock.shield")
-                        Spacer(minLength: 4)
-                        Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                    }
-                    .font(.footnote)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(.yellow.opacity(0.22), ignoresSafeAreaEdges: [])
+                    HaloBanner(
+                        tone: .warning,
+                        icon: "lock.shield",
+                        message: hasIncomingRequest
+                            ? "Verification request from another device"
+                            : "Verify this device to read older encrypted messages"
+                    )
                 }
                 .buttonStyle(.plain)
                 .transition(.move(edge: .top).combined(with: .opacity))
@@ -62,7 +56,7 @@ public struct RecoveryView: View {
     public var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                Image(systemName: "lock.shield").font(.system(size: 40)).foregroundStyle(.tint)
+                Image(systemName: "lock.shield").font(.largeTitle).imageScale(.large).foregroundStyle(HaloColor.accent)
                     .accessibilityHidden(true)
 
                 switch model.verificationPhase {
@@ -104,6 +98,7 @@ public struct RecoveryView: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .haloFeedback(.success, trigger: model.isVerified)
     }
 
     @ViewBuilder
@@ -132,7 +127,7 @@ public struct RecoveryView: View {
             #endif
             .submitLabel(.go).onSubmit { if canSubmit { Task { await model.submit() } } }
         if let message = model.errorMessage {
-            Text(message).foregroundStyle(.red).font(.footnote).multilineTextAlignment(.center)
+            Text(message).foregroundStyle(HaloColor.danger).font(HaloTypography.meta).multilineTextAlignment(.center)
         }
         if model.isWorking {
             ProgressView().frame(minHeight: 44)
@@ -191,7 +186,7 @@ public struct RecoveryView: View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 72), spacing: 12)], spacing: 12) {
             ForEach(Array(emojis.enumerated()), id: \.offset) { _, emoji in
                 VStack(spacing: 4) {
-                    Text(emoji.symbol).font(.system(size: 32))
+                    Text(emoji.symbol).font(.largeTitle)
                     Text(emoji.description).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
                 .padding(.vertical, 6)

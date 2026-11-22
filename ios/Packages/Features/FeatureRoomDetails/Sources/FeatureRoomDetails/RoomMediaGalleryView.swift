@@ -39,7 +39,7 @@ public struct RoomMediaGalleryView: View {
             }
             if let error = model.galleryError {
                 Section {
-                    Text(error).foregroundStyle(.red).font(.footnote)
+                    Text(error).foregroundStyle(HaloColor.danger).font(HaloTypography.meta)
                 }
             }
             if let exportedURL {

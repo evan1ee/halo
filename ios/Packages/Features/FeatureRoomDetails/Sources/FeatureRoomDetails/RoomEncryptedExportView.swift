@@ -1,4 +1,5 @@
 #if canImport(SwiftUI)
+import HaloDesignSystem
 import HaloDomain
 import SwiftUI
 
@@ -33,16 +34,16 @@ public struct RoomEncryptedExportView: View {
             if !confirmPassphrase.isEmpty && passphrase != confirmPassphrase {
                 Section {
                     Text("Passphrases do not match.")
-                        .font(.footnote)
-                        .foregroundStyle(.red)
+                        .font(HaloTypography.meta)
+                        .foregroundStyle(HaloColor.danger)
                 }
             }
 
             if let error = model.roomExportError {
                 Section {
                     Text(error)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
+                        .font(HaloTypography.meta)
+                        .foregroundStyle(HaloColor.danger)
                 }
             }
 

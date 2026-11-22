@@ -9,6 +9,8 @@ step() { echo "== $1"; shift; "$@" || failed=1; }
 step "handoff (tip commit + structure, AGENTS.md §18)" python3 scripts/check_handoff.py commit HEAD
 step "docs" scripts/validate-docs.sh
 step "boundaries" scripts/check-boundaries.sh
+step "boundaries unit tests" python3 scripts/test_check_boundaries.py
+step "design tokens" scripts/check-design-tokens.sh
 
 packages=(HaloFoundation HaloDomain HaloTestSupport HaloApplication)
 if command -v swift >/dev/null; then
@@ -45,6 +47,6 @@ else skipped+=("HaloPlatform and adapter tests (not macOS)"); fi
 if command -v gitleaks >/dev/null; then step "gitleaks" gitleaks git --redact --no-banner .; else skipped+=("gitleaks (not installed)"); fi
 if command -v swiftlint >/dev/null && [[ -f .swiftlint.yml ]]; then step "swiftlint" swiftlint --strict; else skipped+=("swiftlint (not installed or not configured yet)"); fi
 
-for s in "${skipped[@]}"; do echo "SKIPPED: $s"; done
+for s in ${skipped[@]+"${skipped[@]}"}; do echo "SKIPPED: $s"; done
 if (( failed )); then echo "prepush: FAILED"; exit 1; fi
 echo "prepush: passed (see SKIPPED above for what didn't run)"

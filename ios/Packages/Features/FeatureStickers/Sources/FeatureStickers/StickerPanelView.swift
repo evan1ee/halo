@@ -41,7 +41,7 @@ public struct StickerPanelView: View {
             .padding(.horizontal, 12).padding(.top, 28).padding(.bottom, 8)
             if let error = model.sendError {
                 HStack(spacing: 8) {
-                    Text(error).font(.caption).foregroundStyle(.red)
+                    Text(error).font(HaloTypography.caption).foregroundStyle(HaloColor.danger)
                     Spacer()
                     Button { model.dismissSendError() } label: { Image(systemName: "xmark").font(.caption2.weight(.semibold)) }
                         .buttonStyle(.plain)

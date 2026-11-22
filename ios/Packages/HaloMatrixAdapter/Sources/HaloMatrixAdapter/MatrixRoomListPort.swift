@@ -290,7 +290,7 @@ public final class MatrixRoomListPort: RoomListPort {
         let member: MatrixRustSDK.RoomMember?
         if let cached { member = cached } else { member = try? await room.inviter() }
         guard let member else { return nil }
-        let name = (member.displayName?.isEmpty == false ? member.displayName! : member.userId)
+        let name = member.displayName.flatMap { $0.isEmpty ? nil : $0 } ?? member.userId
         return (name, try? UserID(member.userId))
     }
 
@@ -314,7 +314,11 @@ public final class MatrixRoomListPort: RoomListPort {
         for type in [ReceiptType.read, .readPrivate] {
             guard let found = try? await room.loadUserReceipt(receiptType: type, thread: .unthreaded, userId: me) else { continue }
             let at = found.receipt.timestamp ?? 0
-            if newest == nil || at >= newest!.receipt { newest = (found.eventId, at) }
+            if let current = newest {
+                if at >= current.receipt { newest = (found.eventId, at) }
+            } else {
+                newest = (found.eventId, at)
+            }
         }
         guard let rawEventId = newest?.eventId, let eventID = try? EventID(rawEventId) else { return nil }
         if let known = eventTimes?.get(rawEventId) { return (eventID, known) }

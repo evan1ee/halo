@@ -1,0 +1,39 @@
+# Halo SwiftLint configuration (D62, TD-06, AGENTS.md §6/§17).
+# Enforces safety and architectural rules; formatting is handled by `.swift-format`.
+
+included:
+  - ios/App
+  - ios/NotificationService
+  - ios/Packages
+
+excluded:
+  - "**/Tests"
+  - "**/.build"
+  - "**/.swiftpm"
+  - "**/DerivedData"
+
+only_rules:
+  - force_cast
+  - force_try
+  - force_unwrapping
+  - todo
+  - unused_optional_binding
+  - redundant_discardable_let
+  - custom_rules
+
+custom_rules:
+  no_print:
+    name: "No print()"
+    regex: '(?<![\w.])print\('
+    message: "Use HaloLog instead of print() in production code (AGENTS.md §17)."
+    severity: error
+  no_dispatch_main_sync:
+    name: "No DispatchQueue.main.sync"
+    regex: 'DispatchQueue\.main\.sync'
+    message: "DispatchQueue.main.sync is forbidden (AGENTS.md §9)."
+    severity: error
+  no_task_detached:
+    name: "No unjustified Task.detached"
+    regex: 'Task\.detached'
+    message: "Task.detached is forbidden without written justification (AGENTS.md §9)."
+    severity: error

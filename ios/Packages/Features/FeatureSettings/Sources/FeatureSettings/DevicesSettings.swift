@@ -1,4 +1,5 @@
 import Foundation
+import HaloDesignSystem
 import Observation
 import SwiftUI
 
@@ -60,7 +61,7 @@ struct DevicesSettingsView: View {
     var body: some View {
         List {
             if let error = model.error {
-                Section { Text(error).foregroundStyle(.red) }
+                Section { Text(error).foregroundStyle(HaloColor.danger) }
             }
             Section {
                 if model.loaded, model.rows.isEmpty, model.error == nil {

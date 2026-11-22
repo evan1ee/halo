@@ -1,3 +1,4 @@
+import HaloDesignSystem
 import Observation
 import SwiftUI
 
@@ -109,7 +110,7 @@ struct NotificationDefaultsSection: View {
                     Toggle(target.title, isOn: Binding(get: { enabled }, set: { value in Task { await model.setMention(target, enabled: value) } }))
                 }
             }
-            if let message = model.error { Text(message).font(.footnote).foregroundStyle(.red) }
+            if let message = model.error { Text(message).font(HaloTypography.meta).foregroundStyle(HaloColor.danger) }
         } header: {
             Text("Rooms and mentions")
         } footer: {

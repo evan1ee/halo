@@ -1,3 +1,4 @@
+import HaloDesignSystem
 import Observation
 import SwiftUI
 
@@ -87,7 +88,7 @@ struct ChangePasswordView: View {
                 if let hint = model.hint { Text(hint) } else { Text("Your other sessions stay signed in.") }
             }
             if let error = model.error {
-                Section { Text(error).foregroundStyle(.red) }
+                Section { Text(error).foregroundStyle(HaloColor.danger) }
             }
             Section {
                 Button { Task { await model.submit() } } label: {

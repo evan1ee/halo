@@ -79,7 +79,10 @@ public struct RoomMemberInfo: Sendable, Equatable, Identifiable {
     }
 
     /// The name to show: the display name, else the user ID.
-    public var title: String { displayName?.isEmpty == false ? displayName! : userID }
+    public var title: String {
+        if let displayName, !displayName.isEmpty { return displayName }
+        return userID
+    }
 }
 
 /// Power-level badge of a member (ROOM_MANAGEMENT FR-2).

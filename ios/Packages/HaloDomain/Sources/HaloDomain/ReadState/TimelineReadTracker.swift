@@ -1,5 +1,4 @@
 import Foundation
-import HaloDomain
 import HaloFoundation
 
 /// Tracks visible confirmed events in an open timeline and picks the read-receipt candidate strictly by **timeline order**

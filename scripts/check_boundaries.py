@@ -122,10 +122,61 @@ def check_manifests() -> None:
 
 
 PUBLIC_DECL_RE = re.compile(r"^\s*(?:@\w+(?:\([^)]*\))?\s+)*(?:public|open)\b[^\n{=]*", re.M)
+PUBLIC_TYPE_RE = re.compile(
+    r"^\s*(?:@\w+(?:\([^)]*\))?\s+)*(?:public|open)\s+"
+    r"(?:(?:indirect|final|nonisolated|distributed)\s+)*"
+    r"(?:class|struct|enum|protocol|actor|typealias)\s+([A-Z]\w*)",
+    re.M,
+)
+FEATURE_NAME_RE = re.compile(r"^Feature[A-Z][A-Za-z0-9]*$")
+LAYER_NAME_RE = re.compile(r"^Halo[A-Z][A-Za-z0-9]*$")
 SDK_TYPE_RE = re.compile(r"^(?:public|open)\s+(?:indirect\s+)?(?:final\s+)?(?:class|struct|enum|protocol|typealias)\s+([A-Z]\w*)", re.M)
 ADAPTER = PACKAGES / "HaloMatrixAdapter"
 SDK_SOURCES = ADAPTER / ".build" / "checkouts" / "matrix-rust-components-swift" / "Sources" / "MatrixRustSDK"
 adapter_api_skipped = False
+
+
+def check_module_naming() -> None:
+    """Enforce MODULE_BOUNDARIES.md §1 'Module naming' (D86)."""
+    modules: list[tuple[str, Path]] = []
+    for entry in sorted(PACKAGES.iterdir()):
+        if not entry.is_dir() or entry.name.startswith("."):
+            continue
+        if entry.name == "Features":
+            for feat in sorted(entry.iterdir()):
+                if not feat.is_dir() or feat.name.startswith("."):
+                    continue
+                modules.append((feat.name, feat))
+                if not FEATURE_NAME_RE.match(feat.name):
+                    violations.append(
+                        f"{feat.relative_to(ROOT)}: feature package '{feat.name}' must match Feature<Area> "
+                        "(MODULE_BOUNDARIES.md §1)"
+                    )
+        else:
+            modules.append((entry.name, entry))
+            if not LAYER_NAME_RE.match(entry.name):
+                violations.append(
+                    f"{entry.relative_to(ROOT)}: layer package '{entry.name}' must match Halo<Layer> "
+                    "(MODULE_BOUNDARIES.md §1)"
+                )
+
+    core_types: dict[str, Path] = {}
+    for core_pkg in ("HaloDomain", "HaloApplication"):
+        src_dir = PACKAGES / core_pkg / "Sources"
+        if not src_dir.exists():
+            continue
+        for swift_file in sorted(src_dir.rglob("*.swift")):
+            code = strip_comments_and_strings(swift_file.read_text())
+            for type_name in PUBLIC_TYPE_RE.findall(code):
+                core_types.setdefault(type_name, swift_file)
+
+    for mod_name, mod_path in modules:
+        if mod_name in core_types:
+            decl_where = core_types[mod_name].relative_to(ROOT)
+            violations.append(
+                f"{mod_path.relative_to(ROOT)}: module name '{mod_name}' collides with public type in "
+                f"{decl_where} (MODULE_BOUNDARIES.md §1)"
+            )
 
 
 def check_adapter_public_api() -> None:
@@ -155,6 +206,7 @@ def main() -> int:
         if ".build" in path.parts or path.name == "Package.swift":
             continue
         check_file(path)
+    check_module_naming()
     check_manifests()
     check_adapter_public_api()
     if violations:

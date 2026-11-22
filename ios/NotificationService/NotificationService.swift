@@ -10,6 +10,10 @@ import UserNotifications
 /// Thin wiring over `HaloApplication.NotificationProcessor`: fetches the event through the SDK, records it in
 /// `halo.sqlite` (`notification_record`, R-13), and evaluates any badge fallback via `ReadStatePolicy` (R-08).
 /// Never sets `aps.badge` from a payload and never creates attention from a payload (AGENTS.md §17).
+///
+/// `@unchecked Sendable` justification (AGENTS.md §9, TD-14): subclasses non-Sendable Objective-C
+/// `UNNotificationServiceExtension`. `handler` and `original` are assigned once in `didReceive` before the
+/// async task starts, and `delivered` / completion delivery are serialized by `lock` (`NSLock`).
 final class NotificationService: UNNotificationServiceExtension, @unchecked Sendable {
     private struct SessionKey: Hashable, Sendable {
         let userID: UserID

@@ -4,8 +4,7 @@ Module: `HaloDesignSystem`. Halo has **its own visual identity** — it isn't de
 icon set, layouts or component shapes (D37). Values below are the starting tokens; they change only via this document.
 
 **North star (D84):** Halo feels like a first-party Apple app — Messages, Mail and Photos are the reference for behaviour —
-with its own colours, icon and artwork. **Implementation status (2026-11-22):** the tokens of §2–6 and most components of §7
-are not built yet (features use raw system colours and inline rows, [UX_AUDIT.md](UX_AUDIT.md) UX-03/UX-05); ROADMAP M11 builds them.
+with its own colours, icon and artwork. **Implementation status (2026-11-22):** tokens (§2–§6), asset catalogues (Light/Dark/Increase Contrast + placeholder `AppIcon`), WCAG AA contrast test (`ColorContrastTests`, AC-UX-2), `HaloFeedback`, shared components (`RoomRow`, `UnreadIndicator`, `HaloBanner`, `LoadingState`, `ErrorState`, `EmptyState`), and the token gate (`scripts/check-design-tokens.sh`, AC-UX-1) are implemented in `HaloDesignSystem` (M11).
 
 ## 1. Principles
 1. **Calm**: neutral surfaces, colour reserved for meaning (attention, mentions, errors).
