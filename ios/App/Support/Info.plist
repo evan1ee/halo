@@ -5,6 +5,8 @@
 	<!-- Beta and Release (project.yml). Debug uses Info-Debug.plist, which adds local-network access for infra/dev. -->
 	<key>HaloNamespace</key>
 	<string>$(HALO_NAMESPACE)</string>
+	<key>HaloKlipyAPIKey</key>
+	<string>$(HALO_KLIPY_API_KEY)</string>
 	<key>HaloKeychainAccessGroup</key>
 	<string>$(HALO_KEYCHAIN_GROUP)</string>
 	<key>HaloPushAppID</key>

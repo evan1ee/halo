@@ -2,7 +2,7 @@
 
 ## 1. Principles
 No third-party analytics, ads or tracking SDKs. Data leaves the device only to the user's homeserver (Matrix), the push
-gateway and Apple (APNs metadata), and through explicit user actions (export, share).
+gateway and Apple (APNs metadata), KLIPY when GIF/sticker search is used (D98, row below), and through explicit user actions (export, share).
 
 ## 2. Data flows and boundaries
 
@@ -15,6 +15,7 @@ gateway and Apple (APNs metadata), and through explicit user actions (export, sh
 | Image packs + their media | Homeserver (unencrypted) | Stickers | Server operators, pack room members |
 | Push: room id, event id, counts | Synapse → Sygnal → APNs | Notifications | Push gateway operator, Apple |
 | Account data (`one.mbm.halo.*`) | Homeserver (unencrypted) | Sync of favourites, allowlist | Server operator **[DECISION D51: accepted for sticker prefs; revisit for anything sensitive]** |
+| GIF/sticker search text, region, random per-install `customer_id`, share events; device IP when media loads (D98) | KLIPY (`api.klipy.com`, `static*.klipy.com`) | GIF and sticker search; recipients' Halo loads a received KLIPY link only with media previews on | KLIPY. Never a Matrix ID, message text or room data; the sent message itself (the KLIPY URL) is E2EE in encrypted rooms |
 | Diagnostics export | Only where the user shares it | Debugging | Recipient |
 | Bot conversations | The bot's room (normal Matrix) | Bot features | The bot backend (by the user's choice to talk to it) |
 

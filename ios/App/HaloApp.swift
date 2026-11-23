@@ -460,6 +460,8 @@ private final class BackgroundTaskLease {
 private struct TimelineScreen: View {
     @State private var model: TimelineViewModel
     @State private var stickers: StickerPanelViewModel
+    @State private var klipyGIFs: KlipyPanelModel?
+    @State private var klipyStickers: KlipyPanelModel?
     @State private var details: RoomDetailsViewModel?
     @State private var title = ""
     @Environment(\.dismiss) private var dismiss
@@ -484,6 +486,8 @@ private struct TimelineScreen: View {
         timeline.initialEvent = jumpTo
         _model = State(initialValue: timeline)
         _stickers = State(initialValue: root.makeStickerPanel(room: room, timeline: timeline))
+        _klipyGIFs = State(initialValue: root.makeKlipyPanel(.gifs, timeline: timeline))
+        _klipyStickers = State(initialValue: root.makeKlipyPanel(.stickers, timeline: timeline))
     }
 
     /// The room's picture from the chat list (for a direct chat the other person's); `nil` shows the initial.
@@ -524,7 +528,8 @@ private struct TimelineScreen: View {
     var body: some View {
         TimelineView(
             model: model,
-            stickerPanel: { AnyView(StickerPanelView(model: stickers)) },
+            stickerPanel: { AnyView(StickerTabView(packs: stickers, klipy: klipyStickers)) },
+            gifPanel: klipyGIFs.map { gifs -> @MainActor () -> AnyView in { AnyView(KlipyPanelView(model: gifs)) } },
             onOpenThread: openThread
         )
         .navigationBarTitleDisplayMode(.inline)

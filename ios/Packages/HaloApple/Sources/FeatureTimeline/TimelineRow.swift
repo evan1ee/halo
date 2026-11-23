@@ -97,6 +97,12 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
         showsText && image == nil && file == nil && card == nil && NativeEmoji.isEmojiOnly(text, maxCount: 3)
     }
 
+    /// The KLIPY GIF or sticker this message is, when its whole text is one KLIPY media link (COMPOSER_PANELS §6, D98).
+    public var klipyURL: URL? {
+        guard style == .message || style == .ownMessage, showsText, image == nil, card == nil else { return nil }
+        return KlipyLink.mediaURL(in: text)
+    }
+
     /// Whether the user can edit this row's text (own confirmed text message; never photos, files or stickers).
     public var canEdit: Bool { isOwn && style == .ownMessage && eventID != nil && image == nil && file == nil && !isSticker }
 

@@ -126,18 +126,15 @@ final class HaloUITests: XCTestCase {
         try audit(app)
     }
 
-    /// M4/M5 simulator UI check: opens a chat, verifies the sticker panel loads packs/stickers, and exercises New pack creation.
+    /// Opens the first chat (not the Media Gallery) on a signed-in simulator so the composer is shown; skips when signed out.
     @MainActor
-    func testStickerPanelAndPackCreationFlow() throws {
-        let app = XCUIApplication()
-        app.launch()
-
+    private func openFirstChat(_ app: XCUIApplication) throws {
         if !app.navigationBars["Chats"].waitForExistence(timeout: 3) {
             let back = app.navigationBars.buttons.element(boundBy: 0)
             if back.exists { back.tap() }
         }
         guard app.navigationBars["Chats"].waitForExistence(timeout: 5) else {
-            throw XCTSkip("App is signed out; skipping signed-in sticker panel UI check.")
+            throw XCTSkip("App is signed out; skipping signed-in composer UI check.")
         }
 
         let showAll = app.buttons["focus-show-all"]
@@ -166,8 +163,20 @@ final class HaloUITests: XCTestCase {
         guard openedChat else {
             throw XCTSkip("No room with a sticker button found on this simulator.")
         }
+    }
 
+    /// M4/M5 simulator UI check: opens a chat, verifies the sticker panel loads packs/stickers, and exercises New pack creation.
+    @MainActor
+    func testStickerPanelAndPackCreationFlow() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        try openFirstChat(app)
+
+        // The expression panel remembers its last tab and sticker source: pick Stickers → My stickers.
         app.buttons["sticker-button"].tap()
+        if app.buttons["panel-tab-stickers"].waitForExistence(timeout: 3) { app.buttons["panel-tab-stickers"].tap() }
+        if app.buttons["My stickers"].exists { app.buttons["My stickers"].tap() }
         let search = app.textFields["sticker-search"]
         XCTAssertTrue(search.waitForExistence(timeout: 5), "Sticker panel should show search field")
         let loading = app.staticTexts["Loading stickers…"]
@@ -200,6 +209,83 @@ final class HaloUITests: XCTestCase {
 
     /// Cold-launch performance metric (ROADMAP M15, SR-06, NFR-1).
     /// Opt-in via `HALO_RUN_PERF_TESTS=1` so routine `prepush.sh` runs stay fast.
+    /// COMPOSER_PANELS (D97/D98) simulator check: the expression panel opens in place of the keyboard, switches tabs,
+    /// inserts an emoji, swaps back to the keyboard, and the attachment panel shows its actions. Nothing is sent.
+    @MainActor
+    func testComposerPanelsSwapWithKeyboard() throws {
+        let app = XCUIApplication()
+        app.launch()
+        try openFirstChat(app)
+        func shot(_ name: String) {
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+        let composer = app.descendants(matching: .any)["composer"].firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: 5))
+
+        // Expression panel: opens without the keyboard, with its tab pill.
+        app.buttons["sticker-button"].tap()
+        XCTAssertTrue(app.buttons["panel-tab-emoji"].waitForExistence(timeout: 3), "Expression panel should show its tabs")
+        XCTAssertFalse(app.keyboards.firstMatch.exists, "The panel replaces the keyboard")
+        shot("1-expression-panel")
+
+        // Emoji tab: search and insert.
+        app.buttons["panel-tab-emoji"].tap()
+        // Start from an empty draft (an earlier run may have left one).
+        for _ in 0..<20 where !(composer.value as? String ?? "").isEmpty && (composer.value as? String) != "Message" {
+            app.buttons["emoji-delete"].tap()
+        }
+        let emojiSearch = app.textFields["emoji-search"]
+        XCTAssertTrue(emojiSearch.waitForExistence(timeout: 3))
+        shot("2-emoji-tab")
+        emojiSearch.tap()
+        emojiSearch.typeText("pizza")
+        let pizza = app.buttons["pizza"]
+        XCTAssertTrue(pizza.waitForExistence(timeout: 3), "Search should find the pizza emoji")
+        shot("3-emoji-search")
+        pizza.tap()
+        XCTAssertTrue((composer.value as? String ?? "").contains("🍕"), "Tapping an emoji inserts it into the draft")
+
+        // Tapping the field swaps the panel for the keyboard.
+        composer.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["panel-tab-emoji"].waitForNonExistence(timeout: 3), "The keyboard replaces the panel")
+        shot("4-keyboard")
+
+        // The toggle swaps back to the panel; its delete key removes the emoji again (the draft is left empty).
+        app.buttons["sticker-button"].tap()
+        XCTAssertTrue(app.buttons["panel-tab-emoji"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["emoji-delete"].waitForExistence(timeout: 3))
+        app.buttons["emoji-delete"].tap()
+        XCTAssertFalse((composer.value as? String ?? "").contains("🍕"), "The panel's delete key removes the last emoji")
+
+        // GIFs (KLIPY) when the build has a key.
+        if app.buttons["panel-tab-gifs"].exists {
+            app.buttons["panel-tab-gifs"].tap()
+            XCTAssertTrue(app.textFields["gif-search"].waitForExistence(timeout: 3))
+            XCTAssertEqual(app.textFields["gif-search"].placeholderValue, "Search KLIPY")
+            XCTAssertTrue(app.staticTexts["TRENDING"].waitForExistence(timeout: 10), "KLIPY trending should load")
+            _ = app.staticTexts["media-settle"].waitForExistence(timeout: 12)  // gives the previews time to arrive
+            shot("5-gifs")
+        }
+
+        // Attachment panel.
+        app.buttons["attachment-button"].tap()
+        XCTAssertTrue(app.buttons["file-button"].waitForExistence(timeout: 3), "Attachment panel should offer Files")
+        _ = app.staticTexts["photos-settle"].waitForExistence(timeout: 3)
+        shot("6-attachments")
+
+        // A tap on the conversation closes the panel.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2)).tap()
+        XCTAssertTrue(app.buttons["file-button"].waitForNonExistence(timeout: 3))
+        shot("7-closed")
+        let back = app.navigationBars.buttons.element(boundBy: 0)
+        if back.waitForExistence(timeout: 3) { back.tap() }
+    }
+
     @MainActor
     func testLaunchPerformanceMetric() throws {
         guard ProcessInfo.processInfo.environment["HALO_RUN_PERF_TESTS"] == "1" else {

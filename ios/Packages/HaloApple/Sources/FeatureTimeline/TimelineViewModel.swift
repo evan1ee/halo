@@ -88,6 +88,8 @@ public final class TimelineViewModel {
     }
     /// Whether typing notices are sent while the user composes (Settings → Privacy → Typing notices, SETTINGS §3).
     public var sendsTypingNotices: @MainActor () -> Bool = { true }
+    /// KLIPY GIFs and stickers (D98); `nil` hides them, and KLIPY links then show as plain links.
+    public var klipy: KlipyCatalog?
 
     /// The message being typed. Cleared only once the send was accepted, so a failure never loses the text.
     public var draft = "" {

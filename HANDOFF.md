@@ -1,24 +1,24 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-22 · Branch: `main` · PRs #1–#75 merged
+Last updated: 2026-11-23 · Branch: `feat/keyboard-panels` (PR open) · PRs #1–#75 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
-- **Roadmap / Autonomous Loop:** **ALL autonomous engineering work across M0–M16, ADR-0022 steps 1–4 (D86), and Tech Debt Phases A–D is complete!** Only founder (`👤`) and physical-device (`📱`) items remain (listed in §5).
+- **Roadmap / Autonomous Loop:** all autonomous work across M0–M16, ADR-0022 and Tech Debt A–D is done; this push adds the **composer and keyboard panels** (D97) with **KLIPY GIF/sticker search** (D98) on `feat/keyboard-panels` ([docs/features/COMPOSER_PANELS.md](docs/features/COMPOSER_PANELS.md)). Only founder (`👤`) and physical-device (`📱`) items remain (§5).
 - **Milestones:** M0–M16 done except founder/device items (gates, Beta/Release push gateway + TestFlight, 7-day AC-U8 soak, physical-device NFR-1/NFR-2/MetricKit run, Q-BRAND sign-in artwork, Q-ONBOARD-SERVER, Q-L10N, Q-APPSTORE, legal/export/privacy labels). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`).
 - **Last prepush:** `HALO_SIM="iPhone Air" scripts/prepush.sh` (Halo closed in every simulator first): all steps passed (`HaloCore` 187 tests, `HaloApple-Package`, `Halo-Debug` on `iPhone Air` + `iPad Pro 13-inch (M5)`, `HaloUITests`, docs/boundaries/tokens, gitleaks, swiftlint 0 violations).
 - **CI:** PRs #1–#75 merged. Linux CI runs `HaloCore` tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
+- **Composer and keyboard panels + KLIPY (`feat/keyboard-panels`, D97/D98):** Telegram-style composer in Halo's glass look (paperclip · field with emoji/sticker/GIF toggle · send) over one panel area where the keyboard, the expression panel (GIFs · Stickers · Emoji pill) and the attachment panel (inline Photos picker, File, Paste) swap without a jump (`ComposerInputState`/`ComposerInputController`/`ComposerPanelArea` in `HaloDesignSystem/InputPanel`). Full Unicode emoji set (`EmojiKeyboard`). KLIPY search/trending with favourites/recents (`KlipyCatalog`, `KlipyClient`, `KlipyShelfStore`, `KlipyPanelModel/View`); items are sent as E2EE text messages holding the unmodified KLIPY URL (KLIPY forbids re-hosting) and played inline (`KlipyMessageMedia`) when previews are allowed. Sticker sheet became the embedded Stickers tab (`StickerTabView`: My stickers | KLIPY); the encrypted-room sticker notice is unchanged. Key: `HALO_KLIPY_API_KEY` in git-ignored `ios/Config/Local.xcconfig` (founder's key set locally only).
 - **M4/M5 sticker panel & pack creation simulator UI check (`main`):** verified `stickers` & `createPack` contract tests against `infra/dev` and added `HaloUITests.testStickerPanelAndPackCreationFlow` on signed-in `iPhone Air`; fixed Dynamic Type clipping, contrast (`HaloColor.bgPrimary`/`textPrimary`), `.accessibilityHidden(true)` on sticker placeholder text, and 44×44 `+` hit target in `StickerPanelView`/`NewPackView`.
 - **M16 completion & timeline scroll follow-ups (`main`, `ae88d29..ce9073b`):**
   - iPad three-column layout (`RoomInfoPresentation` + `.inspector` column 300–420 pt + `⌘I`, sheet on compact/iPhone); `ChatsRouterSplitTests`.
   - Send-by-Siri (`SendMessageIntent` + `SiriSendCoordinator`, reuses D88 `ChatEntity`, confirmation before send, confirmed vs queued); `SiriSendCoordinatorTests`.
   - Drag items out of timeline (`TimelineDragExtractor`, `DraggedTimelineFile` for text/captions/notices/emotes, loaded photos, files ≤ 50 MiB); `TimelineDragTests`.
   - Timeline scroll follow-ups (`PrependedAnchor` preserves position on back-pagination; `ShortRoomAlignment` bottom-aligns short rooms above composer); `TimelineScrollHelpersTests`.
-- **Signed-in chat-list accessibility audit & local signing (`PR #74–#75`):** `AvatarTint` contrast ≥ 4.5:1 (`AvatarTests`), wrapping Media Gallery row, 44 pt Focus banner button, full-list audit in `HaloUITests` (D96); `ios/Config/Local.xcconfig` keeps `DEVELOPMENT_TEAM` out of git; removed deprecated `UIWindow(frame:)` in `WebAuthSessionPresenter`.
 
 ## 3. Key decisions
 Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D96), [docs/adr/README.md](docs/adr/README.md).
@@ -27,10 +27,16 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D96), [docs/adr/RE
 - **D83:** Global Media Gallery is a preset virtual room entry in the room list (not a tab, excluded from unread/badge).
 - **D84 / D85 / D86 (ADR-0022):** Apple-native north star; single `NavigationStack` shell; module layout v2 (all 4 steps complete).
 - **D95:** a room opens at its newest message; the first unread message stays marked and "Jump to unread" goes up to it.
+- **D97:** one input area: keyboard and Halo's panels swap under the composer without a jump; composer and panels are independent.
+- **D98:** GIF/sticker search via KLIPY from the device; sent as E2EE links to unmodified KLIPY URLs (no re-hosting); favourites/recents on device.
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
-- **Stickers UI & test + D96 audit update:** `FeatureStickers/{StickerPanelView,NewPackView}.swift`, `ios/UITests/HaloUITests.swift`, `docs/DECISION_LOG.md`, `docs/ROADMAP.md`, `HANDOFF.md`.
+- **Domain/Application:** `HaloDomain/Emoji/EmojiKeyboard.swift`, `HaloDomain/Klipy/KlipyModels.swift`, `HaloApplication/Klipy/KlipyCatalog.swift` (+ tests `EmojiKeyboardTests`, `KlipyModelsTests`, `KlipyCatalogTests`).
+- **Platform/Design system:** `HaloPlatform/{KlipyClient,KlipyShelfStore}.swift`, `HaloDesignSystem/InputPanel/*`, `HaloDesignSystem/Media/AsyncAnimatedImage.swift` (+ `KlipyClientTests`, `ComposerInputStateTests`).
+- **Features:** `FeatureTimeline/{TimelineComposer,ComposerPanels}.swift` (new), `TimelineView`, `TimelineRow`, `TimelineMessageRowView`, `TimelineMediaViews`, `TimelineViewModel(+Actions)`; `FeatureStickers/{KlipyPanelModel,KlipyPanelView,StickerTabView}.swift` (new), `StickerPanelView` (embedded mode) (+ `ComposerKlipyTests`, `KlipyPanelModelTests`).
+- **App/config:** `App/{AppRoot,HaloApp}.swift`, `App/Composition/{ChatsAssembly,SessionAssembly}.swift`, `App/Support/Info(-Debug).plist`, `Config/{Base.xcconfig,Local.xcconfig.example}`; `UITests/HaloUITests.swift` (`testComposerPanelsSwapWithKeyboard`, `openFirstChat`).
+- **Docs:** `features/COMPOSER_PANELS.md` (new), `DECISION_LOG` (D97, D98), `SOURCES` (F-KLIPY-1), `OPEN_QUESTIONS` (Q-KLIPY-PROD, Q-KLIPY-REHOST), `security/{PRIVACY,SECURITY}.md`, `features/STICKERS.md`, `ROADMAP`, `README`.
 
 ## 5. Outstanding issues
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
@@ -39,6 +45,8 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 - **Timeline follow-up:** the room appears ~150 ms after the push starts (the list is hidden until placed).
 
 **Needs the founder (`👤`) or physical device (`📱`)**
+- 👤 **Q-KLIPY-PROD:** the KLIPY key is a testing key (100 requests/hour); request production access in KLIPY's Partner Panel before Beta 1. 👤 **Q-KLIPY-REHOST:** decide whether to ask KLIPY to approve sending GIFs as encrypted `m.image` instead of links.
+- 📱 **Composer panels on a device:** keyboard ↔ panel swap without a jump (AC-CP1), iPad floating/hardware keyboard, and a KLIPY GIF into an encrypted room seen in Element as a link (AC-CP3). The simulator here does not refresh its display without a viewer, so checks ran through XCUITest screenshots.
 - 📱 **Opening rooms on the device (D95):** open S10 and other large rooms with photos 10+ times; each must land at the newest message with no frame of the room's top and no spinner; also from a notification tap and Spotlight, and in the iPad split view.
 - 👤 **Gate confirmations:** confirm **G-FFI**, **G-UNREAD**, and **G-NSE** pass outcomes ([docs/testing/GATE_EVALUATION_M3.md](docs/testing/GATE_EVALUATION_M3.md) §4).
 - 👤 **R-14 (filtering entitlement):** request Apple's `com.apple.developer.usernotifications.filtering` entitlement (V-PUSH-3).
@@ -60,25 +68,26 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 
 ## 6. Next steps
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §"Remaining work".
+0. Merge the `feat/keyboard-panels` PR once checks pass; founder tries the panels on the iPhone and requests KLIPY production access.
 1. Founder checks room opening on the device (`Halo-Debug` is installed on the iPhone) (§5 📱 "Opening rooms"); then the timeline follow-ups in §5 "Engineering".
 2. Founder resolves §5 items (gates, push gateway / APNs, Q-BRAND sign-in illustration, Q-APPSTORE, legal/export/privacy labels) and runs Beta 1 (internal TestFlight) on a physical device.
 3. Post-1.0 backlog (M16): all autonomous items complete (share extension, share-sheet sending, App Intents/Spotlight + Send-by-Siri, unread + unread-chats widgets, Focus filter, iPad two/three-column layout, keyboard shortcuts, drag-and-drop in and out). Calls will not be implemented (D94).
 
 ## 7. Next Session Prompt
 ```text
-Read AGENTS.md, HANDOFF.md, and docs/ROADMAP.md (§"Remaining work").
-All autonomous engineering work for M0–M16, ADR-0022 steps 1–4, and Tech Debt
-Phases A–D is complete and on main.
+Read AGENTS.md, HANDOFF.md, and docs/features/COMPOSER_PANELS.md.
+Last push: composer and keyboard panels (D97) with KLIPY GIF/sticker
+search (D98) on branch feat/keyboard-panels (PR open). KLIPY needs
+HALO_KLIPY_API_KEY in the git-ignored ios/Config/Local.xcconfig.
 
-Only founder (👤) and physical-device (📱) items remain in HANDOFF.md §5
-(gates, Beta/Release push gateway + TestFlight, Q-BRAND sign-in artwork,
-Q-ONBOARD-SERVER, Q-L10N, Q-APPSTORE, legal/export/privacy labels, 7-day
-AC-U8 soak, and physical-device NFR-1/NFR-2 metrics).
-Last pushes on main: timeline scroll anchor on prepend & short-room bottom
-alignment, M16 drag out of timeline, M16 Send-by-Siri (SendMessageIntent +
-SiriSendCoordinator), and M16 iPad three-column inspector layout (⌘I).
-Next: check the device/founder items in HANDOFF §5, or pick any bug report
-or release-prep task the founder raises.
+Next:
+1. If the PR is still open: check its CI, merge per AUTONOMOUS_LOOP §3.
+2. Device checks in HANDOFF §5 (composer panels AC-CP1/AC-CP3), then the
+   other founder/device items there.
+3. Q-KLIPY-PROD / Q-KLIPY-REHOST are founder decisions; don't change the
+   link-sending design without one.
+Simulator note: drive UI through XCUITest (screenshots as attachments);
+the headless simulator display may not refresh for direct screenshots.
 Checks: HALO_SIM="iPhone Air" scripts/prepush.sh (close Halo in every
 simulator first).
 ```

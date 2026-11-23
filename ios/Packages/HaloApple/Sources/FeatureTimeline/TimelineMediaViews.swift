@@ -4,6 +4,7 @@ import HaloDesignSystem
 import HaloDomain
 import HaloFoundation
 import PhotosUI
+import ImageIO
 import SwiftUI
 import UniformTypeIdentifiers
 #if canImport(UIKit)
@@ -176,4 +177,43 @@ private struct OptionalFileDragModifier: ViewModifier {
 }
 
 /// `.task(id:)` re-runs when either value changes: more rows (keep paginating until the screen is full) or becoming ready.
+#if canImport(UIKit)
+/// A KLIPY GIF or sticker sent as a link (COMPOSER_PANELS §6, D98): played inline without a bubble, at most 220 pt,
+/// loaded straight from KLIPY. Until it loads (or if it can't) the link is shown as text.
+struct KlipyMessageMedia: View {
+    let url: URL
+    let model: TimelineViewModel
+    @State private var aspect: Double?
+    @State private var failed = false
+
+    var body: some View {
+        if failed {
+            Link(url.absoluteString, destination: url).font(HaloTypography.caption).lineLimit(1)
+        } else {
+            AsyncAnimatedImage(id: url.absoluteString, maxPixelSize: 660, load: { [model, url] in await model.klipyMedia(url) }) {
+                RoundedRectangle(cornerRadius: HaloRadius.medium, style: .continuous)
+                    .fill(HaloColor.textSecondary.opacity(0.12))
+                    .overlay { ProgressView() }
+            }
+            .frame(width: 220, height: 220 / max(0.5, min(2, aspect ?? 1)))
+            .clipShape(.rect(cornerRadius: HaloRadius.medium, style: .continuous))
+            .task(id: url) {
+                guard let data = await model.klipyMedia(url) else { failed = true; return }
+                aspect = KlipyMessageMedia.aspectRatio(data)
+            }
+            .accessibilityLabel("GIF from KLIPY")
+        }
+    }
+
+    /// Reads the size from the same file (the catalog's memory cache serves both, so it is downloaded once).
+    static func aspectRatio(_ data: Data) -> Double? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Double,
+              let height = properties[kCGImagePropertyPixelHeight] as? Double, width > 0, height > 0
+        else { return nil }
+        return width / height
+    }
+}
+#endif
 #endif

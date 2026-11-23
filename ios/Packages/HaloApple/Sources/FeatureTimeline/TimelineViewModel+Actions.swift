@@ -262,6 +262,35 @@ extension TimelineViewModel {
         try await coordinator.sendSticker(sticker)
     }
 
+    /// Sends a KLIPY GIF or sticker: a message whose body is the item's KLIPY URL, unchanged (KLIPY's rules forbid
+    /// re-hosting its media). It goes through the SDK like any text, so it is end-to-end encrypted in an encrypted room;
+    /// recipients' Halo plays it inline, other clients show the link (COMPOSER_PANELS §6, D98). Replies when a reply is set.
+    public func sendKlipy(_ item: KlipyItem) async throws(HaloError) {
+        guard KlipyLink.mediaURL(in: item.shared.url) != nil else { throw .invalidInput("NOT_KLIPY_MEDIA") }
+        if let id = replyingTo?.eventID {
+            try await coordinator.reply(to: id, text: item.shared.url)
+            replyingTo = nil
+        } else {
+            try await coordinator.send(item.shared.url)
+        }
+    }
+
+    /// Whether KLIPY links in this room play inline: KLIPY is configured and the room's media previews are on (loading
+    /// the file tells KLIPY's CDN this device's address, like any link preview).
+    public var showsKlipyMedia: Bool { klipy != nil && !previewsHidden }
+
+    /// A KLIPY file for a message, loaded directly from KLIPY (memory cache only).
+    public func klipyMedia(_ url: URL) async -> Data? {
+        guard showsKlipyMedia, let klipy else { return nil }
+        return try? await klipy.media(url)
+    }
+
+    /// The emoji panel's delete key: removes the last character (a whole emoji, flags and families included).
+    public func deleteBackward() {
+        guard !draft.isEmpty else { return }
+        draft.removeLast()
+    }
+
     /// Reacts to a confirmed message, or removes the user's reaction.
     public func toggleReaction(on row: TimelineRow, key: String) async {
         guard let id = row.eventID else { return }

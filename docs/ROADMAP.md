@@ -98,6 +98,8 @@ Halo is ready for external testers when **all** of these hold; each line names h
 - [ ] 📱 Focus filter on a device: add Halo to a Focus, turn it on and off, check the list narrows and restores.
 - [ ] 📱 Widgets on a device: add the small and lock-screen widgets, receive a push and check the count refreshes.
 - [ ] 📱 App Intents on a device: the Siri phrase and a Spotlight result opening a chat (the simulator can't speak to Siri).
+- [x] Composer and keyboard panels (D97, D98, [features/COMPOSER_PANELS.md](features/COMPOSER_PANELS.md)): one input area where the keyboard, the expression panel (GIFs · Stickers · Emoji) and the attachment panel swap without a jump; full emoji set; KLIPY GIF/sticker search with favourites and recents, sent as E2EE links and played inline. Tests: `ComposerInputStateTests`, `EmojiKeyboardTests`, `KlipyModelsTests`, `KlipyCatalogTests`, `KlipyClientTests`, `KlipyPanelModelTests`, `ComposerKlipyTests`, `HaloUITests.testComposerPanelsSwapWithKeyboard`.
+- [ ] 📱 Composer panels on a device: keyboard ↔ panel swap feel (AC-CP1), a KLIPY GIF into an encrypted room seen in Element (AC-CP3). 👤 KLIPY production access (Q-KLIPY-PROD).
 - [x] Unread chats widget (D93): medium widget, names from the D88 opt-in; `UnreadChatsSnapshot` tests.
 - [x] Hardware-keyboard shortcuts (D91 extras): ⌘N new chat, ⌘, settings, ⌘F search, ⌘1–⌘6 filters (`HaloApp.swift`); no unit test (SwiftUI wiring), built for iPad simulator.
 - [x] Drag and drop into a conversation (`TimelineDropModifier`, `DropClassifier`): pictures join the pending photos, other files send at once (≤ 50 MiB), text and links go into the draft; a tinted border shows the target. `TimelineDropTests`.

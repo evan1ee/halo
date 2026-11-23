@@ -3,12 +3,22 @@ import HaloDesignSystem
 import SwiftUI
 
 /// The sticker panel: search, favourites, recents, then one section per pack. Tap sends; long-press previews (animated when motion is allowed) and offers send and favourite.
+///
+/// `embedded`: shown inside the composer's expression panel (COMPOSER_PANELS §5) instead of a sheet; sending keeps the panel
+/// open like the keyboard, and the list leaves room at the bottom for the panel's tab pill.
 public struct StickerPanelView: View {
     let model: StickerPanelViewModel
+    let embedded: Bool
     @State private var newPack: NewPackViewModel?
     @Environment(\.dismiss) private var dismiss
 
-    public init(model: StickerPanelViewModel) { self.model = model }
+    public init(model: StickerPanelViewModel, embedded: Bool = false) {
+        self.model = model
+        self.embedded = embedded
+    }
+
+    /// After a send: a sheet closes, an embedded panel stays.
+    private func sent() { if !embedded { dismiss() } }
 
     private let columns = [GridItem(.adaptive(minimum: 72), spacing: 8)]
 
@@ -44,7 +54,7 @@ public struct StickerPanelView: View {
                 }
             }
             // Room for the sheet's drag indicator above the search field.
-            .padding(.horizontal, 12).padding(.top, 28).padding(.bottom, 8)
+            .padding(.horizontal, 12).padding(.top, embedded ? 8 : 28).padding(.bottom, 8)
             if let error = model.sendError {
                 HStack(spacing: 8) {
                     Text(error).font(HaloTypography.caption).foregroundStyle(HaloColor.danger)
@@ -108,16 +118,18 @@ public struct StickerPanelView: View {
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
+                .scrollDismissesKeyboard(.immediately)
+                .contentMargins(.bottom, embedded ? 72 : 0, for: .scrollContent)
             }
         }
-        .background(HaloColor.bgPrimary)
+        .background(embedded ? Color.clear : HaloColor.bgPrimary)
         .presentationBackground(HaloColor.bgPrimary)
         #if canImport(UIKit)
         .sheet(item: $newPack) { NewPackView(model: $0) }
         #endif
         .alert("Stickers aren't encrypted", isPresented: Binding(get: { model.pendingNotice != nil }, set: { if !$0 { model.cancelNotice() } })) {
             Button("Send anyway") {
-                Task { if await model.confirmNotice() { dismiss() } }
+                Task { if await model.confirmNotice() { sent() } }
             }
             Button("Cancel", role: .cancel) { model.cancelNotice() }
         } message: {
@@ -138,7 +150,7 @@ public struct StickerPanelView: View {
                 grid(stickers)
             }
             .listRowSeparator(.hidden)
-            .listRowBackground(HaloColor.bgPrimary)
+            .listRowBackground(embedded ? Color.clear : HaloColor.bgPrimary)
             .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 8, trailing: 12))
         }
     }
@@ -146,7 +158,7 @@ public struct StickerPanelView: View {
     private func grid(_ stickers: [Sticker]) -> some View {
         LazyVGrid(columns: columns, spacing: 8) {
             ForEach(stickers) { sticker in
-                StickerCell(sticker: sticker, model: model) { dismiss() }
+                StickerCell(sticker: sticker, model: model) { sent() }
             }
         }
     }

@@ -125,6 +125,9 @@ struct RowView: View {
                                 },
                                 tick: { id in Task { await model.tickBotTask(bot: row.source?.sender, id: id) } })
                             Button("Show original") { showingOriginal = true }.font(.caption2)
+                        } else if let url = row.klipyURL, model.showsKlipyMedia {
+                            KlipyMessageMedia(url: url, model: model)
+                                .opacity(row.status == nil ? 1 : 0.6)
                         } else if row.isJumboEmoji {
                             Text(row.text)
                                 .font(.largeTitle)
@@ -305,11 +308,6 @@ struct ReceiptAvatars: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Seen by \(row.readers.map(\.name).joined(separator: ", "))" + (row.seenBy > row.readers.count ? " and \(row.seenBy - row.readers.count) more" : ""))
     }
-}
-
-extension Image {
-    /// The attachment buttons beside the composer: one size, centred on a one-line field.
-    func composerIcon() -> some View { font(.title3).frame(height: 36) }
 }
 
 /// Wraps reaction chips onto multiple lines, aligned to the message's own side (leading for incoming, trailing for own).
