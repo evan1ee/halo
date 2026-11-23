@@ -389,6 +389,29 @@ final class HaloUITests: XCTestCase {
         shot("6c-poll")
         app.buttons["Cancel"].tap()  // nothing is sent
         XCTAssertTrue(question.waitForNonExistence(timeout: 3))
+        // Article (D101): Markdown editor with a formatting bar and a preview; closing keeps the draft.
+        app.buttons["attach-tab-article"].tap()
+        XCTAssertTrue(app.buttons["write-article-button"].waitForExistence(timeout: 3))
+        app.buttons["write-article-button"].tap()
+        let articleEditor = app.textViews["article-editor"]
+        XCTAssertTrue(articleEditor.waitForExistence(timeout: 3), "The article editor opens")
+        XCTAssertFalse(app.buttons["article-send"].isEnabled, "An empty article can't be sent")
+        articleEditor.tap()
+        app.buttons["article-format-heading"].tap()
+        articleEditor.typeText("Weekly notes\n")
+        app.buttons["article-format-bulletList"].tap()
+        articleEditor.typeText("first ")
+        app.buttons["article-format-bold"].tap()
+        articleEditor.typeText("item")
+        XCTAssertEqual(articleEditor.value as? String, "## Weekly notes\n- first **item**", "The formatting bar writes Markdown")
+        XCTAssertTrue(app.buttons["article-send"].isEnabled)
+        shot("6d-article-write")
+        app.buttons["Preview"].tap()
+        XCTAssertTrue(app.staticTexts["Weekly notes"].waitForExistence(timeout: 3), "The preview draws the heading")
+        shot("6e-article-preview")
+        app.buttons["article-close"].tap()  // nothing is sent
+        XCTAssertTrue(articleEditor.waitForNonExistence(timeout: 3))
+        XCTAssertEqual(app.buttons["write-article-button"].label, "Continue article", "Closing keeps the article")
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         app.buttons["attach-tab-location"].tap()
         let allow = springboard.buttons["Allow While Using App"]

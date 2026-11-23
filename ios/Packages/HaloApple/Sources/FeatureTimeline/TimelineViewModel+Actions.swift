@@ -261,6 +261,33 @@ extension TimelineViewModel {
         }
     }
 
+    /// Sends the Article editor's Markdown as one message (D101): the ordinary text path, where the SDK turns the Markdown
+    /// into the formatted body (encrypted in encrypted rooms). Replies when a reply is set. Returns `true` when sent; the
+    /// draft is kept on failure.
+    @discardableResult
+    public func sendArticle() async -> Bool {
+        let text = articleDraft
+        sendError = nil
+        guard ArticleMarkdown.canSend(text) else {
+            sendError = text.count > ArticleMarkdown.maximumLength
+                ? "The article is too long. Keep it under \(ArticleMarkdown.maximumLength.formatted()) characters." : nil
+            return false
+        }
+        do {
+            if let id = replyingTo?.eventID {
+                try await coordinator.reply(to: id, text: text)
+                replyingTo = nil
+            } else {
+                try await coordinator.send(text)
+            }
+            articleDraft = ""
+            return true
+        } catch {
+            sendError = error == .network(retryable: true) ? "Can't reach the server. Your article was kept." : "The article couldn't be sent."
+            return false
+        }
+    }
+
     /// Starts a poll from the attachment panel (D100). Returns `true` when sent; otherwise says why.
     @discardableResult
     public func createPoll(_ poll: OutgoingPoll) async -> Bool {

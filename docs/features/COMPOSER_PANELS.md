@@ -95,13 +95,26 @@ design (KLIPY requires client-side calls); its limits live in KLIPY's Partner Pa
 hour (Q-KLIPY-PROD).
 
 ## 7. Attachment panel (D100)
-Telegram's attach sheet as a panel: **Gallery · File · Location · Poll** in a floating pill with icons over titles, always
+Telegram's attach sheet as a panel: **Gallery · File · Location · Poll · Article** (Article per D101, §7a) in a floating pill with icons over titles, always
 opening on Gallery.
 - **Gallery:** the inline system Photos picker (`PhotosPicker`, `.inline`, continuous ordered selection; no photo-library permission is needed); checked photos join the composer's pending strip (M13 batching, caption on the first), unchecked ones leave it. GIFs keep their animation (ImagePreparer).
 - **File:** Files picker (≤ 50 MiB, sent as is as `m.file`/`m.audio`/`m.video`) and Paste when the clipboard has an image.
 - **Location:** a map with the user's position; **Send my current location** (`m.location`, `geo:` URI with accuracy, asset `m.self`) once a position is known, and **Send the pinned place** for the map's centre (asset `m.pin`). "While using" location access is asked for only when this tab opens; without it the pin still works. Sent through `Timeline.send_location` [VERIFIED F-FFI pinned SDK], encrypted in encrypted rooms. Received locations already render (TimelineMapper `.location`).
 - **Poll:** a native form in a sheet (question, 2–20 distinct answers, multiple answers, hide results until the poll ends), sent with `Timeline.create_poll` (`m.poll.start`; `undisclosed` when results are hidden). Polls already render (`.poll`).
 Domain: `OutgoingLocation`, `OutgoingPoll` (validation); ports `TimelineSession.sendLocation` / `createPoll` (adapter, fake, coordinator).
+
+### 7a. Article (D101)
+"Article" is a long message composed in Markdown (founder, 2026-11-23). The tab offers **New article** (or **Continue
+article** when a draft exists) and opens a full-screen editor:
+- **Write:** a monospaced `TextEditor` bound to `TimelineViewModel.articleDraft`, with a formatting bar (heading, bold,
+  italic, strikethrough, link, bulleted and numbered lists, quote, inline code, code block) that acts on the selection
+  (`ArticleMarkdown.apply`: inline formats wrap or unwrap, line formats prefix every touched line or remove the prefix,
+  a link selects its `https://` placeholder) and a character count that turns red past 20,000 characters.
+- **Preview:** headings, paragraphs, lists, quotes, fenced code and rules from `ArticleMarkdown.blocks`, inline styling
+  by Foundation's Markdown parser; close to what Halo draws from the sent `formatted_body`.
+- **Send** (enabled with text that fits) sends one text message through the ordinary path (`send` / `reply`): the SDK
+  turns the Markdown into `formatted_body`, encrypted in encrypted rooms. **Close** keeps the draft in memory for the
+  room; a failed send keeps it and says why. Nothing is stored on disk.
 
 ## 8. Data models and API boundaries
 | Piece | Module | Uses |
@@ -127,6 +140,7 @@ Hardware keyboard (no docked keyboard: panels use the minimum height, focus time
 - AC-CP2 An emoji, a Halo sticker and a KLIPY GIF can each be sent within two taps of opening the panel.
 - AC-CP3 A KLIPY GIF sent into an encrypted room arrives as an encrypted message whose body is the KLIPY URL; Halo shows it animated, Element shows the link.
 - AC-CP5 ↑ / ↓ resizes an open panel smoothly and returns the composer to the same place (UI test measures it).
+- AC-CP6 The Article editor's formatting bar writes Markdown, the preview draws it, Close keeps the draft and Send posts one formatted message (`ArticleMarkdownTests`, `ArticleComposerTests`, `testComposerPanelsSwapWithKeyboard`).
 - AC-CP4 No KLIPY media file is written to disk (ephemeral session, memory cache only).
 
 ## 12. Test requirements

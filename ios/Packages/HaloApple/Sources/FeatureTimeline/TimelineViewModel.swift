@@ -91,6 +91,9 @@ public final class TimelineViewModel {
     /// KLIPY GIFs and stickers (D98); `nil` hides them, and KLIPY links then show as plain links.
     public var klipy: KlipyCatalog?
 
+    /// The Article editor's text (D101): kept while the editor is closed, cleared once the article was sent.
+    public var articleDraft = ""
+
     /// The message being typed. Cleared only once the send was accepted, so a failure never loses the text.
     public var draft = "" {
         didSet {

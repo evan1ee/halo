@@ -216,7 +216,7 @@ struct EmojiPanel: View {
 /// It always opens on Gallery.
 struct AttachmentPanel: View {
     enum Tab: String, Hashable, Identifiable {
-        case gallery, file, location, poll
+        case gallery, file, location, poll, article
         var id: String { rawValue }
     }
 
@@ -233,6 +233,7 @@ struct AttachmentPanel: View {
                 case .file: FileTab(model: model, choosingFile: $choosingFile)
                 case .location: LocationTab(model: model, input: input)
                 case .poll: PollTab(model: model, input: input)
+                case .article: ArticleTab(model: model, input: input)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -243,6 +244,7 @@ struct AttachmentPanel: View {
                     .init(tab: .file, title: "File", systemImage: "doc", identifier: "attach-tab-file"),
                     .init(tab: .location, title: "Location", systemImage: "mappin.and.ellipse", identifier: "attach-tab-location"),
                     .init(tab: .poll, title: "Poll", systemImage: "chart.bar.xaxis", identifier: "attach-tab-poll"),
+                    .init(tab: .article, title: "Article", systemImage: "doc.richtext", identifier: "attach-tab-article"),
                 ],
                 selection: $tab,
                 stacked: true
