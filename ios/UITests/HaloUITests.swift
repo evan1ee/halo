@@ -224,6 +224,18 @@ final class HaloUITests: XCTestCase {
         }
         let composer = app.descendants(matching: .any)["composer"].firstMatch
         XCTAssertTrue(composer.waitForExistence(timeout: 5))
+        let attach = app.buttons["attachment-button"]
+        /// Samples the composer row's top edge right after `action`, while the keyboard/panel swap animates, and records them.
+        func sampleComposerTop(_ label: String, during action: () -> Void) -> [Double] {
+            action()
+            var samples: [Double] = []
+            for _ in 0..<12 { samples.append(Double(attach.frame.minY)) }
+            let note = XCTAttachment(string: "\(label): " + samples.map { String(format: "%.1f", $0) }.joined(separator: ", "))
+            note.name = "composer-y-\(label)"
+            note.lifetime = .keepAlways
+            add(note)
+            return samples
+        }
 
         // Expression panel: opens without the keyboard, with its tab pill.
         app.buttons["sticker-button"].tap()
@@ -253,6 +265,25 @@ final class HaloUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["panel-tab-emoji"].waitForNonExistence(timeout: 3), "The keyboard replaces the panel")
         shot("4-keyboard")
+        _ = app.staticTexts["settle"].waitForExistence(timeout: 1)
+        let keyboardTop = Double(attach.frame.minY)
+
+        // AC-CP1: keyboard → panel → keyboard keeps the composer where it is, during and after each swap.
+        let toPanel = sampleComposerTop("keyboard-to-panel") { app.buttons["sticker-button"].tap() }
+        XCTAssertTrue(app.buttons["panel-tab-emoji"].waitForExistence(timeout: 3))
+        _ = app.staticTexts["settle"].waitForExistence(timeout: 1)
+        let panelTop = Double(attach.frame.minY)
+        let toKeyboard = sampleComposerTop("panel-to-keyboard") { app.buttons["sticker-button"].tap() }
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        _ = app.staticTexts["settle"].waitForExistence(timeout: 1)
+        let summary = XCTAttachment(string: String(format: "settled keyboard %.1f, panel %.1f, back %.1f; max drift during swaps %.1f pt",
+            keyboardTop, panelTop, Double(attach.frame.minY),
+            (toPanel + toKeyboard).map { abs($0 - keyboardTop) }.max() ?? 0))
+        summary.name = "composer-y-summary"
+        summary.lifetime = .keepAlways
+        add(summary)
+        XCTAssertEqual(panelTop, keyboardTop, accuracy: 2, "The panel puts the composer where the keyboard did")
+        XCTAssertEqual(Double(attach.frame.minY), keyboardTop, accuracy: 2, "Back to the keyboard, the composer returns to the same place")
 
         // The toggle swaps back to the panel; its delete key removes the emoji again (the draft is left empty).
         app.buttons["sticker-button"].tap()

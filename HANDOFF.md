@@ -46,6 +46,8 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 
 **Needs the founder (`👤`) or physical device (`📱`)**
 - 👤 **Q-KLIPY-PROD:** the KLIPY key is a testing key (100 requests/hour); request production access in KLIPY's Partner Panel before Beta 1. 👤 **Q-KLIPY-REHOST:** decide whether to ask KLIPY to approve sending GIFs as encrypted `m.image` instead of links.
+- 👤 **Merge PR #76:** all CI checks pass and prepush passed, but it adds a new third-party data flow (KLIPY, SECURITY/PRIVACY docs), which AUTONOMOUS_LOOP §3.4 leaves to the founder. Merge with `gh pr merge 76 --merge --delete-branch` once approved.
+- 📱 **UI tests on the iPhone 17e:** the runner exited with code 74 before connecting (phone locked or Settings → Developer → Enable UI Automation off). Then run `testComposerPanelsSwapWithKeyboard` on it for AC-CP1.
 - 📱 **Composer panels on a device:** keyboard ↔ panel swap without a jump (AC-CP1), iPad floating/hardware keyboard, and a KLIPY GIF into an encrypted room seen in Element as a link (AC-CP3). The simulator here does not refresh its display without a viewer, so checks ran through XCUITest screenshots.
 - 📱 **Opening rooms on the device (D95):** open S10 and other large rooms with photos 10+ times; each must land at the newest message with no frame of the room's top and no spinner; also from a notification tap and Spotlight, and in the iPad split view.
 - 👤 **Gate confirmations:** confirm **G-FFI**, **G-UNREAD**, and **G-NSE** pass outcomes ([docs/testing/GATE_EVALUATION_M3.md](docs/testing/GATE_EVALUATION_M3.md) §4).
@@ -82,7 +84,7 @@ HALO_KLIPY_API_KEY in the git-ignored ios/Config/Local.xcconfig.
 
 Next:
 1. If the PR is still open: check its CI, merge per AUTONOMOUS_LOOP §3.
-2. Device checks in HANDOFF §5 (composer panels AC-CP1/AC-CP3), then the
+2. Device checks in HANDOFF §5 (composer panels AC-CP1/AC-CP3; simulator: composer at 513 pt with keyboard, panel and back, 0 pt drift), then the
    other founder/device items there.
 3. Q-KLIPY-PROD / Q-KLIPY-REHOST are founder decisions; don't change the
    link-sending design without one.
