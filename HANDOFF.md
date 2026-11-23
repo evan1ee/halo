@@ -12,6 +12,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
+- **Article tab (D101):** "article means markdown editor compose" (founder): fifth attachment tab opening a full-screen Markdown editor (`FeatureTimeline/ArticleComposer.swift`: Write/Preview, formatting bar, character count, ≤ 20,000) that sends one text message through the existing path (the SDK makes the formatted body); draft kept in memory (`articleDraft`). Pure helpers `HaloDomain/Timeline/ArticleMarkdown.swift` (+ `ArticleMarkdownTests`, `ArticleComposerTests`, UI test steps 6d/6e).
 - **Attachment tabs (D100):** Gallery · File · Location · Poll; `OutgoingLocation`/`OutgoingPoll`, `TimelineSession.sendLocation`/`createPoll` (adapter → SDK `send_location`/`create_poll`, fake, coordinator), `PollComposer` sheet, MapKit location tab (`NSLocationWhenInUseUsageDescription`). UI tests now dismiss by dragging (a tap could open a photo) and wait for the composer to settle; the full `HaloUITests` suite passes. Prepush caught the field taking focus back right after the face icon opened a panel (the keyboard returned by itself); `ComposerInputController` now resigns a focus gain within 500 ms of a panel opening (`refocusRightAfterOpening` test, composer UI test passed 3× with 0.0 pt drift).
 - **Telegram composer layout + voice messages (`feat/keyboard-panels`, D99):** face icon in the field, mic / ↑ / ↓ on the right (↑ expands an open panel to a tall sheet, measured by `testComposerPanelsSwapWithKeyboard`: composer 513 → 166 → 513 pt), send inside the field while typing; tap-to-record voice messages sent as `m.audio` (`VoiceRecorder`, `NSMicrophoneUsageDescription`). Tabs are Emoji · GIFs · Stickers, opening on Emoji. The keyboard height is remembered app-wide (`KeyboardHeightMemory`) so face icon → emoji → keyboard no longer moves the field (founder report). Fixes: a panel now resigns the keyboard explicitly (the focus binding alone sometimes left it up), KLIPY media downloads get 60 s and a failed KLIPY message shows tap-to-retry instead of a bare link.
 - **Composer and keyboard panels + KLIPY (`feat/keyboard-panels`, D97/D98):** Telegram-style composer in Halo's glass look (paperclip · field with emoji/sticker/GIF toggle · send) over one panel area where the keyboard, the expression panel (GIFs · Stickers · Emoji pill) and the attachment panel (inline Photos picker, File, Paste) swap without a jump (`ComposerInputState`/`ComposerInputController`/`ComposerPanelArea` in `HaloDesignSystem/InputPanel`). Full Unicode emoji set (`EmojiKeyboard`). KLIPY search/trending with favourites/recents (`KlipyCatalog`, `KlipyClient`, `KlipyShelfStore`, `KlipyPanelModel/View`); items are sent as E2EE text messages holding the unmodified KLIPY URL (KLIPY forbids re-hosting) and played inline (`KlipyMessageMedia`) when previews are allowed. Sticker sheet became the embedded Stickers tab (`StickerTabView`: My stickers | KLIPY); the encrypted-room sticker notice is unchanged. Key: `HALO_KLIPY_API_KEY` in git-ignored `ios/Config/Local.xcconfig` (founder's key set locally only).
@@ -23,7 +24,7 @@ Summary only; older history lives in `git log`.
   - Timeline scroll follow-ups (`PrependedAnchor` preserves position on back-pagination; `ShortRoomAlignment` bottom-aligns short rooms above composer); `TimelineScrollHelpersTests`.
 
 ## 3. Key decisions
-Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D96), [docs/adr/README.md](docs/adr/README.md).
+Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D101), [docs/adr/README.md](docs/adr/README.md).
 - **D73 / D74 / D78–D80 (ADR-0020):** classic sync unread evidence, encrypted-room SDK counts decide, identity/timeline-index read ordering.
 - **D82 (ADR-0021):** app icon badge sums `RoomReadState.badgeCount` for `attention == true`.
 - **D83:** Global Media Gallery is a preset virtual room entry in the room list (not a tab, excluded from unread/badge).
@@ -31,6 +32,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D96), [docs/adr/RE
 - **D95:** a room opens at its newest message; the first unread message stays marked and "Jump to unread" goes up to it.
 - **D97:** one input area: keyboard and Halo's panels swap under the composer without a jump; composer and panels are independent.
 - **D100:** attachment panel tabs Gallery · File · Location · Poll; location and polls via the SDK.
+- **D101:** Article tab: Markdown editor sending one formatted text message through the existing path.
 - **D99:** Telegram composer layout (face icon, mic / ↑ / ↓, send in field) and voice messages as `m.audio`.
 - **D98:** GIF/sticker search via KLIPY from the device; sent as E2EE links to unmodified KLIPY URLs (no re-hosting); favourites/recents on device.
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
@@ -53,7 +55,7 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 - 👤 **Q-KLIPY-PROD:** the KLIPY key is a testing key (100 requests/hour); request production access in KLIPY's Partner Panel before Beta 1. 👤 **Q-KLIPY-REHOST:** decide whether to ask KLIPY to approve sending GIFs as encrypted `m.image` instead of links.
 - 👤 **Merge PR #76:** all CI checks pass and prepush passed, but it adds a new third-party data flow (KLIPY, SECURITY/PRIVACY docs), which AUTONOMOUS_LOOP §3.4 leaves to the founder. Merge with `gh pr merge 76 --merge --delete-branch` once approved.
 - 📱 **UI tests on the iPhone 17e:** the runner exited with code 74 before connecting (phone locked or Settings → Developer → Enable UI Automation off). Then run `testComposerPanelsSwapWithKeyboard` on it for AC-CP1.
-- 📱 **Location and polls:** send own location and a pin on a device, start a poll; check they render in Halo and Element (no live message was sent in the simulator).
+- 📱 **Location, polls and articles:** send own location and a pin on a device, start a poll, send an article with headings/lists/code; check they render in Halo and Element (no live message was sent in the simulator).
 - 📱 **Voice messages on a device:** record, cancel and send one; check it plays in Halo and Element (the simulator has no microphone test here).
 - 📱 **Composer panels on a device:** keyboard ↔ panel swap without a jump (AC-CP1), iPad floating/hardware keyboard, and a KLIPY GIF into an encrypted room seen in Element as a link (AC-CP3). The simulator here does not refresh its display without a viewer, so checks ran through XCUITest screenshots.
 - 📱 **Opening rooms on the device (D95):** open S10 and other large rooms with photos 10+ times; each must land at the newest message with no frame of the room's top and no spinner; also from a notification tap and Spotlight, and in the iPad split view.
@@ -77,8 +79,7 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 
 ## 6. Next steps
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §"Remaining work".
-0. **Article tab (founder, 2026-11-23):** "article means markdown editor compose": add Article to the attachment tabs, a full-screen Markdown editor (Write/Preview, formatting bar) that sends through the existing text path (SDK turns Markdown into the formatted body). In progress on `feat/keyboard-panels`.
-1. Merge the `feat/keyboard-panels` PR once checks pass; founder tries the panels on the iPhone and requests KLIPY production access.
+0. Merge the `feat/keyboard-panels` PR once checks pass; founder tries the panels on the iPhone and requests KLIPY production access.
 1. Founder checks room opening on the device (`Halo-Debug` is installed on the iPhone) (§5 📱 "Opening rooms"); then the timeline follow-ups in §5 "Engineering".
 2. Founder resolves §5 items (gates, push gateway / APNs, Q-BRAND sign-in illustration, Q-APPSTORE, legal/export/privacy labels) and runs Beta 1 (internal TestFlight) on a physical device.
 3. Post-1.0 backlog (M16): all autonomous items complete (share extension, share-sheet sending, App Intents/Spotlight + Send-by-Siri, unread + unread-chats widgets, Focus filter, iPad two/three-column layout, keyboard shortcuts, drag-and-drop in and out). Calls will not be implemented (D94).
