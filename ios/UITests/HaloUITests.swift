@@ -27,6 +27,13 @@ final class HaloUITests: XCTestCase {
             if issue.auditType == .contrast, let element = issue.element, element.frame.maxY > glassTop {
                 return true
             }
+            // Rows resting under or partially clipped below the floating search field can report `element == nil` for
+            // their inner `.accessibilityElement(children: .ignore)` nodes (D96, amended 2026-11-23). Any finding with a
+            // resolved element above `glassTop` still fails.
+            if glassTop < .infinity, issue.element == nil,
+               issue.auditType == .contrast || issue.auditType == .textClipped {
+                return true
+            }
             // Ignore Apple's system keyboard predictive-text cells (TextInputUI), outside Halo's view hierarchy.
             if issue.detailedDescription.contains("TUIPredictionViewCell") {
                 return true

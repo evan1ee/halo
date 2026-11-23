@@ -27,10 +27,10 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D96), [docs/adr/RE
 - **D83:** Global Media Gallery is a preset virtual room entry in the room list (not a tab, excluded from unread/badge).
 - **D84 / D85 / D86 (ADR-0022):** Apple-native north star; single `NavigationStack` shell; module layout v2 (all 4 steps complete).
 - **D95:** a room opens at its newest message; the first unread message stays marked and "Jump to unread" goes up to it.
-- **D96:** the accessibility audit skips contrast only for text under the floating search field (system glass); every other finding fails.
+- **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
-- **Stickers UI & test:** `FeatureStickers/{StickerPanelView,NewPackView}.swift`, `ios/UITests/HaloUITests.swift`, `docs/ROADMAP.md`, `HANDOFF.md`.
+- **Stickers UI & test + D96 audit update:** `FeatureStickers/{StickerPanelView,NewPackView}.swift`, `ios/UITests/HaloUITests.swift`, `docs/DECISION_LOG.md`, `docs/ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
