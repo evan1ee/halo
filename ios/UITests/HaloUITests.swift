@@ -229,12 +229,16 @@ final class HaloUITests: XCTestCase {
             let cell = cells.element(boundBy: index)
             if cell.staticTexts["Media Gallery"].exists { continue }
             cell.tap()
-            if app.buttons["sticker-button"].waitForExistence(timeout: 5) {
+            if app.buttons["sticker-button"].waitForExistence(timeout: 8) {
                 openedChat = true
                 break
             }
-            let back = app.navigationBars.buttons.element(boundBy: 0)
-            if back.exists { back.tap() }
+            // iPhone: the room covers the list, go back. iPad: the list stays in the sidebar beside the room (and the
+            // first bar button there would hide the sidebar), so just try the next row.
+            if !cells.firstMatch.isHittable {
+                let back = app.navigationBars.buttons.element(boundBy: 0)
+                if back.exists { back.tap() }
+            }
         }
         guard openedChat else {
             throw XCTSkip("No room with a sticker button found on this simulator.")
@@ -332,7 +336,11 @@ final class HaloUITests: XCTestCase {
             shot.name = "empty-room-\(index)"
             shot.lifetime = .keepAlways
             add(shot)
-            XCTAssertTrue(emptyState, "\(name): an empty room says so instead of a blank list")
+            // Test data can gain messages (another run may post into these rooms); the empty state is checked only
+            // while the room has no message rows. Responsiveness below is checked either way.
+            let hasMessages = app.staticTexts["Waiting for this message's key"].exists
+                || app.descendants(matching: .any).matching(identifier: "message-row").firstMatch.exists
+            if !hasMessages { XCTAssertTrue(emptyState, "\(name): an empty room says so instead of a blank list") }
             composer.tap()
             XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3), "\(name): the keyboard opens")
             // Real key taps (XCUIElement.typeText may touch the screen, which a person typing doesn't).

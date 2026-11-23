@@ -131,7 +131,7 @@ private struct RootView: View {
                     }
                     .navigationTitle("Chats")
                     .navigationBarTitleDisplayMode(.large)
-                    .searchable(text: $searchModel.query, isPresented: $searchPresented, prompt: "Search chats & messages")
+                    .searchable(text: $searchModel.query, isPresented: $searchPresented, prompt: Self.isPad ? "Search" : "Search chats & messages")  // the iPad sidebar is too narrow for the long prompt at large text sizes
                     .background {
                         // ⌘F starts a search (hardware keyboard).
                         Button("Search") { searchPresented = true }
