@@ -84,6 +84,32 @@ struct ComposerInputStateTests {
         searching.keyboardWillShow()
         #expect(ComposerPanelMetrics.areaHeight(state: searching, panelHeight: height, keyboardOverlap: 300) == ComposerPanelMetrics.searchHeight)
     }
+
+    @Test("↑ pulls an open panel up to the tall height, ↓ brings it back; nothing without a panel; leaving the panel resets it")
+    func expand() {
+        var state = ComposerInputState()
+        state.toggleExpanded()
+        #expect(!state.panelExpanded)
+        state.open(.expression)
+        state.toggleExpanded()
+        #expect(state.panelExpanded)
+        #expect(ComposerPanelMetrics.areaHeight(state: state, panelHeight: 300, expandedHeight: 640, keyboardOverlap: 0) == 640)
+        state.toggleExpanded()
+        #expect(ComposerPanelMetrics.areaHeight(state: state, panelHeight: 300, expandedHeight: 640, keyboardOverlap: 0) == 300)
+        state.toggleExpanded()
+        state.fieldFocused()
+        #expect(!state.panelExpanded)
+        state.open(.attachments)
+        state.toggleExpanded()
+        state.dismiss()
+        #expect(!state.panelExpanded)
+    }
+
+    @Test("the tall height leaves room for the navigation bar and composer, never below the normal panel")
+    func expandedHeight() {
+        #expect(ComposerPanelMetrics.expandedHeight(windowHeight: 878, topInset: 62, panelHeight: 300) == 666)
+        #expect(ComposerPanelMetrics.expandedHeight(windowHeight: 400, topInset: 20, panelHeight: 300) == 300)
+    }
 }
 
 @Suite("ComposerInputController")
@@ -104,5 +130,18 @@ struct ComposerInputControllerTests {
         #expect(controller.state.panelSearching && controller.panelHeight == 291)
         controller.dismiss()
         #expect(controller.state.mode == .idle)
+    }
+
+    @Test("the field taking focus back right after a panel opens keeps the panel; a later tap on the field swaps")
+    func refocusRightAfterOpening() async throws {
+        let controller = ComposerInputController()
+        controller.fieldFocusChanged(true)
+        controller.toggle(.expression)
+        controller.fieldFocusChanged(false)
+        controller.fieldFocusChanged(true)  // focus bouncing back in the same moment
+        #expect(controller.state.panel == .expression)
+        try await Task.sleep(for: ComposerInputController.refocusGuard + .milliseconds(100))
+        controller.fieldFocusChanged(true)  // the user taps the field
+        #expect(controller.state.mode == .keyboard && controller.state.lingeringPanel == .expression)
     }
 }

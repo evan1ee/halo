@@ -18,6 +18,7 @@ struct Composer: View {
     @Binding var choosingFile: Bool
     @FocusState private var focused: Bool
     @State private var sendTrigger = 0
+    @State private var voice = VoiceRecorder()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var hasAccessoryRows: Bool {
@@ -50,53 +51,123 @@ struct Composer: View {
 
     // MARK: Input row
 
+    /// Telegram's layout in Halo's look: paperclip · field (face/keyboard toggle inside, send inside once there is
+    /// text) · one round button on the right — the mic, or ↑ / ↓ to pull an open panel up to a tall sheet and back.
     private var inputRow: some View {
         HStack(alignment: .bottom, spacing: HaloSpacing.s) {
-            ComposerCircleButton(
-                systemImage: input.state.showsKeyboardToggle(for: .attachments) ? "keyboard" : "paperclip",
-                label: input.state.showsKeyboardToggle(for: .attachments) ? "Show keyboard" : "Attach"
-            ) { input.toggle(.attachments) }
+            ComposerCircleButton(systemImage: "paperclip", label: "Attach") { input.toggle(.attachments) }
                 .accessibilityIdentifier("attachment-button")
+                .accessibilityValue(input.state.panel == .attachments ? "Open" : "")
 
             HStack(alignment: .bottom, spacing: 0) {
-                TextField("Message", text: $model.draft, axis: .vertical)
-                    .lineLimit(1...6)
-                    .textFieldStyle(.plain)
-                    .focused($focused)
-                    .padding(.vertical, 11)
-                    .padding(.leading, HaloSpacing.l)
-                    .accessibilityIdentifier("composer")
-                Button { input.toggle(.expression) } label: {
-                    Image(systemName: expressionSymbol)
-                        .font(HaloTypography.title)
-                        .foregroundStyle(HaloColor.textSecondary)
-                        .contentTransition(.symbolEffect(.replace))
-                        .frame(width: 44, height: 44)
-                        .contentShape(.rect)
+                if voice.isRecording {
+                    recordingField
+                } else {
+                    TextField("Message", text: $model.draft, axis: .vertical)
+                        .lineLimit(1...6)
+                        .textFieldStyle(.plain)
+                        .focused($focused)
+                        .padding(.vertical, 11)
+                        .padding(.leading, HaloSpacing.l)
+                        .accessibilityIdentifier("composer")
+                    Button { input.toggle(.expression) } label: {
+                        Image(systemName: input.state.showsKeyboardToggle(for: .expression) ? "keyboard" : "face.smiling")
+                            .font(HaloTypography.title)
+                            .foregroundStyle(HaloColor.textSecondary)
+                            .contentTransition(.symbolEffect(.replace))
+                            .frame(width: 44, height: 44)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(input.state.showsKeyboardToggle(for: .expression) ? "Show keyboard" : "Emoji, stickers and GIFs")
+                    .accessibilityIdentifier("sticker-button")
+                    if model.canSend {
+                        Button {
+                            sendTrigger += 1
+                            Task { await model.send() }
+                        } label: {
+                            Image(systemName: "paperplane.fill")
+                                .font(HaloTypography.headline)
+                                .foregroundStyle(HaloColor.onAccent)
+                                .frame(width: 36, height: 36)
+                                .background(HaloColor.accent, in: .circle)
+                                .frame(width: 44, height: 44)
+                                .contentShape(.circle)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.trailing, HaloSpacing.xxs)
+                        .accessibilityLabel("Send")
+                        .accessibilityIdentifier("send-button")
+                        .transition(.scale.combined(with: .opacity))
+                    }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(input.state.showsKeyboardToggle(for: .expression) ? "Show keyboard" : "Emoji, stickers and GIFs")
-                .accessibilityIdentifier("sticker-button")
             }
             .frame(minHeight: 44)
             .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22, style: .continuous))
 
-            if model.canSend {
-                ComposerCircleButton(systemImage: "arrow.up", label: "Send", prominent: true) {
-                    sendTrigger += 1
-                    Task { await model.send() }
-                }
-                .accessibilityIdentifier("send-button")
-                .transition(.scale.combined(with: .opacity))
+            if voice.isRecording {
+                ComposerCircleButton(systemImage: "arrow.up", label: "Send voice message", prominent: true) { sendVoice() }
+                    .accessibilityIdentifier("voice-send-button")
+                    .transition(.scale.combined(with: .opacity))
+            } else if !model.canSend {
+                ComposerCircleButton(systemImage: trailingSymbol, label: trailingLabel) { trailingTapped() }
+                    .contentTransition(.symbolEffect(.replace))
+                    .accessibilityIdentifier(input.state.panel != nil ? "panel-expand-button" : "voice-button")
+                    .transition(.scale.combined(with: .opacity))
             }
         }
         .animation(.snappy(duration: 0.2), value: model.canSend)
+        .animation(.snappy(duration: 0.2), value: voice.isRecording)
+        .alert("Microphone access is off", isPresented: Binding(get: { voice.phase == .denied }, set: { if !$0 { voice.dismissProblem() } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("To record voice messages, allow Halo to use the microphone in Settings.")
+        }
     }
 
-    /// Keyboard while the expression panel is open; a smiley while typing; the sticker symbol on an empty field.
-    private var expressionSymbol: String {
-        if input.state.showsKeyboardToggle(for: .expression) { return "keyboard" }
-        return model.draft.isEmpty ? "sparkles.rectangle.stack" : "face.smiling"
+    /// The right button: ↑ / ↓ while a panel is open, the mic otherwise.
+    private var trailingSymbol: String {
+        guard input.state.panel != nil else { return "mic" }
+        return input.state.panelExpanded ? "chevron.down" : "chevron.up"
+    }
+
+    private var trailingLabel: String {
+        guard input.state.panel != nil else { return "Record voice message" }
+        return input.state.panelExpanded ? "Shrink panel" : "Expand panel"
+    }
+
+    private func trailingTapped() {
+        if input.state.panel != nil {
+            input.toggleExpanded()
+        } else {
+            Task { await voice.start() }
+        }
+    }
+
+    /// While recording, the field shows a red dot, the time and Cancel.
+    private var recordingField: some View {
+        HStack(spacing: HaloSpacing.s) {
+            Circle().fill(HaloColor.danger).frame(width: 10, height: 10)
+                .symbolEffect(.pulse)
+                .accessibilityHidden(true)
+            Text(VoiceRecorder.clock(voice.elapsed))
+                .font(HaloTypography.body.monospacedDigit())
+                .foregroundStyle(HaloColor.textPrimary)
+                .accessibilityLabel("Recording, \(VoiceRecorder.clock(voice.elapsed))")
+            Spacer()
+            Button("Cancel") { voice.cancel() }
+                .font(HaloTypography.bodyEmphasis)
+                .foregroundStyle(HaloColor.danger)
+                .accessibilityIdentifier("voice-cancel-button")
+        }
+        .padding(.horizontal, HaloSpacing.l)
+        .frame(minHeight: 44)
+    }
+
+    private func sendVoice() {
+        guard let recording = voice.finish() else { return }
+        sendTrigger += 1
+        Task { await model.sendFile(data: recording.data, filename: "Voice message.m4a", mimeType: "audio/mp4") }
     }
 
     // MARK: Accessory rows (typing, errors, edit/reply, suggestions, pending photos)

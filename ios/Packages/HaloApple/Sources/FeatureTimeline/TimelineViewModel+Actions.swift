@@ -248,6 +248,37 @@ extension TimelineViewModel {
         }
     }
 
+    /// Sends a static location from the attachment panel (D100). Returns `true` when sent; a failure is shown in the composer.
+    @discardableResult
+    public func sendLocation(_ location: OutgoingLocation) async -> Bool {
+        sendError = nil
+        do {
+            try await coordinator.sendLocation(location)
+            return true
+        } catch {
+            sendError = error == .network(retryable: true) ? "Can't reach the server. The location wasn't sent." : "The location couldn't be sent."
+            return false
+        }
+    }
+
+    /// Starts a poll from the attachment panel (D100). Returns `true` when sent; otherwise says why.
+    @discardableResult
+    public func createPoll(_ poll: OutgoingPoll) async -> Bool {
+        sendError = nil
+        do {
+            try await coordinator.createPoll(poll)
+            return true
+        } catch {
+            switch error {
+            case .invalidInput("POLL_DUPLICATE_ANSWERS"): sendError = "Two answers are the same."
+            case .invalidInput: sendError = "A poll needs a question and at least two answers."
+            case .network(retryable: true): sendError = "Can't reach the server. The poll wasn't sent."
+            default: sendError = "The poll couldn't be sent."
+            }
+            return false
+        }
+    }
+
     public func reportFileTooLarge() { sendError = "That file is too large to send." }
     public func reportFileUnreadable() { sendError = "That file couldn't be read." }
     public func dismissSendError() { sendError = nil }

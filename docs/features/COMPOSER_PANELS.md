@@ -10,16 +10,26 @@ place under the composer, with no jumps while they swap.
 ## 2. User stories and user flows
 - I tap the field and type with the iOS keyboard (dictation, predictive text, other languages: all native).
 - I tap the sticker/smiley button inside the field and the keyboard turns into the emoji/sticker/GIF panel at the same height; tapping it again (now a keyboard icon) brings the keyboard back.
-- In the panel I switch GIFs · Stickers · Emoji with a floating pill; the last tab is remembered.
+- In the panel I switch Emoji · GIFs · Stickers with a floating pill; it opens on Emoji the first time, then on the last tab used.
 - I search GIFs and KLIPY stickers, keep favourites, and find what I sent recently.
 - I long-press a GIF or sticker to preview it, send it or favourite it.
 - I tap the paperclip and pick photos from an inline picker, a file, or a pasted image.
 - Dragging or tapping the conversation puts the keyboard or panel away.
 
+### 2a. Composer layout (founder, 2026-11-23, D99)
+Telegram's arrangement in Halo's look: a round **paperclip** (attachment panel) · the **field** with a **face** icon inside
+(opens the expression panel; a keyboard icon while it is open) · one round button on the right: the **mic** when the field
+is empty and nothing is open, **↑** while a panel is open (pulls it up to a tall, sheet-like height that leaves room for the
+navigation bar and composer) and **↓** to bring it back. Once there is text, a blue **send** button appears inside the field
+and the right button goes away. The panel's content is laid out at the taller height while its area animates, so resizing
+slides without a flash. **Voice messages:** tap the mic to record (the system asks for the microphone the first time), the
+field shows a red dot, the time and Cancel; the right button sends. The recording is AAC `.m4a`, at most 5 minutes, sent
+through the file path as `m.audio` (encrypted in encrypted rooms) and deleted from the device afterwards.
+
 ## 3. Functional requirements: input state (D97)
 `ComposerInputState` (pure, `HaloDesignSystem/InputPanel`) is the single source of truth for what is under the composer:
 `idle`, `keyboard` or `panel(expression | attachments)`, plus `panelSearching` (a field inside the panel raised the
-keyboard) and `lingeringPanel` (the panel being replaced while the keyboard rises). `ComposerInputController` drives it
+keyboard), `lingeringPanel` (the panel being replaced while the keyboard rises) and `panelExpanded` (↑ / ↓, reset when the panel closes or the keyboard returns). `ComposerInputController` drives it
 from the field's focus, the composer's toggles and UIKit keyboard notifications.
 
 ```mermaid
@@ -35,7 +45,8 @@ stateDiagram-v2
   keyboard --> idle: tap/drag on conversation
 ```
 
-- **No jump.** The panel's height is the docked keyboard's last height above the bottom safe area (250–420 pt; 250 before any keyboard was seen; a hardware keyboard's shortcut bar never shrinks it). While the keyboard animates out (panel opening) or in (panel replaced), the panel area gives up exactly what the keyboard covers (`ComposerPanelMetrics.areaHeight`), animated with the keyboard's own curve, so keyboard + panel stays constant. The replaced panel stays drawn under the rising keyboard until it is covered.
+- **No jump.** The panel's height is the docked keyboard's last height above the bottom safe area (250–420 pt; a hardware keyboard's shortcut bar never shrinks it). That height is remembered for the whole app and across launches per window width (`KeyboardHeightMemory`); before the keyboard was ever seen at a width it is estimated as 38 % of the window less the bottom safe area, so opening the face panel before typing and then switching to the keyboard does not move the message field (founder report, 2026-11-23; measured 513.3 → 513.0 pt on iPhone Air with the memory wiped). While the keyboard animates out (panel opening) or in (panel replaced), the panel area gives up exactly what the keyboard covers (`ComposerPanelMetrics.areaHeight`), animated with the keyboard's own curve, so keyboard + panel stays constant. The replaced panel stays drawn under the rising keyboard until it is covered.
+- **Focus bounce.** Opening a panel resigns the field's first responder; the field sometimes takes focus back by itself a moment later (a race with SwiftUI focus and the button tap, seen once in the prepush UI run). A focus gain within 500 ms of a panel opening is resigned again instead of swapping the panel for the keyboard; a later tap on the field swaps as usual.
 - **Search inside a panel** raises the keyboard; the panel shrinks to its search height (190 pt) above it and its tab pill hides.
 - **Composer independence.** The composer reads the mode only for its two toggle icons (paperclip ↔ keyboard, sticker/smiley ↔ keyboard) and sends events; panels insert or send through the timeline's view model and never reference the composer.
 
@@ -83,19 +94,22 @@ GIF tab and the KLIPY source are hidden and KLIPY links stay links. A client-sid
 design (KLIPY requires client-side calls); its limits live in KLIPY's Partner Panel. A testing key allows 100 requests per
 hour (Q-KLIPY-PROD).
 
-## 7. Attachment panel
-An inline system Photos picker (`PhotosPicker`, `.inline`, continuous ordered selection; no photo-library permission is
-needed) whose checked photos join the composer's pending strip (M13 batching, caption on the first); unchecking removes
-them. Floating actions: **File** (Files picker, ≤ 50 MiB as before) and **Paste** when the clipboard has an image. GIFs
-picked from Photos keep their animation (ImagePreparer).
+## 7. Attachment panel (D100)
+Telegram's attach sheet as a panel: **Gallery · File · Location · Poll** in a floating pill with icons over titles, always
+opening on Gallery.
+- **Gallery:** the inline system Photos picker (`PhotosPicker`, `.inline`, continuous ordered selection; no photo-library permission is needed); checked photos join the composer's pending strip (M13 batching, caption on the first), unchecked ones leave it. GIFs keep their animation (ImagePreparer).
+- **File:** Files picker (≤ 50 MiB, sent as is as `m.file`/`m.audio`/`m.video`) and Paste when the clipboard has an image.
+- **Location:** a map with the user's position; **Send my current location** (`m.location`, `geo:` URI with accuracy, asset `m.self`) once a position is known, and **Send the pinned place** for the map's centre (asset `m.pin`). "While using" location access is asked for only when this tab opens; without it the pin still works. Sent through `Timeline.send_location` [VERIFIED F-FFI pinned SDK], encrypted in encrypted rooms. Received locations already render (TimelineMapper `.location`).
+- **Poll:** a native form in a sheet (question, 2–20 distinct answers, multiple answers, hide results until the poll ends), sent with `Timeline.create_poll` (`m.poll.start`; `undisclosed` when results are hidden). Polls already render (`.poll`).
+Domain: `OutgoingLocation`, `OutgoingPoll` (validation); ports `TimelineSession.sendLocation` / `createPoll` (adapter, fake, coordinator).
 
 ## 8. Data models and API boundaries
 | Piece | Module | Uses |
 |---|---|---|
 | `ComposerInputState`, `ComposerPanelMetrics`, `ComposerInputController`, `ComposerPanelArea`, `PanelTabPill`, `ComposerCircleButton`, `PanelSearchField`, `AsyncAnimatedImage` | HaloDesignSystem | SwiftUI, UIKit keyboard notifications |
-| `Composer`, `ExpressionPanel`, `EmojiPanel`, `AttachmentPanel`, `KlipyMessageMedia` | FeatureTimeline | `TimelineViewModel` (`sendKlipy`, `insertEmoji`, `deleteBackward`, `attachPhoto`, `sendFile`) |
+| `Composer`, `ExpressionPanel`, `EmojiPanel`, `AttachmentPanel` (Gallery/File/Location/Poll tabs, `PollComposer`), `VoiceRecorder`, `KlipyMessageMedia` | FeatureTimeline | `TimelineViewModel` (`sendKlipy`, `insertEmoji`, `deleteBackward`, `attachPhoto`, `sendFile`, `sendLocation`, `createPoll`) |
 | `StickerTabView`, `KlipyPanelView`, `KlipyPanelModel`, embedded `StickerPanelView` | FeatureStickers | `KlipyCatalog`, `StickerPanelViewModel` |
-| `KlipyKind/Item/Rendition/Page`, `KlipyResponseParser`, `KlipyLink`, `KlipyShelf`, `KlipyPort`, `KlipyShelfPort`, `EmojiKeyboard` | HaloDomain | — |
+| `KlipyKind/Item/Rendition/Page`, `KlipyResponseParser`, `KlipyLink`, `KlipyShelf`, `KlipyPort`, `KlipyShelfPort`, `EmojiKeyboard`, `OutgoingLocation`, `OutgoingPoll`, `TimelineSession.sendLocation/createPoll` | HaloDomain | — |
 | `KlipyCatalog` (actor) | HaloApplication | `KlipyPort`, `KlipyShelfPort` |
 | `KlipyClient`, `KlipyShelfStore` | HaloPlatform | URLSession (ephemeral), UserDefaults |
 The composition root injects the Stickers and GIFs tabs into `TimelineView` as closures (features never import each other).
@@ -112,6 +126,7 @@ Hardware keyboard (no docked keyboard: panels use the minimum height, focus time
 - AC-CP1 Switching keyboard ↔ panel keeps the composer at the same height (no visible jump) on iPhone.
 - AC-CP2 An emoji, a Halo sticker and a KLIPY GIF can each be sent within two taps of opening the panel.
 - AC-CP3 A KLIPY GIF sent into an encrypted room arrives as an encrypted message whose body is the KLIPY URL; Halo shows it animated, Element shows the link.
+- AC-CP5 ↑ / ↓ resizes an open panel smoothly and returns the composer to the same place (UI test measures it).
 - AC-CP4 No KLIPY media file is written to disk (ephemeral session, memory cache only).
 
 ## 12. Test requirements

@@ -126,6 +126,16 @@ final class HaloUITests: XCTestCase {
         try audit(app)
     }
 
+    /// Closes the keyboard or a composer panel by dragging the conversation (COMPOSER_PANELS §3). A tap could land on a
+    /// message (a photo opens the full-screen viewer), so the tests drag instead.
+    @MainActor
+    private func dismissComposerInput(_ app: XCUIApplication) {
+        // Like Messages: the keyboard follows a drag that reaches into it (interactive dismissal); a panel closes as soon
+        // as the conversation is dragged.
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+        start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.97)))
+    }
+
     /// Opens the first chat (not the Media Gallery) on a signed-in simulator so the composer is shown; skips when signed out.
     @MainActor
     private func openFirstChat(_ app: XCUIApplication) throws {
@@ -200,8 +210,9 @@ final class HaloUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["New pack"].waitForNonExistence(timeout: 3), "Cancel should dismiss New pack sheet")
 
         // Dismiss the sticker panel and return to Chats so @SceneStorage restores at the root for subsequent tests.
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15)).tap()
+        dismissComposerInput(app)
         _ = search.waitForNonExistence(timeout: 3)
+        _ = app.staticTexts["settle"].waitForExistence(timeout: 1)
         let back = app.navigationBars.buttons.element(boundBy: 0)
         if back.waitForExistence(timeout: 3) { back.tap() }
         XCTAssertTrue(app.navigationBars["Chats"].waitForExistence(timeout: 5), "Should return to Chats root")
@@ -214,6 +225,8 @@ final class HaloUITests: XCTestCase {
     @MainActor
     func testComposerPanelsSwapWithKeyboard() throws {
         let app = XCUIApplication()
+        // Forget the remembered keyboard height: the first panel must still match the keyboard it later swaps with.
+        app.launchArguments += ["-halo.composer.keyboardOverlaps", "{}"]
         app.launch()
         try openFirstChat(app)
         func shot(_ name: String) {
@@ -236,6 +249,38 @@ final class HaloUITests: XCTestCase {
             add(note)
             return samples
         }
+
+        // Founder's flow: face icon first (no keyboard seen yet in this room), insert an emoji, then the keyboard icon.
+        // The message field must stay where it is.
+        app.buttons["sticker-button"].tap()
+        XCTAssertTrue(app.buttons["panel-tab-emoji"].waitForExistence(timeout: 3))
+        // Emoji · GIFs · Stickers (the panel opens on Emoji the first time, then on the last tab used).
+        app.buttons["panel-tab-emoji"].tap()
+        XCTAssertTrue(app.buttons["panel-tab-emoji"].isSelected)
+        if app.buttons["panel-tab-gifs"].exists, app.buttons["panel-tab-stickers"].exists {
+            XCTAssertLessThan(app.buttons["panel-tab-emoji"].frame.minX, app.buttons["panel-tab-gifs"].frame.minX)
+            XCTAssertLessThan(app.buttons["panel-tab-gifs"].frame.minX, app.buttons["panel-tab-stickers"].frame.minX)
+        }
+        _ = app.staticTexts["settle"].waitForExistence(timeout: 1)
+        let firstPanelTop = Double(attach.frame.minY)
+        let anyEmoji = app.buttons.matching(identifier: "grinning").firstMatch.exists
+            ? app.buttons.matching(identifier: "grinning").firstMatch : app.buttons["grinning face"].firstMatch
+        if anyEmoji.waitForExistence(timeout: 2) { anyEmoji.tap() }
+        let firstSwap = sampleComposerTop("first-panel-to-keyboard") { app.buttons["sticker-button"].tap() }
+        shot("0-first-swap")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        _ = app.staticTexts["settle"].waitForExistence(timeout: 1)
+        let firstKeyboardTop = Double(attach.frame.minY)
+        let firstNote = XCTAttachment(string: String(format: "first open: panel %.1f, keyboard %.1f, samples %@", firstPanelTop, firstKeyboardTop,
+            firstSwap.map { String(format: "%.0f", $0) }.joined(separator: ",")))
+        firstNote.name = "composer-y-first-open"
+        firstNote.lifetime = .keepAlways
+        add(firstNote)
+        XCTAssertEqual(firstKeyboardTop, firstPanelTop, accuracy: 2, "Face icon → emoji → keyboard must not move the message field")
+        dismissComposerInput(app)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
+        // XCUITest aims at the final frame while the composer is still sliding down; let it settle before the next tap.
+        _ = app.staticTexts["settle"].waitForExistence(timeout: 1.5)
 
         // Expression panel: opens without the keyboard, with its tab pill.
         app.buttons["sticker-button"].tap()
@@ -293,26 +338,79 @@ final class HaloUITests: XCTestCase {
         app.buttons["emoji-delete"].tap()
         XCTAssertFalse((composer.value as? String ?? "").contains("🍕"), "The panel's delete key removes the last emoji")
 
+        // ↑ pulls the panel up to a tall sheet, ↓ brings it back to the same place (smoothly, no flash).
+        let expand = app.buttons["panel-expand-button"]
+        XCTAssertTrue(expand.waitForExistence(timeout: 3), "With a panel open the right button expands it")
+        XCTAssertEqual(expand.label, "Expand panel")
+        let normalTop = Double(attach.frame.minY)
+        let growing = sampleComposerTop("expand") { expand.tap() }
+        _ = app.staticTexts["settle"].waitForExistence(timeout: 1)
+        let expandedTop = Double(attach.frame.minY)
+        XCTAssertLessThan(expandedTop, normalTop - 150, "The expanded panel lifts the composer well up")
+        XCTAssertEqual(expand.label, "Shrink panel")
+        shot("4b-expanded")
+        let shrinking = sampleComposerTop("collapse") { expand.tap() }
+        _ = app.staticTexts["settle"].waitForExistence(timeout: 1)
+        XCTAssertEqual(Double(attach.frame.minY), normalTop, accuracy: 2, "Collapsing returns the panel to its height")
+        XCTAssertTrue((growing + shrinking).allSatisfy { $0 >= expandedTop - 2 && $0 <= normalTop + 2 }, "No overshoot or flash while resizing")
+
         // GIFs (KLIPY) when the build has a key.
         if app.buttons["panel-tab-gifs"].exists {
             app.buttons["panel-tab-gifs"].tap()
             XCTAssertTrue(app.textFields["gif-search"].waitForExistence(timeout: 3))
             XCTAssertEqual(app.textFields["gif-search"].placeholderValue, "Search KLIPY")
-            XCTAssertTrue(app.staticTexts["TRENDING"].waitForExistence(timeout: 10), "KLIPY trending should load")
+            XCTAssertTrue(app.staticTexts["TRENDING"].waitForExistence(timeout: 30), "KLIPY trending should load")
             _ = app.staticTexts["media-settle"].waitForExistence(timeout: 12)  // gives the previews time to arrive
             shot("5-gifs")
         }
 
         // Attachment panel.
         app.buttons["attachment-button"].tap()
-        XCTAssertTrue(app.buttons["file-button"].waitForExistence(timeout: 3), "Attachment panel should offer Files")
+        XCTAssertTrue(app.buttons["attach-tab-gallery"].waitForExistence(timeout: 3), "Attachment panel should show its tabs")
         _ = app.staticTexts["photos-settle"].waitForExistence(timeout: 3)
         shot("6-attachments")
+        // Gallery · File · Location · Poll (D100).
+        app.buttons["attach-tab-file"].tap()
+        XCTAssertTrue(app.buttons["file-button"].waitForExistence(timeout: 3), "File tab offers Files")
+        shot("6b-file")
+        app.buttons["attach-tab-poll"].tap()
+        XCTAssertTrue(app.buttons["create-poll-button"].waitForExistence(timeout: 3))
+        app.buttons["create-poll-button"].tap()
+        let question = app.textViews["poll-question"].exists ? app.textViews["poll-question"] : app.textFields["poll-question"]
+        XCTAssertTrue(question.waitForExistence(timeout: 3), "The poll form opens")
+        XCTAssertFalse(app.buttons["poll-send"].isEnabled, "An empty poll can't be sent")
+        question.tap()
+        question.typeText("Lunch?")
+        app.textFields["poll-answer-0"].tap()
+        app.textFields["poll-answer-0"].typeText("Pizza")
+        app.textFields["poll-answer-1"].tap()
+        app.textFields["poll-answer-1"].typeText("Sushi")
+        XCTAssertTrue(app.buttons["poll-send"].isEnabled, "A question with two answers can be sent")
+        shot("6c-poll")
+        app.buttons["Cancel"].tap()  // nothing is sent
+        XCTAssertTrue(question.waitForNonExistence(timeout: 3))
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        app.buttons["attach-tab-location"].tap()
+        let allow = springboard.buttons["Allow While Using App"]
+        if allow.waitForExistence(timeout: 3) { allow.tap() }
+        XCTAssertTrue(app.buttons["send-pinned-location"].waitForExistence(timeout: 5), "Location tab offers the pinned place")
+        _ = app.staticTexts["map-settle"].waitForExistence(timeout: 3)
+        shot("6d-location")
 
         // A tap on the conversation closes the panel.
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2)).tap()
+        dismissComposerInput(app)
         XCTAssertTrue(app.buttons["file-button"].waitForNonExistence(timeout: 3))
         shot("7-closed")
+        XCTAssertTrue(app.buttons["voice-button"].waitForExistence(timeout: 3), "An empty field with nothing open offers the mic")
+
+        // A KLIPY GIF already in this room plays inline (loaded straight from KLIPY, D98).
+        let klipyMessage = app.descendants(matching: .any)["klipy-message-media"].firstMatch
+        if klipyMessage.waitForExistence(timeout: 3) {
+            let loaded = NSPredicate(format: "value == 'loaded'")
+            XCTAssertEqual(XCTWaiter().wait(for: [expectation(for: loaded, evaluatedWith: klipyMessage)], timeout: 60), .completed,
+                "The KLIPY message should load and play, not fall back")
+            shot("8-klipy-message")
+        }
         let back = app.navigationBars.buttons.element(boundBy: 0)
         if back.waitForExistence(timeout: 3) { back.tap() }
     }

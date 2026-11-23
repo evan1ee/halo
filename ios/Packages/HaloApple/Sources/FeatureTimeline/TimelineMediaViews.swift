@@ -185,24 +185,37 @@ struct KlipyMessageMedia: View {
     let model: TimelineViewModel
     @State private var aspect: Double?
     @State private var failed = false
+    @State private var attempt = 0
 
     var body: some View {
-        if failed {
-            Link(url.absoluteString, destination: url).font(HaloTypography.caption).lineLimit(1)
-        } else {
-            AsyncAnimatedImage(id: url.absoluteString, maxPixelSize: 660, load: { [model, url] in await model.klipyMedia(url) }) {
-                RoundedRectangle(cornerRadius: HaloRadius.medium, style: .continuous)
-                    .fill(HaloColor.textSecondary.opacity(0.12))
-                    .overlay { ProgressView() }
-            }
-            .frame(width: 220, height: 220 / max(0.5, min(2, aspect ?? 1)))
-            .clipShape(.rect(cornerRadius: HaloRadius.medium, style: .continuous))
-            .task(id: url) {
-                guard let data = await model.klipyMedia(url) else { failed = true; return }
-                aspect = KlipyMessageMedia.aspectRatio(data)
-            }
-            .accessibilityLabel("GIF from KLIPY")
+        AsyncAnimatedImage(id: "\(url.absoluteString)#\(attempt)", maxPixelSize: 660, load: { [model, url] in await model.klipyMedia(url) }) {
+            RoundedRectangle(cornerRadius: HaloRadius.medium, style: .continuous)
+                .fill(HaloColor.textSecondary.opacity(0.12))
+                .overlay {
+                    if failed {
+                        // Tap to try again; the link stays reachable from the message's Copy action.
+                        Label("GIF didn't load. Tap to retry", systemImage: "arrow.clockwise")
+                            .font(HaloTypography.caption)
+                            .foregroundStyle(HaloColor.textSecondary)
+                            .padding(HaloSpacing.s)
+                    } else {
+                        ProgressView()
+                    }
+                }
         }
+        .frame(width: 220, height: 220 / max(0.5, min(2, aspect ?? 1)))
+        .clipShape(.rect(cornerRadius: HaloRadius.medium, style: .continuous))
+        .contentShape(.rect)
+        .onTapGesture { if failed { failed = false; attempt += 1 } }
+        .task(id: attempt) {
+            guard let data = await model.klipyMedia(url) else { failed = true; return }
+            aspect = KlipyMessageMedia.aspectRatio(data)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(failed ? "GIF from KLIPY, didn't load" : "GIF from KLIPY")
+        .accessibilityIdentifier("klipy-message-media")
+        .accessibilityValue(aspect != nil ? "loaded" : failed ? "failed" : "loading")
+        .accessibilityAddTraits(failed ? .isButton : [])
     }
 
     /// Reads the size from the same file (the catalog's memory cache serves both, so it is downloaded once).

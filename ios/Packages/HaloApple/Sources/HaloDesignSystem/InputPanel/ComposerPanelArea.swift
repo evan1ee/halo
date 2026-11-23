@@ -17,7 +17,9 @@ public struct ComposerPanelArea<Content: View>: View {
 
     public var body: some View {
         let area = controller.areaHeight
-        let full = controller.state.panelSearching ? ComposerPanelMetrics.searchHeight : controller.panelHeight
+        let state = controller.state
+        let full = state.panelSearching ? ComposerPanelMetrics.searchHeight
+            : state.panelExpanded ? controller.expandedHeight : controller.panelHeight
         ZStack(alignment: .top) {
             if let panel = controller.state.displayedPanel {
                 content(panel)
@@ -60,12 +62,15 @@ public struct PanelTabPill<Tab: Hashable & Identifiable>: View {
     }
 
     private let items: [Item]
+    private let stacked: Bool
     @Binding private var selection: Tab
     @Namespace private var highlight
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    public init(items: [Item], selection: Binding<Tab>) {
+    /// - Parameter stacked: icon above a small title (the attachment panel), instead of a one-line title.
+    public init(items: [Item], selection: Binding<Tab>, stacked: Bool = false) {
         self.items = items
+        self.stacked = stacked
         _selection = selection
     }
 
@@ -76,16 +81,22 @@ public struct PanelTabPill<Tab: Hashable & Identifiable>: View {
                     withAnimation(HaloMotion.stickerPanel(reduceMotion: reduceMotion)) { selection = item.tab }
                 } label: {
                     Group {
-                        if let symbol = item.systemImage {
-                            Label(item.title, systemImage: symbol)
+                        if stacked, let symbol = item.systemImage {
+                            VStack(spacing: HaloSpacing.xxs) {
+                                Image(systemName: symbol).font(HaloTypography.title).frame(height: 26)
+                                Text(item.title).font(HaloTypography.captionEmphasis)
+                            }
+                            .frame(minWidth: 60)
+                        } else if let symbol = item.systemImage {
+                            Label(item.title, systemImage: symbol).font(HaloTypography.bodyEmphasis)
                         } else {
-                            Text(item.title)
+                            Text(item.title).font(HaloTypography.bodyEmphasis)
                         }
                     }
-                    .font(HaloTypography.bodyEmphasis)
                     .lineLimit(1)
-                    .foregroundStyle(selection == item.tab ? HaloColor.textPrimary : HaloColor.textSecondary)
-                    .padding(.horizontal, HaloSpacing.l)
+                    .foregroundStyle(selection == item.tab ? (stacked ? HaloColor.accent : HaloColor.textPrimary) : HaloColor.textSecondary)
+                    .padding(.horizontal, stacked ? HaloSpacing.s : HaloSpacing.l)
+                    .padding(.vertical, stacked ? HaloSpacing.xs : 0)
                     .frame(minHeight: 44)
                     .background {
                         if selection == item.tab {

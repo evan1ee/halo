@@ -21,6 +21,10 @@ public final class ComposerInputController {
 
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private var lingerTimeout: Task<Void, Never>?
+    /// When a panel last took the keyboard's place: a focus gain right after it is the field taking focus back, not the user.
+    @ObservationIgnored private var panelOpenedAt: ContinuousClock.Instant?
+    /// How long after a panel opens a focus gain is treated as the field taking focus back.
+    static let refocusGuard: Duration = .milliseconds(500)
 
     public init() {
         #if canImport(UIKit)
@@ -44,11 +48,44 @@ public final class ComposerInputController {
     }
 
     /// The panels' full height.
-    public var panelHeight: Double { ComposerPanelMetrics.panelHeight(lastKeyboardOverlap: lastKeyboardOverlap) }
+    public var panelHeight: Double {
+        #if canImport(UIKit)
+        let window = Self.keyWindow
+        let width = Double(window?.bounds.width ?? 0)
+        let estimate = ComposerPanelMetrics.estimatedKeyboardOverlap(
+            windowHeight: Double(window?.bounds.height ?? 0), bottomInset: Double(window?.safeAreaInsets.bottom ?? 0))
+        return ComposerPanelMetrics.panelHeight(lastKeyboardOverlap: lastKeyboardOverlap ?? KeyboardHeightMemory.overlap(forWidth: width), estimate: estimate)
+        #else
+        return ComposerPanelMetrics.panelHeight(lastKeyboardOverlap: lastKeyboardOverlap)
+        #endif
+    }
+
+    #if canImport(UIKit)
+    static var keyWindow: UIWindow? {
+        UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows).first(where: \.isKeyWindow)
+    }
+    #endif
+
+    /// The tall height the ↑ button pulls a panel up to.
+    public var expandedHeight: Double {
+        #if canImport(UIKit)
+        let window = Self.keyWindow
+        let height = Double(window?.bounds.height ?? 0) - Double(window?.safeAreaInsets.bottom ?? 0)
+        return ComposerPanelMetrics.expandedHeight(windowHeight: height, topInset: Double(window?.safeAreaInsets.top ?? 0), panelHeight: panelHeight)
+        #else
+        return panelHeight
+        #endif
+    }
 
     /// The height the panel area under the composer has right now.
     public var areaHeight: Double {
-        ComposerPanelMetrics.areaHeight(state: state, panelHeight: panelHeight, keyboardOverlap: keyboardOverlap)
+        ComposerPanelMetrics.areaHeight(state: state, panelHeight: panelHeight, expandedHeight: expandedHeight, keyboardOverlap: keyboardOverlap)
+    }
+
+    /// The composer's ↑ / ↓ button. The panel's content is laid out at the taller of its two heights while the area
+    /// animates, so it slides rather than redraws: no flash.
+    public func toggleExpanded() {
+        withAnimation(.smooth(duration: 0.35)) { state.toggleExpanded() }
     }
 
     // MARK: Events from the composer, the panels and the timeline
@@ -56,6 +93,12 @@ public final class ComposerInputController {
     public func fieldFocusChanged(_ focused: Bool) {
         if focused {
             guard state.mode != .keyboard else { return }
+            // Resigning first responder for a panel sometimes loses a race with SwiftUI's focus or the button tap, and the
+            // field takes focus back by itself a moment later: keep the panel the user just opened.
+            if state.panel != nil, let openedAt = panelOpenedAt, ContinuousClock.now - openedAt < Self.refocusGuard {
+                resignKeyboard()
+                return
+            }
             withAnimation(Self.keyboardAnimation(duration: 0.25)) { state.fieldFocused() }
             armLingerTimeout()
         } else {
@@ -67,20 +110,34 @@ public final class ComposerInputController {
     public func toggle(_ panel: ComposerPanel) {
         let opening = state.panel != panel
         withAnimation(Self.keyboardAnimation(duration: 0.25)) { state.toggle(panel) }
-        if !opening { armLingerTimeout() }
+        if opening {
+            panelOpenedAt = .now
+            resignKeyboard()
+        } else {
+            panelOpenedAt = nil
+            armLingerTimeout()
+        }
     }
 
     public func open(_ panel: ComposerPanel) {
         withAnimation(Self.keyboardAnimation(duration: 0.25)) { state.open(panel) }
+        panelOpenedAt = .now
+        resignKeyboard()
+    }
+
+    /// A panel takes the keyboard's place: the field must let go of first responder now. Clearing the SwiftUI focus
+    /// binding alone sometimes lost a race with the button tap and left the keyboard up over the panel.
+    private func resignKeyboard() {
+        #if canImport(UIKit)
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        #endif
     }
 
     /// Closes the keyboard or panel (a tap or drag on the conversation).
     public func dismiss() {
         guard state.mode != .idle || state.displayedPanel != nil else { return }
         withAnimation(Self.keyboardAnimation(duration: 0.25)) { state.dismiss() }
-        #if canImport(UIKit)
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-        #endif
+        resignKeyboard()
     }
 
     // MARK: Keyboard
@@ -136,6 +193,9 @@ public final class ComposerInputController {
                 // A docked keyboard of usual size becomes the panel size; a hardware keyboard's shortcut bar does not.
                 if overlap >= ComposerPanelMetrics.minimumHeight, !state.panelSearching, state.panel == nil {
                     lastKeyboardOverlap = overlap
+                    #if canImport(UIKit)
+                    KeyboardHeightMemory.remember(overlap, forWidth: Double(Self.keyWindow?.bounds.width ?? 0))
+                    #endif
                 }
                 keyboardOverlap = overlap
                 state.keyboardWillShow()
@@ -167,5 +227,32 @@ public final class ComposerInputController {
         duration <= 0 ? .linear(duration: 0) : .interpolatingSpring(mass: 3, stiffness: 1000, damping: 500, initialVelocity: 0)
     }
 
+}
+
+/// The docked keyboard's height, remembered for the whole app and across launches, per window width (portrait, landscape,
+/// iPad split sizes). Each conversation's composer is new, so without this a panel opened before typing used a guess and
+/// the message field moved when the real keyboard replaced it.
+@MainActor
+enum KeyboardHeightMemory {
+    static let defaultsKey = "halo.composer.keyboardOverlaps"
+
+    static func overlap(forWidth width: Double) -> Double? {
+        guard width > 0 else { return nil }
+        return load()[key(width)].flatMap { $0 > 0 ? $0 : nil }
+    }
+
+    static func remember(_ overlap: Double, forWidth width: Double) {
+        guard width > 0, overlap > 0 else { return }
+        var all = load()
+        guard all[key(width)] != overlap else { return }
+        all[key(width)] = overlap
+        UserDefaults.standard.set(all, forKey: defaultsKey)
+    }
+
+    private static func key(_ width: Double) -> String { String(Int(width.rounded())) }
+
+    private static func load() -> [String: Double] {
+        UserDefaults.standard.dictionary(forKey: defaultsKey) as? [String: Double] ?? [:]
+    }
 }
 #endif

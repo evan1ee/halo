@@ -26,6 +26,8 @@ public struct ComposerInputState: Equatable, Sendable {
     /// The panel that was open just before the keyboard replaced it. It stays drawn under the rising keyboard until the
     /// keyboard covers it, so the composer never dips while the keyboard animates in.
     public private(set) var lingeringPanel: ComposerPanel?
+    /// The open panel is pulled up to its tall, sheet-like height (the composer's ↑ / ↓ button).
+    public private(set) var panelExpanded = false
 
     public init(mode: Mode = .idle) { self.mode = mode }
 
@@ -52,6 +54,7 @@ public struct ComposerInputState: Equatable, Sendable {
         lingeringPanel = panel
         mode = .keyboard
         panelSearching = false
+        panelExpanded = false
     }
 
     /// The message field lost focus. Only ends keyboard mode: a panel opening unfocuses the field on purpose.
@@ -77,6 +80,12 @@ public struct ComposerInputState: Equatable, Sendable {
         panelSearching = false
     }
 
+    /// The composer's ↑ / ↓ button: grows the open panel to its tall height, or back. Nothing without an open panel.
+    public mutating func toggleExpanded() {
+        guard panel != nil else { return }
+        panelExpanded.toggle()
+    }
+
     /// The system keyboard is about to show. With a panel open it was raised by the panel's own search field.
     public mutating func keyboardWillShow() {
         if panel != nil { panelSearching = true }
@@ -97,6 +106,7 @@ public struct ComposerInputState: Equatable, Sendable {
         mode = .idle
         panelSearching = false
         lingeringPanel = nil
+        panelExpanded = false
     }
 }
 
@@ -112,17 +122,31 @@ public enum ComposerPanelMetrics {
     /// The panel's full height: the docked keyboard's last height above the bottom safe area, so a panel and the
     /// keyboard put the composer at the same place. Hardware or floating keyboards report small heights; then the
     /// minimum is used.
-    public static func panelHeight(lastKeyboardOverlap: Double?) -> Double {
-        guard let overlap = lastKeyboardOverlap, overlap >= minimumHeight else { return minimumHeight }
+    public static func panelHeight(lastKeyboardOverlap: Double?, estimate: Double? = nil) -> Double {
+        guard let overlap = lastKeyboardOverlap ?? estimate, overlap >= minimumHeight else { return minimumHeight }
         return min(overlap, maximumHeight)
+    }
+
+    /// The docked keyboard's height above the bottom safe area before it has ever been seen at this width: the system
+    /// keyboard with its suggestion bar takes about 38 % of a portrait iPhone window. Once the keyboard has shown, its real
+    /// height is remembered (`KeyboardHeightMemory`) and used instead.
+    public static func estimatedKeyboardOverlap(windowHeight: Double, bottomInset: Double) -> Double {
+        max(0, windowHeight * 0.38 - bottomInset)
     }
 
     /// The visible height of the panel area right now. While the keyboard still covers part of the screen (it is
     /// animating out as a panel opens, or in as a panel is replaced), the panel area gives up that much, so the keyboard
     /// plus the panel area stay the same height and the composer does not jump.
-    public static func areaHeight(state: ComposerInputState, panelHeight: Double, keyboardOverlap: Double) -> Double {
+    public static func areaHeight(state: ComposerInputState, panelHeight: Double, expandedHeight: Double? = nil, keyboardOverlap: Double) -> Double {
         guard state.displayedPanel != nil else { return 0 }
         if state.panelSearching { return searchHeight }
+        if state.panelExpanded, state.panel != nil { return max(panelHeight, expandedHeight ?? panelHeight) }
         return max(0, panelHeight - keyboardOverlap)
+    }
+
+    /// The tall panel: the window's height less its top safe area and room for the navigation bar and composer
+    /// (`reserved`), never shorter than the normal panel.
+    public static func expandedHeight(windowHeight: Double, topInset: Double, panelHeight: Double, reserved: Double = 150) -> Double {
+        max(panelHeight, windowHeight - topInset - reserved)
     }
 }

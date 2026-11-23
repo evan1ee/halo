@@ -23,6 +23,8 @@ public final class FakeTimelinePort: TimelinePort {
         var stickers: [Sticker] = []
         var images: [OutgoingImage] = []
         var files: [OutgoingFile] = []
+        var locations: [OutgoingLocation] = []
+        var polls: [OutgoingPoll] = []
         var fileFailure: HaloError?
         var imageFailure: HaloError?
         var stickerFailure: HaloError?
@@ -67,6 +69,10 @@ public final class FakeTimelinePort: TimelinePort {
     /// The images sent, in order.
     public func sentImages(in id: RoomID) -> [OutgoingImage] { rooms.withLock { $0[id]?.images ?? [] } }
     public func sentFiles(in id: RoomID) -> [OutgoingFile] { rooms.withLock { $0[id]?.files ?? [] } }
+    /// The locations sent, in order.
+    public func sentLocations(in id: RoomID) -> [OutgoingLocation] { rooms.withLock { $0[id]?.locations ?? [] } }
+    /// The polls started, in order.
+    public func sentPolls(in id: RoomID) -> [OutgoingPoll] { rooms.withLock { $0[id]?.polls ?? [] } }
     /// The next `sendFile` in `id` throws `error`.
     public func failNextFile(in id: RoomID, with error: HaloError) { rooms.withLock { $0[id]?.fileFailure = error } }
     /// The next `sendImage` throws `error`.
@@ -193,6 +199,16 @@ public final class FakeTimelinePort: TimelinePort {
                 return f
             }) { throw failure }
             port.rooms.withLock { $0[room]?.files.append(file) }
+        }
+
+        func sendLocation(_ location: OutgoingLocation) async throws(HaloError) {
+            try location.validate()
+            port.rooms.withLock { $0[room]?.locations.append(location) }
+        }
+
+        func createPoll(_ poll: OutgoingPoll) async throws(HaloError) {
+            try poll.validate()
+            port.rooms.withLock { $0[room]?.polls.append(poll) }
         }
 
         func members() async throws(HaloError) -> [RoomMember] { port.rooms.withLock { $0[room]?.members ?? [] } }

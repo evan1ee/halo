@@ -14,6 +14,8 @@ public struct KlipyClient: KlipyPort {
     static let perPage = 24
     /// Mild filtering by default; partner-level filtering lives in KLIPY's Partner Panel.
     static let contentFilter = "medium"
+    /// Seconds a media download may take (API calls use the session's 15 s).
+    static let mediaTimeout: TimeInterval = 60
 
     private let appKey: String
     private let customerID: String
@@ -49,6 +51,7 @@ public struct KlipyClient: KlipyPort {
         configuration.urlCache = nil
         configuration.httpCookieStorage = nil
         configuration.timeoutIntervalForRequest = 15
+        configuration.timeoutIntervalForResource = 120
         return URLSession(configuration: configuration)
     }
 
@@ -79,7 +82,10 @@ public struct KlipyClient: KlipyPort {
 
     public func media(_ url: URL) async throws(HaloError) -> Data {
         guard KlipyLink.mediaURL(in: url.absoluteString) != nil else { throw .invalidInput("NOT_KLIPY_MEDIA") }
-        return try await send(URLRequest(url: url))
+        // A medium GIF is a few MB: allow it longer than an API call on a slow network.
+        var request = URLRequest(url: url)
+        request.timeoutInterval = Self.mediaTimeout
+        return try await send(request)
     }
 
     // MARK: Requests
