@@ -42,6 +42,14 @@ struct ThumbnailView: View {
     @State private var failed = false
     @State private var attempt = 0
 
+    init(image: TimelineRow.Image, model: TimelineViewModel, isSticker: Bool = false) {
+        self.image = image
+        self.model = model
+        self.isSticker = isSticker
+        // A rebuilt view (scrolled back into view, list reset) paints the picture already loaded, on its first frame.
+        _data = State(initialValue: model.cachedThumbnail(for: image))
+    }
+
     var body: some View {
         Group {
             #if canImport(UIKit)
@@ -101,9 +109,10 @@ struct ThumbnailView: View {
             guard isSticker || model.showsPreview(of: image) else { return }
             let loaded = await model.thumbnail(for: image)
             guard !Task.isCancelled else { return }
-            data = loaded
+            // A failed reload never blanks a picture that is already showing.
+            if let loaded { data = loaded }
             #if canImport(UIKit)
-            failed = loaded.flatMap(UIImage.init(data:)) == nil
+            failed = data.flatMap(UIImage.init(data:)) == nil
             // A sticker may be a GIF or animated WebP: fetch the whole file and play it, unless motion is reduced.
             if isSticker, !failed, StickerImage.motionAllowed, let full = await model.stickerContent(for: image), StickerImage.isAnimated(full) {
                 animated = full

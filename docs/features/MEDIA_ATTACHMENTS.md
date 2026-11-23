@@ -26,6 +26,13 @@ Thumbnail decode ≤ 16 ms on a background thread; memory cap per [../matrix/MED
 ## 5–6. Flows and states
 Download: `NotLoaded → Loading → Loaded | Failed(retry)`. Upload: `Preparing → Uploading(progress) → Sent | Failed`.
 
+### Sending (seamless echo, D107)
+A photo you send shows at once from the SDK's local echo (source `mxc://send-queue.localhost/<txn>`, bytes in the SDK media store) and must stay on screen until the server's own event replaces it. [VERIFIED against Synapse, `sentImageNeverLeavesTheList`] The SDK confirms an echo as `remove(i)` + `pushBack` of an item with the **same** unique ID, and the source changes to the real `mxc:`/encrypted reference. Three rules keep it from flickering:
+1. `TimelineDiffCoalescer` (adapter, per subscription) folds that remove + add, within one batch and at the same position, into one `set`; the row never leaves the list, so its views are not rebuilt.
+2. `TimelineThumbnailMemory` (feature) keeps shown pictures readable synchronously: a rebuilt `ThumbnailView` paints on its first frame, a failed reload never blanks a shown picture, and when a row's reference changes the picture on screen is adopted as the entry for the new reference (no download for a photo you just uploaded).
+3. Disk persistence is the SDK's media store (sqlite, passphrase-encrypted, retention policy), for encrypted and unencrypted rooms alike; Halo adds no plaintext disk cache. The SDK re-keys the uploaded file to the new reference (`replace_media_key`).
+Delivery state (TIMELINE FR-6) is the same for photos, videos, files, audio, stickers, locations and text.
+
 ## 7. Data models
 `MediaRef` (opaque), `MediaInfo { mime, size, width, height, duration, blurhash }`.
 

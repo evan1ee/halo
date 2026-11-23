@@ -17,7 +17,28 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     /// An image to show above the text (the filename or caption), loaded through the view model.
     public let image: Image?
     /// "Sending…" or "Not sent" for an own message that the server hasn't confirmed; `nil` once it is sent.
-    public let status: String?
+    public var status: String?
+    /// The state of an own message for the indicator beside its time, the same for text, photos, files and stickers
+    /// (TIMELINE FR-6); `nil` for everyone else's messages and for room events.
+    public var delivery: Delivery?
+
+    /// Telegram-style: sending is a small spinner, sent a circle with a check, read the readers' pictures instead of the check.
+    public enum Delivery: Equatable, Sendable {
+        case sending
+        /// `recoverable`: the send queue will retry by itself.
+        case failed(recoverable: Bool)
+        case sent
+        /// Someone has read up to this message (`seenBy` > 0).
+        case read
+
+        init(sendState: SendState, readCount: Int) {
+            switch sendState {
+            case .sending: self = .sending
+            case .failed(let recoverable): self = .failed(recoverable: recoverable)
+            case .sent: self = readCount > 0 ? .read : .sent
+            }
+        }
+    }
     /// Set for confirmed events only: reactions, edits and deletes need it.
     public let eventID: EventID?
     public let isOwn: Bool
@@ -27,7 +48,7 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     /// Styled text for a message that came with an HTML body; the view shows `text` otherwise.
     public let styled: AttributedString?
     /// The local ID of an own message whose sending failed; the user can retry or delete it.
-    public let failedLocalID: String?
+    public var failedLocalID: String?
     /// A sticker: its image is shown without a bubble or caption (`text` is the accessibility label).
     public let isSticker: Bool
     /// A file, audio or video attachment, shown as a tile that opens in Quick Look (MEDIA_ATTACHMENTS FR-2…4).

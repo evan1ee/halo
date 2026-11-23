@@ -977,6 +977,54 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
+    @Test("A sent image keeps one row from local echo to confirmation (uses HALO_DEV_STICKER_ROOM as a scratch room)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
+    func sentImageNeverLeavesTheList() async throws {
+        let session = port()
+        let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"), on: details)
+        try await MatrixSyncPort(session: session).start()
+        let room = try RoomID(env["HALO_DEV_STICKER_ROOM"] ?? "")
+        var timeline: (any TimelineSession)?
+        for _ in 0..<60 {
+            if let opened = try? await MatrixTimelinePort(session: session).open(room: room) { timeline = opened; break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        let opened = try #require(timeline)
+        let stream = opened.items()
+        let png = try #require(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="))
+        let name = "echo-\(UUID().uuidString.prefix(6)).png"
+        try await opened.sendImage(OutgoingImage(data: png, filename: name, mimeType: "image/png", width: 1, height: 1))
+        // After every diff: the photo's row ID, whether it is in the list at all, and whether the server has confirmed it.
+        let seen: (ids: Set<String>, missingAfterAppearing: Bool)? = try await within(seconds: 60) {
+            var items: [HaloDomain.TimelineItem] = []
+            var ids: Set<String> = []
+            var appeared = false
+            var missing = false
+            var confirmedSightings = 0
+            for await diff in stream {
+                try ListReducer.apply(diff, to: &items)
+                let mine = items.filter { item in
+                    if case .event(let event) = item.content, event.isOwn, case .media(let attachment) = event.kind { return attachment.body == name }
+                    return false
+                }
+                if mine.isEmpty, appeared { missing = true }
+                for item in mine {
+                    appeared = true
+                    ids.insert(item.id.rawValue)
+                    if case .event(let event) = item.content, event.eventID != nil { confirmedSightings += 1 }
+                }
+                if confirmedSightings >= 2 { return (ids, missing) }  // the confirmation, then the server's own echo
+            }
+            return nil
+        }
+        let result = try #require(seen)
+        #expect(result.ids.count == 1, "the row ID is the same from local echo to confirmed event")
+        #expect(!result.missingAfterAppearing, "the photo's row is never missing from the list between the echo and the confirmation")
+        await opened.close()
+        try await session.logout()
+    }
+
     @Test("Sending a file, an audio clip and a video (uses HALO_DEV_STICKER_ROOM as a scratch room)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
     func sendFiles() async throws {
         let session = port()

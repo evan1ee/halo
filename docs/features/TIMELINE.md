@@ -16,6 +16,7 @@ Show a room's history correctly and smoothly, and report what the user has actua
 - FR-3 Back pagination on reaching the top (`paginate_backwards(20)`), with a status indicator.
 - FR-4 Read-marker line at `m.fully_read`; "Jump to unread" pill when the line is above the viewport.
 - FR-5 **Visibility tracking** → `ReadStateCoordinator.markRead` per D6 ([../matrix/READ_RECEIPTS.md](../matrix/READ_RECEIPTS.md) §1).
+- FR-6a Delivery state of own messages, one model for every kind (text, photo, video, file, audio, sticker, location): sending = small spinner, sent (server confirmed) = circle with a check, read = the readers' avatars replace the check (tap for the list), failed = warning + "Not sent" with retry/delete. *Built (D107): `TimelineRow.Delivery`, `DeliveryIndicator`.*
 - FR-6 Read receipts: up to 3 avatars + count under the newest message each user has read. *Built: up to 3 avatars + count under own sent messages (name/picture from the timeline's own senders, else the ID's name part); tap the avatars for the full list of readers (built, not seen on screen); not built: receipts under others' messages.*
 - FR-7 Reactions row; tap toggles (`toggle_reaction`).
 - FR-8 Reply preview (`load_reply_details`), tap to jump (built for loaded rows only) (paginate around the event if needed — `timeline_with_configuration` with `TimelineFocus.Event` **[VERIFIED F-FFI-22]**).
