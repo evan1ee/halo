@@ -21,7 +21,8 @@ struct UserDefaultsPreferencesStoreTests {
             privacyBlur: false,
             botSenders: ["@todo:example.org"],
             appearance: .dark,
-            chatsInSystemSearch: true
+            chatsInSystemSearch: true,
+            followFocusFilter: true
         )
         store.save(updated)
         #expect(store.load() == updated)

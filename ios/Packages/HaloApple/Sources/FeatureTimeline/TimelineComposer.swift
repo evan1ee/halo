@@ -51,8 +51,9 @@ struct Composer: View {
 
     // MARK: Input row
 
-    /// Telegram's layout in Halo's look: paperclip · field (face/keyboard toggle inside, send inside once there is
-    /// text) · one round button on the right — the mic, or ↑ / ↓ to pull an open panel up to a tall sheet and back.
+    /// Telegram's layout in Halo's look: paperclip · field (face/keyboard toggle inside) · one round button on the right —
+    /// send once there is something to send, else the mic, or ↑ / ↓ to pull an open panel up to a tall sheet and back.
+    /// Send sits outside the field so a long message keeps the field's width (founder: "right side … is empty").
     private var inputRow: some View {
         HStack(alignment: .bottom, spacing: HaloSpacing.s) {
             ComposerCircleButton(systemImage: "paperclip", label: "Attach") { input.toggle(.attachments) }
@@ -70,6 +71,19 @@ struct Composer: View {
                         .padding(.vertical, 11)
                         .padding(.leading, HaloSpacing.l)
                         .accessibilityIdentifier("composer")
+                        // A pasted image joins the pending photos; its placeholder never stays in the draft.
+                        .background {
+                            ComposerImagePaste { images in
+                                guard model.canSendImages else { return }
+                                Task { await model.attachPhotos(images.map { (data: $0, filename: "pasted") }) }
+                            }
+                            .allowsHitTesting(false)
+                        }
+                        .onChange(of: model.draft) { _, draft in
+                            if draft.contains(ComposerImagePaste.placeholder) {
+                                model.draft.removeAll { $0 == ComposerImagePaste.placeholder }
+                            }
+                        }
                     Button { input.toggle(.expression) } label: {
                         Image(systemName: input.state.showsKeyboardToggle(for: .expression) ? "keyboard" : "face.smiling")
                             .font(HaloTypography.title)
@@ -81,35 +95,28 @@ struct Composer: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel(input.state.showsKeyboardToggle(for: .expression) ? "Show keyboard" : "Emoji, stickers and GIFs")
                     .accessibilityIdentifier("sticker-button")
-                    if model.canSend {
-                        Button {
-                            sendTrigger += 1
-                            Task { await model.send() }
-                        } label: {
-                            Image(systemName: "paperplane.fill")
-                                .font(HaloTypography.headline)
-                                .foregroundStyle(HaloColor.onAccent)
-                                .frame(width: 36, height: 36)
-                                .background(HaloColor.accent, in: .circle)
-                                .frame(width: 44, height: 44)
-                                .contentShape(.circle)
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.trailing, HaloSpacing.xxs)
-                        .accessibilityLabel("Send")
-                        .accessibilityIdentifier("send-button")
-                        .transition(.scale.combined(with: .opacity))
-                    }
                 }
             }
             .frame(minHeight: 44)
             .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22, style: .continuous))
+            #if DEBUG
+            .overlay(alignment: .topLeading) {
+                if ComposerMotionTrace.isEnabled { ComposerMotionTrace().frame(width: 1, height: 1) }
+            }
+            #endif
 
             if voice.isRecording {
                 ComposerCircleButton(systemImage: "arrow.up", label: "Send voice message", prominent: true) { sendVoice() }
                     .accessibilityIdentifier("voice-send-button")
                     .transition(.scale.combined(with: .opacity))
-            } else if !model.canSend {
+            } else if model.canSend {
+                ComposerCircleButton(systemImage: "paperplane.fill", label: "Send", prominent: true) {
+                    sendTrigger += 1
+                    Task { await model.send() }
+                }
+                .accessibilityIdentifier("send-button")
+                .transition(.scale.combined(with: .opacity))
+            } else {
                 ComposerCircleButton(systemImage: trailingSymbol, label: trailingLabel) { trailingTapped() }
                     .contentTransition(.symbolEffect(.replace))
                     .accessibilityIdentifier(input.state.panel != nil ? "panel-expand-button" : "voice-button")

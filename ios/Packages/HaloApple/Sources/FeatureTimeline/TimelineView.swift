@@ -37,6 +37,8 @@ public struct TimelineView: View {
     @State private var scrollInteracting = false
     /// Extra top content margin that keeps a short room anchored just above the composer.
     @State private var shortRoomTopMargin: Double = 0
+    /// Recent short-room margin changes, to stop a layout loop instead of freezing (`ShortRoomAlignment`).
+    @State private var marginChanges: [Date] = []
     /// Automatic history paging only runs with the newest row on screen (a short room that needs filling) or once the user has
     /// scrolled; right after history lands above the newest row the "Load earlier" row is briefly visible and paging then would
     /// move the content again.
@@ -99,6 +101,22 @@ public struct TimelineView: View {
                         .onDisappear { headerVisible = false }
                         .task(id: PaginationTrigger(rows: rows.count, ready: headerVisible && landed && pagingAllowed)) { if headerVisible, landed, pagingAllowed, paginationError == nil { await model.loadEarlier() } }
                     }
+                    // A room with nothing but its setup events (created, joined, settings) says so, above those events
+                    // (as a row, so the short-room alignment keeps it clear of them and of the composer).
+                    if !canLoadEarlier, !rows.contains(where: \.isConversation) {
+                        ContentUnavailableView {
+                            Label("No messages yet", systemImage: "bubble.left.and.bubble.right")
+                        } description: {
+                            Text("Messages you send here appear in this conversation.")
+                        }
+                        // ContentUnavailableView fills what it's offered and can be squeezed; a list row must keep its own
+                        // height or the description draws over the setup rows below (founder screenshot, two-line description).
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("empty-room")
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                    }
                     ForEach(rows) { row in
                         RowView(
                             row: row,
@@ -122,7 +140,11 @@ public struct TimelineView: View {
                     }
                 }
                 .listStyle(.plain)
-                .scrollDismissesKeyboard(.interactively)
+                // A finger dragging the conversation closes the keyboard or panel (the drag gesture below). The list itself
+                // never dismisses the keyboard: a programmatic move (a short room's margin changing as the keyboard rises)
+                // would count as a scroll, and with interactive dismissal the composer could not follow the finger (it
+                // doesn't move with the system keyboard, D102, and iOS sends no keyboard frames during that drag).
+                .scrollDismissesKeyboard(.never)
                 // A tap on the conversation closes the keyboard or panel; the gesture only exists while one is open.
                 .simultaneousGesture(TapGesture().onEnded { input.dismiss() }, including: input.state.mode == .idle && input.state.displayedPanel == nil ? .subviews : .all)
                 .opacity(listPlaced || rows.isEmpty ? 1 : 0)
@@ -134,6 +156,7 @@ public struct TimelineView: View {
                 .listSectionSeparator(.hidden)
                 .listRowSeparatorTint(.clear)
                 .defaultScrollAnchor(.bottom)
+                // A short room sits just above the composer instead of at the top (`ShortRoomAlignment`).
                 .contentMargins(.top, shortRoomTopMargin, for: .scrollContent)
                 .onScrollGeometryChange(for: ShortRoomGeometry.self) { geometry in
                     ShortRoomGeometry(
@@ -144,14 +167,7 @@ public struct TimelineView: View {
                         canLoadEarlier: canLoadEarlier
                     )
                 } action: { _, value in
-                    shortRoomTopMargin = ShortRoomAlignment.topMargin(
-                        containerHeight: value.containerHeight,
-                        topInset: value.topInset,
-                        bottomInset: value.bottomInset,
-                        contentHeight: value.contentHeight,
-                        currentMargin: shortRoomTopMargin,
-                        canLoadEarlier: value.canLoadEarlier
-                    )
+                    updateShortRoomMargin(value)
                 }
                 // "At the bottom" comes from the scroll geometry, not from one row's visibility: that flag could stay true after
                 // rows were added above the newest row and then hide that the list had moved away from the bottom.
@@ -177,9 +193,12 @@ public struct TimelineView: View {
                         proxy.scrollTo(last, anchor: .bottom)
                     }
                 }
+                // A finger dragging the conversation puts the keyboard or a panel away (COMPOSER_PANELS §3). A real drag
+                // gesture, not the scroll phase: that also changes for programmatic moves.
+                .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in
+                    if input.state.mode != .idle || input.state.displayedPanel != nil { input.dismiss() }
+                }, including: input.state.mode == .idle && input.state.displayedPanel == nil ? .subviews : .all)
                 .onScrollPhaseChange { _, phase in
-                    // Dragging the conversation puts the keyboard or panel away (COMPOSER_PANELS §3).
-                    if phase == .interacting, input.state.displayedPanel != nil { input.dismiss() }
                     scrollMoving = phase == .interacting || phase == .decelerating || phase == .animating
                     scrollInteracting = phase == .interacting
                 }
@@ -308,6 +327,10 @@ public struct TimelineView: View {
             }
         }
         #if canImport(UIKit)
+        // The area under the composer holds the keyboard's height itself (`ComposerPanelMetrics.areaHeight`), so the system
+        // must not also move the composer for the keyboard: two animations made it dip and creep back in every keyboard/panel
+        // swap (D102). Applied always: switching it rebuilds the message field, which then loses focus.
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         .sheet(item: Binding(get: { model.openedFile }, set: { if $0 == nil { model.closeFile() } })) { QuickLookView(url: $0.url).ignoresSafeArea() }
         .fullScreenCover(item: $viewerPhoto) { photo in
             photoViewer(initial: photo)
@@ -367,6 +390,25 @@ enum UnreadPill {
 /// How far the end of the list is below its visible part (≤ 0 at the bottom), and the content height, so a change of either
 /// reaches the scroll-geometry action. The visible rect reaches under the composer, so the end is the content plus the bottom
 /// inset; measured against the content alone, the newest row could sit half behind the composer and count as at the bottom.
+extension TimelineView {
+    /// Applies the short-room margin for `value`, at most `ShortRoomAlignment.maximumChangesPerSecond` times a second.
+    func updateShortRoomMargin(_ value: ShortRoomGeometry) {
+        let margin = ShortRoomAlignment.topMargin(
+            containerHeight: value.containerHeight,
+            topInset: value.topInset,
+            bottomInset: value.bottomInset,
+            contentHeight: value.contentHeight,
+            currentMargin: shortRoomTopMargin,
+            canLoadEarlier: value.canLoadEarlier
+        )
+        guard margin != shortRoomTopMargin else { return }
+        let now = Date()
+        marginChanges = marginChanges.filter { now.timeIntervalSince($0) < 1 } + [now]
+        guard marginChanges.count <= ShortRoomAlignment.maximumChangesPerSecond else { return }
+        shortRoomTopMargin = margin
+    }
+}
+
 struct BottomGap: Equatable {
     let gap: Double
     let contentHeight: Double

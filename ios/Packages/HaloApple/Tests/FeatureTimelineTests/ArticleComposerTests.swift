@@ -58,3 +58,27 @@ struct ArticleComposerTests {
         #expect(styled.runs.contains { $0.inlinePresentationIntent == .stronglyEmphasized })
     }
 }
+
+@MainActor
+@Suite("Timeline: rooms that open on room events only")
+struct OpeningOnRoomEventsTests {
+    @Test("a room whose loaded history is only a join loads earlier pages by itself until it finds a message, then lands")
+    func loadsUntilMessage() async throws {
+        let room = try RoomID("!r:x.org")
+        let ann = try UserID("@ann:x.org")
+        let join = TimelineItem(id: TimelineItemID("join"), content: .event(TimelineEvent(
+            eventID: try EventID("$join"), sender: ann, senderName: "Ann", timestamp: Date(timeIntervalSince1970: 100), isOwn: false,
+            kind: .membership(user: ann, displayName: "Ann", change: .joined))))
+        let old = TimelineItem(id: TimelineItemID("old"), content: .event(TimelineEvent(
+            eventID: try EventID("$old"), sender: ann, senderName: "Ann", timestamp: Date(timeIntervalSince1970: 10), isOwn: false,
+            kind: .text("hello", isEdited: false))))
+        let port = FakeTimelinePort()
+        port.addRoom(room, items: [join], older: [[old]])
+        let model = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room))
+        await model.start()
+        for _ in 0..<500_000 where model.landingRow == nil { await Task.yield() }
+        guard case .live(let rows, _, _, _) = model.content else { Issue.record("not live"); return }
+        #expect(rows.contains { $0.text == "hello" } && model.landingRow == "join")
+        await model.stop()
+    }
+}

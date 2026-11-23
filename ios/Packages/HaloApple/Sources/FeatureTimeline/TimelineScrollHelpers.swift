@@ -20,8 +20,15 @@ enum PrependedAnchor {
     }
 }
 
-/// Keeps a short room anchored just above the composer instead of floating at the top of the screen.
-/// Uses `contentMargins(.top, ..., for: .scrollContent)` so `contentSize.height` is untouched and there is no feedback loop.
+
+/// Keeps a short room anchored just above the composer instead of floating at the top of the screen, with
+/// `contentMargins(.top, ..., for: .scrollContent)`.
+///
+/// Measured on iOS 26/27 (2026-11-23): a List's scroll-geometry `contentSize` includes that margin and its `contentInsets.top`
+/// does not (margin 0 → 300 → 100 gave content 97 → 397 → 197 with the top inset fixed at 122). The room's own height is
+/// therefore `contentHeight - currentMargin`, which the margin doesn't change, so the result is a fixed point. The earlier
+/// formula assumed the opposite, flipped between two margins on every layout pass, and froze rooms holding only a few
+/// events at 100 % CPU (founder report and device hang logs).
 enum ShortRoomAlignment {
     /// Extra top margin needed to push short content down to the composer, or `0` when the room fills the screen or still has
     /// earlier history to load.
@@ -33,13 +40,16 @@ enum ShortRoomAlignment {
         currentMargin: Double,
         canLoadEarlier: Bool
     ) -> Double {
-        guard !canLoadEarlier, contentHeight > 0, containerHeight > 0 else { return 0 }
-        let baseTopInset = max(0, topInset - currentMargin)
-        let availableHeight = containerHeight - baseTopInset - bottomInset
-        guard availableHeight > contentHeight else { return 0 }
-        let margin = availableHeight - contentHeight
+        let roomHeight = contentHeight - currentMargin
+        guard !canLoadEarlier, roomHeight > 0, containerHeight > 0 else { return 0 }
+        let availableHeight = containerHeight - max(0, topInset) - bottomInset
+        guard availableHeight > roomHeight else { return 0 }
+        let margin = (availableHeight - roomHeight).rounded()
         return abs(margin - currentMargin) < 1 ? currentMargin : margin
     }
+
+    /// Most margin changes allowed within one second; past that the margin is left alone (a layout loop guard).
+    static let maximumChangesPerSecond = 8
 }
 
 struct ShortRoomGeometry: Equatable {

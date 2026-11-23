@@ -127,21 +127,30 @@ public enum ComposerPanelMetrics {
         return min(overlap, maximumHeight)
     }
 
-    /// The docked keyboard's height above the bottom safe area before it has ever been seen at this width: the system
-    /// keyboard with its suggestion bar takes about 38 % of a portrait iPhone window. Once the keyboard has shown, its real
-    /// height is remembered (`KeyboardHeightMemory`) and used instead.
+    /// The docked keyboard's height above the bottom safe area before it has ever been seen at this width. Fitted to
+    /// measured portrait iPhones with the suggestion bar (iPhone 16, 852 pt: 294.1; iPhone Air, 912 pt: 312.3, both with a
+    /// 34 pt home-indicator inset); a fixed 38 % of the window was 4.3 pt short on the iPhone 16, which moved the message
+    /// field when the first panel gave way to the keyboard. Once the keyboard has shown, its real height is remembered
+    /// (`KeyboardHeightMemory`) and used instead.
     public static func estimatedKeyboardOverlap(windowHeight: Double, bottomInset: Double) -> Double {
-        max(0, windowHeight * 0.38 - bottomInset)
+        guard windowHeight > 0 else { return 0 }
+        return max(0, windowHeight * 0.3027 + 70.2 - bottomInset)
     }
 
-    /// The visible height of the panel area right now. While the keyboard still covers part of the screen (it is
-    /// animating out as a panel opens, or in as a panel is replaced), the panel area gives up that much, so the keyboard
-    /// plus the panel area stay the same height and the composer does not jump.
+    /// The height of the area under the composer right now: Halo owns all of it, the system keyboard included (the
+    /// timeline ignores the keyboard safe area, D102). While the keyboard is up the area is the keyboard's height; while a
+    /// panel is shown, or the keyboard is handing over to or from one, it is the larger of the two (the keyboard plus the
+    /// search strip while searching inside a panel). Panels are sized to the remembered keyboard height, so a swap doesn't
+    /// change the area and the composer cannot move; the keyboard's own movement is followed with its measured curve
+    /// (`ComposerInputController.keyboardAnimation`). Measured per drawn frame on an iPhone 16 (2026-11-23): letting the
+    /// system move the composer with the keyboard while the panel compensated made the field dip 69–106 pt in every swap,
+    /// even with the measured curve (the two animations also start at different moments); owning the space: 0.0 pt.
     public static func areaHeight(state: ComposerInputState, panelHeight: Double, expandedHeight: Double? = nil, keyboardOverlap: Double) -> Double {
-        guard state.displayedPanel != nil else { return 0 }
-        if state.panelSearching { return searchHeight }
+        let keyboard = max(0, keyboardOverlap)
+        guard state.displayedPanel != nil else { return keyboard }
+        if state.panelSearching { return keyboard + searchHeight }
         if state.panelExpanded, state.panel != nil { return max(panelHeight, expandedHeight ?? panelHeight) }
-        return max(0, panelHeight - keyboardOverlap)
+        return max(panelHeight, keyboard)
     }
 
     /// The tall panel: the window's height less its top safe area and room for the navigation bar and composer

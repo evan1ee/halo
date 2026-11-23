@@ -45,6 +45,11 @@ extension TimelineViewModel {
                 }
             } else {
                 updateDetachedCount(for: rows)
+                if !landed, !snapshot.reachedStart, !snapshot.isPaginating, snapshot.paginationError == nil,
+                   openingPages < Self.maxOpeningPages {
+                    openingPages += 1
+                    Task { await loadEarlier() }
+                }
             }
             reportOwnMessage(snapshot.items)
             reevaluateSeen()

@@ -515,7 +515,12 @@ public actor MatrixSessionPort: SessionPort {
         self.delegate = delegate
         let slidingSyncBuilder: SlidingSyncVersionBuilder = enablesSlidingSync ? .native : .none
         var builder = ClientBuilder()
-            .serverNameOrHomeserverUrl(serverNameOrUrl: homeserver)
+        // Restoring a stored session uses its resolved homeserver URL as is: no server discovery on the network, so the app
+        // opens on its cached chats at once and also offline (like Element X). Signing in still discovers the server.
+        builder = initialSession == nil
+            ? builder.serverNameOrHomeserverUrl(serverNameOrUrl: homeserver)
+            : builder.homeserverUrl(url: homeserver)
+        builder = builder
             .sessionPaths(dataPath: data.path, cachePath: cache.path)
             .sqliteStore(config: SqliteStoreBuilder(dataPath: data.path, cachePath: cache.path).passphrase(passphrase: passphrase))
             .slidingSyncVersionBuilder(versionBuilder: slidingSyncBuilder)

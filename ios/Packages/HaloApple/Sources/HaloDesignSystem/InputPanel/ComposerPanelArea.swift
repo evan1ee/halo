@@ -3,7 +3,8 @@ import SwiftUI
 
 /// The space under the composer where Halo's panels take the keyboard's place (docs/features/COMPOSER_PANELS.md §3).
 ///
-/// Its height follows `ComposerInputController.areaHeight`, animated with the keyboard's curve. The panel itself is laid
+/// Its height follows `ComposerInputController.areaHeight` (the keyboard's height while the keyboard is up, the panel's
+/// while a panel is shown), animated with the keyboard's measured curve. The panel itself is laid
 /// out at its full height and pinned to the top, so as the area grows or shrinks the panel slides in from below like the
 /// keyboard does instead of squashing. The background reaches under the home indicator.
 public struct ComposerPanelArea<Content: View>: View {
@@ -32,7 +33,8 @@ public struct ComposerPanelArea<Content: View>: View {
         .frame(height: area, alignment: .top)
         .clipShape(UnevenRoundedRectangle(topLeadingRadius: HaloRadius.sheet, topTrailingRadius: HaloRadius.sheet, style: .continuous))
         .background(alignment: .top) {
-            if area > 0 {
+            // Only under a panel: with the keyboard alone the area sits behind the (translucent) keyboard and stays clear.
+            if area > 0, state.displayedPanel != nil {
                 // Rounded top corners like the system keyboard's, so swapping the two keeps the same silhouette.
                 UnevenRoundedRectangle(topLeadingRadius: HaloRadius.sheet, topTrailingRadius: HaloRadius.sheet, style: .continuous)
                     .fill(HaloColor.bgSecondary)
@@ -82,11 +84,13 @@ public struct PanelTabPill<Tab: Hashable & Identifiable>: View {
                 } label: {
                     Group {
                         if stacked, let symbol = item.systemImage {
+                            // The tabs share the pill's width and the titles shrink to fit, so five tabs fit a narrow
+                            // iPhone (17e) at large text sizes too (founder: "the tab's length is long").
                             VStack(spacing: HaloSpacing.xxs) {
                                 Image(systemName: symbol).font(HaloTypography.title).frame(height: 26)
-                                Text(item.title).font(HaloTypography.captionEmphasis)
+                                Text(item.title).font(HaloTypography.captionEmphasis).minimumScaleFactor(0.6)
                             }
-                            .frame(minWidth: 60)
+                            .frame(maxWidth: .infinity)
                         } else if let symbol = item.systemImage {
                             Label(item.title, systemImage: symbol).font(HaloTypography.bodyEmphasis)
                         } else {
@@ -95,7 +99,7 @@ public struct PanelTabPill<Tab: Hashable & Identifiable>: View {
                     }
                     .lineLimit(1)
                     .foregroundStyle(selection == item.tab ? (stacked ? HaloColor.accent : HaloColor.textPrimary) : HaloColor.textSecondary)
-                    .padding(.horizontal, stacked ? HaloSpacing.s : HaloSpacing.l)
+                    .padding(.horizontal, stacked ? HaloSpacing.xxs : HaloSpacing.l)
                     .padding(.vertical, stacked ? HaloSpacing.xs : 0)
                     .frame(minHeight: 44)
                     .background {
@@ -112,6 +116,8 @@ public struct PanelTabPill<Tab: Hashable & Identifiable>: View {
         }
         .padding(HaloSpacing.xs)
         .glassEffect(.regular, in: .capsule)
+        .padding(.horizontal, stacked ? HaloSpacing.m : 0)
+        .dynamicTypeSize(stacked ? ...DynamicTypeSize.xxLarge : ...DynamicTypeSize.accessibility5)
     }
 }
 

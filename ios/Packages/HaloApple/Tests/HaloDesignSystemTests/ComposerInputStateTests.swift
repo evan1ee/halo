@@ -67,22 +67,29 @@ struct ComposerInputStateTests {
         #expect(ComposerPanelMetrics.panelHeight(lastKeyboardOverlap: 900) == ComposerPanelMetrics.maximumHeight)
     }
 
-    @Test("while the keyboard and a panel swap, keyboard cover plus panel area stays the panel height")
+    @Test("the area under the composer stays the same height while the keyboard and a panel swap, in both directions")
     func handOver() {
         let height = 300.0
+        // Keyboard → panel: the keyboard animates out over the panel; the area keeps the panel's height.
         let opening = ComposerInputState(mode: .panel(.expression))
         for overlap in stride(from: 300.0, through: 0, by: -50) {
-            #expect(ComposerPanelMetrics.areaHeight(state: opening, panelHeight: height, keyboardOverlap: overlap) + overlap == height)
+            #expect(ComposerPanelMetrics.areaHeight(state: opening, panelHeight: height, keyboardOverlap: overlap) == height)
         }
+        // Panel → keyboard: the replaced panel lingers under the rising keyboard; still the same height.
         var closing = ComposerInputState(mode: .panel(.expression))
         closing.fieldFocused()
         for overlap in stride(from: 0.0, through: 300, by: 50) {
-            #expect(ComposerPanelMetrics.areaHeight(state: closing, panelHeight: height, keyboardOverlap: overlap) + overlap == height)
+            #expect(ComposerPanelMetrics.areaHeight(state: closing, panelHeight: height, keyboardOverlap: overlap) == height)
         }
-        #expect(ComposerPanelMetrics.areaHeight(state: ComposerInputState(mode: .keyboard), panelHeight: height, keyboardOverlap: 300) == 0)
+        closing.keyboardCoversLingeringPanel()
+        #expect(ComposerPanelMetrics.areaHeight(state: closing, panelHeight: height, keyboardOverlap: 300) == 300)
+        // The keyboard alone: its own height; idle: nothing.
+        #expect(ComposerPanelMetrics.areaHeight(state: ComposerInputState(mode: .keyboard), panelHeight: height, keyboardOverlap: 291) == 291)
+        #expect(ComposerPanelMetrics.areaHeight(state: ComposerInputState(), panelHeight: height, keyboardOverlap: 0) == 0)
+        // A search field inside the panel: the keyboard plus the panel's search strip above it.
         var searching = ComposerInputState(mode: .panel(.expression))
         searching.keyboardWillShow()
-        #expect(ComposerPanelMetrics.areaHeight(state: searching, panelHeight: height, keyboardOverlap: 300) == ComposerPanelMetrics.searchHeight)
+        #expect(ComposerPanelMetrics.areaHeight(state: searching, panelHeight: height, keyboardOverlap: 300) == 300 + ComposerPanelMetrics.searchHeight)
     }
 
     @Test("↑ pulls an open panel up to the tall height, ↓ brings it back; nothing without a panel; leaving the panel resets it")
@@ -110,6 +117,13 @@ struct ComposerInputStateTests {
         #expect(ComposerPanelMetrics.expandedHeight(windowHeight: 878, topInset: 62, panelHeight: 300) == 666)
         #expect(ComposerPanelMetrics.expandedHeight(windowHeight: 400, topInset: 20, panelHeight: 300) == 300)
     }
+
+    @Test("the first panel's height estimate matches the keyboards measured on devices within a point")
+    func keyboardEstimate() {
+        #expect(abs(ComposerPanelMetrics.estimatedKeyboardOverlap(windowHeight: 852, bottomInset: 34) - 294.1) < 1)  // iPhone 16
+        #expect(abs(ComposerPanelMetrics.estimatedKeyboardOverlap(windowHeight: 912, bottomInset: 34) - 312.3) < 1)  // iPhone Air
+        #expect(ComposerPanelMetrics.estimatedKeyboardOverlap(windowHeight: 0, bottomInset: 0) == 0)
+    }
 }
 
 @Suite("ComposerInputController")
@@ -121,8 +135,9 @@ struct ComposerInputControllerTests {
         controller.fieldFocusChanged(true)
         controller.apply(isHiding: false, overlap: 291, duration: 0.25)
         #expect(controller.lastKeyboardOverlap == 291 && controller.panelHeight == 291)
+        #expect(controller.areaHeight == 291)  // the keyboard's height
         controller.toggle(.expression)
-        #expect(controller.areaHeight == 0)  // still under the keyboard
+        #expect(controller.areaHeight == 291)  // the panel under the leaving keyboard: same height
         controller.apply(isHiding: true, overlap: 0, duration: 0.25)
         #expect(controller.areaHeight == 291 && controller.state.panel == .expression)
         // A hardware keyboard's bar while searching doesn't resize the panels.

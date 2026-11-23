@@ -231,6 +231,10 @@ public final class TimelineViewModel {
     /// The time up to which the user had read the room when it was opened (nil: unknown, then the timeline opens at the bottom).
     var readThroughAtOpen: Date?
     var landed = false
+    /// Pages loaded at open to find a message when the loaded history holds only room events (a join): without it a room
+    /// whose newest events are state events never lands, and history only loads after landing.
+    var openingPages = 0
+    static let maxOpeningPages = 10
     /// The row to bring to the top of the screen once, right after the timeline first shows items (the first unread message).
     public internal(set) var landingRow: String?
     /// `true` when `landingRow` is the first unread message (shown at the top); `false` when it is the newest row (shown at the bottom).
@@ -350,6 +354,7 @@ public final class TimelineViewModel {
         readThroughAtOpen = await readThrough?()
         if let previewsAllowed { previewsHidden = await !previewsAllowed() }
         landed = false
+        openingPages = 0
         landingRow = nil
         unreadMarkerID = nil
         isAtBottom = true

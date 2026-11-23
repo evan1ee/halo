@@ -53,6 +53,7 @@ final class HaloUITests: XCTestCase {
     func testLaunchRootScreenPassesAccessibilityAudit() throws {
         let app = XCUIApplication()
         app.launch()
+        dismissFirstRunSheets(app)
 
         // The app launches either into SignInView (signed out) or Chats (signed in).
         let signInVisible = app.staticTexts["Halo"].waitForExistence(timeout: 5)
@@ -101,25 +102,41 @@ final class HaloUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        if app.buttons["Sign in"].waitForExistence(timeout: 5) {
-            let serverField = app.textFields.firstMatch
-            if serverField.exists {
-                serverField.tap()
-                serverField.typeText(server)
-            }
-            let nextButton = app.buttons["Continue"]
-            if nextButton.exists { nextButton.tap() }
+        let serverField = app.textFields["Homeserver"]
+        if serverField.waitForExistence(timeout: 5) {
+            serverField.tap()
+            serverField.typeText(server)
+            app.buttons["Continue"].tap()
             let userField = app.textFields["Username"]
-            if userField.waitForExistence(timeout: 5) {
-                userField.tap()
-                userField.typeText(user)
-            }
+            XCTAssertTrue(userField.waitForExistence(timeout: 15), "The server offers password sign-in")
+            userField.tap()
+            userField.typeText(user)
             let passwordField = app.secureTextFields["Password"]
-            if passwordField.waitForExistence(timeout: 5) {
-                passwordField.tap()
-                passwordField.typeText(password)
-            }
+            passwordField.tap()
+            passwordField.typeText(password)
+            let tapped = Date()
             app.buttons["Sign in"].tap()
+            // First run after sign-in may ask about notifications; answer later.
+            let skip = app.buttons["skip-notifications"]
+            let chatsBar = app.navigationBars["Chats"]
+            for _ in 0..<60 where !chatsBar.exists {
+                if skip.exists { skip.tap() }
+                _ = chatsBar.waitForExistence(timeout: 0.5)
+            }
+            XCTAssertTrue(chatsBar.waitForExistence(timeout: 1))
+            let chats = Date().timeIntervalSince(tapped)
+            if skip.waitForExistence(timeout: 2) { skip.tap() }
+            if app.buttons["focus-show-all"].waitForExistence(timeout: 1) { app.buttons["focus-show-all"].tap() }
+            let rowsShown = app.collectionViews.firstMatch.buttons.element(boundBy: 1).waitForExistence(timeout: 60)
+            let note = XCTAttachment(string: String(format: "sign-in: Chats after %.2f s, rows %@ after %.2f s", chats,
+                rowsShown ? "shown" : "NOT shown", Date().timeIntervalSince(tapped)))
+            note.name = "sign-in-timing"
+            note.lifetime = .keepAlways
+            add(note)
+            let shot = XCTAttachment(screenshot: app.screenshot())
+            shot.name = "after-sign-in"
+            shot.lifetime = .keepAlways
+            add(shot)
         }
 
         XCTAssertTrue(app.navigationBars["Chats"].waitForExistence(timeout: 15))
@@ -138,6 +155,46 @@ final class HaloUITests: XCTestCase {
 
     /// Opens the first chat (not the Media Gallery) on a signed-in simulator so the composer is shown; skips when signed out.
     @MainActor
+    /// A fresh install shows "What's New" and the notifications prompt over the chats; answer both so tests see the app.
+    private func dismissFirstRunSheets(_ app: XCUIApplication) {
+        for _ in 0..<3 {
+            let whatsNew = app.buttons["Continue"]
+            let skip = app.buttons["skip-notifications"]
+            if whatsNew.waitForExistence(timeout: 1.5), app.staticTexts["What's New in Halo"].exists { whatsNew.tap(); continue }
+            if skip.exists { skip.tap(); continue }
+            break
+        }
+    }
+
+    /// Pasting an image into the message field (edit menu or the keyboard's paste suggestion) adds it as a pending photo
+    /// and leaves no placeholder in the draft (founder: "Can not sent the paste image").
+    @MainActor
+    func testPastedImageJoinsPendingPhotos() throws {
+        let app = XCUIApplication()
+        app.launch()
+        dismissFirstRunSheets(app)
+        try openFirstChat(app)
+        let composer = app.descendants(matching: .any)["composer"].firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: 5))
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 64, height: 64))
+        UIPasteboard.general.image = renderer.image { context in
+            UIColor.systemTeal.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
+        }
+        composer.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        composer.press(forDuration: 1.0)
+        let paste = app.menuItems["Paste"]
+        XCTAssertTrue(paste.waitForExistence(timeout: 3), "The edit menu offers Paste for an image")
+        paste.tap()
+        let remove = app.buttons["remove-photo"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 5), "The pasted image becomes a pending photo")
+        XCTAssertFalse((composer.value as? String ?? "").contains("\u{FFFC}"), "No image placeholder stays in the draft")
+        remove.tap()  // nothing is sent
+        XCTAssertTrue(remove.waitForNonExistence(timeout: 3))
+        UIPasteboard.general.items = []
+    }
+
     private func openFirstChat(_ app: XCUIApplication) throws {
         if !app.navigationBars["Chats"].waitForExistence(timeout: 3) {
             let back = app.navigationBars.buttons.element(boundBy: 0)
@@ -175,11 +232,120 @@ final class HaloUITests: XCTestCase {
         }
     }
 
+    /// Founder report (2026-11-23): a signed-in launch waited on a loading screen instead of opening on the chats like
+    /// Element X. Measures a cold launch to the first chat row (the stored session is restored without network discovery).
+    @MainActor
+    func testSignedInLaunchOpensOnChats() throws {
+        let app = XCUIApplication()
+        app.terminate()
+        let started = Date()
+        app.launch()
+        dismissFirstRunSheets(app)
+        guard app.navigationBars["Chats"].waitForExistence(timeout: 10) else { throw XCTSkip("App is signed out.") }
+        let chatsShown = Date().timeIntervalSince(started)
+        if app.buttons["focus-show-all"].exists { app.buttons["focus-show-all"].tap() }
+        let firstRow = app.collectionViews.firstMatch.buttons.element(boundBy: 1)
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 5), "The cached chats show without waiting for the network")
+        let rowsShown = Date().timeIntervalSince(started)
+        let labels = app.collectionViews.firstMatch.buttons.allElementsBoundByIndex.prefix(5).map(\.label)
+        let note = XCTAttachment(string: String(format: "Chats bar after %.2f s, first rows after %.2f s\n", chatsShown, rowsShown)
+            + labels.joined(separator: "\n"))
+        note.name = "launch-to-chats"
+        note.lifetime = .keepAlways
+        add(note)
+        // XCUITest's launch waits for the app to go idle, which adds seconds of its own (in-app: about 0.3 s on an iPhone 16).
+        XCTAssertLessThan(rowsShown, 15, "A signed-in launch reaches the chat list without waiting on the network")
+    }
+
+    /// Diagnostic: attaches to Halo as it is on screen (no relaunch), records what it shows and whether it still answers.
+    /// Run with `-only-testing:HaloUITests/HaloUITests/testInspectRunningApp` after putting the app in the state to check.
+    @MainActor
+    func testInspectRunningApp() throws {
+        let app = XCUIApplication()
+        let started = Date()
+        app.activate()
+        let tree = XCTAttachment(string: app.debugDescription)
+        tree.name = "running-app-tree"
+        tree.lifetime = .keepAlways
+        add(tree)
+        let snapshotTime = Date().timeIntervalSince(started)
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "running-app"
+        shot.lifetime = .keepAlways
+        add(shot)
+        var notes = [String(format: "snapshot after %.2f s", snapshotTime)]
+        let composer = app.descendants(matching: .any)["composer"].firstMatch
+        if composer.exists {
+            let tapped = Date()
+            composer.tap()
+            let keyboard = app.keyboards.firstMatch.waitForExistence(timeout: 5)
+            notes.append(String(format: "keyboard %@ after %.2f s", keyboard ? "shown" : "NOT shown", Date().timeIntervalSince(tapped)))
+            let after = XCTAttachment(screenshot: app.screenshot())
+            after.name = "running-app-keyboard"
+            after.lifetime = .keepAlways
+            add(after)
+        }
+        let note = XCTAttachment(string: notes.joined(separator: "\n"))
+        note.name = "running-app-notes"
+        note.lifetime = .keepAlways
+        add(note)
+    }
+
+    /// Founder report (2026-11-23): opening a room without messages froze the app (seen in "Invite decline fixture", whose
+    /// only event is the join). Opens the chats named "Empty…" or "Invite decline…" (rooms without messages) and checks each
+    /// shows its empty state and stays responsive.
+    @MainActor
+    func testEmptyRoomStaysResponsive() throws {
+        let app = XCUIApplication()
+        app.launch()
+        dismissFirstRunSheets(app)
+        guard app.navigationBars["Chats"].waitForExistence(timeout: 10) else { throw XCTSkip("App is signed out.") }
+        if app.buttons["focus-show-all"].exists { app.buttons["focus-show-all"].tap() }
+        let rows = app.collectionViews.firstMatch.cells.containing(NSPredicate(format: "label BEGINSWITH[c] 'empty' OR label BEGINSWITH[c] 'invite decline'"))
+        let emptyRow = app.collectionViews.firstMatch.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] 'empty' OR label BEGINSWITH[c] 'invite decline'"))
+        guard emptyRow.firstMatch.waitForExistence(timeout: 5) || rows.firstMatch.exists else { throw XCTSkip("No empty room on this account.") }
+        // Names first: the list re-sorts while rooms are visited, so rows are found by name, not position.
+        let names = emptyRow.allElementsBoundByIndex.map { String($0.label.split(separator: ",").first ?? "") }
+        let wanted = Array((names.filter { $0.localizedCaseInsensitiveContains("invite decline") } + names).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }.prefix(5))
+        for (index, name) in wanted.enumerated() {
+            let row = app.collectionViews.firstMatch.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name + ",")).firstMatch
+            guard row.waitForExistence(timeout: 5) else { XCTFail("\(name): row not found"); continue }
+            let opened = Date()
+            row.tap()
+            let composer = app.descendants(matching: .any)["composer"].firstMatch
+            XCTAssertTrue(composer.waitForExistence(timeout: 5), "\(name): the composer shows")
+            let emptyState = app.descendants(matching: .any)["empty-room"].firstMatch.waitForExistence(timeout: 5)
+            let note = XCTAttachment(string: String(format: "%@ opened in %.2f s", name, Date().timeIntervalSince(opened)))
+            note.name = "empty-room-open"
+            note.lifetime = .keepAlways
+            add(note)
+            let shot = XCTAttachment(screenshot: app.screenshot())
+            shot.name = "empty-room-\(index)"
+            shot.lifetime = .keepAlways
+            add(shot)
+            XCTAssertTrue(emptyState, "\(name): an empty room says so instead of a blank list")
+            composer.tap()
+            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3), "\(name): the keyboard opens")
+            // Real key taps (XCUIElement.typeText may touch the screen, which a person typing doesn't).
+            app.keys.matching(NSPredicate(format: "label ==[c] 'h'")).firstMatch.tap()
+            app.keys.matching(NSPredicate(format: "label ==[c] 'i'")).firstMatch.tap()
+            app.buttons["sticker-button"].tap()
+            XCTAssertTrue(app.buttons["panel-tab-emoji"].waitForExistence(timeout: 3), "\(name): the emoji panel opens")
+            app.buttons["panel-tab-emoji"].tap()
+            XCTAssertTrue(app.buttons["emoji-delete"].waitForExistence(timeout: 3))
+            app.buttons["emoji-delete"].tap()
+            app.buttons["emoji-delete"].tap()
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            XCTAssertTrue(app.navigationBars["Chats"].waitForExistence(timeout: 5), "\(name): back to the chat list")
+        }
+    }
+
     /// M4/M5 simulator UI check: opens a chat, verifies the sticker panel loads packs/stickers, and exercises New pack creation.
     @MainActor
     func testStickerPanelAndPackCreationFlow() throws {
         let app = XCUIApplication()
         app.launch()
+        dismissFirstRunSheets(app)
 
         try openFirstChat(app)
 
@@ -226,9 +392,24 @@ final class HaloUITests: XCTestCase {
     func testComposerPanelsSwapWithKeyboard() throws {
         let app = XCUIApplication()
         // Forget the remembered keyboard height: the first panel must still match the keyboard it later swaps with.
-        app.launchArguments += ["-halo.composer.keyboardOverlaps", "{}"]
+        app.launchArguments += ["-halo.composer.keyboardOverlaps", "{}", "-halo.debug.composerTrace", "YES"]
         app.launch()
+        dismissFirstRunSheets(app)
         try openFirstChat(app)
+        // Frame-by-frame position of the message field as drawn (presentation layer), from `ComposerMotionTrace`.
+        var frameDrifts: [String: Double] = [:]
+        func recordFrameDrift(_ label: String) {
+            let trace = app.descendants(matching: .any)["composer-trace"].firstMatch
+            guard trace.exists, let text = trace.value as? String else { return }
+            let ys = text.split(separator: ",").compactMap { Double($0) }
+            guard let settled = ys.last else { return }
+            let drift = ys.map { abs($0 - settled) }.max() ?? 0
+            frameDrifts[label] = drift
+            let note = XCTAttachment(string: "frames \(label): drift \(String(format: "%.1f", drift)) pt over \(ys.count) frames: " + text)
+            note.name = "composer-frames-\(label)"
+            note.lifetime = .keepAlways
+            add(note)
+        }
         func shot(_ name: String) {
             let attachment = XCTAttachment(screenshot: app.screenshot())
             attachment.name = name
@@ -237,10 +418,29 @@ final class HaloUITests: XCTestCase {
         }
         let composer = app.descendants(matching: .any)["composer"].firstMatch
         XCTAssertTrue(composer.waitForExistence(timeout: 5))
+        // A draft left by an earlier run: clear it all so the steps below start from an empty field.
+        if let draft = composer.value as? String, !draft.isEmpty, draft != "Message" {
+            // Tap the field's bottom-right corner so the cursor lands at the end (a tap may leave it at the start, and
+            // deleting from there removes nothing); then delete backwards past everything.
+            composer.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.9)).tap()
+            // Hold the keyboard's delete key (it speeds up to whole words) until the field is empty; the value is truncated,
+            // and a long typeText of deletes stops early.
+            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+            for _ in 0..<8 {
+                let value = composer.value as? String ?? ""
+                if value.isEmpty || value == "Message" { break }
+                app.keys["delete"].press(forDuration: 3)
+            }
+            XCTAssertTrue(((composer.value as? String) ?? "").isEmpty || composer.value as? String == "Message", "The leftover draft is cleared")
+            dismissComposerInput(app)
+            _ = app.keyboards.firstMatch.waitForNonExistence(timeout: 3)
+            _ = app.staticTexts["settle"].waitForExistence(timeout: 1.5)
+        }
         let attach = app.buttons["attachment-button"]
         /// Samples the composer row's top edge right after `action`, while the keyboard/panel swap animates, and records them.
         func sampleComposerTop(_ label: String, during action: () -> Void) -> [Double] {
             action()
+            recordFrameDrift(label)
             var samples: [Double] = []
             for _ in 0..<12 { samples.append(Double(attach.frame.minY)) }
             let note = XCTAttachment(string: "\(label): " + samples.map { String(format: "%.1f", $0) }.joined(separator: ", "))
@@ -282,6 +482,16 @@ final class HaloUITests: XCTestCase {
         // XCUITest aims at the final frame while the composer is still sliding down; let it settle before the next tap.
         _ = app.staticTexts["settle"].waitForExistence(timeout: 1.5)
 
+        // The keyboard alone, from nothing and back: the system moves the composer with the keyboard (frames recorded).
+        composer.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        _ = app.staticTexts["settle"].waitForExistence(timeout: 1)
+        recordFrameDrift("idle-to-keyboard")
+        dismissComposerInput(app)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
+        _ = app.staticTexts["settle"].waitForExistence(timeout: 1.5)
+        recordFrameDrift("keyboard-to-idle")
+
         // Expression panel: opens without the keyboard, with its tab pill.
         app.buttons["sticker-button"].tap()
         XCTAssertTrue(app.buttons["panel-tab-emoji"].waitForExistence(timeout: 3), "Expression panel should show its tabs")
@@ -309,6 +519,15 @@ final class HaloUITests: XCTestCase {
         composer.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["panel-tab-emoji"].waitForNonExistence(timeout: 3), "The keyboard replaces the panel")
+        // Typing keeps the keyboard up (the send button appearing in the field must not cost the field its focus).
+        // Real key taps on the keyboard, like a person (XCUIElement.typeText may touch the element first).
+        app.keys.matching(NSPredicate(format: "label ==[c] 'o'")).firstMatch.tap()
+        app.keys.matching(NSPredicate(format: "label ==[c] 'k'")).firstMatch.tap()
+        XCTAssertFalse(app.keyboards.firstMatch.waitForNonExistence(timeout: 1.5), "Typing keeps the keyboard up")
+        // Autocorrect may have changed what was typed ("Ok"): delete until the letters are gone, the emoji stays.
+        for _ in 0..<6 where (composer.value as? String ?? "").lowercased().contains(where: { $0 == "o" || $0 == "k" }) {
+            app.keys["delete"].tap()
+        }
         shot("4-keyboard")
         _ = app.staticTexts["settle"].waitForExistence(timeout: 1)
         let keyboardTop = Double(attach.frame.minY)
@@ -403,7 +622,9 @@ final class HaloUITests: XCTestCase {
         articleEditor.typeText("first ")
         app.buttons["article-format-bold"].tap()
         articleEditor.typeText("item")
-        XCTAssertEqual(articleEditor.value as? String, "## Weekly notes\n- first **item**", "The formatting bar writes Markdown")
+        // Prefixes and markers from the bar (a device keyboard's autocorrect may change the typed words themselves).
+        let article = articleEditor.value as? String ?? ""
+        XCTAssertTrue(article.hasPrefix("## ") && article.contains("\n- ") && article.contains("**"), "The formatting bar writes Markdown: \(article)")
         XCTAssertTrue(app.buttons["article-send"].isEnabled)
         shot("6d-article-write")
         app.buttons["Preview"].tap()

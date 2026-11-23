@@ -158,6 +158,7 @@ public struct SettingsView: View {
     @State private var sendTypingNotices: Bool
     @State private var privacyBlur: Bool
     @State private var chatsInSystemSearch: Bool
+    @State private var followFocusFilter: Bool
 
     public init(config: SettingsConfiguration) {
         self.config = config
@@ -165,6 +166,7 @@ public struct SettingsView: View {
         _sendTypingNotices = State(initialValue: config.preferences.sendTypingNotices)
         _privacyBlur = State(initialValue: config.preferences.privacyBlur)
         _chatsInSystemSearch = State(initialValue: config.preferences.chatsInSystemSearch)
+        _followFocusFilter = State(initialValue: config.preferences.followFocusFilter)
     }
 
     public var body: some View {
@@ -220,6 +222,18 @@ public struct SettingsView: View {
                 Text("Privacy")
             } footer: {
                 Text("Private read receipts hide that you read messages from others while keeping your devices in sync (applies from now on). Typing notices let others see when you're writing. App-switcher blur hides your chats when switching apps. Chats in Siri and Spotlight lets you open a chat by name; the chat names (not messages) are shared with the system and removed when you turn it off or sign out.")
+            }
+            Section {
+                Toggle("Follow Focus filters", isOn: $followFocusFilter)
+                    .accessibilityIdentifier("follow-focus-filter")
+                    .onChange(of: followFocusFilter) { _, value in
+                        preferences.followFocusFilter = value
+                        config.onPreferencesChanged?()
+                    }
+            } header: {
+                Text("Focus")
+            } footer: {
+                Text("When on, a Focus with a Halo filter (Settings → Focus → Halo) shows only the chats it picks while that Focus is on. When off, Halo always shows every chat.")
             }
             Section("Appearance") {
                 Picker("Theme", selection: $appearance) {

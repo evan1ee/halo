@@ -7,6 +7,9 @@ import Observation
 /// One displayed row. Text is prepared here so the view only lays it out.
 public struct TimelineRow: Equatable, Identifiable, Sendable {
     public enum Style: Equatable, Sendable { case message, ownMessage, notice, emote, placeholder, state, divider, marker }
+
+    /// A message of the conversation (not a room event, divider or marker).
+    public var isConversation: Bool { [.message, .ownMessage, .notice, .emote, .placeholder].contains(style) }
     public let id: String
     public let style: Style
     public let sender: String?

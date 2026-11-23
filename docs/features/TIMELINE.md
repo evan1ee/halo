@@ -43,7 +43,7 @@ Open → position (newest message; first unread marked) → scroll → events be
 Pagination failure (retry button) · media download failure (retry tile) · timeline reset by the SDK (re-position on the same event).
 
 ## 10. Edge cases
-A photo without a size (4:3 box, cropped) · a short room (fits on screen) · gaps in history · an event-focused jump to a very old event · own message from another device · a redaction of an item in view · a room with only state events · rapid diffs during scrolling.
+A photo without a size (4:3 box, cropped) · a short room (fits on screen: pushed down to sit just above the composer by a top content margin computed as a fixed point — a List's scroll-geometry content height includes that margin and its top inset does not, measured 2026-11-23; a wrong assumption here made the margin flip on every layout pass and froze rooms holding only a few events at 100 % CPU; at most 8 margin changes a second as a guard) · a room without messages (only setup events: "No messages yet"; earlier pages are loaded by themselves until a message or the room's start is found) · gaps in history · an event-focused jump to a very old event · own message from another device · a redaction of an item in view · a room with only state events · rapid diffs during scrolling.
 
 ## 11. Acceptance criteria
 - AC-TL-1 Opening a room with unread messages positions at the read-marker line.

@@ -222,9 +222,13 @@ public final class ComposerInputController {
         }
     }
 
-    /// The system keyboard's curve (UIKit's undocumented curve 7), so panel changes move together with the keyboard.
+    /// The system keyboard's motion, so the area under the composer moves with the keyboard (D102). Measured from the
+    /// composer's drawn position while iOS moved it with the keyboard on an iPhone 16 (iOS 27, 60 Hz, 2026-11-23,
+    /// `ComposerMotionTrace`): fraction moved per frame .02 .13 .27 .41 .54 .64 .73 .80 .85 .89, which a critically damped
+    /// spring with ω ≈ 22/s matches within a frame. The often-quoted "mass 3, stiffness 1000, damping 500" is strongly
+    /// overdamped and creeps in over half a second.
     public static func keyboardAnimation(duration: Double) -> Animation {
-        duration <= 0 ? .linear(duration: 0) : .interpolatingSpring(mass: 3, stiffness: 1000, damping: 500, initialVelocity: 0)
+        duration <= 0 ? .linear(duration: 0) : .interpolatingSpring(mass: 1, stiffness: 484, damping: 44, initialVelocity: 0)
     }
 
 }

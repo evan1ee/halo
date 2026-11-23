@@ -20,8 +20,9 @@ place under the composer, with no jumps while they swap.
 Telegram's arrangement in Halo's look: a round **paperclip** (attachment panel) · the **field** with a **face** icon inside
 (opens the expression panel; a keyboard icon while it is open) · one round button on the right: the **mic** when the field
 is empty and nothing is open, **↑** while a panel is open (pulls it up to a tall, sheet-like height that leaves room for the
-navigation bar and composer) and **↓** to bring it back. Once there is text, a blue **send** button appears inside the field
-and the right button goes away. The panel's content is laid out at the taller height while its area animates, so resizing
+navigation bar and composer) and **↓** to bring it back. Once there is text, the right button becomes a blue **send** button
+(founder 2026-11-23: with send inside the field, a long message left an empty column down the field's right side; only the
+face icon stays inside). A pasted image (edit menu, or the keyboard's paste suggestion) joins the pending photos (D106). The panel's content is laid out at the taller height while its area animates, so resizing
 slides without a flash. **Voice messages:** tap the mic to record (the system asks for the microphone the first time), the
 field shows a red dot, the time and Cancel; the right button sends. The recording is AAC `.m4a`, at most 5 minutes, sent
 through the file path as `m.audio` (encrypted in encrypted rooms) and deleted from the device afterwards.
@@ -40,12 +41,12 @@ stateDiagram-v2
   keyboard --> panel: toggle(panel)
   panel --> keyboard: toggle(same panel) / field focused
   panel --> panel: toggle(other panel)
-  keyboard --> idle: keyboard hides (interactive dismissal)
+  keyboard --> idle: keyboard hides (drag on the conversation)
   panel --> idle: tap/drag on conversation
   keyboard --> idle: tap/drag on conversation
 ```
 
-- **No jump.** The panel's height is the docked keyboard's last height above the bottom safe area (250–420 pt; a hardware keyboard's shortcut bar never shrinks it). That height is remembered for the whole app and across launches per window width (`KeyboardHeightMemory`); before the keyboard was ever seen at a width it is estimated as 38 % of the window less the bottom safe area, so opening the face panel before typing and then switching to the keyboard does not move the message field (founder report, 2026-11-23; measured 513.3 → 513.0 pt on iPhone Air with the memory wiped). While the keyboard animates out (panel opening) or in (panel replaced), the panel area gives up exactly what the keyboard covers (`ComposerPanelMetrics.areaHeight`), animated with the keyboard's own curve, so keyboard + panel stays constant. The replaced panel stays drawn under the rising keyboard until it is covered.
+- **No jump (D102).** Halo owns the whole space under the composer: the timeline ignores the keyboard safe area, and the area's height (`ComposerPanelMetrics.areaHeight`) is the keyboard's height while the keyboard is up and the larger of the panel and keyboard heights while a panel is shown or the two hand over (keyboard + search strip while searching inside a panel). The panel's height is the docked keyboard's last height above the bottom safe area (250–420 pt; a hardware keyboard's shortcut bar never shrinks it), remembered for the whole app and across launches per window width (`KeyboardHeightMemory`); before the keyboard was ever seen at a width it is estimated from the window height (fitted to iPhone 16 and iPhone Air: within a point). So in a keyboard ⇄ panel swap the area does not change and the composer cannot move. The keyboard's own movement is followed with its measured curve (a critically damped spring, ω ≈ 22/s, `ComposerInputController.keyboardAnimation`). Measured per drawn frame on an iPhone 16 (`ComposerMotionTrace`, AC-CP1): letting the system move the composer while the panel compensated made the field dip 69–106 pt in every swap, with the old overdamped curve and with the measured one alike (founder: "keyboard panel, shake"); owning the space: 0.0 pt on every frame, and opening the keyboard from nothing follows the keyboard within a frame (founder: "not smooth"). The replaced panel stays drawn under the rising keyboard until it is covered. A finger dragging the conversation closes the keyboard or panel at once (a drag gesture: the list never dismisses the keyboard itself, and the scroll phase also changes for programmatic moves); interactive keyboard dismissal isn't used because iOS sends no keyboard frames while a finger drags it, so the composer could not follow. Switching the keyboard safe-area setting at run time rebuilds the message field, which loses focus, so it is applied always.
 - **Focus bounce.** Opening a panel resigns the field's first responder; the field sometimes takes focus back by itself a moment later (a race with SwiftUI focus and the button tap, seen once in the prepush UI run). A focus gain within 500 ms of a panel opening is resigned again instead of swapping the panel for the keyboard; a later tap on the field swaps as usual.
 - **Search inside a panel** raises the keyboard; the panel shrinks to its search height (190 pt) above it and its tab pill hides.
 - **Composer independence.** The composer reads the mode only for its two toggle icons (paperclip ↔ keyboard, sticker/smiley ↔ keyboard) and sends events; panels insert or send through the timeline's view model and never reference the composer.
@@ -136,7 +137,7 @@ Panels appear within one frame of the tap (no loading for emoji; KLIPY grids sho
 Hardware keyboard (no docked keyboard: panels use the minimum height, focus timeout clears the lingering panel) · iPad split views and floating keyboards (overlap measured against the key window) · Reduce Motion / Low Power Mode (first frame only) · a page repeating an item (shown once) · ads or items without usable files in a KLIPY page (skipped) · a thread timeline (emoji and attachments only).
 
 ## 11. Acceptance criteria
-- AC-CP1 Switching keyboard ↔ panel keeps the composer at the same height (no visible jump) on iPhone.
+- AC-CP1 Switching keyboard ↔ panel keeps the composer at the same height (no visible jump) on iPhone. Debug builds launched with `-halo.debug.composerTrace YES` record the field's drawn position every display frame (`ComposerMotionTrace`); the UI test attaches each swap's frames and their largest deviation.
 - AC-CP2 An emoji, a Halo sticker and a KLIPY GIF can each be sent within two taps of opening the panel.
 - AC-CP3 A KLIPY GIF sent into an encrypted room arrives as an encrypted message whose body is the KLIPY URL; Halo shows it animated, Element shows the link.
 - AC-CP5 ↑ / ↓ resizes an open panel smoothly and returns the composer to the same place (UI test measures it).
