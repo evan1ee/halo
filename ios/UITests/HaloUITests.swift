@@ -34,6 +34,13 @@ final class HaloUITests: XCTestCase {
                issue.auditType == .contrast || issue.auditType == .textClipped {
                 return true
             }
+            // iOS's own hidden "Search" button that belongs to the floating search field (no identifier; on an iPhone 16
+            // it sits invisibly mid-list and is measured against nothing). Halo's buttons carry identifiers (D96, amended
+            // 2026-11-23 after the iPhone 16 run).
+            if issue.auditType == .contrast, glassTop < .infinity, let element = issue.element,
+               [.button, .staticText].contains(element.elementType), element.label == "Search", element.identifier.isEmpty {
+                return true
+            }
             // Ignore Apple's system keyboard predictive-text cells (TextInputUI), outside Halo's view hierarchy.
             if issue.detailedDescription.contains("TUIPredictionViewCell") {
                 return true
@@ -181,6 +188,8 @@ final class HaloUITests: XCTestCase {
             UIColor.systemTeal.setFill()
             context.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
         }
+        // On a device the test runner may not be allowed to write the general pasteboard ("not available at this time").
+        guard UIPasteboard.general.hasImages else { throw XCTSkip("The test runner can't put an image on this device's pasteboard.") }
         composer.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         composer.press(forDuration: 1.0)
