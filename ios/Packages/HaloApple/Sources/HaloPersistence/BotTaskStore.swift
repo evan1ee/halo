@@ -8,11 +8,18 @@ import HaloFoundation
 public struct BotTaskStore: BotTaskPort {
     private let database: HaloDatabase
     private let account: String
+    private let cipher: FieldCipher?
     private let now: @Sendable () -> Date
 
-    public init(database: HaloDatabase, account: UserID, now: @escaping @Sendable () -> Date = { Date() }) {
+    public init(
+        database: HaloDatabase,
+        account: UserID,
+        cipher: FieldCipher? = nil,
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) {
         self.database = database
         self.account = account.rawValue
+        self.cipher = cipher
         self.now = now
     }
 
@@ -22,9 +29,24 @@ public struct BotTaskStore: BotTaskPort {
         guard !entries.isEmpty else { return }
         do {
             let account = account
+            let cipher = cipher
             let stamp = Self.millis(now())
+            let encoded: [(entry: BotTaskEntry, title: String?, detail: String?)] = try entries.map { entry in
+                let title: String? = if let value = entry.title {
+                    if let cipher { try cipher.encrypt(value) } else { value }
+                } else {
+                    nil
+                }
+                let detail: String? = if let value = entry.detail {
+                    if let cipher { try cipher.encrypt(value) } else { value }
+                } else {
+                    nil
+                }
+                return (entry, title, detail)
+            }
             try await database.pool.write { db in
-                for entry in entries {
+                for item in encoded {
+                    let entry = item.entry
                     // Newer-or-equal `as_of` wins (so a rebuilt entry replaces its own old copy); a missing source keeps the stored one.
                     try db.execute(
                         sql: """
@@ -42,30 +64,54 @@ public struct BotTaskStore: BotTaskPort {
                             """,
                         arguments: [
                             account, entry.key.room.rawValue, entry.key.bot, entry.key.kind.rawValue, entry.key.id,
-                            entry.sourceEventID?.rawValue, entry.title, entry.detail, entry.status.rawValue, Self.millis(entry.asOf), stamp, entry.sourceRedacted ? 1 : 0,
+                            entry.sourceEventID?.rawValue, item.title, item.detail, entry.status.rawValue, Self.millis(entry.asOf), stamp, entry.sourceRedacted ? 1 : 0,
                         ])
                 }
             }
+        } catch let error as HaloError {
+            throw error
         } catch { throw .storage(.corrupted) }
     }
 
     public func entries() async throws(HaloError) -> [BotTaskEntry] {
         do {
             let account = account
+            let cipher = cipher
             return try await database.pool.read { db in
-                try Row.fetchAll(db, sql: "SELECT * FROM bot_task WHERE account = ? ORDER BY as_of_ts DESC, room_id, bot_sender, entity_type, entity_id", arguments: [account])
-                    .compactMap { row -> BotTaskEntry? in
-                        guard let room = try? RoomID(row["room_id"] as String), let kind = BotTaskEntry.Kind(rawValue: row["entity_type"]),
-                            let status = BotTaskEntry.Status(rawValue: row["status"])
-                        else { return nil }
-                        let source: String? = row["source_event_id"]
-                        return BotTaskEntry(
-                            key: .init(room: room, bot: row["bot_sender"], kind: kind, id: row["entity_id"]), title: row["title"], status: status,
-                            sourceEventID: source.flatMap { try? EventID($0) },
-                            asOf: Date(timeIntervalSince1970: Double(row["as_of_ts"] as Int64) / 1000), detail: row["detail"],
-                            sourceRedacted: (row["source_redacted"] as Int64) != 0)
+                let rows = try Row.fetchAll(
+                    db,
+                    sql: "SELECT * FROM bot_task WHERE account = ? ORDER BY as_of_ts DESC, room_id, bot_sender, entity_type, entity_id",
+                    arguments: [account]
+                )
+                var result: [BotTaskEntry] = []
+                result.reserveCapacity(rows.count)
+                for row in rows {
+                    guard let room = try? RoomID(row["room_id"] as String), let kind = BotTaskEntry.Kind(rawValue: row["entity_type"]),
+                        let status = BotTaskEntry.Status(rawValue: row["status"])
+                    else { continue }
+                    let source: String? = row["source_event_id"]
+                    let rawTitle: String? = row["title"]
+                    let rawDetail: String? = row["detail"]
+                    let title: String? = if let value = rawTitle {
+                        if let cipher { try cipher.decrypt(value) } else { value }
+                    } else {
+                        nil
                     }
+                    let detail: String? = if let value = rawDetail {
+                        if let cipher { try cipher.decrypt(value) } else { value }
+                    } else {
+                        nil
+                    }
+                    result.append(BotTaskEntry(
+                        key: .init(room: room, bot: row["bot_sender"], kind: kind, id: row["entity_id"]), title: title, status: status,
+                        sourceEventID: source.flatMap { try? EventID($0) },
+                        asOf: Date(timeIntervalSince1970: Double(row["as_of_ts"] as Int64) / 1000), detail: detail,
+                        sourceRedacted: (row["source_redacted"] as Int64) != 0))
+                }
+                return result
             }
+        } catch let error as HaloError {
+            throw error
         } catch { throw .storage(.corrupted) }
     }
 

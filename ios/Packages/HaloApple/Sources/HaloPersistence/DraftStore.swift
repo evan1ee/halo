@@ -7,21 +7,34 @@ import HaloFoundation
 public struct DraftStore: DraftPort {
     private let database: HaloDatabase
     private let account: String
+    private let cipher: FieldCipher?
     private let now: @Sendable () -> Date
 
     /// - Parameter account: the signed-in user ID; every row is scoped by it.
-    public init(database: HaloDatabase, account: UserID, now: @escaping @Sendable () -> Date = { Date() }) {
+    /// - Parameter cipher: when provided, encrypts `draft.body` at rest using AES-256-GCM (TD-12 / NFR-7).
+    public init(
+        database: HaloDatabase,
+        account: UserID,
+        cipher: FieldCipher? = nil,
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) {
         self.database = database
         self.account = account.rawValue
+        self.cipher = cipher
         self.now = now
     }
 
     public func draft(for room: RoomID) async throws(HaloError) -> String? {
         do {
             let account = account
-            return try await database.pool.read { db in
+            let stored = try await database.pool.read { db in
                 try String.fetchOne(db, sql: "SELECT body FROM draft WHERE account = ? AND room_id = ?", arguments: [account, room.rawValue])
             }
+            guard let stored else { return nil }
+            guard let cipher else { return stored }
+            return try cipher.decrypt(stored)
+        } catch let error as HaloError {
+            throw error
         } catch { throw .storage(.corrupted) }
     }
 
@@ -30,6 +43,7 @@ public struct DraftStore: DraftPort {
             let account = account
             let stamp = Int64((now().timeIntervalSince1970 * 1000).rounded())
             let blank = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let payload = if blank { "" } else if let cipher { try cipher.encrypt(text) } else { text }
             try await database.pool.write { db in
                 if blank {
                     try db.execute(sql: "DELETE FROM draft WHERE account = ? AND room_id = ?", arguments: [account, room.rawValue])
@@ -39,9 +53,11 @@ public struct DraftStore: DraftPort {
                             INSERT INTO draft (account, room_id, body, updated_at) VALUES (?, ?, ?, ?)
                             ON CONFLICT (account, room_id) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at
                             """,
-                        arguments: [account, room.rawValue, text, stamp])
+                        arguments: [account, room.rawValue, payload, stamp])
                 }
             }
+        } catch let error as HaloError {
+            throw error
         } catch { throw .storage(.corrupted) }
     }
 }

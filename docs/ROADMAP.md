@@ -52,7 +52,7 @@ Ordered work queue for the autonomous loop ([development/AUTONOMOUS_LOOP.md](dev
 - [x] Dynamic Type up to AX5 verified (replaced clipped `.roundedBorder` fields in `SignInView` with Dynamic-Type-friendly containers, `RoomRow` AX5 vertical reflow, zero audit issues).
 - [x] XCUITest target `HaloUITests` (`ios/UITests/HaloUITests.swift`, TD-03): automated `performAccessibilityAudit()` on root and inline-help screens + optional golden path against `infra/dev`; wired into `scripts/prepush.sh`.
 - [x] String Catalog `ios/App/Resources/Localizable.xcstrings` with English source language and plural rules (`%lld unread messages`, `%lld members`), validated by `RoomRowAccessibilityTests.stringCatalogIsValid`.
-- [ ] 👤 Q-L10N: languages for the external beta (recommendation: English only for Beta 1, then the founder's languages).
+- [x] Q-L10N (D111, founder 2026-11-24): English only for Beta 1; additional languages deferred to Beta 2.
 
 **M15 Ship readiness — external TestFlight and App Store** (exit: AC-UX-11, AC-UX-12 and the "Ship-ready definition" below; fixes SR-01, SR-05; done except 👤/📱 items)
 - [x] `PrivacyInfo.xcprivacy` for the app (`ios/App/Resources/`) and the NSE (`ios/NotificationService/`) declaring required-reason APIs (`UserDefaults`, `FileTimestamp`, `DiskSpace`), `NSPrivacyTracking = false`, no collected data; validated in `AcknowledgementsTests.privacyManifestsAreValid`.
@@ -69,7 +69,8 @@ Ordered work queue for the autonomous loop ([development/AUTONOMOUS_LOOP.md](dev
 - [x] Phase C with M13: `HaloErrorCopy` user-facing error map (TD-01/UX-15); `ActionState` double-tap guard helper (TD-07, unit-tested); split `TimelineViewModel`/`TimelineView` below 500 lines per file (TD-11); removed 1.5 s sleep workaround in room details (TD-13).
 - [x] Phase D with M14–M15: `HaloUITests` (TD-03); manual-dispatch macOS build workflow `.github/workflows/macos-build.yml` (TD-04); `bot_action` table (`v9-bot-action` + `BotActionStore` + tests, TD-08).
 - [x] ADR-0022 (module layout v2, TD-16) accepted by the founder (2026-11-22, D86); its four steps are queued in M11, M12, M13 and "ADR-0022 step 4" above.
-- [ ] 👤 TD-12 (R-16 field encryption) and 📤 TD-15 (upstream SDK filter / queued raw sends).
+- [x] TD-12 (D108, R-16 / NFR-7): AES-256-GCM field encryption (`FieldCipher`, `KeychainItem.haloDatabaseKey`) for `draft.body`, `bot_task.title`, and `bot_task.detail` in `halo.sqlite` (`FieldCipherTests`).
+- [ ] 📤 TD-15 (upstream SDK filter / queued raw sends).
 
 ## Ship-ready definition (D84)
 Halo is ready for external testers when **all** of these hold; each line names how it's checked.

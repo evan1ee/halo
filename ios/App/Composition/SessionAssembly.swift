@@ -34,9 +34,16 @@ extension AppRoot {
                     activeRecords.current = recordStore
                     await readState.attach(records: recordStore)
                     await receipts.restore(from: ReadIntentStore(database: database, account: user))
-                    await drafts.attach(DraftStore(database: database, account: user))
+                    let fieldCipher: FieldCipher?
+                    do {
+                        fieldCipher = try await FieldCipher.loadOrCreate(keychain: HaloShared.keychain(), account: user)
+                    } catch {
+                        log.error("Failed to load or create database field cipher")
+                        fieldCipher = nil
+                    }
+                    await drafts.attach(DraftStore(database: database, account: user, cipher: fieldCipher))
                     await klipy.attach(KlipyShelfStore(account: user))
-                    await botActivity.attach(BotTaskStore(database: database, account: user))
+                    await botActivity.attach(BotTaskStore(database: database, account: user, cipher: fieldCipher))
                     #if DEBUG
                     let log = log
                     let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
