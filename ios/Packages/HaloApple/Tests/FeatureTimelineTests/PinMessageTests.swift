@@ -53,4 +53,43 @@ struct PinMessageTests {
         #expect(port.pinnedEvents(in: room).isEmpty)
         await vm.stop()
     }
+
+    @Test("re-entering a room reloads existing pinned messages immediately after open")
+    func reenteringRoomKeepsPins() async throws {
+        let room = try RoomID("!pin-reenter:x.org")
+        let eventID = try EventID("$pinned1")
+        let event = TimelineEvent(
+            eventID: eventID,
+            sender: try UserID("@alice:x.org"),
+            senderName: "Alice",
+            timestamp: Date(timeIntervalSince1970: 1_700_000_000),
+            isOwn: false,
+            kind: .text("Pinned before leaving", isEdited: false)
+        )
+        let port = FakeTimelinePort()
+        port.addRoom(room, items: [TimelineItem(id: TimelineItemID("row-1"), content: .event(event))])
+
+        // First visit: pin the message and leave the room.
+        let vm1 = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room), room: room)
+        await vm1.start()
+        for _ in 0..<5 {
+            if case .live(let rows, _, _, _) = vm1.content, !rows.isEmpty { break }
+            await Task.yield()
+        }
+        await vm1.pin(eventID: eventID)
+        #expect(vm1.pinnedEventIDs == [eventID])
+        await vm1.stop()
+
+        // Second visit: brand-new coordinator & view model re-entering the room.
+        let vm2 = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room), room: room)
+        await vm2.start()
+        for _ in 0..<5 {
+            if case .live(let rows, _, _, _) = vm2.content, !rows.isEmpty { break }
+            await Task.yield()
+        }
+        #expect(vm2.pinnedEventIDs == [eventID])
+        #expect(vm2.pinnedMessages.count == 1)
+        #expect(vm2.pinnedMessages.first?.preview == "Pinned before leaving")
+        await vm2.stop()
+    }
 }

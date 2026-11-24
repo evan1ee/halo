@@ -190,7 +190,9 @@ public struct TimelineView: View {
                     let atBottom = value.isAtBottom
                     if atBottom != bottomVisible {
                         bottomVisible = atBottom
-                        if landed { model.setAtBottom(atBottom) }
+                    }
+                    if landed, model.isAtBottom != atBottom {
+                        model.setAtBottom(atBottom)
                     }
                     if atBottom {
                         pinnedToBottom = true
@@ -208,6 +210,11 @@ public struct TimelineView: View {
                 .onScrollPhaseChange { _, phase in
                     scrollMoving = phase == .interacting || phase == .decelerating || phase == .animating
                     scrollInteracting = phase == .interacting
+                    if phase == .interacting, !landed {
+                        landed = true
+                        listPlaced = true
+                        model.setAtBottom(bottomVisible)
+                    }
                 }
                 .onChange(of: rows.first?.id) { oldFirst, newFirst in
                     if let anchor = PrependedAnchor.anchor(
@@ -268,7 +275,13 @@ public struct TimelineView: View {
                 }
                 .onChange(of: model.jumpRequest) { _, target in
                     guard let target else { return }
-                    pinnedToBottom = false  // a reply jump leaves the bottom: new rows must not pull the reader back down
+                    landed = true
+                    listPlaced = true
+                    pinnedToBottom = false  // a reply/pin jump leaves the bottom: new rows must not pull the reader back down
+                    if target != rows.last?.id {
+                        bottomVisible = false
+                        model.setAtBottom(false)
+                    }
                     withAnimation { proxy.scrollTo(target, anchor: .center) }
                     model.jumpHandled()
                     Task {
@@ -295,7 +308,7 @@ public struct TimelineView: View {
                 }
                 // TIMELINE §6: when scrolled up, offer a floating button (or "↓ N new" pill) to return to the newest row.
                 .overlay(alignment: .bottomTrailing) {
-                    if landed, !model.isAtBottom, let last = rows.last?.id {
+                    if landed, (!model.isAtBottom || !bottomVisible), let last = rows.last?.id {
                         Button {
                             model.setAtBottom(true)
                             pinnedToBottom = true

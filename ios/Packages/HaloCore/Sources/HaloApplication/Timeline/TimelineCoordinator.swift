@@ -192,7 +192,7 @@ public actor TimelineCoordinator {
 
     /// Event IDs currently pinned in the open room.
     public func pinnedEventIDs() async -> [EventID] {
-        guard let session, case .live = status else { return [] }
+        guard let session else { return [] }
         return await session.pinnedEventIDs()
     }
 

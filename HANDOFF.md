@@ -12,6 +12,9 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
+- **Pin reload & jump-to-bottom arrow bug fixes (2026-11-24, `main`):**
+  - Fixed pinned messages disappearing on room re-entry: `TimelineCoordinator.pinnedEventIDs()` no longer gates on `case .live = status` (it was returning `[]` during `.opening` right after `open()`), with regression test `PinMessageTests.reenteringRoomKeepsPins`.
+  - Fixed jump-to-bottom arrow disappearing on early scroll or jump in `TimelineView`: marks `landed = true` on user scroll interaction / `jumpRequest`, always syncs `model.setAtBottom(atBottom)` when `landed && model.isAtBottom != atBottom`, and checks `(!model.isAtBottom || !bottomVisible)`.
 - **iOS 26 UX, Sticker Pack Manager, Photo Viewer & Pinned Messages (2026-11-24, PR #79):**
   - Tiered native confirmations (`.alert` for high-stakes actions, anchored `.confirmationDialog` on trigger), sheet grabbers (Room Info, Quick Look), and non-blocking floating Liquid Glass title pills on Stickers, Pack Detail, Settings, Acknowledgements, and Media Gallery (dynamic date pill + grouped type/room filter pill).
   - Full Sticker Pack Manager (`StickerPackManagementPort`, `StickerPackManager`, `StickerLibraryView`, `StickerPackDetailView`, `AddToStickerPackSheet`) with thumbnail preview strips, rename, add/delete stickers, and delete pack.
@@ -41,10 +44,9 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D107), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
-- **Domain / Application / TestSupport (`HaloCore`):** `HaloDomain/{Ports/StickerPorts,Ports/TimelinePort,Stickers/PackCreation,Timeline/PersonalPinnedEvents}.swift`, `HaloApplication/{Stickers/StickerLibrary,Stickers/StickerPackManager,Timeline/TimelineCoordinator}.swift`, `HaloTestSupport/{Stickers/FakeStickerPorts,Timeline/FakeTimelinePort}.swift`, + unit tests (`StickerPackManagementDomainTests`, `PersonalPinnedEventsTests`, `StickerPackManagerTests`).
-- **Adapter (`HaloMatrixAdapter`):** `Stickers/MatrixStickerPorts.swift`, `Timeline/MatrixTimelinePort.swift`.
-- **Design System & Features (`HaloApple`):** `HaloDesignSystem/Media/{PagedPhotoViewer,ZoomableImageView}.swift`, `FeatureStickers/{AddToStickerPackSheet,StickerLibraryView,StickerLibraryViewModel}.swift`, `FeatureTimeline/{LocationCardView,PinnedMessagesSheet,TimelineDrag,TimelineMediaViews,TimelineMessageRowView,TimelineRow,TimelineView,TimelineViewModel,TimelineViewModel+Actions,TimelineViewModel+Mapping}.swift`, `FeatureMedia/GlobalMediaGalleryView.swift`, `FeatureSettings/SettingsView.swift`, `FeatureRoomDetails/RoomDetailsView.swift`, `FeatureBotActivity/BotActivityView.swift`, + tests (`StickerLibraryViewModelTests`, `PinMessageTests`, `ThumbnailSizeTests`).
-- **App & Docs:** `ios/App/{AppRoot,Composition/SettingsAssembly,HaloApp,Intents/SendMessageIntent}.swift`, `ios/App/Support/{Info,Info-Debug}.plist`, `HANDOFF.md`.
+- **Application (`HaloCore`):** `HaloApplication/Timeline/TimelineCoordinator.swift`.
+- **Feature (`HaloApple`):** `FeatureTimeline/TimelineView.swift`, `Tests/FeatureTimelineTests/PinMessageTests.swift`.
+- **Docs:** `HANDOFF.md`.
 
 ## 5. Outstanding issues
 - **UI flakes:** `testComposerPanelsSwapWithKeyboard` and `testEmptyRoomStaysResponsive` still fail in the full UI run (pre-existing); an own thumbnail is downloaded once after an app restart (SDK caches the file under the new reference, thumbnails under their own key).
