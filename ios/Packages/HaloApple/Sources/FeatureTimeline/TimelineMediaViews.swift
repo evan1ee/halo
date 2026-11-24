@@ -203,11 +203,14 @@ struct KlipyMessageMedia: View {
                 .fill(HaloColor.textSecondary.opacity(0.12))
                 .overlay {
                     if failed {
-                        // Tap to try again; the link stays reachable from the message's Copy action.
-                        Label("GIF didn't load. Tap to retry", systemImage: "arrow.clockwise")
-                            .font(HaloTypography.caption)
-                            .foregroundStyle(HaloColor.textSecondary)
-                            .padding(HaloSpacing.s)
+                        // Tap to try again; a plain Button lets vertical list scrolls pass through without blocking.
+                        Button { failed = false; attempt += 1 } label: {
+                            Label("GIF didn't load. Tap to retry", systemImage: "arrow.clockwise")
+                                .font(HaloTypography.caption)
+                                .foregroundStyle(HaloColor.textSecondary)
+                                .padding(HaloSpacing.s)
+                        }
+                        .buttonStyle(.plain)
                     } else {
                         ProgressView()
                     }
@@ -215,8 +218,6 @@ struct KlipyMessageMedia: View {
         }
         .frame(width: 220, height: 220 / max(0.5, min(2, aspect ?? 1)))
         .clipShape(.rect(cornerRadius: HaloRadius.medium, style: .continuous))
-        .contentShape(.rect)
-        .onTapGesture { if failed { failed = false; attempt += 1 } }
         .task(id: attempt) {
             guard let data = await model.klipyMedia(url) else { failed = true; return }
             aspect = KlipyMessageMedia.aspectRatio(data)

@@ -82,3 +82,41 @@ struct ShortRoomAlignmentTests {
     }
 }
 
+@Suite("BottomFollowState")
+struct BottomFollowStateTests {
+    @Test("tapping jump-to-bottom while decelerating stays pinned across intermediate frames until reaching bottom")
+    func jumpToBottomSurvivesOngoingScrollMovement() {
+        var state = BottomFollowState(pinnedToBottom: false, jumpingToBottom: false)
+        state.beginJumpToBottom()
+        #expect(state.pinnedToBottom)
+        #expect(state.jumpingToBottom)
+
+        // Intermediate frames during ongoing deceleration / animation must NOT clear pinnedToBottom or jumpingToBottom.
+        #expect(state.onScrollGeometryChanged(atBottom: false, scrollMoving: true) == false)
+        #expect(state.pinnedToBottom)
+        #expect(state.jumpingToBottom)
+
+        // Reaching bottom completes the jump and keeps the list pinned.
+        #expect(state.onScrollGeometryChanged(atBottom: true, scrollMoving: false) == false)
+        #expect(state.pinnedToBottom)
+        #expect(!state.jumpingToBottom)
+    }
+
+    @Test("user interaction cancels an in-flight jump-to-bottom and detaches when not at bottom")
+    func userInteractionCancelsJumpToBottom() {
+        var state = BottomFollowState()
+        state.beginJumpToBottom()
+        state.onUserInteractionStarted(atBottom: false)
+        #expect(!state.jumpingToBottom)
+        #expect(!state.pinnedToBottom)
+    }
+
+    @Test("idle layout drift re-anchors when pinned, while user scrolling detaches")
+    func idleReanchorsAndScrollDetaches() {
+        var state = BottomFollowState(pinnedToBottom: true, jumpingToBottom: false)
+        #expect(state.onScrollGeometryChanged(atBottom: false, scrollMoving: false) == true)
+        #expect(state.onScrollGeometryChanged(atBottom: false, scrollMoving: true) == false)
+        #expect(!state.pinnedToBottom)
+    }
+}
+
