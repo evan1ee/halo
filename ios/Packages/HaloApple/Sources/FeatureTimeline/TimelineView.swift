@@ -30,7 +30,9 @@ public struct TimelineView: View {
     @State private var markerVisible = UnreadPill.markerOnScreenAtOpen
     @State private var bottomVisible = false
     /// The list follows its newest row (also when older history arrives above it) until the user scrolls away themselves.
-    @State private var pinnedToBottom = true
+    @State private var bottomFollow = BottomFollowState()
+    /// In-flight programmatic jump-to-bottom task, cancelled on user touch or conflicting jump.
+    @State private var jumpToBottomTask: Task<Void, Never>?
     /// The list is drawn once it has been placed at the newest row (a frame or two), so it never shows its top first and then
     /// jumps. No spinner: a short fallback timer shows it anyway if that never happens.
     @State private var listPlaced = false
@@ -45,7 +47,7 @@ public struct TimelineView: View {
     /// Automatic history paging only runs with the newest row on screen (a short room that needs filling) or once the user has
     /// scrolled; right after history lands above the newest row the "Load earlier" row is briefly visible and paging then would
     /// move the content again.
-    private var pagingAllowed: Bool { bottomVisible || !pinnedToBottom }
+    private var pagingAllowed: Bool { bottomVisible || !bottomFollow.pinnedToBottom }
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -191,14 +193,11 @@ public struct TimelineView: View {
                     if atBottom != bottomVisible {
                         bottomVisible = atBottom
                     }
-                    if landed, model.isAtBottom != atBottom {
+                    if landed, (!bottomFollow.jumpingToBottom || atBottom), model.isAtBottom != atBottom {
                         model.setAtBottom(atBottom)
                     }
-                    if atBottom {
-                        pinnedToBottom = true
-                    } else if scrollMoving {
-                        pinnedToBottom = false
-                    } else if pinnedToBottom, let last = rows.last?.id {
+                    if bottomFollow.onScrollGeometryChanged(atBottom: atBottom, scrollMoving: scrollMoving),
+                       let last = rows.last?.id {
                         proxy.scrollTo(last, anchor: .bottom)
                     }
                 }
@@ -210,10 +209,15 @@ public struct TimelineView: View {
                 .onScrollPhaseChange { _, phase in
                     scrollMoving = phase == .interacting || phase == .decelerating || phase == .animating
                     scrollInteracting = phase == .interacting
-                    if phase == .interacting, !landed {
-                        landed = true
-                        listPlaced = true
-                        model.setAtBottom(bottomVisible)
+                    if phase == .interacting {
+                        jumpToBottomTask?.cancel()
+                        jumpToBottomTask = nil
+                        bottomFollow.onUserInteractionStarted(atBottom: bottomVisible)
+                        if !landed {
+                            landed = true
+                            listPlaced = true
+                            model.setAtBottom(bottomVisible)
+                        }
                     }
                 }
                 .onChange(of: rows.first?.id) { oldFirst, newFirst in
@@ -222,7 +226,7 @@ public struct TimelineView: View {
                         newFirst: newFirst,
                         rowIDs: rows.map(\.id),
                         landed: landed,
-                        pinnedToBottom: pinnedToBottom,
+                        pinnedToBottom: bottomFollow.pinnedToBottom,
                         interacting: scrollInteracting
                     ) {
                         proxy.scrollTo(anchor, anchor: .top)
@@ -275,9 +279,11 @@ public struct TimelineView: View {
                 }
                 .onChange(of: model.jumpRequest) { _, target in
                     guard let target else { return }
+                    jumpToBottomTask?.cancel()
+                    jumpToBottomTask = nil
                     landed = true
                     listPlaced = true
-                    pinnedToBottom = false  // a reply/pin jump leaves the bottom: new rows must not pull the reader back down
+                    bottomFollow.detach()  // a reply/pin jump leaves the bottom: new rows must not pull the reader back down
                     if target != rows.last?.id {
                         bottomVisible = false
                         model.setAtBottom(false)
@@ -294,7 +300,9 @@ public struct TimelineView: View {
                     if let marker = model.unreadMarkerID,
                        UnreadPill.isShown(hasMarker: true, landed: landed, markerOnScreen: markerVisible, atBottom: bottomVisible) {
                         Button {
-                            pinnedToBottom = false
+                            jumpToBottomTask?.cancel()
+                            jumpToBottomTask = nil
+                            bottomFollow.detach()
                             withAnimation { proxy.scrollTo(marker, anchor: .top) }
                         } label: {
                             Label("Jump to unread", systemImage: "arrow.up")
@@ -310,9 +318,32 @@ public struct TimelineView: View {
                 .overlay(alignment: .bottomTrailing) {
                     if landed, (!model.isAtBottom || !bottomVisible), let last = rows.last?.id {
                         Button {
+                            jumpToBottomTask?.cancel()
+                            bottomFollow.beginJumpToBottom()
                             model.setAtBottom(true)
-                            pinnedToBottom = true
-                            withAnimation { proxy.scrollTo(last, anchor: .bottom) }
+                            let wasMoving = scrollMoving
+                            jumpToBottomTask = Task { @MainActor in
+                                defer { bottomFollow.cancelJumpToBottom() }
+                                // When the list is actively decelerating or running another scroll animation, a single
+                                // animated `scrollTo` is often ignored by UIKit. Interrupt the in-flight scroll first,
+                                // then converge smoothly until the bottom row is confirmed visible.
+                                if wasMoving {
+                                    proxy.scrollTo(model.lastRowID ?? last, anchor: .bottom)
+                                    try? await Task.sleep(for: .milliseconds(50))
+                                } else {
+                                    withAnimation(.easeOut(duration: 0.25)) {
+                                        proxy.scrollTo(model.lastRowID ?? last, anchor: .bottom)
+                                    }
+                                    try? await Task.sleep(for: .milliseconds(120))
+                                }
+                                for _ in 0..<8 {
+                                    if Task.isCancelled || bottomVisible || !bottomFollow.jumpingToBottom { break }
+                                    withAnimation(.easeOut(duration: 0.2)) {
+                                        proxy.scrollTo(model.lastRowID ?? last, anchor: .bottom)
+                                    }
+                                    try? await Task.sleep(for: .milliseconds(100))
+                                }
+                            }
                         } label: {
                             if model.newSinceDetached > 0 {
                                 Label("\(model.newSinceDetached) new", systemImage: "arrow.down")
@@ -439,7 +470,12 @@ public struct TimelineView: View {
         }
         .task { await model.start() }
         .onChange(of: scenePhase, initial: true) { _, phase in model.setActive(phase == .active) }
-        .onDisappear { model.setActive(false); Task { await model.stop() } }
+        .onDisappear {
+            jumpToBottomTask?.cancel()
+            jumpToBottomTask = nil
+            model.setActive(false)
+            Task { await model.stop() }
+        }
     }
 
     private func photoViewer(initial: TimelineViewModel.PhotoViewerItem) -> some View {

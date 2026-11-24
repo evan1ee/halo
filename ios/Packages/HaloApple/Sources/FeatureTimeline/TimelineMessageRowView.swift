@@ -77,27 +77,32 @@ struct RowView: View {
                     VStack(alignment: row.style == .ownMessage ? .trailing : .leading, spacing: 2) {
                         if let sender = row.sender, row.style == .message, !row.continuesRun { Text(sender).font(.caption).foregroundStyle(.secondary) }
                         if let reply = row.reply {
-                            VStack(alignment: .leading, spacing: 0) {
-                                if let name = reply.sender { Text(name).font(.caption2.bold()) }
-                                Text(reply.snippet ?? "Original message unavailable").font(.caption).lineLimit(2)
+                            Button { Task { await model.jumpToReplyOriginal(from: row) } } label: {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    if let name = reply.sender { Text(name).font(.caption2.bold()) }
+                                    Text(reply.snippet ?? "Original message unavailable").font(.caption).lineLimit(2)
+                                }
+                                .foregroundStyle(.secondary)
+                                .padding(.leading, 6)
+                                .overlay(alignment: .leading) { Rectangle().fill(.secondary).frame(width: 2) }
+                                .contentShape(Rectangle())
                             }
-                            .foregroundStyle(.secondary)
-                            .padding(.leading, 6)
-                            .overlay(alignment: .leading) { Rectangle().fill(.secondary).frame(width: 2) }
-                            .contentShape(Rectangle())
-                            .onTapGesture { Task { await model.jumpToReplyOriginal(from: row) } }
-                            .accessibilityAddTraits(.isButton)
+                            .buttonStyle(.plain)
                         }
                         VStack(alignment: row.style == .ownMessage ? .trailing : .leading, spacing: 2) {
                             if let image = row.image {
-                                ThumbnailView(image: image, model: model, isSticker: row.isSticker)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        if !row.isSticker, model.showsPreview(of: image) {
-                                            onOpenPhoto?(row.id)
-                                        }
+                                // Use a plain Button (not `.onTapGesture`) inside `List` so vertical scroll pan gestures
+                                // starting on an image are never intercepted or blocked by SwiftUI's tap recognizer.
+                                if !row.isSticker, model.showsPreview(of: image) {
+                                    Button { onOpenPhoto?(row.id) } label: {
+                                        ThumbnailView(image: image, model: model, isSticker: false)
                                     }
-                                    .accessibilityLabel(row.isSticker ? row.text : "Image")
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("Image")
+                                } else {
+                                    ThumbnailView(image: image, model: model, isSticker: row.isSticker)
+                                        .accessibilityLabel(row.isSticker ? row.text : "Image")
+                                }
                             }
                             if let file = row.file { FileTileView(file: file, isOpening: model.openingRow == row.id, model: model) { Task { await model.openFile(row) } } }
                             if let location = row.location {

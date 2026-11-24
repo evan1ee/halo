@@ -59,3 +59,49 @@ struct ShortRoomGeometry: Equatable {
     let contentHeight: Double
     let canLoadEarlier: Bool
 }
+
+/// Coordinates bottom-pinning and programmatic jump-to-bottom so tapping the floating down-arrow during an ongoing
+/// deceleration or scroll animation isn't immediately cancelled by intermediate non-bottom geometry callbacks.
+struct BottomFollowState: Equatable {
+    var pinnedToBottom = true
+    var jumpingToBottom = false
+
+    mutating func beginJumpToBottom() {
+        pinnedToBottom = true
+        jumpingToBottom = true
+    }
+
+    mutating func cancelJumpToBottom() {
+        jumpingToBottom = false
+    }
+
+    mutating func detach() {
+        pinnedToBottom = false
+        jumpingToBottom = false
+    }
+
+    mutating func onUserInteractionStarted(atBottom: Bool) {
+        jumpingToBottom = false
+        if !atBottom {
+            pinnedToBottom = false
+        }
+    }
+
+    /// Processes a scroll-geometry update and returns `true` when the list should re-anchor to the bottom row.
+    mutating func onScrollGeometryChanged(atBottom: Bool, scrollMoving: Bool) -> Bool {
+        if atBottom {
+            pinnedToBottom = true
+            jumpingToBottom = false
+            return false
+        }
+        if jumpingToBottom {
+            // Keep pinned while the jump-to-bottom task is converging so in-flight deceleration doesn't wipe it out.
+            return false
+        }
+        if scrollMoving {
+            pinnedToBottom = false
+            return false
+        }
+        return pinnedToBottom
+    }
+}
