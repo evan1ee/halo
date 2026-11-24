@@ -25,7 +25,6 @@ used 3 times, 2 with a written justification.
 
 | ID | Type | Debt | Evidence | I | R | E | **P** |
 |---|---|---|---|---|---|---|---|
-| TD-12 | Security | **NFR-7 not met:** draft bodies and bot-task titles are stored in plaintext in `halo.sqlite` (protected only by file protection) | R-16, HANDOFF §5 (founder) | 2 | 4 | 3 | **18** |
 | TD-15 | Dependency | **Upstream SDK gaps.** Classic sync without a filter (R-18), no queued `sendRaw`/`sendSticker` (R-21), direct HTTP for devices and password (ADR-0018/0019); each bump must recheck the workarounds | HANDOFF §5, OUTSTANDING_ISSUES | 3 | 3 | 5 | **6** |
 
 ## 3. Business justification (top items)

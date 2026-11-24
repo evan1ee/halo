@@ -62,8 +62,8 @@ The founder closed V-RS-7: classic sync is the unread evidence. Verified in the 
 - **Physical iPhone 16 verification (`F-DEV-1`):** 10/10 live APNs pushes `outcome: "display"`, peak NSE memory `6.2 MB`, warm restore `0 ms` (`totalMs = 44–96 ms`), 10/10 GRDB `notification_record` rows read by the app at launch, `NSFileProtectionCompleteUntilFirstUserAuthentication` verified on `halo.sqlite`/`-wal`/`-shm`/dir, and unread-message-count badge (D82) verified live.
 - **Recommendation for the founder (§4):** both **G-FFI** and **G-UNREAD** now have complete automated + live-device evidence to **pass** (with the 7-day AC-U8 soak tracked under M5).
 
-## 4. What the founder decides
-1. G-FFI: confirm **pass** (stay on upstream), with the two conditions above? [recommended]
-2. G-UNREAD: keep **open** until the V-RS-7 path is decided and the 📱 checks are done? [recommended] Or close now with the gaps
-   accepted?
-3. ~~V-RS-7~~ decided: classic sync (D73).
+## 4. Founder decisions (confirmed 2026-11-24, D109)
+1. **G-FFI:** **PASS confirmed** (stay on upstream `MatrixRustSDK`, sticker state reader behind `StickerPackPort`, V-ST-2 verified).
+2. **G-UNREAD:** **PASS confirmed** (classic sync D73/D74 + `ReadStatePolicy` + S01–S29 real-server suite green; 7-day AC-U8 soak tracked under Beta 1).
+3. **G-NSE:** **PASS confirmed** (100/100 live iPhone 16 APNs soak `F-DEV-1`/`F-DEV-2` at 6.2 MB peak memory, zero `0xdead10cc` terminations).
+4. ~~V-RS-7~~ decided: classic sync (D73).
