@@ -88,3 +88,93 @@ public final class FakeStickerPackCreation: StickerPackCreationPort {
         return PackRef(room: room, stateKey: ImagePackBuilder.stateKey)
     }
 }
+
+/// In-memory `StickerPackManagementPort`; records mutations and optionally updates a backing `FakeStickerPacks`.
+public final class FakeStickerPackManagement: StickerPackManagementPort {
+    public struct Renamed: Sendable, Equatable {
+        public let ref: PackRef
+        public let name: String
+    }
+    public struct Added: Sendable, Equatable {
+        public let ref: PackRef
+        public let images: [NewStickerImage]
+    }
+    public struct RemovedSticker: Sendable, Equatable {
+        public let ref: PackRef
+        public let shortcode: String
+    }
+
+    private struct State {
+        var renamed: [Renamed] = []
+        var added: [Added] = []
+        var removedStickers: [RemovedSticker] = []
+        var deletedPacks: [PackRef] = []
+        var error: HaloError?
+    }
+    private let state = Mutex(State())
+    private let backing: FakeStickerPacks?
+
+    public init(backing: FakeStickerPacks? = nil) { self.backing = backing }
+
+    public var renamed: [Renamed] { state.withLock { $0.renamed } }
+    public var added: [Added] { state.withLock { $0.added } }
+    public var removedStickers: [RemovedSticker] { state.withLock { $0.removedStickers } }
+    public var deletedPacks: [PackRef] { state.withLock { $0.deletedPacks } }
+    public func fail(with error: HaloError?) { state.withLock { $0.error = error } }
+
+    public func renamePack(_ ref: PackRef, to name: String) async throws(HaloError) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw .invalidInput("EMPTY_PACK_NAME") }
+        if let error = state.withLock({ $0.error }) { throw error }
+        state.withLock { $0.renamed.append(Renamed(ref: ref, name: trimmed)) }
+        if let backing {
+            let current = try await backing.packs(currentRoom: nil)
+            let updated = current.packs.map { pack in
+                pack.ref == ref
+                    ? StickerPack(ref: pack.ref, displayName: trimmed, avatarURL: pack.avatarURL, usage: pack.usage, attribution: pack.attribution, stickers: pack.stickers, source: pack.source)
+                    : pack
+            }
+            backing.set(StickerPackLoad(packs: updated, failedSources: current.failedSources, unavailable: current.unavailable))
+        }
+    }
+
+    public func addStickers(_ images: [NewStickerImage], to ref: PackRef, progress: @escaping @Sendable (Int, Int) -> Void) async throws(HaloError) {
+        guard !images.isEmpty else { throw .invalidInput("NO_IMAGES") }
+        if let error = state.withLock({ $0.error }) { throw error }
+        for index in images.indices { progress(index + 1, images.count) }
+        state.withLock { $0.added.append(Added(ref: ref, images: images)) }
+        if let backing {
+            let current = try await backing.packs(currentRoom: nil)
+            let updated = current.packs.map { pack in
+                guard pack.ref == ref else { return pack }
+                let newStickers = images.map {
+                    Sticker(pack: ref, shortcode: $0.shortcode, body: $0.body, url: "mxc://fake/\($0.shortcode)", info: StickerInfo(width: $0.width, height: $0.height, mimeType: $0.mimeType, size: $0.data.count))
+                }
+                return StickerPack(ref: pack.ref, displayName: pack.displayName, avatarURL: pack.avatarURL, usage: pack.usage, attribution: pack.attribution, stickers: pack.stickers + newStickers, source: pack.source)
+            }
+            backing.set(StickerPackLoad(packs: updated, failedSources: current.failedSources, unavailable: current.unavailable))
+        }
+    }
+
+    public func removeSticker(shortcode: String, from ref: PackRef) async throws(HaloError) {
+        if let error = state.withLock({ $0.error }) { throw error }
+        state.withLock { $0.removedStickers.append(RemovedSticker(ref: ref, shortcode: shortcode)) }
+        if let backing {
+            let current = try await backing.packs(currentRoom: nil)
+            let updated = current.packs.map { pack in
+                guard pack.ref == ref else { return pack }
+                return StickerPack(ref: pack.ref, displayName: pack.displayName, avatarURL: pack.avatarURL, usage: pack.usage, attribution: pack.attribution, stickers: pack.stickers.filter { $0.shortcode != shortcode }, source: pack.source)
+            }
+            backing.set(StickerPackLoad(packs: updated, failedSources: current.failedSources, unavailable: current.unavailable))
+        }
+    }
+
+    public func deletePack(_ ref: PackRef) async throws(HaloError) {
+        if let error = state.withLock({ $0.error }) { throw error }
+        state.withLock { $0.deletedPacks.append(ref) }
+        if let backing {
+            let current = try await backing.packs(currentRoom: nil)
+            backing.set(StickerPackLoad(packs: current.packs.filter { $0.ref != ref }, failedSources: current.failedSources, unavailable: current.unavailable))
+        }
+    }
+}

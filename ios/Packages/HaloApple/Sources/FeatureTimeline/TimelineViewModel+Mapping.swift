@@ -300,11 +300,21 @@ extension TimelineViewModel {
                 return TimelineRow(id: id, style: .state, sender: nil, text: "\(who) \(Self.phrase(change))")
             case .location(let body, let geoURI):
                 let text = "📍 \(body.isEmpty ? "Shared location" : body)"
+                let url = Self.mapsURL(geoURI: geoURI)
                 var styled = AttributedString(text)
-                if let url = Self.mapsURL(geoURI: geoURI) { styled.link = url }
+                if let url { styled.link = url }
+                let locationCard: TimelineRow.Location? = Self.parseCoordinates(geoURI: geoURI).map { coords in
+                    TimelineRow.Location(
+                        latitude: coords.latitude,
+                        longitude: coords.longitude,
+                        title: Self.locationTitle(from: body),
+                        subtitle: Self.formattedCoordinates(latitude: coords.latitude, longitude: coords.longitude),
+                        mapsURL: url
+                    )
+                }
                 return TimelineRow(
                     id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: text, eventID: event.eventID, isOwn: event.isOwn,
-                    reactions: Self.chips(event.reactions), styled: styled, source: plainSource(event, body))
+                    reactions: Self.chips(event.reactions), styled: styled, location: locationCard, source: plainSource(event, body))
             case .poll(let question, let options, let ended):
                 let lines = options.map { "• \($0.text) — \($0.votes) \($0.votes == 1 ? "vote" : "votes")" }
                 let text = (["📊 \(question)"] + lines + [ended ? "Poll ended" : "Voting isn't available in Halo yet"]).joined(separator: "\n")
@@ -321,13 +331,33 @@ extension TimelineViewModel {
         }
     }
 
-    /// An Apple Maps link for a `geo:lat,lon[;u=…]` URI; `nil` when the coordinates are missing or out of range.
-    static func mapsURL(geoURI: String) -> URL? {
+    /// Parses `geo:lat,lon[;u=…]` coordinates; `nil` when missing or out of range.
+    static func parseCoordinates(geoURI: String) -> (latitude: Double, longitude: Double)? {
         guard geoURI.hasPrefix("geo:") else { return nil }
         guard let head = geoURI.dropFirst(4).split(separator: ";").first else { return nil }
         let coords = head.split(separator: ",")
         guard coords.count >= 2, let lat = Double(coords[0]), let lon = Double(coords[1]), abs(lat) <= 90, abs(lon) <= 180 else { return nil }
-        return URL(string: "https://maps.apple.com/?ll=\(lat),\(lon)&q=Shared%20location")
+        return (lat, lon)
+    }
+
+    /// An Apple Maps link for a `geo:lat,lon[;u=…]` URI; `nil` when the coordinates are missing or out of range.
+    static func mapsURL(geoURI: String) -> URL? {
+        guard let coords = parseCoordinates(geoURI: geoURI) else { return nil }
+        return URL(string: "https://maps.apple.com/?ll=\(coords.latitude),\(coords.longitude)&q=Shared%20location")
+    }
+
+    private static func locationTitle(from body: String) -> String {
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "Shared Location" }
+        if trimmed.hasPrefix("Pinned location:") { return "Pinned Location" }
+        if trimmed.hasPrefix("Location:") { return "Current Location" }
+        return trimmed
+    }
+
+    private static func formattedCoordinates(latitude: Double, longitude: Double) -> String {
+        let latDir = latitude >= 0 ? "N" : "S"
+        let lonDir = longitude >= 0 ? "E" : "W"
+        return String(format: "%.4f° %@, %.4f° %@", abs(latitude), latDir, abs(longitude), lonDir)
     }
 
     static func reply(_ preview: ReplyPreview?) -> TimelineRow.Reply? {

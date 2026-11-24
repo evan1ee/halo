@@ -243,7 +243,7 @@ public struct SettingsView: View {
                 // The picker stores to UserDefaults; the root view reads `PreferencesStore`, so refresh it.
                 .onChange(of: appearance) { config.onPreferencesChanged?() }
             }
-            if let stickerPacks {
+            if config.onOpenStickers == nil, let stickerPacks {
                 Section("Stickers") {
                     NavigationLink { StickerPackSettingsView(actions: stickerPacks) } label: { Label("Sticker packs", systemImage: "face.smiling") }
                 }
@@ -408,7 +408,22 @@ public struct SettingsView: View {
                     .accessibilityIdentifier("sign-out")
             }
         }
-        .navigationTitle("Settings")
+        .scrollEdgeEffectHidden(true, for: .top)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Settings")
+                    .font(HaloTypography.headline)
+                    .foregroundStyle(HaloColor.textPrimary)
+                    .lineLimit(1)
+                    .padding(.horizontal, HaloSpacing.m)
+                    .frame(height: 44)
+                    .glassEffect(.regular, in: .capsule)
+            }
+            .sharedBackgroundVisibility(.hidden)
+        }
         .task { if let changePassword { canChangePassword = await changePassword.isAvailable() } }
         .sheet(isPresented: $verifying) { verifyDevice?.makeView() }
         .onChange(of: verifyDevice?.isNeeded() ?? false) { _, needed in if !needed { verifying = false } }
@@ -428,7 +443,7 @@ public struct SettingsView: View {
         .sheet(item: Binding(get: { newRecoveryKey.map(RecoveryKeyItem.init) }, set: { if $0 == nil { newRecoveryKey = nil } })) { item in
             RecoveryKeySheet(key: item.key) { newRecoveryKey = nil }
         }
-        .confirmationDialog("Change the recovery key?", isPresented: $confirmingNewRecoveryKey, titleVisibility: .visible) {
+        .alert("Change the recovery key?", isPresented: $confirmingNewRecoveryKey) {
             Button("Create a new key", role: .destructive) {
                 guard let replaceRecovery else { return }
                 changingRecoveryKey = true
@@ -442,11 +457,13 @@ public struct SettingsView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The current key stops working. Messages that are only in the old backup can't be restored with the new key. Save the new key as soon as it appears.")
+            Text("Your current key will stop working, and messages only in the old backup can't be restored with the new key. Save the new key as soon as it appears.")
         }
-        .confirmationDialog("Sign out of Halo?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
+        .alert("Sign out of Halo?", isPresented: $confirmingSignOut) {
             Button("Sign out", role: .destructive, action: onSignOut)
             Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Synced data on this device will be removed. You can sign back in anytime.")
         }
         .sheet(isPresented: $showingFeedback) {
             FeedbackSheetView(version: version, build: build, exportDiagnosticsZip: exportDiagnosticsZip)
@@ -703,10 +720,25 @@ public struct AcknowledgementsView: View {
                 }
             }
         }
+        .scrollEdgeEffectHidden(true, for: .top)
         .overlay {
             if !rustCrates.isEmpty, !hasMatches { ContentUnavailableView.search(text: query) }
         }
-        .navigationTitle("Acknowledgements")
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Acknowledgements")
+                    .font(HaloTypography.headline)
+                    .foregroundStyle(HaloColor.textPrimary)
+                    .lineLimit(1)
+                    .padding(.horizontal, HaloSpacing.m)
+                    .frame(height: 44)
+                    .glassEffect(.regular, in: .capsule)
+            }
+            .sharedBackgroundVisibility(.hidden)
+        }
         .searchable(text: $query)
         .task { if rustCrates.isEmpty { rustCrates = Acknowledgements.bundled() } }
     }

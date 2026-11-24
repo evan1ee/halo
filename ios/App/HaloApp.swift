@@ -418,12 +418,6 @@ private struct RootView: View {
             }
             Section {
                 Button {
-                    Task { await openSavedMessages() }
-                } label: {
-                    Label("Saved Messages", systemImage: "bookmark.fill")
-                }
-                .accessibilityIdentifier("savedMessages")
-                Button {
                     newChat = root.makeNewChat { room in
                         newChat = nil
                         router.openRoom(room)
@@ -433,6 +427,12 @@ private struct RootView: View {
                 }
                 .accessibilityIdentifier("compose-chat")
                 .keyboardShortcut("n", modifiers: .command)
+                Button {
+                    Task { await openSavedMessages() }
+                } label: {
+                    Label("Saved Messages", systemImage: "bookmark")
+                }
+                .accessibilityIdentifier("savedMessages")
                 if !root.preferences.botSenders.isEmpty {
                     Button {
                         router.push(.activity)
@@ -466,11 +466,8 @@ private struct RootView: View {
             SettingsView(config: root.makeSettingsConfiguration(onOpenStickers: {
                 router.push(.stickerLibrary)
             }))
-            .navigationBarTitleDisplayMode(.large)
         case .stickerLibrary:
-            StickerPackSettingsView(actions: root.stickerPackSettings())
-                .navigationTitle("Stickers")
-                .navigationBarTitleDisplayMode(.large)
+            StickerLibraryView(model: root.makeStickerLibrary())
         case .activity:
             BotActivityView(model: root.makeBotActivity()) { room, event in
                 router.openRoom(room, focus: event)
@@ -512,6 +509,7 @@ private struct TimelineScreen: View {
     @State private var klipyGIFs: KlipyPanelModel?
     @State private var klipyStickers: KlipyPanelModel?
     @State private var details: RoomDetailsViewModel?
+    @State private var stickerToSave: PendingStickerSave?
     @State private var title = ""
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -579,8 +577,14 @@ private struct TimelineScreen: View {
             model: model,
             stickerPanel: { AnyView(StickerTabView(packs: stickers, klipy: klipyStickers)) },
             gifPanel: klipyGIFs.map { gifs -> @MainActor () -> AnyView in { AnyView(KlipyPanelView(model: gifs)) } },
-            onOpenThread: openThread
+            onOpenThread: openThread,
+            onSaveAsSticker: { data, filename in
+                stickerToSave = PendingStickerSave(data: data, filename: filename)
+            }
         )
+        .sheet(item: $stickerToSave) { pending in
+            AddToStickerPackSheet(model: root.makeStickerLibrary(), imageData: pending.data, filename: pending.filename)
+        }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
@@ -712,17 +716,35 @@ final class PushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCen
     }
 }
 
+private struct PendingStickerSave: Identifiable {
+    let id = UUID()
+    let data: Data
+    let filename: String
+}
+
 /// Keeps the global media gallery view model alive for the lifetime of the pushed preset room screen (D34, D83).
 private struct GlobalMediaGalleryScreen: View {
     @State private var model: GlobalMediaGalleryViewModel
+    @State private var stickerToSave: PendingStickerSave?
+    private let root: AppRoot
     private let onJumpToMessage: @MainActor (RoomID, EventID) -> Void
 
     init(root: AppRoot, onJumpToMessage: @escaping @MainActor (RoomID, EventID) -> Void) {
+        self.root = root
         _model = State(initialValue: root.makeGlobalMediaGallery())
         self.onJumpToMessage = onJumpToMessage
     }
 
     var body: some View {
-        GlobalMediaGalleryView(model: model, onJumpToMessage: onJumpToMessage)
+        GlobalMediaGalleryView(
+            model: model,
+            onJumpToMessage: onJumpToMessage,
+            onSaveAsSticker: { data, filename in
+                stickerToSave = PendingStickerSave(data: data, filename: filename)
+            }
+        )
+        .sheet(item: $stickerToSave) { pending in
+            AddToStickerPackSheet(model: root.makeStickerLibrary(), imageData: pending.data, filename: pending.filename)
+        }
     }
 }

@@ -102,10 +102,22 @@ public protocol TimelineSession: Sendable {
     /// hidden events when the user has viewed the newest visible row (R-01 leftover, R-06).
     func latestEventID() async -> EventID?
 
+    /// Event IDs currently pinned in the room (`m.room.pinned_events`).
+    func pinnedEventIDs() async -> [EventID]
+
+    /// Pins `event` in the room (`m.room.pinned_events`). Throws `.forbidden` when the user lacks permission.
+    func pin(event: EventID) async throws(HaloError)
+
+    /// Unpins `event` from the room (`m.room.pinned_events`). Throws `.forbidden` when the user lacks permission.
+    func unpin(event: EventID) async throws(HaloError)
+
     func close() async
 }
 
 extension TimelineSession {
     public func send(text: String) async throws(HaloError) { try await send(text: text, mentions: []) }
     public func reply(to event: EventID, text: String) async throws(HaloError) { try await reply(to: event, text: text, mentions: []) }
+    public func pinnedEventIDs() async -> [EventID] { [] }
+    public func pin(event: EventID) async throws(HaloError) { throw .unsupported("PIN_NOT_SUPPORTED") }
+    public func unpin(event: EventID) async throws(HaloError) { throw .unsupported("PIN_NOT_SUPPORTED") }
 }

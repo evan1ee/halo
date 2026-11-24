@@ -23,6 +23,10 @@ public final class MatrixTimelinePort: TimelinePort {
     private let warmState = Mutex(WarmState())
     static let warmLimit = 6
 
+    /// Short-lived in-memory overlay of server-confirmed pin/unpin writes so leaving and immediately re-entering a room
+    /// reflects the confirmed change even before the next sync tick updates `roomInfo().pinnedEventIds` or `accountData`.
+    private let pinStore = PinOverlayStore()
+
     public init(session: MatrixSessionPort) { self.session = session }
 
     /// One warm-up runs at a time; a request arriving meanwhile replaces any waiting one and runs after it.
@@ -103,7 +107,7 @@ public final class MatrixTimelinePort: TimelinePort {
             return state.timelines.removeValue(forKey: id)
         }
         let release: @Sendable () -> Void = { [weak self] in self?.closed(id) }
-        if let ready { return MatrixTimelineSession(room: room, timeline: ready, ownUserID: own, release: release) }
+        if let ready { return MatrixTimelineSession(pinStore: pinStore, session: session, roomID: id, room: room, timeline: ready, ownUserID: own, release: release) }
         do {
             let timeline = try await room.timeline()
             // Classic sync (D73) doesn't pre-fill a timeline the way sliding sync did: it starts empty and fills from the
@@ -111,7 +115,7 @@ public final class MatrixTimelinePort: TimelinePort {
             // arrives above the newest row right after the opening scroll. Bounded, so a room that needs the network
             // doesn't hold the open up; the page keeps loading in the background then.
             await Self.firstPage(of: timeline)
-            return MatrixTimelineSession(room: room, timeline: timeline, ownUserID: own, release: release)
+            return MatrixTimelineSession(pinStore: pinStore, session: session, roomID: id, room: room, timeline: timeline, ownUserID: own, release: release)
         } catch {
             release()
             throw ErrorMapper.map(error)
@@ -131,21 +135,69 @@ public final class MatrixTimelinePort: TimelinePort {
         do {
             let timeline = try await room.timelineWithConfiguration(configuration: config)
             await Self.firstPage(of: timeline)
-            return MatrixTimelineSession(room: room, timeline: timeline, ownUserID: own)
+            return MatrixTimelineSession(pinStore: pinStore, session: session, roomID: id, room: room, timeline: timeline, ownUserID: own)
         } catch {
             throw ErrorMapper.map(error)
         }
     }
 }
 
+final class PinOverlayStore: Sendable {
+    private struct State {
+        weak var client: Client?
+        var added: [RoomID: [EventID]] = [:]
+        var removed: [RoomID: Set<EventID>] = [:]
+    }
+    private let state = Mutex(State())
+
+    func recordPin(_ event: EventID, in room: RoomID, client: Client) {
+        state.withLock { s in
+            if s.client !== client { s = State(client: client) }
+            s.removed[room]?.remove(event)
+            var list = s.added[room] ?? []
+            if !list.contains(event) { list.append(event) }
+            s.added[room] = list
+        }
+    }
+
+    func recordUnpin(_ event: EventID, in room: RoomID, client: Client) {
+        state.withLock { s in
+            if s.client !== client { s = State(client: client) }
+            s.added[room]?.removeAll { $0 == event }
+            var set = s.removed[room] ?? []
+            set.insert(event)
+            s.removed[room] = set
+        }
+    }
+
+    func apply(to base: [EventID], in room: RoomID, client: Client) -> [EventID] {
+        state.withLock { s in
+            guard s.client === client else { return base }
+            let removed = s.removed[room] ?? []
+            let added = s.added[room] ?? []
+            var result: [EventID] = []
+            var seen: Set<EventID> = []
+            for id in base where !removed.contains(id) && seen.insert(id).inserted { result.append(id) }
+            for id in added where !removed.contains(id) && seen.insert(id).inserted { result.append(id) }
+            return result
+        }
+    }
+}
+
 final class MatrixTimelineSession: TimelineSession {
+    private let pinStore: PinOverlayStore
+    private let session: MatrixSessionPort
+    private let roomID: RoomID
     private let room: Room
     private let timeline: Timeline
     private let ownUserID: String
     /// Tells the port this session is gone; runs once, on `close` or when the session is dropped.
     private let release: Mutex<(@Sendable () -> Void)?>
 
-    init(room: Room, timeline: Timeline, ownUserID: String, release: @escaping @Sendable () -> Void = {}) {
+    init(pinStore: PinOverlayStore, session: MatrixSessionPort, roomID: RoomID, room: Room, timeline: Timeline, ownUserID: String, release: @escaping @Sendable () -> Void = {}) {
+        self.pinStore = pinStore
+        self.session = session
+        self.roomID = roomID
         self.room = room
         self.timeline = timeline
         self.ownUserID = ownUserID
@@ -345,6 +397,76 @@ final class MatrixTimelineSession: TimelineSession {
                 question: poll.question, answers: poll.answers, maxSelections: UInt8(clamping: poll.maxSelections),
                 pollKind: poll.hidesResultsUntilEnd ? .undisclosed : .disclosed)
         } catch { throw ErrorMapper.map(error) }
+    }
+
+    func pinnedEventIDs() async -> [EventID] {
+        var result: [EventID] = []
+        var seen: Set<EventID> = []
+        if let info = try? await room.roomInfo() {
+            for raw in info.pinnedEventIds {
+                if let id = try? EventID(raw), seen.insert(id).inserted { result.append(id) }
+            }
+        }
+        guard let client = try? await session.signedInClient() else { return result }
+        if let content = await readPersonalPins(client: client) {
+            for id in PersonalPinnedEvents.pinned(in: roomID, from: content) where seen.insert(id).inserted {
+                result.append(id)
+            }
+        }
+        return pinStore.apply(to: result, in: roomID, client: client)
+    }
+
+    func pin(event: EventID) async throws(HaloError) {
+        let client = try await session.signedInClient()
+        do {
+            _ = try await timeline.pinEvent(eventId: event.rawValue)
+            pinStore.recordPin(event, in: roomID, client: client)
+            return
+        } catch {
+            let mapped = ErrorMapper.map(error)
+            // Network/auth failures propagate; permission or SDK-wrapped room-state errors fall back to personal pins
+            // so normal room members (PL 0) can pin messages in any room.
+            if case .network = mapped { throw mapped }
+            if case .unauthorized = mapped { throw mapped }
+        }
+        do {
+            let current = await readPersonalPins(client: client)
+            if let updated = PersonalPinnedEvents.pinning(event, in: roomID, content: current) {
+                let json = String(decoding: try JSONSerialization.data(withJSONObject: updated, options: [.sortedKeys]), as: UTF8.self)
+                try await client.setAccountData(eventType: PersonalPinnedEvents.eventType, content: json)
+            }
+            pinStore.recordPin(event, in: roomID, client: client)
+        } catch { throw ErrorMapper.map(error) }
+    }
+
+    func unpin(event: EventID) async throws(HaloError) {
+        let client = try await session.signedInClient()
+        var removedPersonal = false
+        if let current = await readPersonalPins(client: client),
+           let updated = PersonalPinnedEvents.unpinning(event, in: roomID, content: current) {
+            do {
+                let json = String(decoding: try JSONSerialization.data(withJSONObject: updated, options: [.sortedKeys]), as: UTF8.self)
+                try await client.setAccountData(eventType: PersonalPinnedEvents.eventType, content: json)
+                removedPersonal = true
+            } catch { throw ErrorMapper.map(error) }
+        }
+        let isRoomPinned = (try? await room.roomInfo().pinnedEventIds.contains(event.rawValue)) ?? false
+        if isRoomPinned || !removedPersonal {
+            do {
+                _ = try await timeline.unpinEvent(eventId: event.rawValue)
+            } catch {
+                let mapped = ErrorMapper.map(error)
+                if !(removedPersonal && (mapped == .forbidden || mapped == .internal(code: "SDK_GENERIC"))) {
+                    throw mapped
+                }
+            }
+        }
+        pinStore.recordUnpin(event, in: roomID, client: client)
+    }
+
+    private func readPersonalPins(client: Client) async -> [String: Any]? {
+        guard let json = try? await client.accountData(eventType: PersonalPinnedEvents.eventType) else { return nil }
+        return try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
     }
 
     func retrySend(localID: String) async throws(HaloError) {

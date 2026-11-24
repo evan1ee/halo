@@ -248,6 +248,86 @@ extension TimelineViewModel {
         }
     }
 
+    public struct PinnedMessage: Identifiable, Equatable, Sendable {
+        public var id: EventID { eventID }
+        public let eventID: EventID
+        public let sender: String
+        public let avatar: MediaRef?
+        public let preview: String
+        public let time: String?
+    }
+
+    /// Pinned messages for the floating banner and Pinned Messages sheet, newest pinned first.
+    public var pinnedMessages: [PinnedMessage] {
+        let rows: [TimelineRow] = if case .live(let r, _, _, _) = content { r } else { [] }
+        let byEvent = Dictionary(rows.compactMap { row in row.eventID.map { ($0, row) } }, uniquingKeysWith: { first, _ in first })
+        return pinnedEventIDs.reversed().map { id in
+            if let row = byEvent[id] {
+                let preview: String
+                if let location = row.location { preview = location.title }
+                else if let file = row.file { preview = file.name }
+                else if row.isSticker { preview = "Sticker" }
+                else if row.image != nil, !row.showsText { preview = "Photo" }
+                else { preview = row.text }
+                return PinnedMessage(
+                    eventID: id,
+                    sender: row.sender ?? (row.isOwn ? "You" : "Message"),
+                    avatar: row.avatar,
+                    preview: preview,
+                    time: row.time
+                )
+            }
+            return PinnedMessage(
+                eventID: id,
+                sender: "Pinned message",
+                avatar: nil,
+                preview: "Tap to jump to message",
+                time: nil
+            )
+        }
+    }
+
+    public func isPinned(_ row: TimelineRow) -> Bool {
+        guard let id = row.eventID else { return false }
+        return pinnedEventIDs.contains(id)
+    }
+
+    /// Pins or unpins a confirmed message in the room (`m.room.pinned_events` or personal pins fallback).
+    public func togglePin(_ row: TimelineRow) async {
+        guard let id = row.eventID else { return }
+        if pinnedEventIDs.contains(id) {
+            await unpin(eventID: id)
+        } else {
+            await pin(eventID: id)
+        }
+    }
+
+    public func pin(eventID id: EventID) async {
+        sendError = nil
+        do {
+            try await coordinator.pin(event: id)
+            var updated = await coordinator.pinnedEventIDs()
+            if !updated.contains(id) { updated.append(id) }
+            pinnedEventIDs = updated
+        } catch {
+            sendError = error == .network(retryable: true)
+                ? "Can't reach the server. Pin change wasn't saved."
+                : "Couldn't pin this message."
+        }
+    }
+
+    public func unpin(eventID id: EventID) async {
+        sendError = nil
+        do {
+            try await coordinator.unpin(event: id)
+            pinnedEventIDs = await coordinator.pinnedEventIDs().filter { $0 != id }
+        } catch {
+            sendError = error == .network(retryable: true)
+                ? "Can't reach the server. Pin change wasn't saved."
+                : "Couldn't unpin this message."
+        }
+    }
+
     /// Sends a static location from the attachment panel (D100). Returns `true` when sent; a failure is shown in the composer.
     @discardableResult
     public func sendLocation(_ location: OutgoingLocation) async -> Bool {

@@ -29,7 +29,7 @@ struct SendMessageIntent: AppIntent {
         guard let room = try? RoomID(chat.id) else {
             throw SiriSendError.message("That chat is no longer available.")
         }
-        try await requestConfirmation(result: .result(dialog: "Send \"\(trimmed)\" to \(chat.name)?"))
+        try await requestConfirmation(actionName: .send, dialog: IntentDialog("Send \"\(trimmed)\" to \(chat.name)?"))
         do {
             let outcome = try await sender.value.send(text: trimmed, to: room)
             switch outcome {

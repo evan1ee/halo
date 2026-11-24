@@ -24,7 +24,7 @@ struct ThumbnailSize: ViewModifier {
             // to the newest message drops its measurements and lands near the top of the room (seen in S10).
             Color.clear
                 .aspectRatio(aspectRatio ?? 4 / 3, contentMode: .fit)
-                .frame(maxWidth: 240)
+                .frame(maxWidth: .infinity)
                 .overlay { content }
                 .contentShape(.rect)
         }
@@ -70,7 +70,8 @@ struct ThumbnailView: View {
             } else if let data, let uiImage = UIImage(data: data) {
                 // A photo fills its box (cropped when the event announced no size; the viewer shows all of it); a sticker fits.
                 let rendered = Image(uiImage: uiImage)
-                if TimelineDragExtractor.allowsPhotoDrag(isSticker: isSticker, hasImageData: true) {
+                if UIDevice.current.userInterfaceIdiom == .pad,
+                   TimelineDragExtractor.allowsPhotoDrag(isSticker: isSticker, hasImageData: true) {
                     rendered.resizable().aspectRatio(contentMode: .fill)
                         .draggable(rendered)
                 } else {

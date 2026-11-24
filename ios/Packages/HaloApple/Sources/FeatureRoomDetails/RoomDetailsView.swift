@@ -50,8 +50,9 @@ public struct RoomDetailsView: View {
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .toolbarVisibility(.hidden, for: .navigationBar)
         }
+        .presentationDragIndicator(.visible)
         .task { await model.load() }
         .onChange(of: picked) { _, item in
             guard let item else { return }
@@ -193,8 +194,9 @@ public struct RoomDetailsView: View {
             Button("Invite") { Task { _ = await model.invite(inviteText) } }
             Button("Cancel", role: .cancel) {}
         }
-        .confirmationDialog("Leave this room?", isPresented: $model.confirmsLeave, titleVisibility: .visible) {
+        .alert("Leave this room?", isPresented: $model.confirmsLeave) {
             Button("Leave", role: .destructive) { Task { await model.leave() } }
+            Button("Cancel", role: .cancel) {}
         } message: {
             Text(model.leavingStrandsRoom ? "You are the only administrator. Nobody will be able to manage the room after you leave." : "You will stop receiving its messages.")
         }

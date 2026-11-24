@@ -37,6 +37,7 @@ final class AppRoot {
     let receipts: ReadReceiptCoordinator
     let drafts: DraftCoordinator
     let stickers: StickerLibrary
+    let stickerPackManager: StickerPackManager
     /// KLIPY GIFs and stickers (D98); unavailable when the build has no `HALO_KLIPY_API_KEY`.
     let klipy = KlipyCatalog(port: KlipyClient.configured())
     let botActivity: BotActivityCoordinator
@@ -131,11 +132,17 @@ final class AppRoot {
         )
         self.receipts = receipts
         drafts = DraftCoordinator()
+        let stickerPackPort = MatrixStickerPackPort(session: session)
         let stickers = StickerLibrary(
-            packs: MatrixStickerPackPort(session: session),
+            packs: stickerPackPort,
             prefs: MatrixStickerPrefsPort(session: session)
         )
         self.stickers = stickers
+        self.stickerPackManager = StickerPackManager(
+            port: MatrixStickerPackManagementPort(session: session, packs: stickerPackPort),
+            preparer: ImagePreparer(maximumDimension: 512),
+            library: stickers
+        )
         readState = ReadStateCoordinator(rooms: roomCoordinator, port: SystemBadge(suiteName: suite), receipts: receipts)
 
         timelinePort = MatrixTimelinePort(session: session)

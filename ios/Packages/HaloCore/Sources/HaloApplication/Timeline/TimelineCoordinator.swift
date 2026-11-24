@@ -190,6 +190,24 @@ public actor TimelineCoordinator {
         try await session.toggleReaction(on: event, key: key)
     }
 
+    /// Event IDs currently pinned in the open room.
+    public func pinnedEventIDs() async -> [EventID] {
+        guard let session, case .live = status else { return [] }
+        return await session.pinnedEventIDs()
+    }
+
+    /// Pins a confirmed event in the open room (`m.room.pinned_events`).
+    public func pin(event: EventID) async throws(HaloError) {
+        guard let session, case .live = status else { throw .cancelled }
+        try await session.pin(event: event)
+    }
+
+    /// Unpins a confirmed event from the open room (`m.room.pinned_events`).
+    public func unpin(event: EventID) async throws(HaloError) {
+        guard let session, case .live = status else { throw .cancelled }
+        try await session.unpin(event: event)
+    }
+
     /// Adds a reaction unless the user already has it; `true` when one was sent.
     @discardableResult
     public func addReaction(on event: EventID, key: String) async throws(HaloError) -> Bool {
