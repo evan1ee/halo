@@ -54,7 +54,12 @@ Bot messages: copied **verbatim** from the bot repo's tests (MIT, attribution fi
 
 ## 7. Performance tests
 Targets in [../REQUIREMENTS.md](../REQUIREMENTS.md) NFR-1..3; measured with signposts ([../architecture/LOGGING_AND_DIAGNOSTICS.md](../architecture/LOGGING_AND_DIAGNOSTICS.md) §5) on a reference device; regressions > 20 % block release. From M15, cold start and timeline scrolling are also measured with XCTest metrics
-(`XCTApplicationLaunchMetric`, `XCTOSSignpostMetric` scroll hitches) on a physical iPhone 15-class device and recorded here (AC-UX-11).
+(`XCTApplicationLaunchMetric`, `XCTOSSignpostMetric` scroll hitches, `XCTMemoryMetric`) on a physical iPhone 15-class device and recorded here (AC-UX-11).
+
+**Physical-device baseline (2026-11-24, iPhone 16 `iPhone17,3`, iOS 27.2.1 `24B156`, `Halo-Debug`, signed-in `infra/dev` account, `TEST_RUNNER_HALO_RUN_PERF_TESTS=1`):**
+- **NFR-1 cold launch (`HaloUITests.testLaunchPerformanceMetric`, 5 iterations):** `AppLaunch` **0.348 s** avg (RSD 2.49%, values `0.332–0.357 s`); `ApplicationFirstFramePresentationResponsive` **0.357 s** avg (RSD 2.14%, values `0.345–0.367 s`) — well below the 1.0 s budget (dev-account room count; 300-room account still to validate).
+- **Timeline memory (`HaloUITests.testTimelineScrollPerformanceMetric` in `S10 scroll test`, 5 iterations):** `Memory Peak Physical` **76.8–78.1 MB** avg (`76,778–78,108 kB`, RSD 0.51–0.69%); `Absolute Memory Physical` **76.7–78.0 MB** avg — well below the 200 MB budget.
+- **NFR-2 scroll hitch ratio (`XCTOSSignpostMetric.scrollingAndDecelerationMetric`):** did not emit hitch-ratio lines in non-interactive `xcodebuild` (device diagnostics timed out waiting for interactive auth); measure interactively via Xcode Test Navigator / Instruments Animation Hitches on device.
 
 ## 7b. UI and accessibility tests (M14)
 `HaloUITests` runs the golden path against `infra/dev` and `XCUIApplication.performAccessibilityAudit()` on every root screen

@@ -36,7 +36,7 @@ Halo should be indistinguishable in feel from Messages, Mail and Photos while ke
 | SR-02 | Blocker | Push gateway for Beta/Release, APNs keys and TestFlight are not configured (R-24) | M5 leftover, 👤 |
 | SR-03 | Blocker | Legal review (D38), export compliance (V-LEGAL) and App Store privacy labels ([../security/PRIVACY.md](../security/PRIVACY.md) §5) not done | M15, 👤 |
 | SR-04 | High | No App Store Connect metadata: name, subtitle, keywords, screenshots (6.9" and 6.3"), support URL, privacy-policy URL (Q-APPSTORE) | M15, 👤 |
-| SR-06 | Medium | Performance targets NFR-1/NFR-2 need physical-device measurement with XCTest metrics (`testLaunchPerformanceMetric` in place) | M15, 📱 |
+| SR-06 | Medium | NFR-1 cold launch (0.357 s responsive) and timeline peak memory (76.8 MB) measured on iPhone 16 (`TEST_STRATEGY.md` §7); NFR-2 scroll hitch ratio (`XCTOSSignpostMetric`) and 300-room scale still need interactive Xcode/Instruments + MetricKit check | M15, 📱 |
 
 ## 4. What is already good (keep it)
 `ContentUnavailableView` for empty states (16 uses), `.searchable` lists, swipe actions and context menus on rows, `ShareLink`

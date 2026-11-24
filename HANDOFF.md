@@ -1,25 +1,26 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-24 · Branch: `docs/release-prep-and-founder-decisions` · PRs #1–#81 merged
+Last updated: 2026-11-24 · Branch: `perf/iphone16-ui-and-nfr-metrics` · PRs #1–#82 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
-- **Roadmap / Autonomous Loop:** all autonomous work across M0–M16, ADR-0022, Tech Debt A–D (including TD-12), the Halo Sygnal pushkin (`infra/sygnal/`, R-24), and release documentation (`docs/release/`, D115) is complete; all open product decisions in `OPEN_QUESTIONS.md` are resolved (`D108–D117`). Only external-account / legal (`👤`) and physical-device (`📱`) items remain (§5).
-- **Milestones:** M0–M16 done except external/device items (deploy `infra/sygnal/` + APNs keys + TestFlight, 7-day AC-U8 soak, physical-device NFR-1/NFR-2/MetricKit run, Q-KLIPY-PROD portal request, publish `docs/release/` privacy/support URLs, final Beta 2 brand artwork, legal/export review). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`).
-- **Last checks (`docs/release-prep-and-founder-decisions`):** `validate-docs.sh`, `check_handoff.py structure` & `commit HEAD`, and `gitleaks` passed (docs-only change; code/tests passed on PR #80 and PR #81).
-- **CI:** PRs #1–#81 merged. Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
+- **Roadmap / Autonomous Loop:** all autonomous work across M0–M16, ADR-0022, Tech Debt A–D (including TD-12), the Halo Sygnal pushkin (`infra/sygnal/`, R-24), and release documentation (`docs/release/`, D115) is complete; all open product decisions in `OPEN_QUESTIONS.md` are resolved (`D108–D117`). Physical iPhone 16 `HaloUITests` + NFR-1 cold launch (0.357 s responsive) + timeline memory (76.8 MB peak) baselines are recorded (`TEST_STRATEGY.md` §7). Only external-account / legal (`👤`) and remaining physical-device (`📱`) items remain (§5).
+- **Milestones:** M0–M16 done except external/device items (deploy `infra/sygnal/` + APNs keys + TestFlight, 7-day AC-U8 soak, interactive Xcode/Instruments NFR-2 scroll hitch + 300-room + MetricKit run, Q-KLIPY-PROD portal request, publish `docs/release/` privacy/support URLs, final Beta 2 brand artwork, legal/export review). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1).
+- **Last checks (`perf/iphone16-ui-and-nfr-metrics`):** physical iPhone 16 `HaloUITests` + `TEST_RUNNER_HALO_RUN_PERF_TESTS=1` passed (0 failures across all 7 applicable device tests: launch audit, signed-in launch, sticker panel, composer panels swap, empty rooms, launch perf 0.348 s / 0.357 s responsive, timeline scroll memory 76.8–78.1 MB peak); `validate-docs.sh`, `check-boundaries.sh`, `check-design-tokens.sh`, `swiftlint --strict`, `gitleaks` passed.
+- **CI:** PRs #1–#82 merged. Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
-- **Release docs & remaining founder decisions (2026-11-24, `docs/release-prep-and-founder-decisions`, D113–D117):**
+- **Physical iPhone 16 UI tests & NFR-1/memory baseline (2026-11-24, `perf/iphone16-ui-and-nfr-metrics`):**
+  - Added `testTimelineScrollPerformanceMetric` (`XCTOSSignpostMetric.scrollingAndDecelerationMetric` + `XCTMemoryMetric`) and `XCTApplicationLaunchMetric(waitUntilResponsive: true)` to `ios/UITests/HaloUITests.swift`; fixed physical-device software-keyboard detection (`requireSoftwareKeyboard` checking any hittable key after settle) and `testEmptyRoomStaysResponsive` returning from a `@SceneStorage`-restored room.
+  - Ran `HaloUITests` + `TEST_RUNNER_HALO_RUN_PERF_TESTS=1` on physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1): 0 failures across all 7 applicable device tests; recorded NFR-1 launch (**0.348 s** / **0.357 s** responsive ≤ 1.0 s) and `S10` timeline peak memory (**76.8–78.1 MB** < 200 MB) in `docs/testing/TEST_STRATEGY.md` §7, `docs/design/UX_AUDIT.md`, and `docs/ROADMAP.md`.
+- **Release docs & remaining founder decisions (2026-11-24, PR #82, D113–D117):**
   - Scaffolded `docs/release/{APP_STORE_METADATA,PRIVACY_POLICY,SUPPORT}.md` grounded in `PRIVACY.md` and `PrivacyInfo.xcprivacy` (D115).
   - Recorded founder decisions closing `Q-SDK-BUILD` (D113), `Q-CRASH` (D114), `Q-BRAND`/`Q-APPSTORE` Beta 1 (D115), `Q-KLIPY-REHOST` (D116), and `Q-MAS-ACCOUNT`/`Q-E2EE-STRATEGY`/`Q-BOT-OWNER`/`Q-ACT-REFRESH` (D117).
 - **Field encryption, Sygnal pushkin & founder decisions (2026-11-24, PR #81, D108–D112):**
   - Implemented AES-256-GCM field encryption (`FieldCipher`, `KeychainItem.haloDatabaseKey`, `"enc:v1:"` envelopes) for `draft.body`, `bot_task.title`, and `bot_task.detail` with `FieldCipherTests` (closes TD-12 / R-16 / NFR-7, D108).
   - Implemented Halo Sygnal APNs pushkin in `infra/sygnal/` (`halo_pushkin.py`, `Dockerfile`, `sygnal.yaml.example`, `test_halo_pushkin.py`, `.github/workflows/pushkin.yml`; D112 / ADR-0015 Option 1); confirmed PASS for G-FFI / G-UNREAD / G-NSE (D109) and resolved `Q-ONBOARD-SERVER` (D110) / `Q-L10N` (D111).
-- **UI test regressions, design tokens & doc cleanup (2026-11-24, PR #80):**
-  - Fixed `HaloUITests` borderless Chats root detection (`chatsRoot(app)`), guarded `testComposerPanelsSwapWithKeyboard` with `requireSoftwareKeyboard(app)`, fixed 4 `check-design-tokens.sh` violations, and cleaned dead code/stale docs.
 
 ## 3. Key decisions
 Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D107), [docs/adr/README.md](docs/adr/README.md).
@@ -41,8 +42,8 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D107), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
-- **Release docs:** `docs/release/{APP_STORE_METADATA,PRIVACY_POLICY,SUPPORT}.md`.
-- **Docs:** `docs/DECISION_LOG.md`, `docs/OPEN_QUESTIONS.md`, `docs/ROADMAP.md`, `HANDOFF.md`.
+- **UI & performance tests:** `ios/UITests/HaloUITests.swift`.
+- **Docs:** `docs/testing/TEST_STRATEGY.md`, `docs/design/UX_AUDIT.md`, `docs/ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
@@ -71,7 +72,7 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 - 📱 **Widgets on a device (D89):** add the small and lock-screen widgets, receive a message and check the count refreshes; check the lock-screen redaction.
 - 📱 **App Intents on a device (D88):** turn on "Chats in Siri and Spotlight", then say "Open <chat> in Halo", "Send a message to <chat> in Halo" (confirm online and offline), and tap a Spotlight result.
 - 📱 **Share extension on a device (D87):** App Group sharing needs a signed build; check Safari link, several Photos, a Files PDF and a > 50 MiB file end to end. The simulator build only proves it compiles and the inbox logic.
-- 📱 **Physical-device validation:** 7-day AC-U8 daily-driver soak, Release/TestFlight G-NSE spot check, NFR-1/NFR-2 XCTest metrics on iPhone 15-class device (`HALO_RUN_PERF_TESTS=1`), MetricKit hang/launch review, and Beta 1 → Beta 2 → 1.0 release.
+- 📱 **Physical-device validation:** 7-day AC-U8 daily-driver soak, Release/TestFlight G-NSE spot check, interactive Xcode/Instruments NFR-2 scroll hitch ratio + 300-room NFR-1 check + MetricKit hang/launch review (dev-account iPhone 16 baseline recorded in `TEST_STRATEGY.md` §7: 0.357 s responsive launch, 76.8–78.1 MB peak memory), and Beta 1 → Beta 2 → 1.0 release.
 
 ## 6. Next steps
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §"Remaining work".

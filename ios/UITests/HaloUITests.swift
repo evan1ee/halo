@@ -170,8 +170,11 @@ final class HaloUITests: XCTestCase {
     /// exist but lie off screen). Fix: I/O → Keyboard → Connect Hardware Keyboard (⇧⌘K). A skip is not a pass.
     @MainActor
     private func requireSoftwareKeyboard(_ app: XCUIApplication) throws {
-        let key = app.keys.firstMatch
-        try XCTSkipUnless(key.exists && key.isHittable, "No software keyboard: a hardware keyboard is connected to this simulator.")
+        // On a physical device, the first key element in accessibility order may be non-hittable while the keyboard
+        // is still animating or for auxiliary keys; check whether any software key is hittable after a brief wait.
+        _ = app.keys.firstMatch.waitForExistence(timeout: 2)
+        let hasHittableKey = app.keys.allElementsBoundByIndex.contains(where: \.isHittable)
+        try XCTSkipUnless(hasHittableKey, "No software keyboard: a hardware keyboard is connected to this simulator.")
     }
 
     /// Back to the chat list. On the iPad the list is the always-visible sidebar, so the first navigation button is its
@@ -380,6 +383,9 @@ final class HaloUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
         dismissFirstRunSheets(app)
+        if !chatsRoot(app).waitForExistence(timeout: 3) {
+            returnToChatList(app)
+        }
         guard chatsRoot(app).waitForExistence(timeout: 10) else { throw XCTSkip("App is signed out.") }
         if app.buttons["focus-show-all"].exists { app.buttons["focus-show-all"].tap() }
         let rows = app.collectionViews.firstMatch.cells.containing(NSPredicate(format: "label BEGINSWITH[c] 'empty' OR label BEGINSWITH[c] 'invite decline'"))
@@ -560,8 +566,8 @@ final class HaloUITests: XCTestCase {
         // off-screen keyboard frame whose keys aren't hittable), so there is no keyboard height to match: skip instead of
         // failing (I/O → Keyboard → Connect Hardware Keyboard, ⇧⌘K).
         try XCTSkipIf(app.keyboards.firstMatch.frame.height < 150, "No software keyboard: a hardware keyboard is connected to this simulator.")
-        try requireSoftwareKeyboard(app)
         _ = app.staticTexts["settle"].waitForExistence(timeout: 1)
+        try requireSoftwareKeyboard(app)
         let firstKeyboardTop = Double(attach.frame.minY)
         let firstNote = XCTAttachment(string: String(format: "first open: panel %.1f, keyboard %.1f, samples %@", firstPanelTop, firstKeyboardTop,
             firstSwap.map { String(format: "%.0f", $0) }.joined(separator: ",")))
@@ -756,8 +762,49 @@ final class HaloUITests: XCTestCase {
         guard ProcessInfo.processInfo.environment["HALO_RUN_PERF_TESTS"] == "1" else {
             throw XCTSkip("Set HALO_RUN_PERF_TESTS=1 to run XCTApplicationLaunchMetric.")
         }
-        measure(metrics: [XCTApplicationLaunchMetric()]) {
+        measure(metrics: [XCTApplicationLaunchMetric(), XCTApplicationLaunchMetric(waitUntilResponsive: true)]) {
             XCUIApplication().launch()
         }
+    }
+
+    /// Timeline scroll hitch and memory performance metric (ROADMAP M15, SR-06, NFR-2, AC-UX-11).
+    /// Opt-in via `HALO_RUN_PERF_TESTS=1` so routine `prepush.sh` runs stay fast.
+    @MainActor
+    func testTimelineScrollPerformanceMetric() throws {
+        guard ProcessInfo.processInfo.environment["HALO_RUN_PERF_TESTS"] == "1" else {
+            throw XCTSkip("Set HALO_RUN_PERF_TESTS=1 to run timeline scroll and memory metrics.")
+        }
+        let app = XCUIApplication()
+        app.launch()
+        dismissFirstRunSheets(app)
+
+        // Prefer a large seeded room (S10) when available; otherwise open the first chat.
+        if chatsRoot(app).waitForExistence(timeout: 5) {
+            if app.buttons["focus-show-all"].exists { app.buttons["focus-show-all"].tap() }
+            let s10 = app.collectionViews.firstMatch.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'S10'")).firstMatch
+            if s10.waitForExistence(timeout: 3) {
+                s10.tap()
+                XCTAssertTrue(app.buttons["sticker-button"].waitForExistence(timeout: 8), "Expected timeline composer in S10")
+            } else {
+                try openFirstChat(app)
+            }
+        } else {
+            try openFirstChat(app)
+        }
+
+        let scrollTarget = app.scrollViews.firstMatch.exists ? app.scrollViews.firstMatch : app.collectionViews.firstMatch
+        XCTAssertTrue(scrollTarget.waitForExistence(timeout: 5), "Expected a scrollable timeline")
+
+        let options = XCTMeasureOptions()
+        options.iterationCount = 5
+        measure(
+            metrics: [XCTOSSignpostMetric.scrollingAndDecelerationMetric, XCTMemoryMetric(application: app)],
+            options: options
+        ) {
+            scrollTarget.swipeDown(velocity: .fast)
+            scrollTarget.swipeUp(velocity: .fast)
+        }
+
+        returnToChatList(app)
     }
 }
