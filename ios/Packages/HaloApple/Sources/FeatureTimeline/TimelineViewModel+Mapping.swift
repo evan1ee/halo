@@ -27,6 +27,11 @@ extension TimelineViewModel {
             }
             readerProfiles = profiles
             let rows = Self.collapsingStateRuns(Self.groupingRuns(snapshot.items.map(row), items: snapshot.items), items: snapshot.items)
+            // A photo you sent changes its reference when the server confirms it: the picture on screen becomes the entry
+            // for the new reference, so nothing is loaded again.
+            for change in TimelineThumbnailMemory.changedReferences(rows: rows, known: &knownPhotoRefs) {
+                thumbnailMemory.adopt(change.old, as: change.new)
+            }
             // Wait until there is something to land on: a message, or the whole (message-less) history. The first snapshots of a
             // freshly opened room hold only the start marker and state events.
             let hasMessage = snapshot.items.contains { item in
@@ -188,6 +193,12 @@ extension TimelineViewModel {
             switch event.kind {
             case .text(_, true), .notice(_, true), .emote(_, true): row.isEdited = true
             default: break
+            }
+            if event.isOwn, row.style == .ownMessage {
+                // Every kind of own message (text, photo, file, sticker, location, poll) reports its send state the same way.
+                row.delivery = TimelineRow.Delivery(sendState: event.sendState, readCount: event.readBy.count)
+                row.status = Self.status(of: event.sendState)
+                row.failedLocalID = Self.failedID(event)
             }
             if event.isOwn, row.style == .ownMessage, event.sendState == .sent {
                 row.seenBy = event.readBy.count

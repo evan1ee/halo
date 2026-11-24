@@ -166,8 +166,11 @@ final class MatrixTimelineSession: TimelineSession {
             let (raw, rawContinuation) = AsyncStream<[MatrixRustSDK.TimelineDiff]>.makeStream(bufferingPolicy: .unbounded)
             let handle = await timeline.addListener(listener: Listener(rawContinuation))
             defer { handle.cancel() }
+            // The SDK confirms a local echo as remove + push of the same item; folded into one `set` so the row (and its
+            // photo) never leaves the list (TimelineDiffCoalescer).
+            var coalescer = TimelineDiffCoalescer()
             for await batch in raw {
-                for update in batch { continuation.yield(TimelineMapper.map(update, ownUserID: ownUserID)) }
+                for diff in coalescer.coalesce(batch.map { TimelineMapper.map($0, ownUserID: ownUserID) }) { continuation.yield(diff) }
             }
             continuation.finish()
         }

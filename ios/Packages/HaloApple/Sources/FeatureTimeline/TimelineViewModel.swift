@@ -208,6 +208,10 @@ public final class TimelineViewModel {
     /// `true` when the account's media preview setting asks for a tap before photos in this room are shown (FR-7).
     public internal(set) var previewsHidden = false
     var revealedPreviews: Set<MediaRef> = []
+    /// Pictures already shown (`TimelineThumbnailMemory`) and the photo reference last seen per row, to carry a sent photo
+    /// from its local echo to the confirmed message.
+    let thumbnailMemory = TimelineThumbnailMemory()
+    var knownPhotoRefs: [String: MediaRef] = [:]
     var observation: Task<Void, Never>?
     let dateFormatter: DateFormatter
     let timeFormatter: DateFormatter

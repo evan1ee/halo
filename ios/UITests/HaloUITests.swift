@@ -221,6 +221,50 @@ final class HaloUITests: XCTestCase {
         UIPasteboard.general.items = []
     }
 
+    /// Sending a photo: it shows at once, stays on screen through the upload and the server's confirmation (no grey placeholder,
+    /// no reload: founder, "image disappears then comes back"), and the spinner gives way to the sent check.
+    @MainActor
+    func testSentPhotoStaysVisibleAndShowsDeliveryState() throws {
+        let app = XCUIApplication()
+        app.launch()
+        dismissFirstRunSheets(app)
+        try openFirstChat(app)
+        let composer = app.descendants(matching: .any)["composer"].firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: 5))
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 900, height: 600))
+        UIPasteboard.general.image = renderer.image { context in
+            UIColor.systemTeal.setFill(); context.fill(CGRect(x: 0, y: 0, width: 900, height: 600))
+            UIColor.systemOrange.setFill(); context.fill(CGRect(x: 100, y: 100, width: 300, height: 200))
+        }
+        guard UIPasteboard.general.hasImages else { throw XCTSkip("The test runner can't put an image on this device's pasteboard.") }
+        composer.tap()
+        composer.press(forDuration: 1.0)
+        let paste = app.menuItems["Paste"]
+        XCTAssertTrue(paste.waitForExistence(timeout: 3))
+        paste.tap()
+        XCTAssertTrue(app.buttons["remove-photo"].waitForExistence(timeout: 5))
+        let photos = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Image'"))
+        let before = photos.count
+        app.buttons["send-button"].tap()
+        // Sample for up to 10 s: once the photo is in the list, the count of photos never drops below it.
+        var appeared = false, dropped = false, sawConfirmed = false, shots = 0, samples = 0
+        let start = Date()
+        while Date().timeIntervalSince(start) < 10 {
+            let count = photos.count
+            if count > before { appeared = true } else if appeared { dropped = true }
+            if app.descendants(matching: .any)["delivery-sent"].exists || app.descendants(matching: .any)["delivery-read"].exists { sawConfirmed = true }
+            samples += 1
+            if shots < 16, samples % 2 == 0 {  // a picture of the send flow for the contact sheet
+                let a = XCTAttachment(screenshot: app.screenshot()); a.lifetime = .keepAlways; a.name = "send-\(String(format: "%02d", shots))"; add(a); shots += 1
+            }
+            if sawConfirmed, shots >= 8, Date().timeIntervalSince(start) > 5 { break }
+        }
+        XCTAssertTrue(appeared, "The sent photo appears in the conversation")
+        XCTAssertFalse(dropped, "The photo never leaves the list between the local echo and the confirmed message")
+        XCTAssertTrue(sawConfirmed, "A sent message ends on the sent check (or readers' avatars)")
+        UIPasteboard.general.items = []
+    }
+
     private func openFirstChat(_ app: XCUIApplication) throws {
         if !app.navigationBars["Chats"].waitForExistence(timeout: 3) {
             let back = app.navigationBars.buttons.element(boundBy: 0)

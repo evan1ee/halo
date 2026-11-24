@@ -452,9 +452,14 @@ extension TimelineViewModel {
 
     /// Thumbnail bytes for an image row, or `nil` if it can't be loaded (the row then shows a placeholder).
     public func thumbnail(for image: TimelineRow.Image) async -> Data? {
-        guard let media else { return nil }
-        return try? await media.thumbnail(image.ref, width: 600, height: 600)
+        if let known = thumbnailMemory.data(for: image.ref) { return known }
+        guard let media, let loaded = try? await media.thumbnail(image.ref, width: 600, height: 600) else { return nil }
+        thumbnailMemory.store(loaded, for: image.ref)
+        return loaded
     }
+
+    /// The picture already shown for this reference, for a view's first frame (no waiting, no placeholder).
+    func cachedThumbnail(for image: TimelineRow.Image) -> Data? { thumbnailMemory.data(for: image.ref) }
 
     /// One photo shown in the full-screen zoomable timeline photo viewer (MEDIA_ATTACHMENTS FR-1).
     public struct PhotoViewerItem: Identifiable, Equatable, Sendable {

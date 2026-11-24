@@ -142,12 +142,18 @@ struct RowView: View {
                                 .modifier(OptionalTextDragModifier(text: TimelineDragExtractor.text(for: row)))
                             if row.card != nil { Button("Show card") { showingOriginal = false }.font(.caption2) }
                         }
-                        if let status = row.status {
-                            Text(status).font(.caption2).foregroundStyle(.secondary)
-                        } else if row.endsRun, let time = row.time {
-                            Text(time).font(.caption2).foregroundStyle(.secondary)
+                        if row.delivery != nil || (row.endsRun && row.time != nil) {
+                            HStack(spacing: HaloSpacing.xs) {
+                                if case .failed = row.delivery, let status = row.status {
+                                    Text(status).font(.caption2).foregroundStyle(HaloColor.danger)
+                                } else if row.endsRun, let time = row.time {
+                                    Text(time).font(.caption2).foregroundStyle(HaloColor.textSecondary)
+                                }
+                                if let delivery = row.delivery {
+                                    DeliveryIndicator(delivery: delivery, row: row, model: model) { showingReaders = true }
+                                }
+                            }
                         }
-                        if row.status == nil, !row.readers.isEmpty { Button { showingReaders = true } label: { ReceiptAvatars(row: row, model: model) }.buttonStyle(.plain) }
                         reactionBar
                     }
                     .frame(maxWidth: .infinity, alignment: row.style == .ownMessage ? .trailing : .leading)
@@ -287,6 +293,47 @@ struct ReadersView: View {
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
         .presentationDetents([.medium])
+    }
+}
+
+/// The state of an own message beside its time, the same for every kind of message (TIMELINE FR-6): a small spinner while it
+/// is sending, a circle with a check once the server has it, the readers' pictures (tap for the list) once someone has read
+/// it, and a warning while it isn't sent. Unconfirmed things look unconfirmed (AGENTS §4.4).
+struct DeliveryIndicator: View {
+    let delivery: TimelineRow.Delivery
+    let row: TimelineRow
+    let model: TimelineViewModel
+    let showReaders: () -> Void
+    private let size: CGFloat = 14
+
+    var body: some View {
+        switch delivery {
+        case .sending:
+            ProgressView()
+                .controlSize(.mini)
+                .frame(width: size, height: size)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Sending")
+                .accessibilityIdentifier("delivery-sending")
+        case .failed:
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.system(size: size))
+                .foregroundStyle(HaloColor.danger)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(row.status ?? "Not sent")
+                .accessibilityIdentifier("delivery-failed")
+        case .sent:
+            Image(systemName: "checkmark.circle")
+                .font(.system(size: size))
+                .foregroundStyle(HaloColor.textSecondary)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Sent")
+                .accessibilityIdentifier("delivery-sent")
+        case .read:
+            Button(action: showReaders) { ReceiptAvatars(row: row, model: model) }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("delivery-read")
+        }
     }
 }
 

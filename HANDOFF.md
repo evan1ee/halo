@@ -1,6 +1,6 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-23 · Branch: `feat/keyboard-panels` (PR open) · PRs #1–#75 merged
+Last updated: 2026-11-23 · Branch: `feat/seamless-media-send` (stacked on `feat/keyboard-panels`, not pushed) · PRs #1–#75 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
@@ -12,6 +12,8 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
+- **Seamless photo send + unified delivery state (2026-11-24, D107, founder: "image disappears then comes back"):** measured against Synapse: the SDK confirms a local echo as `remove` + `pushBack` of the same unique ID, so SwiftUI rebuilt the row and its empty thumbnail re-downloaded. Fixed by `TimelineDiffCoalescer` (adapter folds the pair into one `set`) and `TimelineThumbnailMemory` (rebuilt views paint at once; the echo's picture is adopted for the confirmed reference). Disk cache stays the SDK's encrypted media store. Own messages of every kind show spinner → check circle → readers' avatars (`TimelineRow.Delivery`, `DeliveryIndicator`). The "empty circle" in the founder's screenshot matches nothing in this branch (likely an avatar without a picture or an older build). Tests: `TimelineDiffCoalescerTests`, contract `sentImageNeverLeavesTheList` (fails without the fix), `MessageDeliveryTests`, `TimelineThumbnailMemoryTests`, UI `testSentPhotoStaysVisibleAndShowsDeliveryState`. Not tested: an E2EE room end to end, a physical device.
+  - *Prepush (iPhone Air):* HaloCore, HaloApple-Package, Halo-Debug build, docs, boundaries, tokens, gitleaks, swiftlint passed; `HaloUITests` failed only `testComposerPanelsSwapWithKeyboard` and `testEmptyRoomStaysResponsive` (the known unresolved ones, not touched here).
 - **Device UI testing on the founder's iPhone 16 (2026-11-23, founder: "empty room, app freeze · keyboard panel, shake · login takes time"):**
   - *Empty-room freeze:* device hang logs (main thread 100 % CPU, watchdog kills) traced to the short-room top margin flipping on every layout pass (a List's scroll-geometry content height includes the margin; measured). `ShortRoomAlignment` now computes a fixed point, with an 8-changes-a-second guard. Rooms holding only setup events show "No messages yet" and load earlier pages by themselves until a message or the start (`openingPages`). Verified on the iPhone 16 in "Invite decline fixture" (`testEmptyRoomStaysResponsive`).
   - *Keyboard/panel shake and "not smooth":* a debug-only frame trace (`ComposerMotionTrace`, `-halo.debug.composerTrace YES`) showed the field dipping 69–106 pt in every swap. The area under the composer now owns the keyboard height (D102; timeline always ignores the keyboard safe area) and moves with the keyboard's measured curve (ω ≈ 22/s, fitted at 60 Hz): swaps 0.0 pt on every drawn frame, opening the keyboard follows it within a frame. Drag on the conversation closes keyboard/panel (no interactive keyboard dismissal). The first panel's height estimate was refitted (was 4.3 pt short on the iPhone 16). Empty rooms show "No messages yet" as a list row (founder: text overlapped).
@@ -36,7 +38,7 @@ Summary only; older history lives in `git log`.
   - Timeline scroll follow-ups (`PrependedAnchor` preserves position on back-pagination; `ShortRoomAlignment` bottom-aligns short rooms above composer); `TimelineScrollHelpersTests`.
 
 ## 3. Key decisions
-Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D106), [docs/adr/README.md](docs/adr/README.md).
+Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D107), [docs/adr/README.md](docs/adr/README.md).
 - **D73 / D74 / D78–D80 (ADR-0020):** classic sync unread evidence, encrypted-room SDK counts decide, identity/timeline-index read ordering.
 - **D82 (ADR-0021):** app icon badge sums `RoomReadState.badgeCount` for `attention == true`.
 - **D83:** Global Media Gallery is a preset virtual room entry in the room list (not a tab, excluded from unread/badge).
@@ -64,6 +66,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D106), [docs/adr/R
 - **Docs:** `features/COMPOSER_PANELS.md` (new), `DECISION_LOG` (D97, D98), `SOURCES` (F-KLIPY-1), `OPEN_QUESTIONS` (Q-KLIPY-PROD, Q-KLIPY-REHOST), `security/{PRIVACY,SECURITY}.md`, `features/STICKERS.md`, `ROADMAP`, `README`.
 
 ## 5. Outstanding issues
+- **UI flakes:** `testComposerPanelsSwapWithKeyboard` and `testEmptyRoomStaysResponsive` still fail in the full UI run (pre-existing); an own thumbnail is downloaded once after an app restart (SDK caches the file under the new reference, thumbnails under their own key).
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
 
 **Engineering (not blocking)**
