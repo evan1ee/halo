@@ -121,6 +121,9 @@ Re-verify at every SDK bump (see [development/BUILD_AND_RELEASE.md](development/
   **Not verified from documentation:** the NSE execution-time and memory limits (Apple publishes no numbers; measured under G-NSE, AC-NSE-1…6) and
   ImageIO animated GIF/APNG/WebP decoding (checked in M4).
 
+### F-KLIPY — KLIPY API (verified 2026-11-23 at https://docs.klipy.com and with a live call)
+- F-KLIPY-1 Base `https://api.klipy.com`; `GET api/v1/{app_key}/{gifs|stickers}/{trending|search}` with `page`, `per_page` (search 8–50, default 24), `q`, `customer_id` (stable per user), `locale` (ISO 3166 alpha-2), `content_filter` (`off|low|medium|high`), `format_filter`; response `{result, data: {data: [{id, slug, title, file: {hd|md|sm|xs: {gif|webp|jpg|mp4|webm|png: {url, width, height, size}}}, type, blur_preview}], current_page, per_page, has_next}}` (stickers carry `png` instead of `jpg`, checked live). Share trigger `POST api/v1/{app_key}/{kind}/share/{slug}` with body `{customer_id, q}`. Integration requirements: media loaded directly from returned URLs, not stored/mirrored/re-hosted/altered; requests from the end-user client; search/trending order and composition preserved; KLIPY content in its own grid; "Search KLIPY" placeholder required, "Powered by KLIPY" optional. A testing key is limited to 100 requests per hour until production access is granted in the Partner Panel. Media hosts: `static.klipy.com`, `static1.klipy.com`, `static2.klipy.com`.
+
 ## Unverified (tracked in OPEN_QUESTIONS.md)
 Statements about iOS NSE memory limits, APNs/background push throttling, filtering-entitlement
 approval, and SwiftUI performance are labelled **[ASSUMPTION]** until measured.

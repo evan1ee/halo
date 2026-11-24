@@ -9,6 +9,8 @@ HALO_WIDGET_BUNDLE_ID = $(HALO_NAMESPACE).widgets
 HALO_APP_GROUP = group.$(HALO_NAMESPACE)
 HALO_KEYCHAIN_GROUP = $(AppIdentifierPrefix)$(HALO_NAMESPACE).shared
 HALO_BG_REFRESH_TASK = $(HALO_NAMESPACE).refresh
+// KLIPY GIF/sticker search key (D98): empty here; set it in the git-ignored Local.xcconfig. Without it KLIPY is hidden.
+HALO_KLIPY_API_KEY =
 
 IPHONEOS_DEPLOYMENT_TARGET = 26.0
 SWIFT_VERSION = 6

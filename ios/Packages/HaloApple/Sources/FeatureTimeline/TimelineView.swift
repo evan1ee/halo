@@ -12,8 +12,11 @@ import PhotosUI
 public struct TimelineView: View {
     private let model: TimelineViewModel
     private let stickerPanel: (@MainActor () -> AnyView)?
+    private let gifPanel: (@MainActor () -> AnyView)?
     private let onOpenThread: (@MainActor (EventID) -> Void)?
-    @State private var showsStickers = false
+    /// Keyboard vs. Halo's panels under the composer (COMPOSER_PANELS §3, D97).
+    @State private var input = ComposerInputController()
+    @State private var choosingFile = false
     @State private var viewerPhoto: TimelineViewModel.PhotoViewerItem?
     @State private var headerVisible = false
     /// History is only loaded after the opening scroll: rows prepended before it would push the landing row out of place.
@@ -34,6 +37,8 @@ public struct TimelineView: View {
     @State private var scrollInteracting = false
     /// Extra top content margin that keeps a short room anchored just above the composer.
     @State private var shortRoomTopMargin: Double = 0
+    /// Recent short-room margin changes, to stop a layout loop instead of freezing (`ShortRoomAlignment`).
+    @State private var marginChanges: [Date] = []
     /// Automatic history paging only runs with the newest row on screen (a short room that needs filling) or once the user has
     /// scrolled; right after history lands above the newest row the "Load earlier" row is briefly visible and paging then would
     /// move the content again.
@@ -41,16 +46,19 @@ public struct TimelineView: View {
 
     @Environment(\.scenePhase) private var scenePhase
 
-    /// - Parameter stickerPanel: the sticker panel for this room, made by the composition root (a feature never imports
-    ///   another feature). Without it the composer has no sticker button.
+    /// - Parameter stickerPanel: the Stickers tab of the expression panel for this room, made by the composition root (a
+    ///   feature never imports another feature). Without it the panel has no Stickers tab.
+    /// - Parameter gifPanel: the GIFs tab (KLIPY, D98); without it the panel has no GIFs tab.
     /// - Parameter onOpenThread: opens a focused thread sheet for the chosen root event (M10 Threads).
     public init(
         model: TimelineViewModel,
         stickerPanel: (@MainActor () -> AnyView)? = nil,
+        gifPanel: (@MainActor () -> AnyView)? = nil,
         onOpenThread: (@MainActor (EventID) -> Void)? = nil
     ) {
         self.model = model
         self.stickerPanel = stickerPanel
+        self.gifPanel = gifPanel
         self.onOpenThread = onOpenThread
     }
 
@@ -93,6 +101,22 @@ public struct TimelineView: View {
                         .onDisappear { headerVisible = false }
                         .task(id: PaginationTrigger(rows: rows.count, ready: headerVisible && landed && pagingAllowed)) { if headerVisible, landed, pagingAllowed, paginationError == nil { await model.loadEarlier() } }
                     }
+                    // A room with nothing but its setup events (created, joined, settings) says so, above those events
+                    // (as a row, so the short-room alignment keeps it clear of them and of the composer).
+                    if !canLoadEarlier, !rows.contains(where: \.isConversation) {
+                        ContentUnavailableView {
+                            Label("No messages yet", systemImage: "bubble.left.and.bubble.right")
+                        } description: {
+                            Text("Messages you send here appear in this conversation.")
+                        }
+                        // ContentUnavailableView fills what it's offered and can be squeezed; a list row must keep its own
+                        // height or the description draws over the setup rows below (founder screenshot, two-line description).
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("empty-room")
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                    }
                     ForEach(rows) { row in
                         RowView(
                             row: row,
@@ -116,6 +140,13 @@ public struct TimelineView: View {
                     }
                 }
                 .listStyle(.plain)
+                // A finger dragging the conversation closes the keyboard or panel (the drag gesture below). The list itself
+                // never dismisses the keyboard: a programmatic move (a short room's margin changing as the keyboard rises)
+                // would count as a scroll, and with interactive dismissal the composer could not follow the finger (it
+                // doesn't move with the system keyboard, D102, and iOS sends no keyboard frames during that drag).
+                .scrollDismissesKeyboard(.never)
+                // A tap on the conversation closes the keyboard or panel; the gesture only exists while one is open.
+                .simultaneousGesture(TapGesture().onEnded { input.dismiss() }, including: input.state.mode == .idle && input.state.displayedPanel == nil ? .subviews : .all)
                 .opacity(listPlaced || rows.isEmpty ? 1 : 0)
                 .task {
                     try? await Task.sleep(for: .milliseconds(600))
@@ -125,6 +156,7 @@ public struct TimelineView: View {
                 .listSectionSeparator(.hidden)
                 .listRowSeparatorTint(.clear)
                 .defaultScrollAnchor(.bottom)
+                // A short room sits just above the composer instead of at the top (`ShortRoomAlignment`).
                 .contentMargins(.top, shortRoomTopMargin, for: .scrollContent)
                 .onScrollGeometryChange(for: ShortRoomGeometry.self) { geometry in
                     ShortRoomGeometry(
@@ -135,14 +167,7 @@ public struct TimelineView: View {
                         canLoadEarlier: canLoadEarlier
                     )
                 } action: { _, value in
-                    shortRoomTopMargin = ShortRoomAlignment.topMargin(
-                        containerHeight: value.containerHeight,
-                        topInset: value.topInset,
-                        bottomInset: value.bottomInset,
-                        contentHeight: value.contentHeight,
-                        currentMargin: shortRoomTopMargin,
-                        canLoadEarlier: value.canLoadEarlier
-                    )
+                    updateShortRoomMargin(value)
                 }
                 // "At the bottom" comes from the scroll geometry, not from one row's visibility: that flag could stay true after
                 // rows were added above the newest row and then hide that the list had moved away from the bottom.
@@ -168,6 +193,11 @@ public struct TimelineView: View {
                         proxy.scrollTo(last, anchor: .bottom)
                     }
                 }
+                // A finger dragging the conversation puts the keyboard or a panel away (COMPOSER_PANELS §3). A real drag
+                // gesture, not the scroll phase: that also changes for programmatic moves.
+                .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in
+                    if input.state.mode != .idle || input.state.displayedPanel != nil { input.dismiss() }
+                }, including: input.state.mode == .idle && input.state.displayedPanel == nil ? .subviews : .all)
                 .onScrollPhaseChange { _, phase in
                     scrollMoving = phase == .interacting || phase == .decelerating || phase == .animating
                     scrollInteracting = phase == .interacting
@@ -285,9 +315,22 @@ public struct TimelineView: View {
                 }
             }
         }
-        .safeAreaInset(edge: .bottom) { Composer(model: model, onStickers: stickerPanel == nil ? nil : { showsStickers = true }) }
-        .sheet(isPresented: $showsStickers) { stickerPanel?().presentationDetents([.medium, .large]) }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                Composer(model: model, input: input, choosingFile: $choosingFile)
+                #if canImport(UIKit)
+                ComposerPanelArea(controller: input) { panel in
+                    ComposerPanelContent(
+                        panel: panel, model: model, input: input, gifPanel: gifPanel, stickerPanel: stickerPanel, choosingFile: $choosingFile)
+                }
+                #endif
+            }
+        }
         #if canImport(UIKit)
+        // The area under the composer holds the keyboard's height itself (`ComposerPanelMetrics.areaHeight`), so the system
+        // must not also move the composer for the keyboard: two animations made it dip and creep back in every keyboard/panel
+        // swap (D102). Applied always: switching it rebuilds the message field, which then loses focus.
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         .sheet(item: Binding(get: { model.openedFile }, set: { if $0 == nil { model.closeFile() } })) { QuickLookView(url: $0.url).ignoresSafeArea() }
         .fullScreenCover(item: $viewerPhoto) { photo in
             photoViewer(initial: photo)
@@ -333,208 +376,6 @@ public struct TimelineView: View {
     }
 }
 
-struct Composer: View {
-    @Bindable var model: TimelineViewModel
-    let onStickers: (() -> Void)?
-    @State private var picked: [PhotosPickerItem] = []
-    @State private var choosingFile = false
-    @State private var showingEmojiPicker = false
-
-    var body: some View {
-        VStack(spacing: 4) {
-            if let typing = model.typingText { Text(typing).font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading) }
-            if let error = model.sendError {
-                HStack(spacing: 8) {
-                    Text(error).font(HaloTypography.caption).foregroundStyle(HaloColor.danger)
-                    Spacer()
-                    Button { model.dismissSendError() } label: { Image(systemName: "xmark").font(.caption2.weight(.semibold)) }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel("Dismiss")
-                }
-            }
-            if model.isSendingImage { ProgressView("Sending photo…").font(.caption) }
-            if model.isSendingFile { ProgressView("Sending file…").font(.caption) }
-            if model.editing != nil {
-                HStack {
-                    Label("Editing message", systemImage: "pencil").font(.caption)
-                    Spacer()
-                    Button("Cancel") { model.cancelEdit() }.font(.caption)
-                }
-            }
-            if let target = model.replyingTo {
-                HStack {
-                    Label("Replying to \(target.sender ?? "message")", systemImage: "arrowshape.turn.up.left").font(.caption).lineLimit(1)
-                    Spacer()
-                    Button("Cancel") { model.cancelReply() }.font(.caption)
-                }
-            }
-            ForEach(model.mentionSuggestions) { member in
-                Button { model.pickMention(member) } label: {
-                    HStack {
-                        Text(member.mentionName)
-                        Spacer()
-                        Text(member.user.rawValue).font(.caption).foregroundStyle(.secondary)
-                    }
-                    .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("mention-suggestion")
-            }
-            if !model.emojiSuggestions.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(model.emojiSuggestions) { entry in
-                            Button { model.pickEmojiSuggestion(entry) } label: {
-                                HStack(spacing: 4) {
-                                    Text(entry.emoji)
-                                    Text(":\(entry.shortcode):").font(.caption).foregroundStyle(.secondary)
-                                }
-                                .padding(.horizontal, 8).padding(.vertical, 4)
-                                .background(Color.secondary.opacity(0.15), in: .capsule)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("emoji-suggestion")
-                        }
-                    }
-                    .padding(.horizontal, 4)
-                }
-            }
-            if !model.pendingPhotos.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(Array(model.pendingPhotos.enumerated()), id: \.offset) { index, photo in
-                                ZStack(alignment: .topTrailing) {
-                                    #if canImport(UIKit)
-                                    if let image = UIImage(data: photo.data) {
-                                        Image(uiImage: image).resizable().scaledToFill()
-                                            .frame(width: 56, height: 56)
-                                            .clipShape(.rect(cornerRadius: 8))
-                                    }
-                                    #else
-                                    RoundedRectangle(cornerRadius: 8).fill(.secondary.opacity(0.2)).frame(width: 56, height: 56)
-                                    #endif
-                                    Button { model.removePendingPhoto(at: index) } label: {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .font(.caption)
-                                            .symbolRenderingMode(.palette)
-                                            .foregroundStyle(HaloColor.mediaOverlayForeground, HaloColor.mediaOverlayBackground)
-                                    }
-                                    .offset(x: 4, y: -4)
-                                    .accessibilityLabel("Remove photo")
-                                    .accessibilityIdentifier("remove-photo")
-                                }
-                                .padding(.top, 4)
-                            }
-                        }
-                        .padding(.horizontal, 4)
-                    }
-                    Text(model.pendingPhotos.count == 1
-                         ? "Photo ready. Add a caption below, or send as is."
-                         : "\(model.pendingPhotos.count) photos ready. Add a caption below, or send as is.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            HStack(alignment: .bottom, spacing: 14) {
-                if model.canSendImages {
-                    PhotosPicker(
-                        selection: $picked,
-                        maxSelectionCount: max(1, TimelineViewModel.maxPendingPhotos - model.pendingPhotos.count),
-                        matching: .images
-                    ) { Image(systemName: "photo").composerIcon() }
-                        .disabled(model.isSendingImage || model.pendingPhotos.count >= TimelineViewModel.maxPendingPhotos)
-                        .accessibilityLabel("Send photos")
-                        .accessibilityIdentifier("photo-button")
-                }
-                Button { choosingFile = true } label: { Image(systemName: "paperclip").composerIcon() }
-                    .disabled(model.isSendingFile)
-                    .accessibilityLabel("Send a file")
-                    .accessibilityIdentifier("file-button")
-                Button { showingEmojiPicker = true } label: { Image(systemName: "face.smiling").composerIcon() }
-                    .accessibilityLabel("Emoji")
-                    .accessibilityIdentifier("emoji-button")
-                if let onStickers {
-                    Button(action: onStickers) { Image(systemName: "sparkles.rectangle.stack").composerIcon() }
-                        .accessibilityLabel("Stickers")
-                        .accessibilityIdentifier("sticker-button")
-                }
-                // Messages-style field: a rounded pill with the send arrow inside it, shown once there is something to send.
-                HStack(alignment: .bottom, spacing: 4) {
-                    TextField("Message", text: $model.draft, axis: .vertical)
-                        .lineLimit(1...6)
-                        .textFieldStyle(.plain)
-                        .padding(.vertical, 8)
-                        .padding(.leading, 14)
-                        .padding(.trailing, model.canSend ? 0 : 14)
-                        .accessibilityIdentifier("composer")
-                    if model.canSend {
-                        Button { Task { await model.send() } } label: {
-                            Image(systemName: "arrow.up.circle.fill").font(.title2).symbolRenderingMode(.palette)
-                                .foregroundStyle(HaloColor.onAccent, HaloColor.accent)
-                        }
-                        .padding(3)
-                        .accessibilityLabel("Send")
-                        .transition(.scale.combined(with: .opacity))
-                    }
-                }
-                .frame(minHeight: 36)
-                .background(.background, in: .rect(cornerRadius: 18))
-                .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.separator))
-                .animation(.snappy(duration: 0.2), value: model.canSend)
-            }
-        }
-        .padding(8)
-        .background(.bar)
-        .sheet(isPresented: $showingEmojiPicker) {
-            NavigationStack {
-                NativeEmojiPicker(
-                    recents: model.recentEmoji,
-                    onPick: { emoji in model.insertEmoji(emoji) }
-                )
-                .navigationTitle("Emoji")
-                #if os(iOS)
-                .navigationBarTitleDisplayMode(.inline)
-                #endif
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { showingEmojiPicker = false }
-                    }
-                }
-            }
-            .presentationDetents([.medium, .large])
-        }
-        .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.item]) { result in
-            guard case .success(let url) = result else { return }
-            Task {
-                // The picked file lives outside the app's sandbox: access is granted only while this scope is open.
-                let opened = url.startAccessingSecurityScopedResource()
-                defer { if opened { url.stopAccessingSecurityScopedResource() } }
-                let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-                // Checked before reading, so a huge file never gets loaded into memory.
-                guard size <= OutgoingFile.maximumBytes else { model.reportFileTooLarge(); return }
-                guard let data = try? Data(contentsOf: url) else { model.reportFileUnreadable(); return }
-                let type = UTType(filenameExtension: url.pathExtension)
-                await model.sendFile(data: data, filename: url.lastPathComponent, mimeType: type?.preferredMIMEType ?? "application/octet-stream")
-            }
-        }
-        .onChange(of: picked) { _, items in
-            guard !items.isEmpty else { return }
-            picked = []
-            Task {
-                var loaded: [(data: Data, filename: String)] = []
-                for (index, item) in items.enumerated() {
-                    if let data = try? await item.loadTransferable(type: Data.self) {
-                        loaded.append((data: data, filename: item.itemIdentifier ?? "photo-\(index + 1)"))
-                    }
-                }
-                await model.attachPhotos(loaded)
-            }
-        }
-    }
-}
-
-
 /// TIMELINE FR-4 and D95: the "Jump to unread" pill shows once the room has landed at the newest message and the first
 /// unread message is above the screen.
 enum UnreadPill {
@@ -549,6 +390,25 @@ enum UnreadPill {
 /// How far the end of the list is below its visible part (≤ 0 at the bottom), and the content height, so a change of either
 /// reaches the scroll-geometry action. The visible rect reaches under the composer, so the end is the content plus the bottom
 /// inset; measured against the content alone, the newest row could sit half behind the composer and count as at the bottom.
+extension TimelineView {
+    /// Applies the short-room margin for `value`, at most `ShortRoomAlignment.maximumChangesPerSecond` times a second.
+    func updateShortRoomMargin(_ value: ShortRoomGeometry) {
+        let margin = ShortRoomAlignment.topMargin(
+            containerHeight: value.containerHeight,
+            topInset: value.topInset,
+            bottomInset: value.bottomInset,
+            contentHeight: value.contentHeight,
+            currentMargin: shortRoomTopMargin,
+            canLoadEarlier: value.canLoadEarlier
+        )
+        guard margin != shortRoomTopMargin else { return }
+        let now = Date()
+        marginChanges = marginChanges.filter { now.timeIntervalSince($0) < 1 } + [now]
+        guard marginChanges.count <= ShortRoomAlignment.maximumChangesPerSecond else { return }
+        shortRoomTopMargin = margin
+    }
+}
+
 struct BottomGap: Equatable {
     let gap: Double
     let contentHeight: Double

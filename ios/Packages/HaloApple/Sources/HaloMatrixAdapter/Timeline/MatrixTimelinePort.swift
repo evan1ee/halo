@@ -326,6 +326,24 @@ final class MatrixTimelineSession: TimelineSession {
         } catch { throw ErrorMapper.map(error) }
     }
 
+    func sendLocation(_ location: OutgoingLocation) async throws(HaloError) {
+        try location.validate()
+        do {
+            try await timeline.sendLocation(
+                body: location.body, geoUri: location.geoURI, description: nil, zoomLevel: 15,
+                assetType: location.isOwnLocation ? .sender : .pin, repliedToEventId: nil)
+        } catch { throw ErrorMapper.map(error) }
+    }
+
+    func createPoll(_ poll: OutgoingPoll) async throws(HaloError) {
+        try poll.validate()
+        do {
+            try await timeline.createPoll(
+                question: poll.question, answers: poll.answers, maxSelections: UInt8(clamping: poll.maxSelections),
+                pollKind: poll.hidesResultsUntilEnd ? .undisclosed : .disclosed)
+        } catch { throw ErrorMapper.map(error) }
+    }
+
     func retrySend(localID: String) async throws(HaloError) {
         do {
             guard try await timeline.retrySend(itemId: .transactionId(transactionId: localID), target: .event) else {

@@ -41,6 +41,8 @@ user first creates a pack or sends a sticker in an E2EE room, and a permanent hi
 - FR-8 Render incoming stickers at max 256 pt, animated per D13; tap → preview with pack info if known.
 - FR-9 Animation: autoplay in the visible viewport; respects Reduce Motion (static first frame) and Low Power Mode (static).
 
+**Composer integration (D97):** the panel is the "My stickers" source of the Stickers tab in the composer's expression panel ([COMPOSER_PANELS](COMPOSER_PANELS.md) §5); it stays open after a send. KLIPY stickers (D98) are a separate source there and are sent as links, not `m.sticker`.
+
 ## 5. Non-functional requirements
 - Panel opens in < 150 ms with ≥ 200 stickers (thumbnails cached).
 - Thumbnails decoded at panel cell size; at most 12 animations playing at once.

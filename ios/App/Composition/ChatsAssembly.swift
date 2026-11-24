@@ -96,7 +96,15 @@ extension AppRoot {
         model.unrecognisedBotMessages = unrecognisedBots
         model.botActivity = threadRoot == nil ? botActivity : nil
         model.sendsTypingNotices = { [preferences] in preferences.sendTypingNotices }
+        model.klipy = klipy.isAvailable ? klipy : nil
         return model
+    }
+
+    /// A KLIPY grid (GIFs or stickers) for the timeline of `room`; `nil` without a KLIPY key (D98). Sending goes through that
+    /// timeline's view model as a message holding the KLIPY URL.
+    func makeKlipyPanel(_ kind: KlipyKind, timeline: TimelineViewModel) -> KlipyPanelModel? {
+        guard klipy.isAvailable else { return nil }
+        return KlipyPanelModel(kind: kind, catalog: klipy) { item throws(HaloError) in try await timeline.sendKlipy(item) }
     }
 
     /// The sticker panel for the timeline of `room`; sending goes through that timeline's view model.

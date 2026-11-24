@@ -5,6 +5,12 @@
 	<!-- Beta and Release (project.yml). Debug uses Info-Debug.plist, which adds local-network access for infra/dev. -->
 	<key>HaloNamespace</key>
 	<string>$(HALO_NAMESPACE)</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Halo uses your location only when you choose to send it in a chat.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Halo uses the microphone only while you record a voice message to send.</string>
+	<key>HaloKlipyAPIKey</key>
+	<string>$(HALO_KLIPY_API_KEY)</string>
 	<key>HaloKeychainAccessGroup</key>
 	<string>$(HALO_KEYCHAIN_GROUP)</string>
 	<key>HaloPushAppID</key>

@@ -248,6 +248,64 @@ extension TimelineViewModel {
         }
     }
 
+    /// Sends a static location from the attachment panel (D100). Returns `true` when sent; a failure is shown in the composer.
+    @discardableResult
+    public func sendLocation(_ location: OutgoingLocation) async -> Bool {
+        sendError = nil
+        do {
+            try await coordinator.sendLocation(location)
+            return true
+        } catch {
+            sendError = error == .network(retryable: true) ? "Can't reach the server. The location wasn't sent." : "The location couldn't be sent."
+            return false
+        }
+    }
+
+    /// Sends the Article editor's Markdown as one message (D101): the ordinary text path, where the SDK turns the Markdown
+    /// into the formatted body (encrypted in encrypted rooms). Replies when a reply is set. Returns `true` when sent; the
+    /// draft is kept on failure.
+    @discardableResult
+    public func sendArticle() async -> Bool {
+        let text = articleDraft
+        sendError = nil
+        guard ArticleMarkdown.canSend(text) else {
+            sendError = text.count > ArticleMarkdown.maximumLength
+                ? "The article is too long. Keep it under \(ArticleMarkdown.maximumLength.formatted()) characters." : nil
+            return false
+        }
+        do {
+            if let id = replyingTo?.eventID {
+                try await coordinator.reply(to: id, text: text)
+                replyingTo = nil
+            } else {
+                try await coordinator.send(text)
+            }
+            articleDraft = ""
+            return true
+        } catch {
+            sendError = error == .network(retryable: true) ? "Can't reach the server. Your article was kept." : "The article couldn't be sent."
+            return false
+        }
+    }
+
+    /// Starts a poll from the attachment panel (D100). Returns `true` when sent; otherwise says why.
+    @discardableResult
+    public func createPoll(_ poll: OutgoingPoll) async -> Bool {
+        sendError = nil
+        do {
+            try await coordinator.createPoll(poll)
+            return true
+        } catch {
+            switch error {
+            case .invalidInput("POLL_DUPLICATE_ANSWERS"): sendError = "Two answers are the same."
+            case .invalidInput: sendError = "A poll needs a question and at least two answers."
+            case .network(retryable: true): sendError = "Can't reach the server. The poll wasn't sent."
+            default: sendError = "The poll couldn't be sent."
+            }
+            return false
+        }
+    }
+
     public func reportFileTooLarge() { sendError = "That file is too large to send." }
     public func reportFileUnreadable() { sendError = "That file couldn't be read." }
     public func dismissSendError() { sendError = nil }
@@ -260,6 +318,35 @@ extension TimelineViewModel {
     /// Sends a sticker from the sticker panel. Throws so the panel can say it failed.
     public func sendSticker(_ sticker: Sticker) async throws(HaloError) {
         try await coordinator.sendSticker(sticker)
+    }
+
+    /// Sends a KLIPY GIF or sticker: a message whose body is the item's KLIPY URL, unchanged (KLIPY's rules forbid
+    /// re-hosting its media). It goes through the SDK like any text, so it is end-to-end encrypted in an encrypted room;
+    /// recipients' Halo plays it inline, other clients show the link (COMPOSER_PANELS §6, D98). Replies when a reply is set.
+    public func sendKlipy(_ item: KlipyItem) async throws(HaloError) {
+        guard KlipyLink.mediaURL(in: item.shared.url) != nil else { throw .invalidInput("NOT_KLIPY_MEDIA") }
+        if let id = replyingTo?.eventID {
+            try await coordinator.reply(to: id, text: item.shared.url)
+            replyingTo = nil
+        } else {
+            try await coordinator.send(item.shared.url)
+        }
+    }
+
+    /// Whether KLIPY links in this room play inline: KLIPY is configured and the room's media previews are on (loading
+    /// the file tells KLIPY's CDN this device's address, like any link preview).
+    public var showsKlipyMedia: Bool { klipy != nil && !previewsHidden }
+
+    /// A KLIPY file for a message, loaded directly from KLIPY (memory cache only).
+    public func klipyMedia(_ url: URL) async -> Data? {
+        guard showsKlipyMedia, let klipy else { return nil }
+        return try? await klipy.media(url)
+    }
+
+    /// The emoji panel's delete key: removes the last character (a whole emoji, flags and families included).
+    public func deleteBackward() {
+        guard !draft.isEmpty else { return }
+        draft.removeLast()
     }
 
     /// Reacts to a confirmed message, or removes the user's reaction.

@@ -7,6 +7,9 @@ import Observation
 /// One displayed row. Text is prepared here so the view only lays it out.
 public struct TimelineRow: Equatable, Identifiable, Sendable {
     public enum Style: Equatable, Sendable { case message, ownMessage, notice, emote, placeholder, state, divider, marker }
+
+    /// A message of the conversation (not a room event, divider or marker).
+    public var isConversation: Bool { [.message, .ownMessage, .notice, .emote, .placeholder].contains(style) }
     public let id: String
     public let style: Style
     public let sender: String?
@@ -95,6 +98,12 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     /// Whether a plain text message consists solely of 1–3 native Unicode emoji and renders jumbo-sized without a bubble fill.
     public var isJumboEmoji: Bool {
         showsText && image == nil && file == nil && card == nil && NativeEmoji.isEmojiOnly(text, maxCount: 3)
+    }
+
+    /// The KLIPY GIF or sticker this message is, when its whole text is one KLIPY media link (COMPOSER_PANELS §6, D98).
+    public var klipyURL: URL? {
+        guard style == .message || style == .ownMessage, showsText, image == nil, card == nil else { return nil }
+        return KlipyLink.mediaURL(in: text)
     }
 
     /// Whether the user can edit this row's text (own confirmed text message; never photos, files or stickers).

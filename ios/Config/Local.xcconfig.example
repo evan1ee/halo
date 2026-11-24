@@ -1,3 +1,6 @@
 // Copy to Local.xcconfig (git-ignored) and fill in your own values. Base.xcconfig includes it when it exists.
 // Your team ID is in Xcode → Settings → Accounts, or `security find-identity -v -p codesigning` (the ID in brackets).
 DEVELOPMENT_TEAM = YOURTEAMID
+
+// Optional: KLIPY GIF & sticker search key (D98, docs/features/COMPOSER_PANELS.md). Leave unset to hide KLIPY.
+// HALO_KLIPY_API_KEY = your-klipy-app-key

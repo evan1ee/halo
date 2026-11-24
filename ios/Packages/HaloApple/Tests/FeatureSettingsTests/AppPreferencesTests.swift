@@ -71,4 +71,14 @@ struct AppPreferencesTests {
         AppPreferences(defaults: defaults).chatsInSystemSearch = true
         #expect(AppPreferences(defaults: defaults).chatsInSystemSearch == true)
     }
+
+    @Test("following Focus filters is off by default, and the choice is stored (D104)")
+    func followFocusFilter() throws {
+        let name = "halo.test.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        #expect(AppPreferences(defaults: defaults).followFocusFilter == false)
+        AppPreferences(defaults: defaults).followFocusFilter = true
+        #expect(AppPreferences(defaults: defaults).followFocusFilter == true)
+    }
 }

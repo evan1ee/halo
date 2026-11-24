@@ -50,6 +50,11 @@ public final class PreferencesStore {
         set { update { $0.chatsInSystemSearch = newValue } }
     }
 
+    public var followFocusFilter: Bool {
+        get { snapshot.followFocusFilter }
+        set { update { $0.followFocusFilter = newValue } }
+    }
+
     /// Reloads from the backing port (e.g. if another view wrote via legacy `UserDefaults`).
     public func reload() {
         snapshot = port.load()

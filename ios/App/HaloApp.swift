@@ -48,6 +48,7 @@ private struct RootView: View {
     @State private var showingWhatsNew = false
     @State private var ownName = ""
     @State private var ownAvatar: Data?
+    @State private var privacyCover = false
     @AppStorage("halo.onboarding.notificationPrimingShown") private var notificationPrimingShown = false
 
     init(root: AppRoot) {
@@ -59,6 +60,11 @@ private struct RootView: View {
         let content: RoomListViewModel.Content
         let enabled: Bool
         let auth: AuthViewModel.Screen
+    }
+
+    /// The Focus filter narrows the chat list only when the user opted in; otherwise every chat shows (D104).
+    private func applyFocusFilter() {
+        root.roomList.setFocus(root.preferences.followFocusFilter ? root.focus.chats : nil)
     }
 
     private func openRequestedChat() {
@@ -81,11 +87,18 @@ private struct RootView: View {
         }
     }
 
-    /// The user's own name and photo for the avatar button; kept as is when they can't be read.
+    /// The user's own name and photo for the avatar button; kept as is when they can't be read. The last ones seen are
+    /// shown at once from the device (founder: "the user avatar not show instantly"), then refreshed from the server.
     private func refreshOwnProfile() async {
+        let user = root.signedInUserID
+        if let cached = OwnProfileCache.load(user: user) {
+            if ownName.isEmpty, let name = cached.name { ownName = name }
+            if ownAvatar == nil { ownAvatar = cached.avatar }
+        }
         let profile = root.profileSettings()
         if let name = await profile.loadName() { ownName = name }
-        ownAvatar = await profile.loadAvatar()
+        if let avatar = await profile.loadAvatar() { ownAvatar = avatar }
+        OwnProfileCache.save(.init(user: user, name: ownName.isEmpty ? nil : ownName, avatar: ownAvatar))
     }
 
     /// ⌘1…⌘6 pick the room-list filters in menu order (hardware keyboard on iPad, M16 D91).
@@ -118,7 +131,7 @@ private struct RootView: View {
                     }
                     .navigationTitle("Chats")
                     .navigationBarTitleDisplayMode(.large)
-                    .searchable(text: $searchModel.query, isPresented: $searchPresented, prompt: "Search chats & messages")
+                    .searchable(text: $searchModel.query, isPresented: $searchPresented, prompt: Self.isPad ? "Search" : "Search chats & messages")  // the iPad sidebar is too narrow for the long prompt at large text sizes
                     .background {
                         // ⌘F starts a search (hardware keyboard).
                         Button("Search") { searchPresented = true }
@@ -164,8 +177,12 @@ private struct RootView: View {
                     .onChange(of: root.roomList.content) {
                         if !pathRestored, case .loaded = root.roomList.content {
                             pathRestored = true
-                            router.restorePath(from: savedPath)
-                            router.pruneInvalidRooms(joinedRoomIDs: root.roomList.joinedRoomIDs)
+                            // Only when nothing was opened yet: restoring (and pruning rooms the list hasn't shown yet)
+                            // after the user already opened a room would pop it.
+                            if router.path.isEmpty {
+                                router.restorePath(from: savedPath)
+                                router.pruneInvalidRooms(joinedRoomIDs: root.roomList.joinedRoomIDs)
+                            }
                         }
                         Task { await root.scanBotRooms() }
                     }
@@ -217,6 +234,10 @@ private struct RootView: View {
                             }
                     }
                 }
+            case .launching:
+                // Restoring a stored session takes a fraction of a second: show the plain background the system launch
+                // screen showed, not the sign-in logo (founder: "i can see the blue chat icon during the animation").
+                HaloColor.bgPrimary.ignoresSafeArea()
             default:
                 SignInView(model: root.auth)
             }
@@ -236,22 +257,36 @@ private struct RootView: View {
         }
         .preferredColorScheme(colorScheme)
         .overlay {
-            if root.preferences.privacyBlur && scenePhase != .active {
-                ZStack {
-                    Rectangle().fill(.ultraThinMaterial)
-                    Image(systemName: "lock.shield.fill")
-                        .font(.largeTitle)
-                        .imageScale(.large)
-                        .foregroundStyle(HaloColor.textSecondary)
-                }
+            // D61: hides the chats in the app switcher's snapshot. Only while leaving (active → inactive → background), not
+            // while launching or coming back, and without an icon (founder: "i can see the lock icon during the animation").
+            if root.preferences.privacyBlur && privacyCover {
+                Rectangle().fill(.ultraThinMaterial)
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
             }
         }
         // M16 Siri, Shortcuts and Spotlight: open a chat by name; chat names are offered only while the setting is on (D88).
-        .onChange(of: root.focus.chats, initial: true) { root.roomList.setFocus(root.focus.chats) }
+        // M16 Focus filter (D90), only while Settings → Follow Focus filters is on (D104, default off).
+        .onChange(of: root.focus.chats, initial: true) { applyFocusFilter() }
+        .onChange(of: root.preferences.followFocusFilter) { applyFocusFilter() }
         .onChange(of: root.openChat.pending, initial: true) { openRequestedChat() }
+        // The avatar button's cached name and photo: shown on the first frame once signed in, forgotten on sign-out.
+        .onChange(of: root.auth.screen, initial: true) {
+            switch root.auth.screen {
+            case .signedIn:
+                if ownAvatar == nil, ownName.isEmpty, let cached = OwnProfileCache.load(user: root.signedInUserID) {
+                    ownName = cached.name ?? ""
+                    ownAvatar = cached.avatar
+                }
+            case .server, .credentials:
+                OwnProfileCache.clear()
+                ownName = ""
+                ownAvatar = nil
+            default:
+                break
+            }
+        }
         .onChange(of: root.auth.screen) { openRequestedChat() }
         .onContinueUserActivity(CSSearchableItemActionType) { activity in
             let identifier = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String
@@ -318,6 +353,14 @@ private struct RootView: View {
             .presentationDetents([.medium, .large])
         }
         // Sync and periodic read-state auditing run only in the foreground (SYNC_ENGINE §2 rule 1, LOGGING_AND_DIAGNOSTICS §2).
+        .onChange(of: scenePhase) { old, new in
+            switch new {
+            case .active: privacyCover = false
+            case .background: privacyCover = true
+            case .inactive: privacyCover = old == .active  // leaving: cover; launching or returning: none
+            @unknown default: break
+            }
+        }
         .task(id: scenePhase) {
             switch scenePhase {
             case .active:
@@ -460,6 +503,8 @@ private final class BackgroundTaskLease {
 private struct TimelineScreen: View {
     @State private var model: TimelineViewModel
     @State private var stickers: StickerPanelViewModel
+    @State private var klipyGIFs: KlipyPanelModel?
+    @State private var klipyStickers: KlipyPanelModel?
     @State private var details: RoomDetailsViewModel?
     @State private var title = ""
     @Environment(\.dismiss) private var dismiss
@@ -484,6 +529,8 @@ private struct TimelineScreen: View {
         timeline.initialEvent = jumpTo
         _model = State(initialValue: timeline)
         _stickers = State(initialValue: root.makeStickerPanel(room: room, timeline: timeline))
+        _klipyGIFs = State(initialValue: root.makeKlipyPanel(.gifs, timeline: timeline))
+        _klipyStickers = State(initialValue: root.makeKlipyPanel(.stickers, timeline: timeline))
     }
 
     /// The room's picture from the chat list (for a direct chat the other person's); `nil` shows the initial.
@@ -524,7 +571,8 @@ private struct TimelineScreen: View {
     var body: some View {
         TimelineView(
             model: model,
-            stickerPanel: { AnyView(StickerPanelView(model: stickers)) },
+            stickerPanel: { AnyView(StickerTabView(packs: stickers, klipy: klipyStickers)) },
+            gifPanel: klipyGIFs.map { gifs -> @MainActor () -> AnyView in { AnyView(KlipyPanelView(model: gifs)) } },
             onOpenThread: openThread
         )
         .navigationBarTitleDisplayMode(.inline)
@@ -544,15 +592,14 @@ private struct TimelineScreen: View {
                 .accessibilityIdentifier("roomInfo")
             }
         }
-        .inspector(isPresented: Binding(
-            get: { usesInspector && details != nil },
-            set: { if !$0 { details = nil; Task { title = await root.roomName(room) ?? title } } }
-        )) {
-            if let model = details {
-                roomDetailsView(model)
-                    .inspectorColumnWidth(min: 300, ideal: 340, max: 420)
-            }
-        }
+        .modifier(RoomInfoInspector(
+            enabled: UIDevice.current.userInterfaceIdiom == .pad,
+            isPresented: Binding(
+                get: { usesInspector && details != nil },
+                set: { if !$0 { details = nil; Task { title = await root.roomName(room) ?? title } } }
+            ),
+            content: { if let model = details { roomDetailsView(model).inspectorColumnWidth(min: 300, ideal: 340, max: 420) } }
+        ))
         .sheet(item: Binding(
             get: { usesInspector ? nil : details },
             set: { details = $0 }
@@ -560,6 +607,50 @@ private struct TimelineScreen: View {
             roomDetailsView(model)
         }
         .task { title = await root.roomName(room) ?? "Unnamed room" }
+    }
+}
+
+/// The signed-in user's last known name and photo, so the avatar button is drawn on the first frame after launch.
+/// Stored in the app's shared store directory (same protection as the session store) and removed on sign-out.
+private struct OwnProfileCache: Codable {
+    var user: String?
+    var name: String?
+    var avatar: Data?
+
+    private static var url: URL {
+        HaloShared.storeDirectory().appendingPathComponent("halo", isDirectory: true).appendingPathComponent("own-profile.json")
+    }
+
+    static func load(user: String?) -> OwnProfileCache? {
+        guard let user, let data = try? Data(contentsOf: url),
+              let cached = try? JSONDecoder().decode(OwnProfileCache.self, from: data), cached.user == user else { return nil }
+        return cached
+    }
+
+    static func save(_ cache: OwnProfileCache) {
+        guard cache.user != nil, let data = try? JSONEncoder().encode(cache) else { return }
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    }
+
+    static func clear() { try? FileManager.default.removeItem(at: url) }
+}
+
+/// Room info as an iPad inspector column (D91). On iPhone the modifier isn't applied at all: an `.inspector` in compact
+/// width is itself a sheet presenter, and next to the room's real Room-info sheet it popped the room screen out of the
+/// navigation stack without updating the router's path (founder: "tap room avatar, then auto exit"; the next tap crashed
+/// with `AnyNavigationPath.Error.comparisonTypeMismatch`).
+private struct RoomInfoInspector<Inspector: View>: ViewModifier {
+    let enabled: Bool
+    @Binding var isPresented: Bool
+    @ViewBuilder let content: () -> Inspector
+
+    func body(content base: Content) -> some View {
+        if enabled {
+            base.inspector(isPresented: $isPresented) { content() }
+        } else {
+            base
+        }
     }
 }
 

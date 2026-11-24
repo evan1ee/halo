@@ -1,36 +1,67 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-22 · Branch: `main` · PRs #1–#75 merged
+Last updated: 2026-11-23 · Branch: `feat/keyboard-panels` (PR open) · PRs #1–#75 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
-- **Roadmap / Autonomous Loop:** **ALL autonomous engineering work across M0–M16, ADR-0022 steps 1–4 (D86), and Tech Debt Phases A–D is complete!** Only founder (`👤`) and physical-device (`📱`) items remain (listed in §5).
+- **Roadmap / Autonomous Loop:** all autonomous work across M0–M16, ADR-0022 and Tech Debt A–D is done; this push adds the **composer and keyboard panels** (D97) with **KLIPY GIF/sticker search** (D98) on `feat/keyboard-panels` ([docs/features/COMPOSER_PANELS.md](docs/features/COMPOSER_PANELS.md)). Only founder (`👤`) and physical-device (`📱`) items remain (§5).
 - **Milestones:** M0–M16 done except founder/device items (gates, Beta/Release push gateway + TestFlight, 7-day AC-U8 soak, physical-device NFR-1/NFR-2/MetricKit run, Q-BRAND sign-in artwork, Q-ONBOARD-SERVER, Q-L10N, Q-APPSTORE, legal/export/privacy labels). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`).
-- **Last prepush:** `HALO_SIM="iPhone Air" scripts/prepush.sh` (Halo closed in every simulator first): all steps passed (`HaloCore` 187 tests, `HaloApple-Package`, `Halo-Debug` on `iPhone Air` + `iPad Pro 13-inch (M5)`, `HaloUITests`, docs/boundaries/tokens, gitleaks, swiftlint 0 violations).
+- **Last prepush:** `HALO_SIM="iPhone Air" scripts/prepush.sh` (Halo closed in every simulator first): all steps passed (`HaloCore` 193 tests, `HaloApple-Package`, `Halo-Debug` on `iPhone Air`, `HaloUITests`, docs/boundaries/tokens, gitleaks, swiftlint 0 violations).
 - **CI:** PRs #1–#75 merged. Linux CI runs `HaloCore` tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
+- **Device UI testing on the founder's iPhone 16 (2026-11-23, founder: "empty room, app freeze · keyboard panel, shake · login takes time"):**
+  - *Empty-room freeze:* device hang logs (main thread 100 % CPU, watchdog kills) traced to the short-room top margin flipping on every layout pass (a List's scroll-geometry content height includes the margin; measured). `ShortRoomAlignment` now computes a fixed point, with an 8-changes-a-second guard. Rooms holding only setup events show "No messages yet" and load earlier pages by themselves until a message or the start (`openingPages`). Verified on the iPhone 16 in "Invite decline fixture" (`testEmptyRoomStaysResponsive`).
+  - *Keyboard/panel shake and "not smooth":* a debug-only frame trace (`ComposerMotionTrace`, `-halo.debug.composerTrace YES`) showed the field dipping 69–106 pt in every swap. The area under the composer now owns the keyboard height (D102; timeline always ignores the keyboard safe area) and moves with the keyboard's measured curve (ω ≈ 22/s, fitted at 60 Hz): swaps 0.0 pt on every drawn frame, opening the keyboard follows it within a frame. Drag on the conversation closes keyboard/panel (no interactive keyboard dismissal). The first panel's height estimate was refitted (was 4.3 pt short on the iPhone 16). Empty rooms show "No messages yet" as a list row (founder: text overlapped).
+  - *Test lessons:* `XCUIElement.typeText` can touch the screen and close the keyboard (not a user path); the composer and empty-room tests type with real key taps. The simulator's `stickertester` app was reset and signed in again (golden path) during this session.
+  - *Composer and settings (founder screenshot, 2026-11-23):* the send button now takes the mic's place outside the field, so a long message uses the field's width (only the face icon stays inside); the "No messages yet" row keeps its natural height (`fixedSize`), so its two-line description can no longer draw over the setup rows. The Focus filter is opt-in: Settings → Focus → "Follow Focus filters", default off (D104).
+  - *iPhone 16 run (2026-11-23, after D106):* UI suite 5 passed, 3 skipped by design. The launch audit failed only on iOS's hidden "Search" button of the floating search field (D96 amended; passes now). The paste test skips on a device because the test runner may not write the phone's pasteboard; paste was verified in the simulator and still needs a manual check on the phone. iPhone 17e not connected by cable (paired only).
+  - *iPad Pro 13" simulator (2026-11-23):* emoji panel, tabs, delete and send/expand swap checked by hand in the split view. UI suite: the composer test's `openFirstChat` doesn't find the iPad sidebar's list (test helper gap), the empty-room test's room had gained two messages from the golden-path run, and the golden path fails its audit on the sidebar's system search bar ("may be clipped at larger Dynamic Type sizes") — open item. *iPhone 17e:* the UI test runner exits 74 before connecting (UI Automation likely off on that phone); the current build is installed there for a manual check.
+  - *iPad Pro 11" and iPhone Air UI runs (2026-11-24, dev account signed in):* the sidebar-toggle failures were test bugs (the iPad's first navigation button hides the chat list; `returnToChatList` goes back only when needed); the empty-room test now also counts photo rows (other tests post photos there). The composer swap failure (`826 ≠ 513`) and the key-tap failures were environment, not product: some simulators have a hardware keyboard connected, so no software keyboard shows (keys exist off screen). `testComposerPanelsSwapWithKeyboard` and `testEmptyRoomStaysResponsive` now SKIP there (`requireSoftwareKeyboard`); a skip is not a pass. **Still unverified: those two tests with a real software keyboard on the current code** (the iPad Pro 11" passed them once, 2026-11-24, before the final edits; the 420 pt panel cap is unchanged: an iPad-keyboard-taller-than-cap theory is unproven). To run them: I/O → Keyboard → Connect Hardware Keyboard off (⇧⌘K) on the target simulator. NB: UI tests also skip, and xcodebuild still says succeeded, when the simulator is signed out or `TEST_RUNNER_HALO_UI_TEST_*` are not exported: read the skipped count.
+  - *Paste and tabs (D106):* pasting an image into the message field adds it as a pending photo (`ComposerImagePaste`, UI test `testPastedImageJoinsPendingPhotos`); the attachment tab bar fits narrow iPhones (17e) at large text sizes. The launching screen is now the plain background (no blue chat icon), and the saved navigation path is restored only if nothing was opened yet.
+  - *Launch and Room info (D105):* no lock/blur cover during a cold launch or the return to the app (only while leaving, for the switcher snapshot); own name and photo cached on the device so the avatar shows on the first frame; Room info no longer pops the room on iPhone (the iPad inspector modifier is applied on iPad only — it caused the pop and a `comparisonTypeMismatch` crash). Found while testing: `HaloFocusFilter.current` returns the default (People) when no filter is set, so the list was always narrowed before D104.
+  - *Launch:* a stored session is restored without server discovery (D103, AC-AUTH-2); on the iPhone 16 the session is ready at 0.21 s and 122 chats are listed at 0.23 s after the launch task starts. Sign-in in the simulator: ready 0.44 s, chats 1.3 s after tapping Sign in. The phone's "stale" list was a different test account (contractpeer), not a sync fault.
+  - Tests: `testEmptyRoomStaysResponsive`, `testSignedInLaunchOpensOnChats`, `testInspectRunningApp` (attach without relaunch), golden-path sign-in updated to the current screens with timing.
+- **Article tab (D101):** "article means markdown editor compose" (founder): fifth attachment tab opening a full-screen Markdown editor (`FeatureTimeline/ArticleComposer.swift`: Write/Preview, formatting bar, character count, ≤ 20,000) that sends one text message through the existing path (the SDK makes the formatted body); draft kept in memory (`articleDraft`). Pure helpers `HaloDomain/Timeline/ArticleMarkdown.swift` (+ `ArticleMarkdownTests`, `ArticleComposerTests`, UI test steps 6d/6e).
+- **Attachment tabs (D100):** Gallery · File · Location · Poll; `OutgoingLocation`/`OutgoingPoll`, `TimelineSession.sendLocation`/`createPoll` (adapter → SDK `send_location`/`create_poll`, fake, coordinator), `PollComposer` sheet, MapKit location tab (`NSLocationWhenInUseUsageDescription`). UI tests now dismiss by dragging (a tap could open a photo) and wait for the composer to settle; the full `HaloUITests` suite passes. Prepush caught the field taking focus back right after the face icon opened a panel (the keyboard returned by itself); `ComposerInputController` now resigns a focus gain within 500 ms of a panel opening (`refocusRightAfterOpening` test, composer UI test passed 3× with 0.0 pt drift).
+- **Telegram composer layout + voice messages (`feat/keyboard-panels`, D99):** face icon in the field, mic / ↑ / ↓ on the right (↑ expands an open panel to a tall sheet, measured by `testComposerPanelsSwapWithKeyboard`: composer 513 → 166 → 513 pt), send inside the field while typing; tap-to-record voice messages sent as `m.audio` (`VoiceRecorder`, `NSMicrophoneUsageDescription`). Tabs are Emoji · GIFs · Stickers, opening on Emoji. The keyboard height is remembered app-wide (`KeyboardHeightMemory`) so face icon → emoji → keyboard no longer moves the field (founder report). Fixes: a panel now resigns the keyboard explicitly (the focus binding alone sometimes left it up), KLIPY media downloads get 60 s and a failed KLIPY message shows tap-to-retry instead of a bare link.
+- **Composer and keyboard panels + KLIPY (`feat/keyboard-panels`, D97/D98):** Telegram-style composer in Halo's glass look (paperclip · field with emoji/sticker/GIF toggle · send) over one panel area where the keyboard, the expression panel (GIFs · Stickers · Emoji pill) and the attachment panel (inline Photos picker, File, Paste) swap without a jump (`ComposerInputState`/`ComposerInputController`/`ComposerPanelArea` in `HaloDesignSystem/InputPanel`). Full Unicode emoji set (`EmojiKeyboard`). KLIPY search/trending with favourites/recents (`KlipyCatalog`, `KlipyClient`, `KlipyShelfStore`, `KlipyPanelModel/View`); items are sent as E2EE text messages holding the unmodified KLIPY URL (KLIPY forbids re-hosting) and played inline (`KlipyMessageMedia`) when previews are allowed. Sticker sheet became the embedded Stickers tab (`StickerTabView`: My stickers | KLIPY); the encrypted-room sticker notice is unchanged. Key: `HALO_KLIPY_API_KEY` in git-ignored `ios/Config/Local.xcconfig` (founder's key set locally only).
 - **M4/M5 sticker panel & pack creation simulator UI check (`main`):** verified `stickers` & `createPack` contract tests against `infra/dev` and added `HaloUITests.testStickerPanelAndPackCreationFlow` on signed-in `iPhone Air`; fixed Dynamic Type clipping, contrast (`HaloColor.bgPrimary`/`textPrimary`), `.accessibilityHidden(true)` on sticker placeholder text, and 44×44 `+` hit target in `StickerPanelView`/`NewPackView`.
 - **M16 completion & timeline scroll follow-ups (`main`, `ae88d29..ce9073b`):**
   - iPad three-column layout (`RoomInfoPresentation` + `.inspector` column 300–420 pt + `⌘I`, sheet on compact/iPhone); `ChatsRouterSplitTests`.
   - Send-by-Siri (`SendMessageIntent` + `SiriSendCoordinator`, reuses D88 `ChatEntity`, confirmation before send, confirmed vs queued); `SiriSendCoordinatorTests`.
   - Drag items out of timeline (`TimelineDragExtractor`, `DraggedTimelineFile` for text/captions/notices/emotes, loaded photos, files ≤ 50 MiB); `TimelineDragTests`.
   - Timeline scroll follow-ups (`PrependedAnchor` preserves position on back-pagination; `ShortRoomAlignment` bottom-aligns short rooms above composer); `TimelineScrollHelpersTests`.
-- **Signed-in chat-list accessibility audit & local signing (`PR #74–#75`):** `AvatarTint` contrast ≥ 4.5:1 (`AvatarTests`), wrapping Media Gallery row, 44 pt Focus banner button, full-list audit in `HaloUITests` (D96); `ios/Config/Local.xcconfig` keeps `DEVELOPMENT_TEAM` out of git; removed deprecated `UIWindow(frame:)` in `WebAuthSessionPresenter`.
 
 ## 3. Key decisions
-Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D96), [docs/adr/README.md](docs/adr/README.md).
+Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D106), [docs/adr/README.md](docs/adr/README.md).
 - **D73 / D74 / D78–D80 (ADR-0020):** classic sync unread evidence, encrypted-room SDK counts decide, identity/timeline-index read ordering.
 - **D82 (ADR-0021):** app icon badge sums `RoomReadState.badgeCount` for `attention == true`.
 - **D83:** Global Media Gallery is a preset virtual room entry in the room list (not a tab, excluded from unread/badge).
 - **D84 / D85 / D86 (ADR-0022):** Apple-native north star; single `NavigationStack` shell; module layout v2 (all 4 steps complete).
 - **D95:** a room opens at its newest message; the first unread message stays marked and "Jump to unread" goes up to it.
+- **D97:** one input area: keyboard and Halo's panels swap under the composer without a jump; composer and panels are independent.
+- **D100:** attachment panel tabs Gallery · File · Location · Poll; location and polls via the SDK.
+- **D101:** Article tab: Markdown editor sending one formatted text message through the existing path.
+- **D102:** the area under the composer owns the keyboard height, moving with the keyboard's measured curve; swaps can't move the composer (no interactive keyboard drag).
+- **D103:** restore a stored session without server discovery (fast, offline-capable launch).
+- **D104:** the Focus filter narrows the chat list only when Settings → Follow Focus filters is on (default off).
+- **D106:** pasted images become pending photos; attachment tabs fit narrow iPhones.
+- **D105:** privacy cover only while leaving (no icon); cached own avatar; Room-info inspector on iPad only (fixes the iPhone pop/crash).
+- **D99:** Telegram composer layout (face icon, mic / ↑ / ↓, send in field) and voice messages as `m.audio`.
+- **D98:** GIF/sticker search via KLIPY from the device; sent as E2EE links to unmodified KLIPY URLs (no re-hosting); favourites/recents on device.
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
-- **Stickers UI & test + D96 audit update:** `FeatureStickers/{StickerPanelView,NewPackView}.swift`, `ios/UITests/HaloUITests.swift`, `docs/DECISION_LOG.md`, `docs/ROADMAP.md`, `HANDOFF.md`.
+- **Domain/Application:** `HaloDomain/Emoji/EmojiKeyboard.swift`, `HaloDomain/Klipy/KlipyModels.swift`, `HaloApplication/Klipy/KlipyCatalog.swift` (+ tests `EmojiKeyboardTests`, `KlipyModelsTests`, `KlipyCatalogTests`).
+- **Voice/expand (D99):** `FeatureTimeline/VoiceRecorder.swift` (new), `TimelineComposer`, `TimelineMediaViews`, `HaloDesignSystem/InputPanel/{ComposerInputState,ComposerInputController,ComposerPanelArea}`, `HaloPlatform/KlipyClient` (media timeout), `App/Support/Info(-Debug).plist` (microphone text), `docs/features/COMPOSER_PANELS.md` §2a, D99, PRIVACY.
+- **Platform/Design system:** `HaloPlatform/{KlipyClient,KlipyShelfStore}.swift`, `HaloDesignSystem/InputPanel/*`, `HaloDesignSystem/Media/AsyncAnimatedImage.swift` (+ `KlipyClientTests`, `ComposerInputStateTests`).
+- **Features:** `FeatureTimeline/{TimelineComposer,ComposerPanels}.swift` (new), `TimelineView`, `TimelineRow`, `TimelineMessageRowView`, `TimelineMediaViews`, `TimelineViewModel(+Actions)`; `FeatureStickers/{KlipyPanelModel,KlipyPanelView,StickerTabView}.swift` (new), `StickerPanelView` (embedded mode) (+ `ComposerKlipyTests`, `KlipyPanelModelTests`).
+- **App/config:** `App/{AppRoot,HaloApp}.swift`, `App/Composition/{ChatsAssembly,SessionAssembly}.swift`, `App/Support/Info(-Debug).plist`, `Config/{Base.xcconfig,Local.xcconfig.example}`; `UITests/HaloUITests.swift` (`testComposerPanelsSwapWithKeyboard`, `openFirstChat`).
+- **Focus opt-in (D104):** `HaloDomain/Ports/PreferencesPort`, `HaloApplication/Account/PreferencesStore`, `HaloPlatform/UserDefaultsPreferencesStore`, `FeatureSettings/{AppPreferences,SettingsView}`, `App/HaloApp.swift` (+ `AppPreferencesTests`, `UserDefaultsPreferencesStoreTests`); `docs/features/SETTINGS.md`.
+- **Docs:** `features/COMPOSER_PANELS.md` (new), `DECISION_LOG` (D97, D98), `SOURCES` (F-KLIPY-1), `OPEN_QUESTIONS` (Q-KLIPY-PROD, Q-KLIPY-REHOST), `security/{PRIVACY,SECURITY}.md`, `features/STICKERS.md`, `ROADMAP`, `README`.
 
 ## 5. Outstanding issues
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
@@ -39,6 +70,12 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 - **Timeline follow-up:** the room appears ~150 ms after the push starts (the list is hidden until placed).
 
 **Needs the founder (`👤`) or physical device (`📱`)**
+- 👤 **Q-KLIPY-PROD:** the KLIPY key is a testing key (100 requests/hour); request production access in KLIPY's Partner Panel before Beta 1. 👤 **Q-KLIPY-REHOST:** decide whether to ask KLIPY to approve sending GIFs as encrypted `m.image` instead of links.
+- 👤 **Merge PR #76:** all CI checks pass and prepush passed, but it adds a new third-party data flow (KLIPY, SECURITY/PRIVACY docs), which AUTONOMOUS_LOOP §3.4 leaves to the founder. Merge with `gh pr merge 76 --merge --delete-branch` once approved.
+- 📱 **UI tests on devices:** the iPhone 16 (`00008140-000222592ED0801C`, signed in as contractpeer on the LAN dev server) runs `HaloUITests` (composer, empty room, launch). The iPhone 17e still exited with code 74.
+- 📱 **Location, polls and articles:** send own location and a pin on a device, start a poll, send an article with headings/lists/code; check they render in Halo and Element (no live message was sent in the simulator).
+- 📱 **Voice messages on a device:** record, cancel and send one; check it plays in Halo and Element (the simulator has no microphone test here).
+- 📱 **Composer panels on a device:** keyboard ↔ panel swap verified on the iPhone 16 (0.0 pt per frame); still open: iPad floating/hardware keyboard, the composer following the keyboard when it opens from nothing (only end positions measured), and a KLIPY GIF into an encrypted room seen in Element as a link (AC-CP3). The simulator here does not refresh its display without a viewer, so checks ran through XCUITest screenshots.
 - 📱 **Opening rooms on the device (D95):** open S10 and other large rooms with photos 10+ times; each must land at the newest message with no frame of the room's top and no spinner; also from a notification tap and Spotlight, and in the iPad split view.
 - 👤 **Gate confirmations:** confirm **G-FFI**, **G-UNREAD**, and **G-NSE** pass outcomes ([docs/testing/GATE_EVALUATION_M3.md](docs/testing/GATE_EVALUATION_M3.md) §4).
 - 👤 **R-14 (filtering entitlement):** request Apple's `com.apple.developer.usernotifications.filtering` entitlement (V-PUSH-3).
@@ -60,25 +97,26 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 
 ## 6. Next steps
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §"Remaining work".
+0. Merge the `feat/keyboard-panels` PR once checks pass; founder tries the panels on the iPhone and requests KLIPY production access.
 1. Founder checks room opening on the device (`Halo-Debug` is installed on the iPhone) (§5 📱 "Opening rooms"); then the timeline follow-ups in §5 "Engineering".
 2. Founder resolves §5 items (gates, push gateway / APNs, Q-BRAND sign-in illustration, Q-APPSTORE, legal/export/privacy labels) and runs Beta 1 (internal TestFlight) on a physical device.
 3. Post-1.0 backlog (M16): all autonomous items complete (share extension, share-sheet sending, App Intents/Spotlight + Send-by-Siri, unread + unread-chats widgets, Focus filter, iPad two/three-column layout, keyboard shortcuts, drag-and-drop in and out). Calls will not be implemented (D94).
 
 ## 7. Next Session Prompt
 ```text
-Read AGENTS.md, HANDOFF.md, and docs/ROADMAP.md (§"Remaining work").
-All autonomous engineering work for M0–M16, ADR-0022 steps 1–4, and Tech Debt
-Phases A–D is complete and on main.
+Read AGENTS.md, HANDOFF.md, and docs/features/COMPOSER_PANELS.md.
+Last push: composer and keyboard panels (D97) with KLIPY GIF/sticker
+search (D98) on branch feat/keyboard-panels (PR open). KLIPY needs
+HALO_KLIPY_API_KEY in the git-ignored ios/Config/Local.xcconfig.
 
-Only founder (👤) and physical-device (📱) items remain in HANDOFF.md §5
-(gates, Beta/Release push gateway + TestFlight, Q-BRAND sign-in artwork,
-Q-ONBOARD-SERVER, Q-L10N, Q-APPSTORE, legal/export/privacy labels, 7-day
-AC-U8 soak, and physical-device NFR-1/NFR-2 metrics).
-Last pushes on main: timeline scroll anchor on prepend & short-room bottom
-alignment, M16 drag out of timeline, M16 Send-by-Siri (SendMessageIntent +
-SiriSendCoordinator), and M16 iPad three-column inspector layout (⌘I).
-Next: check the device/founder items in HANDOFF §5, or pick any bug report
-or release-prep task the founder raises.
+Next:
+1. If the PR is still open: check its CI, merge per AUTONOMOUS_LOOP §3.
+2. Device checks in HANDOFF §5 (composer panels AC-CP1/AC-CP3; simulator: composer at 513 pt with keyboard, panel and back, 0 pt drift), then the
+   other founder/device items there.
+3. Q-KLIPY-PROD / Q-KLIPY-REHOST are founder decisions; don't change the
+   link-sending design without one.
+Simulator note: drive UI through XCUITest (screenshots as attachments);
+the headless simulator display may not refresh for direct screenshots.
 Checks: HALO_SIM="iPhone Air" scripts/prepush.sh (close Halo in every
 simulator first).
 ```

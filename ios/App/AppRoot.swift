@@ -37,6 +37,8 @@ final class AppRoot {
     let receipts: ReadReceiptCoordinator
     let drafts: DraftCoordinator
     let stickers: StickerLibrary
+    /// KLIPY GIFs and stickers (D98); unavailable when the build has no `HALO_KLIPY_API_KEY`.
+    let klipy = KlipyCatalog(port: KlipyClient.configured())
     let botActivity: BotActivityCoordinator
     /// Ticks from Activity; kept for the app's life so a pending tick survives leaving the screen.
     lazy var botActions = BotActionCoordinator(

@@ -16,6 +16,7 @@ public struct UserDefaultsPreferencesStore: PreferencesPort, Sendable {
     public static let botSendersKey = "halo.botSenders"
     public static let lastSeenWhatsNewVersionKey = "halo.lastSeenWhatsNewVersion"
     public static let chatsInSystemSearchKey = "halo.chatsInSystemSearch"
+    public static let followFocusFilterKey = "halo.followFocusFilter"
 
     public init(defaults: UserDefaults = .standard) {
         box = Box(defaults: defaults)
@@ -30,7 +31,8 @@ public struct UserDefaultsPreferencesStore: PreferencesPort, Sendable {
             botSenders: d.stringArray(forKey: Self.botSendersKey) ?? [],
             appearance: AppAppearance(rawValue: d.string(forKey: Self.appearanceKey) ?? "") ?? .system,
             lastSeenWhatsNewVersion: d.string(forKey: Self.lastSeenWhatsNewVersionKey),
-            chatsInSystemSearch: d.bool(forKey: Self.chatsInSystemSearchKey)
+            chatsInSystemSearch: d.bool(forKey: Self.chatsInSystemSearchKey),
+            followFocusFilter: d.bool(forKey: Self.followFocusFilterKey)
         )
     }
 
@@ -43,5 +45,6 @@ public struct UserDefaultsPreferencesStore: PreferencesPort, Sendable {
         d.set(snapshot.appearance.rawValue, forKey: Self.appearanceKey)
         d.set(snapshot.lastSeenWhatsNewVersion, forKey: Self.lastSeenWhatsNewVersionKey)
         d.set(snapshot.chatsInSystemSearch, forKey: Self.chatsInSystemSearchKey)
+        d.set(snapshot.followFocusFilter, forKey: Self.followFocusFilterKey)
     }
 }

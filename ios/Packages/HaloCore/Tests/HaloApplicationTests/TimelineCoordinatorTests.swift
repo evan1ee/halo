@@ -213,3 +213,24 @@ struct TimelineCoordinatorTests {
         #expect(port.openedThreads(in: room) == [root])
     }
 }
+
+@Suite("TimelineCoordinator: location and poll (D100)")
+struct TimelineCoordinatorSharesTests {
+    @Test("a location and a poll go to the open session; a closed timeline refuses them")
+    func sends() async throws {
+        let port = FakeTimelinePort()
+        let room = try RoomID("!r:x.org")
+        port.addRoom(room, items: [])
+        let coordinator = TimelineCoordinator(port: port, room: room)
+        await coordinator.open()
+        for await status in await coordinator.statuses() { if case .live = status { break } }
+        let location = OutgoingLocation(latitude: 1, longitude: 2, isOwnLocation: true)
+        let poll = OutgoingPoll(question: "Q", answers: ["a", "b"])
+        try await coordinator.sendLocation(location)
+        try await coordinator.createPoll(poll)
+        #expect(port.sentLocations(in: room) == [location] && port.sentPolls(in: room) == [poll])
+        await #expect(throws: HaloError.invalidInput("POLL_TOO_FEW_ANSWERS")) { try await coordinator.createPoll(OutgoingPoll(question: "Q", answers: ["a"])) }
+        await coordinator.close()
+        await #expect(throws: HaloError.cancelled) { try await coordinator.sendLocation(location) }
+    }
+}

@@ -160,6 +160,18 @@ public actor TimelineCoordinator {
         try await session.sendFile(file)
     }
 
+    /// Sends a static location into the open timeline (D100).
+    public func sendLocation(_ location: OutgoingLocation) async throws(HaloError) {
+        guard let session, case .live = status else { throw .cancelled }
+        try await session.sendLocation(location)
+    }
+
+    /// Starts a poll in the open timeline (D100).
+    public func createPoll(_ poll: OutgoingPoll) async throws(HaloError) {
+        guard let session, case .live = status else { throw .cancelled }
+        try await session.createPoll(poll)
+    }
+
     /// The people who can be mentioned in the open room.
     public func members() async throws(HaloError) -> [RoomMember] {
         guard let session, case .live = status else { throw .cancelled }

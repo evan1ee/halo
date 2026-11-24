@@ -26,6 +26,9 @@ public struct PreferencesSnapshot: Sendable, Equatable, Codable {
     public var lastSeenWhatsNewVersion: String?
     /// `true`: joined chat names are offered to Siri, Shortcuts and Spotlight (M16, D88). Default `false`: opt-in, names leave the app.
     public var chatsInSystemSearch: Bool
+    /// `true`: a Focus's Halo filter (Settings → Focus → Halo) narrows the chat list while that Focus is on (M16, D90, D104).
+    /// Default `false`: the chat list always shows every chat.
+    public var followFocusFilter: Bool
 
     public init(
         privateReceipts: Bool = false,
@@ -34,7 +37,8 @@ public struct PreferencesSnapshot: Sendable, Equatable, Codable {
         botSenders: [String] = [],
         appearance: AppAppearance = .system,
         lastSeenWhatsNewVersion: String? = nil,
-        chatsInSystemSearch: Bool = false
+        chatsInSystemSearch: Bool = false,
+        followFocusFilter: Bool = false
     ) {
         self.privateReceipts = privateReceipts
         self.sendTypingNotices = sendTypingNotices
@@ -43,6 +47,7 @@ public struct PreferencesSnapshot: Sendable, Equatable, Codable {
         self.appearance = appearance
         self.lastSeenWhatsNewVersion = lastSeenWhatsNewVersion
         self.chatsInSystemSearch = chatsInSystemSearch
+        self.followFocusFilter = followFocusFilter
     }
 }
 

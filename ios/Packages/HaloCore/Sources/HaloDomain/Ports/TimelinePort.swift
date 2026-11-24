@@ -87,6 +87,10 @@ public protocol TimelineSession: Sendable {
     /// Uploads a file, audio or video clip unchanged and sends it as `m.file`, `m.audio` or `m.video`; returns when it is sent.
     /// `.invalidInput` for an invalid file (see `OutgoingFile.validate`).
     func sendFile(_ file: OutgoingFile) async throws(HaloError)
+    /// Sends a static location as `m.location` (D100). `.invalidInput` for coordinates out of range.
+    func sendLocation(_ location: OutgoingLocation) async throws(HaloError)
+    /// Starts a poll (`m.poll.start`, D100). `.invalidInput` for an invalid poll (see `OutgoingPoll.validate`).
+    func createPoll(_ poll: OutgoingPoll) async throws(HaloError)
 
     /// Sends a failed local echo again (`TimelineEvent.localID`). Throws `.notFound` if the echo is gone (it was sent or deleted meanwhile).
     func retrySend(localID: String) async throws(HaloError)

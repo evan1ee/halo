@@ -54,7 +54,7 @@ app killed during OIDC (the callback arrives on relaunch — discard it if there
 
 ## 11. Acceptance criteria
 - AC-AUTH-1 Password login on the dev Synapse reaches the room list.
-- AC-AUTH-2 Killing and relaunching the app restores without the network.
+- AC-AUTH-2 Killing and relaunching the app restores without the network (D103: the stored homeserver URL is used as is; before 2026-11-23 the restore ran server discovery first, which needed the network). `HaloUITests.testSignedInLaunchOpensOnChats` times a cold launch to the first chat row.
 - AC-AUTH-3 Revoking the token on the server → soft-logout sheet; after re-auth, cached rooms are still there.
 - AC-AUTH-4 Logout removes every per-account file and Keychain item (checked by a test that lists the container).
 

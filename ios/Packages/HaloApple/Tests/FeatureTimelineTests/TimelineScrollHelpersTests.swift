@@ -53,74 +53,32 @@ struct PrependedAnchorTests {
 
 @Suite("ShortRoomAlignment")
 struct ShortRoomAlignmentTests {
-    @Test("pushes a short room down so its newest message sits just above the composer")
+    /// The List reports content height including the margin in effect (measured: 97 → 397 with a 300 pt margin).
+    private func margin(top: Double = 122, bottom: Double = 90, room: Double, current: Double = 0, canLoadEarlier: Bool = false) -> Double {
+        ShortRoomAlignment.topMargin(containerHeight: 912, topInset: top, bottomInset: bottom, contentHeight: room + current,
+                                     currentMargin: current, canLoadEarlier: canLoadEarlier)
+    }
+
+    @Test("pushes a short room down so its newest row sits just above the composer")
     func alignsShortRoomToBottom() {
-        let margin = ShortRoomAlignment.topMargin(
-            containerHeight: 852,
-            topInset: 100,
-            bottomInset: 96,
-            contentHeight: 140,
-            currentMargin: 0,
-            canLoadEarlier: false
-        )
-        #expect(margin == 516)
+        #expect(margin(room: 97) == 603)
     }
 
-    @Test("reaches a stable fixed point once the margin is applied")
-    func stableFixedPoint() {
-        let next = ShortRoomAlignment.topMargin(
-            containerHeight: 852,
-            topInset: 616,  // 100 base + 516 applied
-            bottomInset: 96,
-            contentHeight: 140,
-            currentMargin: 516,
-            canLoadEarlier: false
-        )
-        #expect(next == 516)
+    @Test("applying the margin gives the same margin again, whatever was applied before (no layout loop)")
+    func fixedPoint() {
+        let first = margin(room: 97)
+        #expect(margin(room: 97, current: first) == first)
+        #expect(margin(room: 97, current: 300) == first)
+        #expect(margin(room: 97, current: 100) == first)
     }
 
-    @Test("shrinks as messages arrive or the keyboard opens, and drops to zero once full")
+    @Test("shrinks as rows arrive or the keyboard opens, and is zero once full, while history can load, or with no content")
     func shrinksAndClears() {
-        let afterMessage = ShortRoomAlignment.topMargin(
-            containerHeight: 852,
-            topInset: 616,
-            bottomInset: 96,
-            contentHeight: 190,
-            currentMargin: 516,
-            canLoadEarlier: false
-        )
-        #expect(afterMessage == 466)
-
-        let withKeyboard = ShortRoomAlignment.topMargin(
-            containerHeight: 852,
-            topInset: 566,  // 100 base + 466 applied
-            bottomInset: 380,
-            contentHeight: 190,
-            currentMargin: 466,
-            canLoadEarlier: false
-        )
-        #expect(withKeyboard == 182)
-
-        let fullRoom = ShortRoomAlignment.topMargin(
-            containerHeight: 852,
-            topInset: 100,
-            bottomInset: 96,
-            contentHeight: 700,
-            currentMargin: 0,
-            canLoadEarlier: false
-        )
-        #expect(fullRoom == 0)
-    }
-
-    @Test("stays zero while earlier history can still load or when empty")
-    func zeroWhilePaginatingOrEmpty() {
-        #expect(ShortRoomAlignment.topMargin(
-            containerHeight: 852, topInset: 100, bottomInset: 96,
-            contentHeight: 140, currentMargin: 0, canLoadEarlier: true
-        ) == 0)
-        #expect(ShortRoomAlignment.topMargin(
-            containerHeight: 852, topInset: 100, bottomInset: 96,
-            contentHeight: 0, currentMargin: 0, canLoadEarlier: false
-        ) == 0)
+        #expect(margin(room: 147, current: 603) == 553)
+        #expect(margin(bottom: 380, room: 147, current: 553) == 263)
+        #expect(margin(room: 800) == 0)
+        #expect(margin(room: 97, canLoadEarlier: true) == 0)
+        #expect(margin(room: 0) == 0)
     }
 }
+

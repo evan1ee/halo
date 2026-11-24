@@ -35,6 +35,7 @@ extension AppRoot {
                     await readState.attach(records: recordStore)
                     await receipts.restore(from: ReadIntentStore(database: database, account: user))
                     await drafts.attach(DraftStore(database: database, account: user))
+                    await klipy.attach(KlipyShelfStore(account: user))
                     await botActivity.attach(BotTaskStore(database: database, account: user))
                     #if DEBUG
                     let log = log
@@ -74,6 +75,7 @@ extension AppRoot {
         await drafts.reset()
         await botActivity.reset()
         await stickers.reset()
+        await klipy.reset()
         await timelinePort.dropWarm()
         searchPort.reset()
         preferences.botSenders = []
