@@ -1,26 +1,25 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-24 · Branch: `feat/field-encryption-pushkin-decisions` · PRs #1–#80 merged
+Last updated: 2026-11-24 · Branch: `docs/release-prep-and-founder-decisions` · PRs #1–#81 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
-- **Roadmap / Autonomous Loop:** all autonomous work across M0–M16, ADR-0022, Tech Debt A–D (including TD-12), and the Halo Sygnal pushkin (`infra/sygnal/`, R-24) is complete; gates G-FFI, G-UNREAD, and G-NSE are confirmed PASS (D109). Only remaining founder (`👤`) and physical-device (`📱`) items live in §5.
-- **Milestones:** M0–M16 done except remaining founder/device items (Beta/Release push gateway deploy + APNs keys + TestFlight, 7-day AC-U8 soak, physical-device NFR-1/NFR-2/MetricKit run, Q-KLIPY-PROD, Q-BRAND sign-in artwork, Q-APPSTORE, legal/export/privacy labels). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`).
-- **Last checks (`feat/field-encryption-pushkin-decisions`):** `infra/sygnal` pushkin unit tests (4/4), `validate-docs.sh`, `check-boundaries.sh`, `test_check_boundaries.py` (5/5), `check-design-tokens.sh`, `gitleaks`, `swiftlint --strict` (268 files, 0 violations), `HaloPersistenceTests` (including `FieldCipherTests`), and `Halo-Debug` simulator build all passed (`HaloUITests` not re-run; passed in PR #80).
-- **CI:** PRs #1–#80 merged. Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
+- **Roadmap / Autonomous Loop:** all autonomous work across M0–M16, ADR-0022, Tech Debt A–D (including TD-12), the Halo Sygnal pushkin (`infra/sygnal/`, R-24), and release documentation (`docs/release/`, D115) is complete; all open product decisions in `OPEN_QUESTIONS.md` are resolved (`D108–D117`). Only external-account / legal (`👤`) and physical-device (`📱`) items remain (§5).
+- **Milestones:** M0–M16 done except external/device items (deploy `infra/sygnal/` + APNs keys + TestFlight, 7-day AC-U8 soak, physical-device NFR-1/NFR-2/MetricKit run, Q-KLIPY-PROD portal request, publish `docs/release/` privacy/support URLs, final Beta 2 brand artwork, legal/export review). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`).
+- **Last checks (`docs/release-prep-and-founder-decisions`):** `validate-docs.sh`, `check_handoff.py structure` & `commit HEAD`, and `gitleaks` passed (docs-only change; code/tests passed on PR #80 and PR #81).
+- **CI:** PRs #1–#81 merged. Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
-- **Field encryption, Sygnal pushkin & founder decisions (2026-11-24, `feat/field-encryption-pushkin-decisions`, D108–D112):**
-  - Implemented AES-256-GCM field encryption (`FieldCipher`, `KeychainItem.haloDatabaseKey`, `"enc:v1:"` envelopes with transparent plaintext read-through) for `draft.body`, `bot_task.title`, and `bot_task.detail` in `DraftStore`/`BotTaskStore`/`SessionAssembly`, with `FieldCipherTests` (closes TD-12 / R-16 / NFR-7, D108).
-  - Implemented Halo Sygnal APNs pushkin in `infra/sygnal/` (`halo_pushkin.py`, `Dockerfile`, `sygnal.yaml.example`, `README.md`, `test_halo_pushkin.py`, `.github/workflows/pushkin.yml`, pinned to `matrixdotorg/sygnal:v0.15.1`; D112 / ADR-0015 Option 1).
-  - Recorded founder decisions: confirmed PASS for G-FFI / G-UNREAD / G-NSE (D109), resolved `Q-ONBOARD-SERVER` (D110) and `Q-L10N` (D111).
+- **Release docs & remaining founder decisions (2026-11-24, `docs/release-prep-and-founder-decisions`, D113–D117):**
+  - Scaffolded `docs/release/{APP_STORE_METADATA,PRIVACY_POLICY,SUPPORT}.md` grounded in `PRIVACY.md` and `PrivacyInfo.xcprivacy` (D115).
+  - Recorded founder decisions closing `Q-SDK-BUILD` (D113), `Q-CRASH` (D114), `Q-BRAND`/`Q-APPSTORE` Beta 1 (D115), `Q-KLIPY-REHOST` (D116), and `Q-MAS-ACCOUNT`/`Q-E2EE-STRATEGY`/`Q-BOT-OWNER`/`Q-ACT-REFRESH` (D117).
+- **Field encryption, Sygnal pushkin & founder decisions (2026-11-24, PR #81, D108–D112):**
+  - Implemented AES-256-GCM field encryption (`FieldCipher`, `KeychainItem.haloDatabaseKey`, `"enc:v1:"` envelopes) for `draft.body`, `bot_task.title`, and `bot_task.detail` with `FieldCipherTests` (closes TD-12 / R-16 / NFR-7, D108).
+  - Implemented Halo Sygnal APNs pushkin in `infra/sygnal/` (`halo_pushkin.py`, `Dockerfile`, `sygnal.yaml.example`, `test_halo_pushkin.py`, `.github/workflows/pushkin.yml`; D112 / ADR-0015 Option 1); confirmed PASS for G-FFI / G-UNREAD / G-NSE (D109) and resolved `Q-ONBOARD-SERVER` (D110) / `Q-L10N` (D111).
 - **UI test regressions, design tokens & doc cleanup (2026-11-24, PR #80):**
-  - Fixed `HaloUITests` detecting the borderless Chats root header (`chatsRoot(app)` checks `app.buttons["settings"]`) and guarded `testComposerPanelsSwapWithKeyboard` with `requireSoftwareKeyboard(app)` when a hardware keyboard is attached (6 passed, 0 failures).
-  - Fixed 4 `check-design-tokens.sh` violations (`HaloColor.onAccent`, `HaloTypography.caption`), removed dead `sleep` property from `RoomDetailsViewModel`, and cleaned stale notes in `OUTSTANDING_ISSUES.md` and `HANDOFF.md`.
-- **Pin reload & jump-to-bottom arrow bug fixes (2026-11-24, `main`):**
-  - Fixed pinned messages disappearing on room re-entry (`TimelineCoordinator.pinnedEventIDs()`, regression test `PinMessageTests.reenteringRoomKeepsPins`) and jump-to-bottom arrow disappearing on early scroll/jump in `TimelineView`.
+  - Fixed `HaloUITests` borderless Chats root detection (`chatsRoot(app)`), guarded `testComposerPanelsSwapWithKeyboard` with `requireSoftwareKeyboard(app)`, fixed 4 `check-design-tokens.sh` violations, and cleaned dead code/stale docs.
 
 ## 3. Key decisions
 Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D107), [docs/adr/README.md](docs/adr/README.md).
@@ -42,9 +41,8 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D107), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
-- **Persistence & App (`HaloApple`, `ios/App`):** `HaloPersistence/{FieldCipher,DraftStore,BotTaskStore}.swift`, `Tests/HaloPersistenceTests/FieldCipherTests.swift`, `ios/App/Composition/SessionAssembly.swift`.
-- **Pushkin & CI:** `infra/sygnal/{halo_pushkin.py,test_halo_pushkin.py,Dockerfile,sygnal.yaml.example,README.md}`, `.github/workflows/pushkin.yml`.
-- **Docs:** `docs/DECISION_LOG.md`, `docs/testing/GATE_EVALUATION_M3.md`, `docs/adr/0015-count-only-pushes.md`, `docs/OPEN_QUESTIONS.md`, `docs/ROADMAP.md`, `docs/development/TECH_DEBT.md`, `HANDOFF.md`.
+- **Release docs:** `docs/release/{APP_STORE_METADATA,PRIVACY_POLICY,SUPPORT}.md`.
+- **Docs:** `docs/DECISION_LOG.md`, `docs/OPEN_QUESTIONS.md`, `docs/ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
@@ -53,7 +51,7 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 - **Timeline follow-up:** the room appears ~150 ms after the push starts (the list is hidden until placed); an own thumbnail is downloaded once after an app restart (SDK caches the file under the new reference, thumbnails under their own key).
 
 **Needs the founder (`👤`) or physical device (`📱`)**
-- 👤 **Q-KLIPY-PROD:** the KLIPY key is a testing key (100 requests/hour); request production access in KLIPY's Partner Panel before Beta 1. 👤 **Q-KLIPY-REHOST:** decide whether to ask KLIPY to approve sending GIFs as encrypted `m.image` instead of links.
+- 👤 **Q-KLIPY-PROD:** the KLIPY key is a testing key (100 requests/hour); request production access in KLIPY's Partner Panel before Beta 1.
 - 📱 **UI tests on devices:** the iPhone 16 (`00008140-000222592ED0801C`, signed in as contractpeer on the LAN dev server) runs `HaloUITests` (composer, empty room, launch). The iPhone 17e still exited with code 74.
 - 📱 **Location, polls and articles:** send own location and a pin on a device, start a poll, send an article with headings/lists/code; check they render in Halo and Element (no live message was sent in the simulator).
 - 📱 **Voice messages on a device:** record, cancel and send one; check it plays in Halo and Element (the simulator has no microphone test here).
@@ -62,7 +60,7 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 - 👤 **R-14 (filtering entitlement):** request Apple's `com.apple.developer.usernotifications.filtering` entitlement (V-PUSH-3).
 - 👤 **R-18 & R-21 (upstream SDK gaps):** `SyncSettingsV2` filter and queued `sendRaw`/`sendSticker` need upstream `matrix-rust-sdk` PR + SDK bump.
 - 👤 **R-24 (Beta/Release push gateway deploy):** deploy `infra/sygnal/` (D112) with APNs keys, verify V-PUSH-5 live, and upload Beta 1 to TestFlight.
-- 👤 **UX/ship open questions (D84):** **Q-BRAND** (sign-in illustration; halo disc `AppIcon` landed), **Q-APPSTORE** (App Store metadata, privacy policy & support pages), legal review (D38), export compliance (V-LEGAL), privacy nutrition labels ([docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md)).
+- 👤 **UX/ship external items (D84, D115):** publish `docs/release/{PRIVACY_POLICY,SUPPORT}.md` with founder domain/contact, final Beta 2 brand artwork (`Q-BRAND`), legal review (D38), export compliance (V-LEGAL), and App Store Connect privacy nutrition labels.
 - 📱 **Drag and drop (iPad):** drop a photo, a PDF and a link from Photos/Files/Safari into an open chat, and drag text, a photo, and a file out of a chat (also Split View with another app); a > 50 MiB file shows the size error.
 - 📱 **Keyboard shortcuts (iPad/hardware keyboard):** ⌘N, ⌘,, ⌘F, ⌘1–⌘6 work and ⌘F focuses the search field.
 - 📱 **Unread chats widget (device, D93):** add the medium widget with the setting on and off; names hidden on a locked screen.
@@ -77,23 +75,21 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 
 ## 6. Next steps
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §"Remaining work".
-1. Review and merge `feat/field-encryption-pushkin-decisions` once CI passes.
-2. Founder checks room opening, composer panels, voice/location/poll/article sending, iPad split/inspector, widgets, Focus filter, Siri/Spotlight, and Share extension on physical devices (§5 📱).
-3. Founder resolves remaining §5 👤 items (deploy `infra/sygnal/` + APNs keys + V-PUSH-5, Q-KLIPY-PROD, Q-BRAND sign-in illustration, Q-APPSTORE, legal/export/privacy labels) and runs Beta 1 (internal TestFlight) on a physical device.
-4. Post-1.0 backlog (M16): all autonomous items complete; calls will not be implemented (D94).
+1. Founder deploys `infra/sygnal/` + APNs keys, requests KLIPY production access (`Q-KLIPY-PROD`), and uploads Beta 1 to internal TestFlight.
+2. Founder runs physical-device checks in §5 📱 (room opening, composer panels, voice/location/poll/article sending, iPad split/inspector, widgets, Focus filter, Siri/Spotlight, Share extension, 7-day AC-U8 soak, NFR-1/NFR-2 perf).
+3. Before Beta 2 / 1.0: publish `docs/release/{PRIVACY_POLICY,SUPPORT}.md`, finalize Beta 2 brand artwork, and complete legal/export compliance.
 
 ## 7. Next Session Prompt
 ```text
 Read AGENTS.md and HANDOFF.md.
-All autonomous engineering work across M0–M16, ADR-0022, Tech Debt A–D
-(including TD-12 AES-GCM field encryption, D108), and the Halo Sygnal pushkin
-(infra/sygnal/, D112) is complete; gates G-FFI/G-UNREAD/G-NSE are confirmed
-PASS (D109). Latest branch: feat/field-encryption-pushkin-decisions.
+All autonomous engineering work, technical debt (including TD-12 AES-GCM
+field encryption, D108), Halo Sygnal pushkin (infra/sygnal/, D112), gate
+confirmations (D109), release docs (docs/release/, D115), and open product
+decisions (D108–D117) are complete on main.
 
 Next:
-1. If the feat/field-encryption-pushkin-decisions PR is open, check CI and merge.
-2. Proceed with remaining founder/device items in HANDOFF.md §5 (Beta 1 push
-   gateway deploy + V-PUSH-5, TestFlight, Q-BRAND, Q-APPSTORE) or new requests.
+Proceed with physical-device / Beta 1 TestFlight checks in HANDOFF.md §5,
+or any new feature, polish, or bug fix requested by the founder.
 Checks: HALO_SIM="iPhone Air" scripts/prepush.sh (or isolated CLI DerivedData
 under /tmp/halo-cli-dd when Xcode IDE is open).
 ```

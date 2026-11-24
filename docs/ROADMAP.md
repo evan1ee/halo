@@ -59,8 +59,8 @@ Ordered work queue for the autonomous loop ([development/AUTONOMOUS_LOOP.md](dev
 - [x] In-app feedback: Settings → "Send feedback" (`FeedbackSheetView`) opens a share sheet with optional, opt-in diagnostics `.zip` (never automatic; PRIVACY §1); TestFlight screenshot feedback mentioned in What's New.
 - [x] "What's New" sheet (`WhatsNewView`) shown once per marketing version via `PreferencesPort.lastSeenWhatsNewVersion`, plus About section links (Privacy policy, Support, What's New).
 - [ ] 📱 Performance budgets on a physical device with XCTest metrics (`testLaunchPerformanceMetric` in `HaloUITests` ready; cold start ≤ 1 s for 300 rooms NFR-1, scroll hitch < 5 ms/s NFR-2, memory < 200 MB, MetricKit reports need physical device).
-- [ ] 👤 Q-APPSTORE: name, subtitle, category, age rating, keywords; screenshots (6.9" and 6.3", light and dark) generated from the M14 UI test with fixture data; support and privacy-policy pages.
-- [ ] 👤 Legal review (D38), export compliance (V-LEGAL), privacy nutrition labels (PRIVACY §5), Q-SDK-BUILD and Q-CRASH decided before external testers.
+- [ ] 👤 Q-APPSTORE (scaffolded in `docs/release/`, D115): fill domain/contact placeholders, publish support and privacy-policy URLs, and capture 6.9"/6.3" Light/Dark screenshots before Beta 2.
+- [ ] 👤 Legal review (D38), export compliance (V-LEGAL), and App Store Connect privacy nutrition labels before external testers (`Q-SDK-BUILD` D113 and `Q-CRASH` D114 decided).
 - [ ] 👤📱 Beta 1 (internal TestFlight) → Beta 2 (external TestFlight, ≤ 25 trusted testers) → 1.0 App Store, per the release plan below.
 
 **Tech debt (paid down alongside M11–M15; scores and evidence in [development/TECH_DEBT.md](development/TECH_DEBT.md))**
