@@ -140,6 +140,7 @@ public struct TimelineView: View {
                     }
                 }
                 .listStyle(.plain)
+                .scrollEdgeEffectHidden(true, for: .top)
                 // A finger dragging the conversation closes the keyboard or panel (the drag gesture below). The list itself
                 // never dismisses the keyboard: a programmatic move (a short room's margin changing as the keyboard rises)
                 // would count as a scroll, and with interactive dismissal the composer could not follow the finger (it
@@ -296,18 +297,25 @@ public struct TimelineView: View {
                         } label: {
                             if model.newSinceDetached > 0 {
                                 Label("\(model.newSinceDetached) new", systemImage: "arrow.down")
-                                    .font(.footnote.bold())
-                                    .padding(.horizontal, 12).padding(.vertical, 8)
-                                    .background(.regularMaterial, in: Capsule())
+                                    .font(HaloTypography.meta.weight(.bold))
+                                    .foregroundStyle(HaloColor.textPrimary)
+                                    .padding(.horizontal, HaloSpacing.m)
+                                    .padding(.vertical, HaloSpacing.s)
+                                    .contentShape(.capsule)
+                                    .glassEffect(.regular.interactive(), in: .capsule)
                             } else {
                                 Image(systemName: "arrow.down")
-                                    .font(.footnote.bold())
+                                    .font(HaloTypography.meta.weight(.bold))
+                                    .foregroundStyle(HaloColor.textPrimary)
                                     .frame(width: 34, height: 34)
-                                    .background(.regularMaterial, in: Circle())
+                                    .contentShape(.circle)
+                                    .glassEffect(.regular.interactive(), in: .circle)
+                                    .frame(width: 44, height: 44)
                             }
                         }
-                                                .padding(.trailing, 16)
-                        .padding(.bottom, 12)
+                        .buttonStyle(.plain)
+                        .padding(.trailing, HaloSpacing.s)
+                        .padding(.bottom, HaloSpacing.m)
                         .accessibilityLabel(model.newSinceDetached > 0 ? "\(model.newSinceDetached) new messages, jump to bottom" : "Jump to bottom")
                         .accessibilityIdentifier("jump-to-bottom")
                     }

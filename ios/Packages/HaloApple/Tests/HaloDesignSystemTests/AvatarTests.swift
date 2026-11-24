@@ -53,4 +53,18 @@ struct AvatarTests {
         #expect(AvatarTint.hue(for: "S10") == AvatarTint.hue(for: "S10"))
         #expect(AvatarTint.hues.contains(AvatarTint.hue(for: "S10")))
     }
+
+    #if canImport(SwiftUI)
+    @Test("circular outer frame geometry leaves a proportional ring and positive inner diameter")
+    func circularFrameGeometry() {
+        #expect(AvatarCircle.ringInset(for: 52) == 5)
+        #expect(AvatarCircle.innerDiameter(for: 52) == 42)
+        #expect(AvatarCircle.ringInset(for: 80) == 8)
+        #expect(AvatarCircle.innerDiameter(for: 80) == 64)
+        #expect(AvatarCircle.ringInset(for: 14) == 1.5)
+        #expect(AvatarCircle.innerDiameter(for: 14) == 11)
+        #expect(AvatarCircle.borderWidth(for: 52) >= 0.75)
+        #expect(AvatarCircle.borderWidth(for: 80) <= 1.5)
+    }
+    #endif
 }

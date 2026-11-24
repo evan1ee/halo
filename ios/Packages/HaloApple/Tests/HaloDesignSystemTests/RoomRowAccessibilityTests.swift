@@ -64,6 +64,21 @@ struct RoomRowAccessibilityTests {
         #expect(approx == "Encrypted, unread messages")
     }
 
+    @Test("splits sender prefixes from multi-line and single-line previews while ignoring plain text and URLs")
+    func previewPrefixSplit() {
+        let own = RoomRow<EmptyView>.splitPreviewPrefix("You: Image")
+        #expect(own?.prefix == "You:")
+        #expect(own?.body == " Image")
+
+        let multiline = RoomRow<EmptyView>.splitPreviewPrefix("shirdn: port: 7890\nsocks-port: 7891...")
+        #expect(multiline?.prefix == "shirdn:")
+        #expect(multiline?.body == " port: 7890\nsocks-port: 7891...")
+
+        #expect(RoomRow<EmptyView>.splitPreviewPrefix("Plain message without sender") == nil)
+        #expect(RoomRow<EmptyView>.splitPreviewPrefix("https://example.com/a: b") == nil)
+        #expect(RoomRow<EmptyView>.splitPreviewPrefix("First line\nSecond: line") == nil)
+    }
+
     @Test("Localizable.xcstrings exists and is a valid String Catalog with English source language")
     func stringCatalogIsValid() throws {
         let catalog = URL(fileURLWithPath: #filePath)

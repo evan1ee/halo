@@ -1,6 +1,6 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-23 · Branch: `feat/seamless-media-send` (stacked on `feat/keyboard-panels`, not pushed) · PRs #1–#75 merged
+Last updated: 2026-11-24 · Branch: `feat/room-list-avatar-style` · PRs #1–#75 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
@@ -12,6 +12,12 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
+- **Room list, avatar, floating header, jump button & media gallery polish (2026-11-24, `feat/room-list-avatar-style`):**
+  - *Room list (`RoomRow`, `RoomListView`):* switched to `.listStyle(.plain)` with text-aligned dividers, hid the top section separator (`.listSectionSeparator(.hidden, edges: .top)`), enlarged room list avatars to clean borderless `52 pt` circles, stacked `UnreadIndicator` directly under the trailing date, and enabled 2-line previews with emphasized sender prefixes (`RoomRow.splitPreviewPrefix`).
+  - *Toolbar avatars & floating headers (`HaloApp`, `AvatarCircle`, `RoomListView`, `TimelineView`, `RoomDetailsView`):* replaced the top-leading yellow `verify-dot` with a `2 pt` `HaloColor.warning` border on the `30 pt` user avatar inside an exact `44 × 44` circular Liquid Glass button (`.sharedBackgroundVisibility(.hidden)` + `.glassEffect(.regular.interactive(), in: .circle)`), applied the same `44 × 44` circular glass treatment to the timeline room avatar, removed navigation titles on home, conversation, and room info screens, and hid the top navigation bar background and scroll-edge blur (`.toolbarBackgroundVisibility(.hidden, for: .navigationBar)`, `.scrollEdgeEffectHidden(true, for: .top)`) so only the floating icons sit above scrolling content.
+  - *Timeline jump-to-bottom button (`TimelineView`):* applied `.glassEffect(.regular.interactive(), in: .circle)` at `34 × 34` with `HaloColor.textPrimary` arrow, centered inside a `44 × 44` frame aligned to the voice button circle below.
+  - *Global Media Gallery (`GlobalMediaGalleryView`):* fixed overlapping/overflowing `LazyVGrid` tiles by anchoring each cell to `HaloColor.bgSecondary.aspectRatio(1, contentMode: .fit)` with `.overlay { image.scaledToFill() }.clipped().contentShape(.rect)` and increased thumbnail requests to `400` px.
+  - *Checks:* `check-boundaries.sh`, `validate-docs.sh`, `HaloDesignSystemTests` + `FeatureRoomListTests` (35 tests), `FeatureTimelineTests` (99 tests), and `Halo-Debug` iOS Simulator build passed; `HaloUITests` and `HaloCore` not run (core untouched).
 - **Seamless photo send + unified delivery state (2026-11-24, D107, founder: "image disappears then comes back"):** measured against Synapse: the SDK confirms a local echo as `remove` + `pushBack` of the same unique ID, so SwiftUI rebuilt the row and its empty thumbnail re-downloaded. Fixed by `TimelineDiffCoalescer` (adapter folds the pair into one `set`) and `TimelineThumbnailMemory` (rebuilt views paint at once; the echo's picture is adopted for the confirmed reference). Disk cache stays the SDK's encrypted media store. Own messages of every kind show spinner → check circle → readers' avatars (`TimelineRow.Delivery`, `DeliveryIndicator`). The "empty circle" in the founder's screenshot matches nothing in this branch (likely an avatar without a picture or an older build). Tests: `TimelineDiffCoalescerTests`, contract `sentImageNeverLeavesTheList` (fails without the fix), `MessageDeliveryTests`, `TimelineThumbnailMemoryTests`, UI `testSentPhotoStaysVisibleAndShowsDeliveryState`. Not tested: an E2EE room end to end, a physical device.
   - *Prepush (iPhone Air):* HaloCore, HaloApple-Package, Halo-Debug build, docs, boundaries, tokens, gitleaks, swiftlint passed; `HaloUITests` failed only `testComposerPanelsSwapWithKeyboard` and `testEmptyRoomStaysResponsive` (the known unresolved ones, not touched here).
 - **Device UI testing on the founder's iPhone 16 (2026-11-23, founder: "empty room, app freeze · keyboard panel, shake · login takes time"):**
@@ -57,13 +63,10 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D107), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
-- **Domain/Application:** `HaloDomain/Emoji/EmojiKeyboard.swift`, `HaloDomain/Klipy/KlipyModels.swift`, `HaloApplication/Klipy/KlipyCatalog.swift` (+ tests `EmojiKeyboardTests`, `KlipyModelsTests`, `KlipyCatalogTests`).
-- **Voice/expand (D99):** `FeatureTimeline/VoiceRecorder.swift` (new), `TimelineComposer`, `TimelineMediaViews`, `HaloDesignSystem/InputPanel/{ComposerInputState,ComposerInputController,ComposerPanelArea}`, `HaloPlatform/KlipyClient` (media timeout), `App/Support/Info(-Debug).plist` (microphone text), `docs/features/COMPOSER_PANELS.md` §2a, D99, PRIVACY.
-- **Platform/Design system:** `HaloPlatform/{KlipyClient,KlipyShelfStore}.swift`, `HaloDesignSystem/InputPanel/*`, `HaloDesignSystem/Media/AsyncAnimatedImage.swift` (+ `KlipyClientTests`, `ComposerInputStateTests`).
-- **Features:** `FeatureTimeline/{TimelineComposer,ComposerPanels}.swift` (new), `TimelineView`, `TimelineRow`, `TimelineMessageRowView`, `TimelineMediaViews`, `TimelineViewModel(+Actions)`; `FeatureStickers/{KlipyPanelModel,KlipyPanelView,StickerTabView}.swift` (new), `StickerPanelView` (embedded mode) (+ `ComposerKlipyTests`, `KlipyPanelModelTests`).
-- **App/config:** `App/{AppRoot,HaloApp}.swift`, `App/Composition/{ChatsAssembly,SessionAssembly}.swift`, `App/Support/Info(-Debug).plist`, `Config/{Base.xcconfig,Local.xcconfig.example}`; `UITests/HaloUITests.swift` (`testComposerPanelsSwapWithKeyboard`, `openFirstChat`).
-- **Focus opt-in (D104):** `HaloDomain/Ports/PreferencesPort`, `HaloApplication/Account/PreferencesStore`, `HaloPlatform/UserDefaultsPreferencesStore`, `FeatureSettings/{AppPreferences,SettingsView}`, `App/HaloApp.swift` (+ `AppPreferencesTests`, `UserDefaultsPreferencesStoreTests`); `docs/features/SETTINGS.md`.
-- **Docs:** `features/COMPOSER_PANELS.md` (new), `DECISION_LOG` (D97, D98), `SOURCES` (F-KLIPY-1), `OPEN_QUESTIONS` (Q-KLIPY-PROD, Q-KLIPY-REHOST), `security/{PRIVACY,SECURITY}.md`, `features/STICKERS.md`, `ROADMAP`, `README`.
+- **Design system:** `HaloDesignSystem/Components/{AvatarCircle,RoomRow}.swift` (+ tests `AvatarTests.swift`, `RoomRowAccessibilityTests.swift`).
+- **Features:** `FeatureRoomList/RoomListView.swift`, `FeatureTimeline/TimelineView.swift`, `FeatureRoomDetails/RoomDetailsView.swift`, `FeatureMedia/GlobalMediaGalleryView.swift`.
+- **App:** `ios/App/HaloApp.swift`.
+- **Docs:** `docs/design/DESIGN_SYSTEM.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
 - **UI flakes:** `testComposerPanelsSwapWithKeyboard` and `testEmptyRoomStaysResponsive` still fail in the full UI run (pre-existing); an own thumbnail is downloaded once after an app restart (SDK caches the file under the new reference, thumbnails under their own key).

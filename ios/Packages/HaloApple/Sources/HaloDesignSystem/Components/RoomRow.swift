@@ -67,29 +67,58 @@ public struct RoomRow<AvatarContent: View>: View {
         return parts.joined(separator: ", ")
     }
 
+    /// Splits a leading sender prefix such as `"You:"` or `"shirdn:"` from the preview body so it can be emphasized.
+    public static func splitPreviewPrefix(_ text: String) -> (prefix: String, body: String)? {
+        guard let range = text.range(of: ": ") else { return nil }
+        let prefixWithoutColon = text[..<range.lowerBound]
+        guard !prefixWithoutColon.isEmpty,
+              prefixWithoutColon.count <= 40,
+              !prefixWithoutColon.contains("\n"),
+              !prefixWithoutColon.contains("://")
+        else { return nil }
+        let colonEnd = text.index(after: range.lowerBound)
+        return (String(text[..<colonEnd]), String(text[colonEnd...]))
+    }
+
     public var body: some View {
-        HStack(spacing: HaloSpacing.m) {
+        HStack(alignment: .top, spacing: HaloSpacing.m) {
             avatar
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: HaloSpacing.xxs) {
+            VStack(alignment: .leading, spacing: HaloSpacing.xs) {
                 if dynamicTypeSize.isAccessibilitySize {
-                    VStack(alignment: .leading, spacing: HaloSpacing.xxs) {
-                        titleRow
-                        metaRow
+                    titleRow
+                    HStack(spacing: HaloSpacing.xs) {
+                        timestampText
+                        UnreadIndicator(indicator)
+                    }
+                    if let preview {
+                        previewText(preview)
                     }
                 } else {
-                    HStack(spacing: HaloSpacing.xs) {
+                    HStack(alignment: .firstTextBaseline, spacing: HaloSpacing.xs) {
                         titleRow
                         Spacer(minLength: HaloSpacing.xs)
-                        metaRow
+                        timestampText
+                    }
+                    if preview != nil || indicator != .none {
+                        HStack(alignment: .top, spacing: HaloSpacing.xs) {
+                            if let preview {
+                                previewText(preview)
+                            }
+                            if indicator != .none {
+                                Spacer(minLength: HaloSpacing.xs)
+                                UnreadIndicator(indicator)
+                            }
+                        }
                     }
                 }
-                if let preview {
-                    previewText(preview)
-                }
+            }
+            .alignmentGuide(.listRowSeparatorLeading) { dimensions in
+                dimensions[.leading]
             }
         }
-        .frame(minHeight: 44)
+        .padding(.vertical, HaloSpacing.xs)
+        .frame(minHeight: 56, alignment: .top)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
             Self.accessibilitySummary(
@@ -112,7 +141,7 @@ public struct RoomRow<AvatarContent: View>: View {
                     .accessibilityLabel("Favourite")
             }
             Text(name)
-                .font(hasUnread ? HaloTypography.bodyEmphasis : HaloTypography.body)
+                .font(hasUnread ? HaloTypography.body.weight(.bold) : HaloTypography.bodyEmphasis)
                 .foregroundStyle(HaloColor.textPrimary)
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
             if isMuted {
@@ -124,54 +153,73 @@ public struct RoomRow<AvatarContent: View>: View {
         }
     }
 
-    private var metaRow: some View {
-        HStack(spacing: HaloSpacing.xs) {
-            if let timestamp {
-                Text(timestamp)
-                    .font(HaloTypography.caption)
-                    .foregroundStyle(HaloColor.textSecondary)
-            }
-            UnreadIndicator(indicator)
+    @ViewBuilder
+    private var timestampText: some View {
+        if let timestamp {
+            Text(timestamp)
+                .font(HaloTypography.caption)
+                .foregroundStyle(HaloColor.textSecondary)
+                .lineLimit(1)
         }
     }
 
     @ViewBuilder
     private func previewText(_ text: String) -> some View {
-        let base = Text(text)
+        let base = Text(Self.previewAttributedString(text))
             .font(HaloTypography.meta)
             .foregroundStyle(HaloColor.textSecondary)
-            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
         if let previewIdentifier {
             base.accessibilityIdentifier(previewIdentifier)
         } else {
             base
         }
     }
+
+    private static func previewAttributedString(_ text: String) -> AttributedString {
+        guard let (prefix, rest) = splitPreviewPrefix(text) else {
+            return AttributedString(text)
+        }
+        var attributed = AttributedString(prefix)
+        attributed.font = HaloTypography.meta.weight(.semibold)
+        attributed.append(AttributedString(rest))
+        return attributed
+    }
 }
 
 #Preview("RoomRow — Light") {
     List {
         RoomRow(
-            name: "Alice",
-            preview: "See you at 10:30!",
-            timestamp: "10:42",
+            name: "shirdn",
+            preview: "shirdn: port: 7890\nsocks-port: 7891...",
+            timestamp: "Jun 26",
             hasUnread: true,
-            isFavourite: true,
             indicator: .count(3)
         ) {
-            AvatarCircle(name: "Alice", imageData: nil, size: 40)
+            AvatarCircle(name: "shirdn", imageData: nil, size: 52)
+        }
+        RoomRow(
+            name: "Moments",
+            preview: "You: Image",
+            timestamp: "Apr 10",
+            hasUnread: false,
+            isFavourite: true,
+            indicator: .none
+        ) {
+            AvatarCircle(name: "Moments", imageData: nil, size: 52)
         }
         RoomRow(
             name: "Design Ops",
             preview: "Bob mentioned you: check the tokens",
-            timestamp: "Yesterday",
+            timestamp: "Nov 4, 2025",
             hasUnread: true,
             isMuted: true,
             indicator: .mentions(1)
         ) {
-            AvatarCircle(name: "Design Ops", imageData: nil, size: 40)
+            AvatarCircle(name: "Design Ops", imageData: nil, size: 52)
         }
     }
+    .listStyle(.plain)
 }
 
 #Preview("RoomRow — Dark") {
@@ -183,9 +231,10 @@ public struct RoomRow<AvatarContent: View>: View {
             hasUnread: true,
             indicator: .approximate
         ) {
-            AvatarCircle(name: "Alice", imageData: nil, size: 40)
+            AvatarCircle(name: "Alice", imageData: nil, size: 52)
         }
     }
+    .listStyle(.plain)
     .preferredColorScheme(.dark)
 }
 
@@ -199,8 +248,9 @@ public struct RoomRow<AvatarContent: View>: View {
             isFavourite: true,
             indicator: .count(3)
         ) {
-            AvatarCircle(name: "Alice", imageData: nil, size: 40)
+            AvatarCircle(name: "Alice", imageData: nil, size: 52)
         }
     }
+    .listStyle(.plain)
     .environment(\.dynamicTypeSize, .accessibility5)
 }

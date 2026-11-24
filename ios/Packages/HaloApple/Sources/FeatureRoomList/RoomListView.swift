@@ -62,20 +62,17 @@ public struct RoomListView<SearchResults: View>: View {
                 let showMediaGallery = onMediaGallery != nil
                     && model.effectiveFilter == .all
                     && (trimmedQuery.isEmpty || "Media Gallery".localizedCaseInsensitiveContains(trimmedQuery))
-                VStack(spacing: 0) {
-                focusBanner
-                syncIndicator
                 List {
                     Section {
                         if let onMediaGallery, showMediaGallery {
                             Button { onMediaGallery() } label: {
-                                HStack(spacing: HaloSpacing.m) {
+                                HStack(alignment: .top, spacing: HaloSpacing.m) {
                                     Image(systemName: "photo.on.rectangle.angled")
                                         .font(HaloTypography.headline)
                                         .foregroundStyle(HaloColor.onAccent)
-                                        .frame(width: 44, height: 44)
+                                        .frame(width: 52, height: 52)
                                         .background(HaloColor.accent, in: Circle())
-                                    VStack(alignment: .leading, spacing: HaloSpacing.xxs) {
+                                    VStack(alignment: .leading, spacing: HaloSpacing.xs) {
                                         HStack {
                                             Text("Media Gallery")
                                                 .font(HaloTypography.bodyEmphasis)
@@ -89,15 +86,20 @@ public struct RoomListView<SearchResults: View>: View {
                                             .font(HaloTypography.meta)
                                             .foregroundStyle(HaloColor.textSecondary)
                                     }
+                                    .alignmentGuide(.listRowSeparatorLeading) { dimensions in
+                                        dimensions[.leading]
+                                    }
                                 }
+                                .padding(.vertical, HaloSpacing.xs)
+                                .frame(minHeight: 56, alignment: .top)
                             }
                             .foregroundStyle(HaloColor.textPrimary)
                             .accessibilityIdentifier("preset-media-gallery")
                         }
                         ForEach(visibleRows) { row in
                             if row.isInvite {
-                                HStack(alignment: .top, spacing: 12) {
-                                    AvatarView(name: row.name, ref: model.invitePreviews[row.id]?.avatar ?? row.avatar) { [model] in await model.avatarData($0) }
+                                HStack(alignment: .top, spacing: HaloSpacing.m) {
+                                    AvatarView(name: row.name, ref: model.invitePreviews[row.id]?.avatar ?? row.avatar, size: 52, showsOuterFrame: false) { [model] in await model.avatarData($0) }
                                     VStack(alignment: .leading, spacing: 6) {
                                         Text(row.name).fontWeight(.bold).lineLimit(1)
                                         Text(row.inviter.map { "Invitation from \($0)" } ?? "Invitation").font(.caption).foregroundStyle(.secondary)
@@ -115,7 +117,11 @@ public struct RoomListView<SearchResults: View>: View {
                                             Button("Decline", role: .destructive) { Task { await model.declineInvite(row.id) } }.buttonStyle(.bordered)
                                         }
                                     }
+                                    .alignmentGuide(.listRowSeparatorLeading) { dimensions in
+                                        dimensions[.leading]
+                                    }
                                 }
+                                .padding(.vertical, HaloSpacing.xs)
                                 .accessibilityIdentifier("invite-\(row.name)")
                             } else {
                                 joinedRoomRow(row)
@@ -130,14 +136,25 @@ public struct RoomListView<SearchResults: View>: View {
                             .onAppear { Task { await model.showMore() } }
                         }
                     }
+                    .listSectionSeparator(.hidden, edges: .top)
                     searchResults
                 }
+                .listStyle(.plain)
+                .scrollEdgeEffectHidden(true, for: .top)
                 .contentMargins(.top, 8, for: .scrollContent)
                 .refreshable { await model.refresh() }
                 .accessibilityIdentifier("room-list")
                 .overlay {
                     if trimmedQuery.isEmpty && visibleRows.isEmpty && !showMediaGallery {
                         EmptyState(icon: "bubble.left.and.bubble.right", title: Self.emptyTitle(model.effectiveFilter))
+                    }
+                }
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if model.isFocusFiltering || model.syncNotice != nil {
+                        VStack(spacing: 0) {
+                            focusBanner
+                            syncIndicator
+                        }
                     }
                 }
                 .safeAreaInset(edge: .bottom) {
@@ -149,7 +166,6 @@ public struct RoomListView<SearchResults: View>: View {
                             onDismiss: { model.dismissActionError() }
                         )
                     }
-                }
                 }
             case .failed(let message):
                 ErrorState(title: "Couldn't load rooms", message: message) {
@@ -202,9 +218,7 @@ public struct RoomListView<SearchResults: View>: View {
             .padding(.horizontal, 16)
             .padding(.top, 6)
             .padding(.bottom, 2)
-            #if os(iOS)
-            .background(Color(uiColor: .systemGroupedBackground), ignoresSafeAreaEdges: [])
-            #endif
+            .background(HaloColor.bgSecondary, ignoresSafeAreaEdges: [])
             .accessibilityIdentifier("sync-indicator")
         }
     }
@@ -231,7 +245,7 @@ public struct RoomListView<SearchResults: View>: View {
                 indicator: Self.indicatorStyle(row.display),
                 previewIdentifier: "preview-\(row.name)"
             ) {
-                AvatarView(name: row.name, ref: row.avatar) { [model] in await model.avatarData($0) }
+                AvatarView(name: row.name, ref: row.avatar, size: 52, showsOuterFrame: false) { [model] in await model.avatarData($0) }
             }
         }
         .foregroundStyle(HaloColor.textPrimary)
@@ -331,18 +345,26 @@ public struct AvatarView: View {
     let name: String
     let ref: MediaRef?
     let size: CGFloat
+    let showsOuterFrame: Bool
     let load: @Sendable (MediaRef) async -> Data?
     @State private var data: Data?
 
-    public init(name: String, ref: MediaRef?, size: CGFloat = 44, load: @escaping @Sendable (MediaRef) async -> Data?) {
+    public init(
+        name: String,
+        ref: MediaRef?,
+        size: CGFloat = 44,
+        showsOuterFrame: Bool = true,
+        load: @escaping @Sendable (MediaRef) async -> Data?
+    ) {
         self.name = name
         self.ref = ref
         self.size = size
+        self.showsOuterFrame = showsOuterFrame
         self.load = load
     }
 
     public var body: some View {
-        AvatarCircle(name: name, imageData: data, size: size)
+        AvatarCircle(name: name, imageData: data, size: size, showsOuterFrame: showsOuterFrame)
             .task(id: ref) {
                 data = nil
                 guard let ref else { return }

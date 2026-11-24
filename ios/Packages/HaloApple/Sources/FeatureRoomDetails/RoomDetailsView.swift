@@ -48,7 +48,8 @@ public struct RoomDetailsView: View {
                 case .loaded(let details, let members): list(details, members)
                 }
             }
-            .navigationTitle("Room info")
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
         .task { await model.load() }

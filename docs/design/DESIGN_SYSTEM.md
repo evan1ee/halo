@@ -62,8 +62,8 @@ SF Symbols only (MVP). Halo-specific glyphs (app icon, empty-state illustrations
 
 | Component | Variants / states |
 |---|---|
-| `Avatar` | sizes 24/32/40/56/96; image / initials (deterministic colour from id hash: a pale circle of the hue with the letter darkened in light mode and lightened in dark mode, ≥ 4.5:1, `AvatarTint`); presence dot (P2) |
-| `RoomRow` | indicator `.none/.dot/.count/.mentions`, bold (hasUnread), muted, favourite, invite |
+| `Avatar` | sizes 24/32/40/52/56/96; image / initials (deterministic colour from id hash: a pale circle of the hue with the letter darkened in light mode and lightened in dark mode, ≥ 4.5:1, `AvatarTint`), optional outer ring frame (`showsOuterFrame`) and inner border (`avatarBorderColor`); presence dot (P2) |
+| `RoomRow` | plain list row with text-aligned divider, 52 pt borderless circular avatar, 2-line preview with emphasized sender prefix, timestamp top-trailing with `UnreadIndicator` (`.none/.dot/.count/.mentions`) stacked underneath, bold (`hasUnread`), muted, favourite, invite |
 | `UnreadIndicator` | dot · count (1–99, "99+") · mention (`@n`) · approximate (dot with a ring) |
 | `MessageBubble` | own/other · grouped first/middle/last · states sending/sent/failed · edited · reply header |
 | `ReactionChip` | count, own-selected, pending |
