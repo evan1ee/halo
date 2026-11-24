@@ -1,14 +1,14 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-24 · Branch: `fix/timeline-scroll-safe-gestures` · PRs #1–#86 merged
+Last updated: 2026-11-24 · Branch: `main` · PRs #1–#87 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
-- **Roadmap / Autonomous Loop:** all autonomous work across M0–M16, ADR-0022, Tech Debt A–D (including TD-12), the Halo Sygnal pushkin (`infra/sygnal/`, R-24), and release documentation (`docs/release/`, D115) is complete; all open product decisions in `OPEN_QUESTIONS.md` are resolved (`D108–D117`). Physical iPhone 16 `HaloUITests`, NFR-1 cold launch (0.357 s responsive), timeline memory (76.8 MB peak), D95 10× room-opening, live sends, image-scroll & mid-scroll jump-to-bottom, Voice messages, Share extension (`V-SHARE-1`), Focus filter, and Siri/Spotlight all passed; P0 badge/widget/background-sync fixes (PR #85) and scroll-safe timeline gestures (`fix/timeline-scroll-safe-gestures`) landed. The roadmap has been expanded with **M17–M19** in [docs/ROADMAP.md](docs/ROADMAP.md). External-account / legal (`👤`) and remaining physical-device (`📱`) items remain in §5.
+- **Roadmap / Autonomous Loop:** all autonomous work across M0–M16, ADR-0022, Tech Debt A–D (including TD-12), the Halo Sygnal pushkin (`infra/sygnal/`, R-24), and release documentation (`docs/release/`, D115) is complete; all open product decisions in `OPEN_QUESTIONS.md` are resolved (`D108–D117`). Physical iPhone 16 `HaloUITests`, NFR-1 cold launch (0.357 s responsive), timeline memory (76.8 MB peak), D95 10× room-opening, live sends, image-scroll & mid-scroll jump-to-bottom (PR #87), Voice messages, Share extension (`V-SHARE-1`), Focus filter, and Siri/Spotlight all passed; P0 badge/widget/background-sync fixes (PR #85) landed. The roadmap has been slimmed and expanded with **M17–M19** in [docs/ROADMAP.md](docs/ROADMAP.md). External-account / legal (`👤`) and remaining physical-device (`📱`) items remain in §5.
 - **Milestones:** M0–M16 done except external/device items (deploy `infra/sygnal/` + APNs keys + TestFlight, 7-day AC-U8 soak, interactive Xcode/Instruments NFR-2 scroll hitch + 300-room + MetricKit run, Q-KLIPY-PROD portal request, publish `docs/release/` privacy/support URLs, final Beta 2 brand artwork, legal/export review). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1).
-- **Last checks (`fix/timeline-scroll-safe-gestures`):** physical iPhone 16 `testTimelineImageScrollAndJumpToBottomWhileScrolling` passed (38.8 s, 0 failures); `validate-docs.sh`, `check-boundaries.sh`, `check-design-tokens.sh`, `swiftlint --strict` (268 files, 0 violations), `gitleaks` passed.
-- **CI:** PRs #1–#86 merged. Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
+- **Last checks (`main`):** `validate-docs.sh`, `check_handoff.py`, `gitleaks` passed (code/device tests passed on PRs #85–#87).
+- **CI:** PRs #1–#87 merged. Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
@@ -40,8 +40,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D107), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
-- **FeatureTimeline & UITests:** `TimelineMessageRowView.swift`, `TimelineScrollHelpers.swift`, `LocationCardView.swift`, `TimelineView.swift`, `ios/UITests/HaloUITests.swift`.
-- **Docs:** `HANDOFF.md`.
+- **Docs:** `docs/ROADMAP.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
