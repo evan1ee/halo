@@ -1,26 +1,24 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-24 · Branch: `fix/timeline-image-scroll-and-jump-to-bottom` · PRs #1–#85 merged
+Last updated: 2026-11-24 · Branch: `fix/timeline-scroll-safe-gestures` · PRs #1–#86 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
-- **Roadmap / Autonomous Loop:** all autonomous work across M0–M16, ADR-0022, Tech Debt A–D (including TD-12), the Halo Sygnal pushkin (`infra/sygnal/`, R-24), and release documentation (`docs/release/`, D115) is complete; all open product decisions in `OPEN_QUESTIONS.md` are resolved (`D108–D117`). Physical iPhone 16 `HaloUITests`, NFR-1 cold launch (0.357 s responsive), timeline memory (76.8 MB peak), D95 10× room-opening, live sends, Voice messages, Share extension (`V-SHARE-1`), Focus filter, and Siri/Spotlight all passed; P0 badge/widget/background-sync fixes (PR #85) and timeline image-scroll / jump-to-bottom fixes (`fix/timeline-image-scroll-and-jump-to-bottom`) landed. The roadmap has been expanded with **M17–M19** in [docs/ROADMAP.md](docs/ROADMAP.md). External-account / legal (`👤`) and remaining physical-device (`📱`) items remain in §5.
+- **Roadmap / Autonomous Loop:** all autonomous work across M0–M16, ADR-0022, Tech Debt A–D (including TD-12), the Halo Sygnal pushkin (`infra/sygnal/`, R-24), and release documentation (`docs/release/`, D115) is complete; all open product decisions in `OPEN_QUESTIONS.md` are resolved (`D108–D117`). Physical iPhone 16 `HaloUITests`, NFR-1 cold launch (0.357 s responsive), timeline memory (76.8 MB peak), D95 10× room-opening, live sends, image-scroll & mid-scroll jump-to-bottom, Voice messages, Share extension (`V-SHARE-1`), Focus filter, and Siri/Spotlight all passed; P0 badge/widget/background-sync fixes (PR #85) and scroll-safe timeline gestures (`fix/timeline-scroll-safe-gestures`) landed. The roadmap has been expanded with **M17–M19** in [docs/ROADMAP.md](docs/ROADMAP.md). External-account / legal (`👤`) and remaining physical-device (`📱`) items remain in §5.
 - **Milestones:** M0–M16 done except external/device items (deploy `infra/sygnal/` + APNs keys + TestFlight, 7-day AC-U8 soak, interactive Xcode/Instruments NFR-2 scroll hitch + 300-room + MetricKit run, Q-KLIPY-PROD portal request, publish `docs/release/` privacy/support URLs, final Beta 2 brand artwork, legal/export review). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1).
-- **Last checks (`fix/timeline-image-scroll-and-jump-to-bottom`):** `FeatureTimelineTests` on `iPhone Air` (including 3 new `BottomFollowStateTests`), `Halo-Debug` arm64 build & install on physical iPhone 16, `validate-docs.sh`, `check-boundaries.sh`, `check-design-tokens.sh`, `swiftlint --strict` (268 files, 0 violations), `gitleaks` passed.
-- **CI:** PRs #1–#85 merged. Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
+- **Last checks (`fix/timeline-scroll-safe-gestures`):** physical iPhone 16 `testTimelineImageScrollAndJumpToBottomWhileScrolling` passed (38.8 s, 0 failures); `validate-docs.sh`, `check-boundaries.sh`, `check-design-tokens.sh`, `swiftlint --strict` (268 files, 0 violations), `gitleaks` passed.
+- **CI:** PRs #1–#86 merged. Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
-- **Timeline image scrolling & jump-to-bottom fixes (2026-11-24, `fix/timeline-image-scroll-and-jump-to-bottom`):**
-  - Replaced `.onTapGesture` on timeline photos, reply quotes, and KLIPY retry overlays (`TimelineMessageRowView.swift`, `TimelineMediaViews.swift`) with scroll-friendly plain `Button`s so vertical list drags starting on images pass straight through to `UIScrollView`.
-  - Added pure `BottomFollowState` (`TimelineScrollHelpers.swift`, unit-tested in `TimelineScrollHelpersTests.swift`) and a cancellable convergence `jumpToBottomTask` (`TimelineView.swift`) so tapping the floating down-arrow during ongoing deceleration/animation interrupts in-flight scrolling and smoothly returns to the newest message.
+- **Scroll-safe timeline long-press & image/map tap style + iPhone 16 verification (2026-11-24, `fix/timeline-scroll-safe-gestures`):**
+  - Removed SwiftUI `.simultaneousGesture(LongPressGesture)` + touch-down `.scaleEffect(0.96)` (which flashed a tap/press effect and interfered with scrolling over images, maps, and messages) and replaced it with a UIKit-backed `UILongPressGestureRecognizer` (`ScrollSafeLongPressModifier`, `cancelsTouchesInView = false`, `delaysTouchesBegan = false`, simultaneous with `UIScrollView`) plus no-highlight `ScrollFriendlyTapButtonStyle` on images, maps (`LocationCardView`), and reply quotes.
+  - Made `jump-to-bottom` interrupt ongoing deceleration synchronously on the tap frame before converging; added and passed `HaloUITests.testTimelineImageScrollAndJumpToBottomWhileScrolling` on physical iPhone 16 (`00008140-000222592ED0801C`).
+- **Timeline image scrolling & jump-to-bottom state machine (2026-11-24, PR #86):**
+  - Replaced bare `.onTapGesture` on photos/replies/KLIPY retry with plain `Button`s and added pure `BottomFollowState` (`TimelineScrollHelpers.swift`, `BottomFollowStateTests`) + cancellable convergence `jumpToBottomTask`.
 - **P0 badge, widget & background-push sync fixes + iPhone 16 walkthrough (2026-11-24, PR #85):**
-  - Fixed 4 root causes of badge/widget desync: (1) `ReadStateCoordinator.reconcile()` guarded before `begin()` and invoked on `.active`/`.background` (inside `BackgroundTaskLease`) so dropped OS badges always heal; (2) synchronous `attentionCache.setForeground(false)` on `didEnterBackgroundNotification`/`willTerminateNotification` so force-quit never leaves NSE thinking the app is foregrounded; (3) `NotificationProcessor` folds unconfirmed records across all rooms and returns `attentionCounts`, and `NotificationService` updates `AttentionCache` + calls `WidgetCenter.shared.reloadAllTimelines()`; (4) added `UIBackgroundModes: [remote-notification]`, `SyncPort.syncOnce()`, `SyncCoordinator.syncOnceInBackground()`, and `PushDelegate.application(_:didReceiveRemoteNotification:fetchCompletionHandler:)` for silent background pushes (ADR-0015 / D112).
-  - Physical iPhone 16 manual walkthrough: Voice messages, Share extension (`V-SHARE-1`), Focus filter (`D90`/`D104`), and Siri/Spotlight (`D88`) all passed; fixed build installed on iPhone 16.
-- **Physical iPhone 16 D95 10× room-opening & live-send checks (2026-11-24, PR #84):**
-  - Added opt-in (`HALO_RUN_DEVICE_CHECKS=1`) `testRoomOpeningLandsAtNewestTenTimes` and `testLiveSendsLocationPollArticleAndKlipy` to `ios/UITests/HaloUITests.swift` plus `klipy-gif-item`/`klipy-sticker-item` identifiers in `KlipyPanelView.swift`.
-  - Passed on physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1, `Halo-Debug`): S10 opened 10/10 times at the newest message (no `jump-to-bottom`, no spinner); live pinned location, poll, Markdown article, and KLIPY GIF all sent and rendered inline.
+  - Fixed 4 root causes of badge/widget desync (`ReadStateCoordinator.reconcile()` on `.active`/`.background`, synchronous foreground flag clearing on background/terminate, multi-room NSE `AttentionCache` + `WidgetCenter` reload, and `remote-notification` silent-push `syncOnceInBackground()`); Voice, Share (`V-SHARE-1`), Focus, and Siri/Spotlight passed on iPhone 16.
 
 ## 3. Key decisions
 Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D107), [docs/adr/README.md](docs/adr/README.md).
@@ -42,7 +40,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D107), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
-- **FeatureTimeline:** `TimelineView.swift`, `TimelineScrollHelpers.swift`, `TimelineMessageRowView.swift`, `TimelineMediaViews.swift`, `TimelineScrollHelpersTests.swift`.
+- **FeatureTimeline & UITests:** `TimelineMessageRowView.swift`, `TimelineScrollHelpers.swift`, `LocationCardView.swift`, `TimelineView.swift`, `ios/UITests/HaloUITests.swift`.
 - **Docs:** `HANDOFF.md`.
 
 ## 5. Outstanding issues

@@ -956,4 +956,66 @@ final class HaloUITests: XCTestCase {
 
         returnToChatList(app)
     }
+
+    /// Physical-device verification of timeline scrolling over images and tapping `jump-to-bottom` mid-scroll.
+    /// Opt-in via `HALO_RUN_DEVICE_CHECKS=1`.
+    @MainActor
+    func testTimelineImageScrollAndJumpToBottomWhileScrolling() throws {
+        guard ProcessInfo.processInfo.environment["HALO_RUN_DEVICE_CHECKS"] == "1" else {
+            throw XCTSkip("Set HALO_RUN_DEVICE_CHECKS=1 to run physical-device scroll verification.")
+        }
+        let app = XCUIApplication()
+        app.launch()
+        dismissFirstRunSheets(app)
+        if !chatsRoot(app).waitForExistence(timeout: 3) { returnToChatList(app) }
+        guard chatsRoot(app).waitForExistence(timeout: 10) else { throw XCTSkip("App is signed out.") }
+        if app.buttons["focus-show-all"].exists { app.buttons["focus-show-all"].tap() }
+
+        let s10 = app.collectionViews.firstMatch.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'S10'")).firstMatch
+        if s10.waitForExistence(timeout: 5) {
+            s10.tap()
+            XCTAssertTrue(app.buttons["sticker-button"].waitForExistence(timeout: 8), "Expected timeline composer in S10")
+        } else {
+            try openFirstChat(app)
+        }
+
+        let timeline = app.collectionViews["timeline"].exists ? app.collectionViews["timeline"] : app.collectionViews.firstMatch
+        XCTAssertTrue(timeline.waitForExistence(timeout: 5), "Expected timeline collection view")
+
+        // 1. Find a visible image in the timeline (scroll up slightly if the newest messages are text/GIF/location).
+        let imageButtons = timeline.buttons.matching(NSPredicate(format: "label == 'Image'"))
+        var targetImage: XCUIElement?
+        for _ in 0..<5 {
+            if let visible = imageButtons.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable && $0.frame.height > 40 }) {
+                targetImage = visible
+                break
+            }
+            timeline.swipeDown(velocity: .default)
+        }
+        if let image = targetImage {
+            let startFrame = image.frame
+            let startCoord = image.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            let endCoord = startCoord.withOffset(CGVector(dx: 0, dy: 260))
+            startCoord.press(forDuration: 0.02, thenDragTo: endCoord)
+            // Dragging on an image must scroll the list and must NOT open the full-screen photo viewer.
+            XCTAssertTrue(app.buttons["sticker-button"].exists, "Dragging on an image must not open the photo viewer")
+            let moved = !image.exists || abs(image.frame.midY - startFrame.midY) > 40 || app.buttons["jump-to-bottom"].exists
+            XCTAssertTrue(moved, "Dragging vertically starting on an image must scroll the conversation")
+        }
+
+        // 2. Fling up fast so the list is actively decelerating, then IMMEDIATELY tap jump-to-bottom without waiting.
+        timeline.swipeDown(velocity: .fast)
+        timeline.swipeDown(velocity: .fast)
+        let jumpDown = app.buttons["jump-to-bottom"]
+        XCTAssertTrue(jumpDown.waitForExistence(timeout: 3), "Expected jump-to-bottom button after scrolling up")
+        // Trigger a fresh fast fling and immediately tap jump-to-bottom while decelerating.
+        timeline.swipeDown(velocity: .fast)
+        jumpDown.tap()
+        XCTAssertTrue(
+            jumpDown.waitForNonExistence(timeout: 4),
+            "Tapping jump-to-bottom during ongoing deceleration must interrupt scrolling and return to bottom"
+        )
+
+        returnToChatList(app)
+    }
 }

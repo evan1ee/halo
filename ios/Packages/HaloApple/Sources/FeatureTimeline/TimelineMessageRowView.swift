@@ -19,7 +19,6 @@ struct RowView: View {
     @State private var showingSource = false
     @State private var showingReaders = false
     @State private var showingActions = false
-    @GestureState private var isPressingMessage = false
     /// A sent message is removed for everyone and can't be brought back: ask first.
     @State private var confirmingDelete = false
     @State private var showingOriginal = false
@@ -32,16 +31,6 @@ struct RowView: View {
         guard hasActions else { return }
         reactionHaptic += 1
         showingActions = true
-    }
-
-    private var messageLongPressGesture: some Gesture {
-        LongPressGesture(minimumDuration: 0.35, maximumDistance: 16)
-            .updating($isPressingMessage) { current, state, _ in
-                if hasActions { state = current }
-            }
-            .onEnded { _ in
-                triggerActions()
-            }
     }
 
     /// The icon for a placeholder row, from its wording (set by the view model).
@@ -87,17 +76,17 @@ struct RowView: View {
                                 .overlay(alignment: .leading) { Rectangle().fill(.secondary).frame(width: 2) }
                                 .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(ScrollFriendlyTapButtonStyle())
                         }
                         VStack(alignment: row.style == .ownMessage ? .trailing : .leading, spacing: 2) {
                             if let image = row.image {
-                                // Use a plain Button (not `.onTapGesture`) inside `List` so vertical scroll pan gestures
-                                // starting on an image are never intercepted or blocked by SwiftUI's tap recognizer.
+                                // Use a no-highlight Button inside `List` so vertical scroll pan gestures starting on an
+                                // image pass straight through to `UIScrollView` without triggering a tap/press effect.
                                 if !row.isSticker, model.showsPreview(of: image) {
                                     Button { onOpenPhoto?(row.id) } label: {
                                         ThumbnailView(image: image, model: model, isSticker: false)
                                     }
-                                    .buttonStyle(.plain)
+                                    .buttonStyle(ScrollFriendlyTapButtonStyle())
                                     .accessibilityLabel("Image")
                                 } else {
                                     ThumbnailView(image: image, model: model, isSticker: row.isSticker)
@@ -142,9 +131,7 @@ struct RowView: View {
                             }
                         }
                         .contentShape(.rect)
-                        .scaleEffect(isPressingMessage ? 0.96 : 1.0)
-                        .animation(.snappy(duration: 0.16), value: isPressingMessage)
-                        .simultaneousGesture(messageLongPressGesture)
+                        .modifier(ScrollSafeLongPressModifier(enabled: hasActions, onTrigger: triggerActions))
                         if model.isPinned(row) || row.delivery != nil || (row.endsRun && row.time != nil) {
                             HStack(spacing: HaloSpacing.xs) {
                                 if model.isPinned(row) {
@@ -206,9 +193,7 @@ struct RowView: View {
                         }
                     }
                     .contentShape(.rect)
-                    .scaleEffect(isPressingMessage ? 0.96 : 1.0)
-                    .animation(.snappy(duration: 0.16), value: isPressingMessage)
-                    .simultaneousGesture(messageLongPressGesture)
+                    .modifier(ScrollSafeLongPressModifier(enabled: hasActions, onTrigger: triggerActions))
                     reactionBar
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -217,9 +202,7 @@ struct RowView: View {
                     Text(row.text).italic()
                         .modifier(OptionalTextDragModifier(text: TimelineDragExtractor.text(for: row)))
                         .contentShape(.rect)
-                        .scaleEffect(isPressingMessage ? 0.96 : 1.0)
-                        .animation(.snappy(duration: 0.16), value: isPressingMessage)
-                        .simultaneousGesture(messageLongPressGesture)
+                        .modifier(ScrollSafeLongPressModifier(enabled: hasActions, onTrigger: triggerActions))
                     reactionBar
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

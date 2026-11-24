@@ -322,13 +322,14 @@ public struct TimelineView: View {
                             bottomFollow.beginJumpToBottom()
                             model.setAtBottom(true)
                             let wasMoving = scrollMoving
+                            let initialTarget = model.lastRowID ?? last
+                            if wasMoving {
+                                // Interrupt in-flight deceleration/animation synchronously on the tap frame.
+                                proxy.scrollTo(initialTarget, anchor: .bottom)
+                            }
                             jumpToBottomTask = Task { @MainActor in
                                 defer { bottomFollow.cancelJumpToBottom() }
-                                // When the list is actively decelerating or running another scroll animation, a single
-                                // animated `scrollTo` is often ignored by UIKit. Interrupt the in-flight scroll first,
-                                // then converge smoothly until the bottom row is confirmed visible.
                                 if wasMoving {
-                                    proxy.scrollTo(model.lastRowID ?? last, anchor: .bottom)
                                     try? await Task.sleep(for: .milliseconds(50))
                                 } else {
                                     withAnimation(.easeOut(duration: 0.25)) {
