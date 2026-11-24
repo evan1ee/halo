@@ -56,6 +56,12 @@ final class HaloUITests: XCTestCase {
         }
     }
 
+    /// The Chats root screen (identified by the root toolbar's Settings avatar button; the header intentionally has no title).
+    @MainActor
+    private func chatsRoot(_ app: XCUIApplication) -> XCUIElement {
+        app.buttons["settings"]
+    }
+
     @MainActor
     func testLaunchRootScreenPassesAccessibilityAudit() throws {
         let app = XCUIApplication()
@@ -64,7 +70,7 @@ final class HaloUITests: XCTestCase {
 
         // The app launches either into SignInView (signed out) or Chats (signed in).
         let signInVisible = app.staticTexts["Halo"].waitForExistence(timeout: 5)
-        let chatsVisible = app.navigationBars["Chats"].waitForExistence(timeout: 2)
+        let chatsVisible = chatsRoot(app).waitForExistence(timeout: 2)
         XCTAssertTrue(signInVisible || chatsVisible, "Expected either Sign in or Chats root screen")
 
         try audit(app)
@@ -125,7 +131,7 @@ final class HaloUITests: XCTestCase {
             app.buttons["Sign in"].tap()
             // First run after sign-in may ask about notifications; answer later.
             let skip = app.buttons["skip-notifications"]
-            let chatsBar = app.navigationBars["Chats"]
+            let chatsBar = chatsRoot(app)
             for _ in 0..<60 where !chatsBar.exists {
                 if skip.exists { skip.tap() }
                 _ = chatsBar.waitForExistence(timeout: 0.5)
@@ -146,7 +152,7 @@ final class HaloUITests: XCTestCase {
             add(shot)
         }
 
-        XCTAssertTrue(app.navigationBars["Chats"].waitForExistence(timeout: 15))
+        XCTAssertTrue(chatsRoot(app).waitForExistence(timeout: 15))
         try audit(app)
     }
 
@@ -172,7 +178,7 @@ final class HaloUITests: XCTestCase {
     /// show/hide toggle, not a back button: tapping it would hide the list.
     @MainActor
     private func returnToChatList(_ app: XCUIApplication) {
-        if app.navigationBars["Chats"].exists, app.navigationBars["Chats"].isHittable { return }
+        if chatsRoot(app).exists, chatsRoot(app).isHittable { return }
         let back = app.navigationBars.buttons.element(boundBy: 0)
         if back.waitForExistence(timeout: 3) { back.tap() }
     }
@@ -265,12 +271,13 @@ final class HaloUITests: XCTestCase {
         UIPasteboard.general.items = []
     }
 
+    @MainActor
     private func openFirstChat(_ app: XCUIApplication) throws {
-        if !app.navigationBars["Chats"].waitForExistence(timeout: 3) {
+        if !chatsRoot(app).waitForExistence(timeout: 3) {
             let back = app.navigationBars.buttons.element(boundBy: 0)
             if back.exists { back.tap() }
         }
-        guard app.navigationBars["Chats"].waitForExistence(timeout: 5) else {
+        guard chatsRoot(app).waitForExistence(timeout: 5) else {
             throw XCTSkip("App is signed out; skipping signed-in composer UI check.")
         }
 
@@ -315,7 +322,7 @@ final class HaloUITests: XCTestCase {
         let started = Date()
         app.launch()
         dismissFirstRunSheets(app)
-        guard app.navigationBars["Chats"].waitForExistence(timeout: 10) else { throw XCTSkip("App is signed out.") }
+        guard chatsRoot(app).waitForExistence(timeout: 10) else { throw XCTSkip("App is signed out.") }
         let chatsShown = Date().timeIntervalSince(started)
         if app.buttons["focus-show-all"].exists { app.buttons["focus-show-all"].tap() }
         let firstRow = app.collectionViews.firstMatch.buttons.element(boundBy: 1)
@@ -373,7 +380,7 @@ final class HaloUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
         dismissFirstRunSheets(app)
-        guard app.navigationBars["Chats"].waitForExistence(timeout: 10) else { throw XCTSkip("App is signed out.") }
+        guard chatsRoot(app).waitForExistence(timeout: 10) else { throw XCTSkip("App is signed out.") }
         if app.buttons["focus-show-all"].exists { app.buttons["focus-show-all"].tap() }
         let rows = app.collectionViews.firstMatch.cells.containing(NSPredicate(format: "label BEGINSWITH[c] 'empty' OR label BEGINSWITH[c] 'invite decline'"))
         let emptyRow = app.collectionViews.firstMatch.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] 'empty' OR label BEGINSWITH[c] 'invite decline'"))
@@ -416,7 +423,7 @@ final class HaloUITests: XCTestCase {
             app.buttons["emoji-delete"].tap()
             app.buttons["emoji-delete"].tap()
             returnToChatList(app)
-            XCTAssertTrue(app.navigationBars["Chats"].waitForExistence(timeout: 5), "\(name): back to the chat list")
+            XCTAssertTrue(chatsRoot(app).waitForExistence(timeout: 5), "\(name): back to the chat list")
         }
     }
 
@@ -460,7 +467,7 @@ final class HaloUITests: XCTestCase {
         _ = search.waitForNonExistence(timeout: 3)
         _ = app.staticTexts["settle"].waitForExistence(timeout: 1)
         returnToChatList(app)
-        XCTAssertTrue(app.navigationBars["Chats"].waitForExistence(timeout: 5), "Should return to Chats root")
+        XCTAssertTrue(chatsRoot(app).waitForExistence(timeout: 5), "Should return to Chats root")
     }
 
     /// Cold-launch performance metric (ROADMAP M15, SR-06, NFR-1).
@@ -549,9 +556,11 @@ final class HaloUITests: XCTestCase {
         let firstSwap = sampleComposerTop("first-panel-to-keyboard") { app.buttons["sticker-button"].tap() }
         shot("0-first-swap")
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
-        // With a hardware keyboard connected the simulator shows no software keyboard (only a thin shortcut bar), so there is
-        // no keyboard height to match: skip instead of failing (I/O → Keyboard → Connect Hardware Keyboard, ⇧⌘K).
+        // With a hardware keyboard connected the simulator shows no software keyboard (only a thin shortcut bar, or an
+        // off-screen keyboard frame whose keys aren't hittable), so there is no keyboard height to match: skip instead of
+        // failing (I/O → Keyboard → Connect Hardware Keyboard, ⇧⌘K).
         try XCTSkipIf(app.keyboards.firstMatch.frame.height < 150, "No software keyboard: a hardware keyboard is connected to this simulator.")
+        try requireSoftwareKeyboard(app)
         _ = app.staticTexts["settle"].waitForExistence(timeout: 1)
         let firstKeyboardTop = Double(attach.frame.minY)
         let firstNote = XCTAttachment(string: String(format: "first open: panel %.1f, keyboard %.1f, samples %@", firstPanelTop, firstKeyboardTop,

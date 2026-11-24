@@ -332,7 +332,7 @@ public struct StickerPackDetailView: View {
                                                 Image(systemName: "minus.circle.fill")
                                                     .font(.title3)
                                                     .symbolRenderingMode(.palette)
-                                                    .foregroundStyle(.white, HaloColor.danger)
+                                                    .foregroundStyle(HaloColor.onAccent, HaloColor.danger)
                                                     .offset(x: 6, y: -6)
                                                     .allowsHitTesting(false)
                                             }

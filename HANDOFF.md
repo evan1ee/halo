@@ -1,28 +1,25 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-24 · Branch: `main` · PRs #1–#79 merged
+Last updated: 2026-11-24 · Branch: `fix/ui-flakes-and-autonomous-cleanup` · PRs #1–#79 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
-- **Roadmap / Autonomous Loop:** all autonomous work across M0–M16, ADR-0022 and Tech Debt A–D is done; PRs #78 and #79 merged iOS 26 UX polish, the full Sticker Pack Manager, upgraded Photo Viewer, and Pinned Messages into `main`. Only founder (`👤`) and physical-device (`📱`) items remain (§5).
+- **Roadmap / Autonomous Loop:** all autonomous work across M0–M16, ADR-0022, Tech Debt A–D, and pre-push/UI-test housekeeping is done. Only founder (`👤`) and physical-device (`📱`) items remain (§5).
 - **Milestones:** M0–M16 done except founder/device items (gates, Beta/Release push gateway + TestFlight, 7-day AC-U8 soak, physical-device NFR-1/NFR-2/MetricKit run, Q-BRAND sign-in artwork, Q-ONBOARD-SERVER, Q-L10N, Q-APPSTORE, legal/export/privacy labels). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`).
-- **Last checks (PR #79):** `validate-docs.sh`, `check-boundaries.sh`, `gitleaks`, `HaloCore` (194 tests), `HaloDesignSystemTests`, `FeatureStickersTests` (20 tests), `FeatureTimelineTests` (100 tests), `Halo-Debug` build, and all 5 GitHub CI checks passed (`HaloUITests` not run).
+- **Last checks (`fix/ui-flakes-and-autonomous-cleanup`):** `validate-docs.sh`, `check-boundaries.sh`, `test_check_boundaries.py` (5 tests), `check-design-tokens.sh`, `gitleaks`, `swiftlint --strict` (267 files, 0 violations), `HaloCore` (194 tests in 27 suites), `HaloApple-Package` (iOS Simulator `iPhone Air`), and `HaloUITests` (0 failures; 6 passed, 5 skipped on hardware-keyboard / signed-in / opt-in gates) all passed.
 - **CI:** PRs #1–#79 merged. Linux CI runs `HaloCore` tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
+- **UI test regressions, design tokens & doc cleanup (2026-11-24, `fix/ui-flakes-and-autonomous-cleanup`):**
+  - Fixed `HaloUITests` detecting the borderless Chats root header (`chatsRoot(app)` checks `app.buttons["settings"]` instead of removed `"Chats"` navigation bar) and guarded `testComposerPanelsSwapWithKeyboard` with `requireSoftwareKeyboard(app)` when a hardware keyboard is attached (6 passed, 0 failures).
+  - Fixed 4 `check-design-tokens.sh` violations introduced in PR #79 (`HaloColor.onAccent` in `StickerLibraryView` and `LocationCardView`; `HaloTypography.caption` in `TimelineMessageRowView.DeliveryIndicator`), removed dead `sleep` property from `RoomDetailsViewModel`, and updated stale notes in `OUTSTANDING_ISSUES.md` and `HANDOFF.md`.
 - **Pin reload & jump-to-bottom arrow bug fixes (2026-11-24, `main`):**
   - Fixed pinned messages disappearing on room re-entry: `TimelineCoordinator.pinnedEventIDs()` no longer gates on `case .live = status` (it was returning `[]` during `.opening` right after `open()`), with regression test `PinMessageTests.reenteringRoomKeepsPins`.
   - Fixed jump-to-bottom arrow disappearing on early scroll or jump in `TimelineView`: marks `landed = true` on user scroll interaction / `jumpRequest`, always syncs `model.setAtBottom(atBottom)` when `landed && model.isAtBottom != atBottom`, and checks `(!model.isAtBottom || !bottomVisible)`.
 - **iOS 26 UX, Sticker Pack Manager, Photo Viewer & Pinned Messages (2026-11-24, PR #79):**
-  - Tiered native confirmations (`.alert` for high-stakes actions, anchored `.confirmationDialog` on trigger), sheet grabbers (Room Info, Quick Look), and non-blocking floating Liquid Glass title pills on Stickers, Pack Detail, Settings, Acknowledgements, and Media Gallery (dynamic date pill + grouped type/room filter pill).
-  - Full Sticker Pack Manager (`StickerPackManagementPort`, `StickerPackManager`, `StickerLibraryView`, `StickerPackDetailView`, `AddToStickerPackSheet`) with thumbnail preview strips, rename, add/delete stickers, and delete pack.
-  - Timeline `LocationCardView` (`MKMapSnapshotter`), full-width photos, message-only long-press `MessageActionsSheet`, room-wide + `one.mbm.halo.pinned_events` personal pins with swipeable toolbar pin pill & `PinnedMessagesSheet`, VisionKit Live Text/Subject Lift + Save/Copy/Reply/React/Save-as-Sticker in `PagedPhotoViewer`, and `SendMessageIntent` deprecation fix.
-- **Room list, avatar, floating header, jump button & gallery grid polish (2026-11-24, PR #78):**
-  - Plain room list with text-aligned dividers, borderless `52 pt` avatars, stacked unread indicator, 2-line sender-prefixed previews, exact `44 × 44` circular Liquid Glass toolbar avatars (warning border replaces `verify-dot`), non-blocking headers, `34 × 34` glass jump-to-bottom button, and fixed `GlobalMediaGalleryView` tile clipping at `400` px.
-- **Seamless photo send + unified delivery state (2026-11-24, D107):**
-  - Added `TimelineDiffCoalescer` (folds echo `remove` + `pushBack` into one `set`), `TimelineThumbnailMemory` (no blank reload on confirmation), and unified `TimelineRow.Delivery` / `DeliveryIndicator` (spinner → check → readers' avatars) with unit, contract, and UI regression tests.
+  - Tiered native confirmations (`.alert` for high-stakes actions, anchored `.confirmationDialog` on trigger), sheet grabbers, non-blocking floating Liquid Glass title pills, full Sticker Pack Manager, `LocationCardView`, message-only long-press `MessageActionsSheet`, room + personal pinned messages (`one.mbm.halo.pinned_events`) with swipeable toolbar pin pill & sheet, VisionKit Live Text/Subject Lift in `PagedPhotoViewer`, and `SendMessageIntent` deprecation fix.
 
 ## 3. Key decisions
 Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D107), [docs/adr/README.md](docs/adr/README.md).
@@ -44,20 +41,18 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D107), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
-- **Application (`HaloCore`):** `HaloApplication/Timeline/TimelineCoordinator.swift`.
-- **Feature (`HaloApple`):** `FeatureTimeline/TimelineView.swift`, `Tests/FeatureTimelineTests/PinMessageTests.swift`.
-- **Docs:** `HANDOFF.md`.
+- **Features (`HaloApple`):** `FeatureStickers/StickerLibraryView.swift`, `FeatureTimeline/LocationCardView.swift`, `FeatureTimeline/TimelineMessageRowView.swift`, `FeatureRoomDetails/RoomDetailsViewModel.swift`.
+- **UI Tests:** `ios/UITests/HaloUITests.swift`.
+- **Docs:** `docs/development/OUTSTANDING_ISSUES.md`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
-- **UI flakes:** `testComposerPanelsSwapWithKeyboard` and `testEmptyRoomStaysResponsive` still fail in the full UI run (pre-existing); an own thumbnail is downloaded once after an app restart (SDK caches the file under the new reference, thumbnails under their own key).
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
 
 **Engineering (not blocking)**
-- **Timeline follow-up:** the room appears ~150 ms after the push starts (the list is hidden until placed).
+- **Timeline follow-up:** the room appears ~150 ms after the push starts (the list is hidden until placed); an own thumbnail is downloaded once after an app restart (SDK caches the file under the new reference, thumbnails under their own key).
 
 **Needs the founder (`👤`) or physical device (`📱`)**
 - 👤 **Q-KLIPY-PROD:** the KLIPY key is a testing key (100 requests/hour); request production access in KLIPY's Partner Panel before Beta 1. 👤 **Q-KLIPY-REHOST:** decide whether to ask KLIPY to approve sending GIFs as encrypted `m.image` instead of links.
-- 👤 **Merge PR #76:** all CI checks pass and prepush passed, but it adds a new third-party data flow (KLIPY, SECURITY/PRIVACY docs), which AUTONOMOUS_LOOP §3.4 leaves to the founder. Merge with `gh pr merge 76 --merge --delete-branch` once approved.
 - 📱 **UI tests on devices:** the iPhone 16 (`00008140-000222592ED0801C`, signed in as contractpeer on the LAN dev server) runs `HaloUITests` (composer, empty room, launch). The iPhone 17e still exited with code 74.
 - 📱 **Location, polls and articles:** send own location and a pin on a device, start a poll, send an article with headings/lists/code; check they render in Halo and Element (no live message was sent in the simulator).
 - 📱 **Voice messages on a device:** record, cancel and send one; check it plays in Halo and Element (the simulator has no microphone test here).
@@ -83,26 +78,23 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 
 ## 6. Next steps
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §"Remaining work".
-0. Merge the `feat/keyboard-panels` PR once checks pass; founder tries the panels on the iPhone and requests KLIPY production access.
-1. Founder checks room opening on the device (`Halo-Debug` is installed on the iPhone) (§5 📱 "Opening rooms"); then the timeline follow-ups in §5 "Engineering".
-2. Founder resolves §5 items (gates, push gateway / APNs, Q-BRAND sign-in illustration, Q-APPSTORE, legal/export/privacy labels) and runs Beta 1 (internal TestFlight) on a physical device.
-3. Post-1.0 backlog (M16): all autonomous items complete (share extension, share-sheet sending, App Intents/Spotlight + Send-by-Siri, unread + unread-chats widgets, Focus filter, iPad two/three-column layout, keyboard shortcuts, drag-and-drop in and out). Calls will not be implemented (D94).
+1. Review and merge `fix/ui-flakes-and-autonomous-cleanup` once CI passes.
+2. Founder checks room opening, composer panels, voice/location/poll/article sending, iPad split/inspector, widgets, Focus filter, Siri/Spotlight, and Share extension on physical devices (§5 📱).
+3. Founder resolves §5 👤 items (gates G-FFI/G-UNREAD/G-NSE, push gateway / APNs, Q-KLIPY-PROD, Q-BRAND sign-in illustration, Q-APPSTORE, legal/export/privacy labels) and runs Beta 1 (internal TestFlight) on a physical device.
+4. Post-1.0 backlog (M16): all autonomous items complete; calls will not be implemented (D94).
 
 ## 7. Next Session Prompt
 ```text
-Read AGENTS.md, HANDOFF.md, and docs/features/COMPOSER_PANELS.md.
-Last push: composer and keyboard panels (D97) with KLIPY GIF/sticker
-search (D98) on branch feat/keyboard-panels (PR open). KLIPY needs
-HALO_KLIPY_API_KEY in the git-ignored ios/Config/Local.xcconfig.
+Read AGENTS.md and HANDOFF.md.
+All autonomous engineering work across M0–M16, ADR-0022, Tech Debt A–D, and
+UI-test / design-token housekeeping is complete (latest branch:
+fix/ui-flakes-and-autonomous-cleanup). Only founder (👤) and physical-device
+(📱) items remain in HANDOFF.md §5.
 
 Next:
-1. If the PR is still open: check its CI, merge per AUTONOMOUS_LOOP §3.
-2. Device checks in HANDOFF §5 (composer panels AC-CP1/AC-CP3; simulator: composer at 513 pt with keyboard, panel and back, 0 pt drift), then the
-   other founder/device items there.
-3. Q-KLIPY-PROD / Q-KLIPY-REHOST are founder decisions; don't change the
-   link-sending design without one.
-Simulator note: drive UI through XCUITest (screenshots as attachments);
-the headless simulator display may not refresh for direct screenshots.
-Checks: HALO_SIM="iPhone Air" scripts/prepush.sh (close Halo in every
-simulator first).
+1. If the fix/ui-flakes-and-autonomous-cleanup PR is open, check CI and merge.
+2. Proceed with founder decisions or physical-device checks in HANDOFF.md §5,
+   or any new feature/bug request from the founder.
+Checks: HALO_SIM="iPhone Air" scripts/prepush.sh (or isolated CLI DerivedData
+under /tmp/halo-cli-dd when Xcode IDE is open).
 ```

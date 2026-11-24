@@ -144,7 +144,6 @@ public final class RoomDetailsViewModel: Identifiable {
     private let images: (any ImagePreparing)?
     private let media: MediaLoader?
     private let encryptor: (any RoomExportEncryptor)?
-    private let sleep: @Sendable (Duration) async throws -> Void
 
     /// An avatar's image bytes (a small thumbnail); `nil` without a loader or when the download failed, so the initial stays.
     public func avatarData(_ ref: MediaRef) async -> Data? {
@@ -154,15 +153,13 @@ public final class RoomDetailsViewModel: Identifiable {
 
     public init(
         port: any RoomPort, room: RoomID, images: (any ImagePreparing)? = nil, media: MediaLoader? = nil,
-        encryptor: (any RoomExportEncryptor)? = nil,
-        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+        encryptor: (any RoomExportEncryptor)? = nil
     ) {
         self.images = images
         self.media = media
         self.encryptor = encryptor
         self.port = port
         self.room = room
-        self.sleep = sleep
     }
 
     /// The members shown under a heading; administrators carry a badge.
