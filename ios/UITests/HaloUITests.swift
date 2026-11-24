@@ -807,4 +807,153 @@ final class HaloUITests: XCTestCase {
 
         returnToChatList(app)
     }
+
+    /// Physical-device D95 check: open S10 (or the first non-gallery room) 10 times; each open must land at the newest
+    /// message (no `jump-to-bottom` button, no lingering loading spinner). Opt-in via `HALO_RUN_DEVICE_CHECKS=1`.
+    @MainActor
+    func testRoomOpeningLandsAtNewestTenTimes() throws {
+        guard ProcessInfo.processInfo.environment["HALO_RUN_DEVICE_CHECKS"] == "1" else {
+            throw XCTSkip("Set HALO_RUN_DEVICE_CHECKS=1 to run physical-device D95 room-opening check.")
+        }
+        let app = XCUIApplication()
+        app.launch()
+        dismissFirstRunSheets(app)
+        if !chatsRoot(app).waitForExistence(timeout: 3) { returnToChatList(app) }
+        guard chatsRoot(app).waitForExistence(timeout: 10) else { throw XCTSkip("App is signed out.") }
+        if app.buttons["focus-show-all"].exists { app.buttons["focus-show-all"].tap() }
+
+        let s10 = app.collectionViews.firstMatch.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'S10'")).firstMatch
+        let hasS10 = s10.waitForExistence(timeout: 5)
+        for attempt in 1...10 {
+            if hasS10 {
+                XCTAssertTrue(s10.waitForExistence(timeout: 5), "Run \(attempt): S10 row should exist")
+                s10.tap()
+                XCTAssertTrue(app.buttons["sticker-button"].waitForExistence(timeout: 8), "Run \(attempt): S10 should open")
+            } else {
+                try openFirstChat(app)
+            }
+            _ = app.staticTexts["settle"].waitForExistence(timeout: 0.6)
+            XCTAssertFalse(app.staticTexts["Loading messages…"].exists, "Run \(attempt): no loading spinner after room open")
+            XCTAssertFalse(
+                app.buttons["jump-to-bottom"].exists,
+                "Run \(attempt): room must land at the newest message (jump-to-bottom must not appear)"
+            )
+            if attempt == 1 || attempt == 10 {
+                let shot = XCTAttachment(screenshot: app.screenshot())
+                shot.name = "d95-open-\(String(format: "%02d", attempt))"
+                shot.lifetime = .keepAlways
+                add(shot)
+            }
+            returnToChatList(app)
+            XCTAssertTrue(chatsRoot(app).waitForExistence(timeout: 5), "Run \(attempt): back to Chats root")
+        }
+    }
+
+    /// Physical-device live-send check (HANDOFF §5): sends a pinned location, a poll, a Markdown article, and a KLIPY GIF
+    /// into S10 (or the first non-gallery room) and verifies each renders in the timeline. Opt-in via `HALO_RUN_DEVICE_CHECKS=1`.
+    @MainActor
+    func testLiveSendsLocationPollArticleAndKlipy() throws {
+        guard ProcessInfo.processInfo.environment["HALO_RUN_DEVICE_CHECKS"] == "1" else {
+            throw XCTSkip("Set HALO_RUN_DEVICE_CHECKS=1 to run physical-device live-send checks.")
+        }
+        let app = XCUIApplication()
+        app.launch()
+        dismissFirstRunSheets(app)
+        if !chatsRoot(app).waitForExistence(timeout: 3) { returnToChatList(app) }
+        guard chatsRoot(app).waitForExistence(timeout: 10) else { throw XCTSkip("App is signed out.") }
+        if app.buttons["focus-show-all"].exists { app.buttons["focus-show-all"].tap() }
+
+        let s10 = app.collectionViews.firstMatch.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'S10'")).firstMatch
+        if s10.waitForExistence(timeout: 5) {
+            s10.tap()
+            XCTAssertTrue(app.buttons["sticker-button"].waitForExistence(timeout: 8), "Expected timeline composer in S10")
+        } else {
+            try openFirstChat(app)
+        }
+
+        func shot(_ name: String) {
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+
+        let stamp = Int(Date().timeIntervalSince1970) % 100_000
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+
+        // 1. Live send: pinned location.
+        app.buttons["attachment-button"].tap()
+        XCTAssertTrue(app.buttons["attach-tab-location"].waitForExistence(timeout: 5))
+        app.buttons["attach-tab-location"].tap()
+        let allow = springboard.buttons["Allow While Using App"]
+        if allow.waitForExistence(timeout: 3) { allow.tap() }
+        let sendPin = app.buttons["send-pinned-location"]
+        XCTAssertTrue(sendPin.waitForExistence(timeout: 8), "Location tab should offer send-pinned-location")
+        sendPin.tap()
+        XCTAssertTrue(sendPin.waitForNonExistence(timeout: 5), "Location panel should dismiss after sending")
+        _ = app.staticTexts["settle"].waitForExistence(timeout: 2)
+        shot("live-1-location")
+
+        // 2. Live send: poll.
+        let pollQuestionText = "Device poll \(stamp)?"
+        app.buttons["attachment-button"].tap()
+        XCTAssertTrue(app.buttons["attach-tab-poll"].waitForExistence(timeout: 5))
+        app.buttons["attach-tab-poll"].tap()
+        XCTAssertTrue(app.buttons["create-poll-button"].waitForExistence(timeout: 5))
+        app.buttons["create-poll-button"].tap()
+        let question = app.textViews["poll-question"].exists ? app.textViews["poll-question"] : app.textFields["poll-question"]
+        XCTAssertTrue(question.waitForExistence(timeout: 5))
+        question.tap()
+        question.typeText(pollQuestionText)
+        app.textFields["poll-answer-0"].tap()
+        app.textFields["poll-answer-0"].typeText("Pizza")
+        app.textFields["poll-answer-1"].tap()
+        app.textFields["poll-answer-1"].typeText("Sushi")
+        XCTAssertTrue(app.buttons["poll-send"].isEnabled)
+        app.buttons["poll-send"].tap()
+        XCTAssertTrue(question.waitForNonExistence(timeout: 8), "Poll sheet should dismiss after sending")
+        let pollRendered = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", pollQuestionText)).firstMatch
+        XCTAssertTrue(pollRendered.waitForExistence(timeout: 15), "Sent poll should render in the timeline")
+        shot("live-2-poll")
+
+        // 3. Live send: Markdown article.
+        let articleHeading = "Device Article \(stamp)"
+        app.buttons["attachment-button"].tap()
+        XCTAssertTrue(app.buttons["attach-tab-article"].waitForExistence(timeout: 5))
+        app.buttons["attach-tab-article"].tap()
+        XCTAssertTrue(app.buttons["write-article-button"].waitForExistence(timeout: 5))
+        app.buttons["write-article-button"].tap()
+        let articleEditor = app.textViews["article-editor"]
+        XCTAssertTrue(articleEditor.waitForExistence(timeout: 5))
+        articleEditor.tap()
+        articleEditor.typeText("\n## \(articleHeading)\n\n- **Bold** item\n")
+        XCTAssertTrue(app.buttons["article-send"].isEnabled)
+        app.buttons["article-send"].tap()
+        XCTAssertTrue(articleEditor.waitForNonExistence(timeout: 8), "Article sheet should dismiss after sending")
+        let articleRendered = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", articleHeading)).firstMatch
+        XCTAssertTrue(articleRendered.waitForExistence(timeout: 15), "Sent article should render in the timeline")
+        shot("live-3-article")
+
+        // 4. Live send: KLIPY GIF (when build has a KLIPY key).
+        app.buttons["sticker-button"].tap()
+        if app.buttons["panel-tab-gifs"].waitForExistence(timeout: 5) {
+            app.buttons["panel-tab-gifs"].tap()
+            XCTAssertTrue(app.staticTexts["TRENDING"].waitForExistence(timeout: 30), "KLIPY trending should load")
+            let firstGif = app.buttons["klipy-gif-item"].firstMatch
+            XCTAssertTrue(firstGif.waitForExistence(timeout: 10), "At least one KLIPY GIF item should appear")
+            firstGif.tap()
+            dismissComposerInput(app)
+            let klipyMedia = app.descendants(matching: .any)["klipy-message-media"].firstMatch
+            XCTAssertTrue(klipyMedia.waitForExistence(timeout: 15), "Sent KLIPY GIF should appear in the timeline")
+            let loaded = NSPredicate(format: "value == 'loaded'")
+            XCTAssertEqual(
+                XCTWaiter().wait(for: [expectation(for: loaded, evaluatedWith: klipyMedia)], timeout: 45),
+                .completed,
+                "KLIPY GIF message should load and play inline"
+            )
+            shot("live-4-klipy")
+        }
+
+        returnToChatList(app)
+    }
 }

@@ -132,6 +132,7 @@ private struct KlipyCell: View {
         .disabled(model.isSending)
         .accessibilityLabel(item.title.isEmpty ? (isGIF ? "GIF" : "Sticker") : item.title)
         .accessibilityHint("Sends it")
+        .accessibilityIdentifier(isGIF ? "klipy-gif-item" : "klipy-sticker-item")
         .contextMenu {
             Button("Send", systemImage: "paperplane") { Task { await model.tap(item) } }
             Button(model.isFavourite(item) ? "Remove from favourites" : "Add to favourites",
