@@ -1,26 +1,26 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-24 · Branch: `perf/iphone16-ui-and-nfr-metrics` · PRs #1–#82 merged
+Last updated: 2026-11-24 · Branch: `test/iphone16-d95-and-live-sends` · PRs #1–#83 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
-- **Roadmap / Autonomous Loop:** all autonomous work across M0–M16, ADR-0022, Tech Debt A–D (including TD-12), the Halo Sygnal pushkin (`infra/sygnal/`, R-24), and release documentation (`docs/release/`, D115) is complete; all open product decisions in `OPEN_QUESTIONS.md` are resolved (`D108–D117`). Physical iPhone 16 `HaloUITests` + NFR-1 cold launch (0.357 s responsive) + timeline memory (76.8 MB peak) baselines are recorded (`TEST_STRATEGY.md` §7). Only external-account / legal (`👤`) and remaining physical-device (`📱`) items remain (§5).
+- **Roadmap / Autonomous Loop:** all autonomous work across M0–M16, ADR-0022, Tech Debt A–D (including TD-12), the Halo Sygnal pushkin (`infra/sygnal/`, R-24), and release documentation (`docs/release/`, D115) is complete; all open product decisions in `OPEN_QUESTIONS.md` are resolved (`D108–D117`). Physical iPhone 16 `HaloUITests`, NFR-1 cold launch (0.357 s responsive), timeline memory (76.8 MB peak), D95 10× room-opening check, and live sends (location pin, poll, Markdown article, KLIPY GIF) are all verified green. The roadmap has been expanded with **M17 (Ship-readiness polish & hardening)**, **M18 (Everyday messaging completeness)**, and **M19 (Power-user organization, trust & ecosystem)** in [docs/ROADMAP.md](docs/ROADMAP.md). External-account / legal (`👤`) and remaining physical-device (`📱`) items remain in §5.
 - **Milestones:** M0–M16 done except external/device items (deploy `infra/sygnal/` + APNs keys + TestFlight, 7-day AC-U8 soak, interactive Xcode/Instruments NFR-2 scroll hitch + 300-room + MetricKit run, Q-KLIPY-PROD portal request, publish `docs/release/` privacy/support URLs, final Beta 2 brand artwork, legal/export review). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1).
-- **Last checks (`perf/iphone16-ui-and-nfr-metrics`):** physical iPhone 16 `HaloUITests` + `TEST_RUNNER_HALO_RUN_PERF_TESTS=1` passed (0 failures across all 7 applicable device tests: launch audit, signed-in launch, sticker panel, composer panels swap, empty rooms, launch perf 0.348 s / 0.357 s responsive, timeline scroll memory 76.8–78.1 MB peak); `validate-docs.sh`, `check-boundaries.sh`, `check-design-tokens.sh`, `swiftlint --strict`, `gitleaks` passed.
-- **CI:** PRs #1–#82 merged. Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
+- **Last checks (`test/iphone16-d95-and-live-sends`):** physical iPhone 16 `testRoomOpeningLandsAtNewestTenTimes` (10/10 passes in S10) & `testLiveSendsLocationPollArticleAndKlipy` (location pin, poll, Markdown article, KLIPY GIF sent & rendered inline) passed (0 failures, 0 skips); `validate-docs.sh`, `check-boundaries.sh`, `check-design-tokens.sh`, `swiftlint --strict`, `gitleaks` passed.
+- **CI:** PRs #1–#83 merged. Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
-- **Physical iPhone 16 UI tests & NFR-1/memory baseline (2026-11-24, `perf/iphone16-ui-and-nfr-metrics`):**
+- **Physical iPhone 16 D95 10× room-opening & live-send checks (2026-11-24, `test/iphone16-d95-and-live-sends`):**
+  - Added opt-in (`HALO_RUN_DEVICE_CHECKS=1`) `testRoomOpeningLandsAtNewestTenTimes` and `testLiveSendsLocationPollArticleAndKlipy` to `ios/UITests/HaloUITests.swift` plus `klipy-gif-item`/`klipy-sticker-item` identifiers in `KlipyPanelView.swift`.
+  - Passed on physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1, `Halo-Debug`): S10 opened 10/10 times at the newest message (no `jump-to-bottom`, no spinner); live pinned location, poll, Markdown article, and KLIPY GIF all sent and rendered inline.
+- **Physical iPhone 16 UI tests & NFR-1/memory baseline (2026-11-24, PR #83):**
   - Added `testTimelineScrollPerformanceMetric` (`XCTOSSignpostMetric.scrollingAndDecelerationMetric` + `XCTMemoryMetric`) and `XCTApplicationLaunchMetric(waitUntilResponsive: true)` to `ios/UITests/HaloUITests.swift`; fixed physical-device software-keyboard detection (`requireSoftwareKeyboard` checking any hittable key after settle) and `testEmptyRoomStaysResponsive` returning from a `@SceneStorage`-restored room.
   - Ran `HaloUITests` + `TEST_RUNNER_HALO_RUN_PERF_TESTS=1` on physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1): 0 failures across all 7 applicable device tests; recorded NFR-1 launch (**0.348 s** / **0.357 s** responsive ≤ 1.0 s) and `S10` timeline peak memory (**76.8–78.1 MB** < 200 MB) in `docs/testing/TEST_STRATEGY.md` §7, `docs/design/UX_AUDIT.md`, and `docs/ROADMAP.md`.
 - **Release docs & remaining founder decisions (2026-11-24, PR #82, D113–D117):**
   - Scaffolded `docs/release/{APP_STORE_METADATA,PRIVACY_POLICY,SUPPORT}.md` grounded in `PRIVACY.md` and `PrivacyInfo.xcprivacy` (D115).
   - Recorded founder decisions closing `Q-SDK-BUILD` (D113), `Q-CRASH` (D114), `Q-BRAND`/`Q-APPSTORE` Beta 1 (D115), `Q-KLIPY-REHOST` (D116), and `Q-MAS-ACCOUNT`/`Q-E2EE-STRATEGY`/`Q-BOT-OWNER`/`Q-ACT-REFRESH` (D117).
-- **Field encryption, Sygnal pushkin & founder decisions (2026-11-24, PR #81, D108–D112):**
-  - Implemented AES-256-GCM field encryption (`FieldCipher`, `KeychainItem.haloDatabaseKey`, `"enc:v1:"` envelopes) for `draft.body`, `bot_task.title`, and `bot_task.detail` with `FieldCipherTests` (closes TD-12 / R-16 / NFR-7, D108).
-  - Implemented Halo Sygnal APNs pushkin in `infra/sygnal/` (`halo_pushkin.py`, `Dockerfile`, `sygnal.yaml.example`, `test_halo_pushkin.py`, `.github/workflows/pushkin.yml`; D112 / ADR-0015 Option 1); confirmed PASS for G-FFI / G-UNREAD / G-NSE (D109) and resolved `Q-ONBOARD-SERVER` (D110) / `Q-L10N` (D111).
 
 ## 3. Key decisions
 Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D107), [docs/adr/README.md](docs/adr/README.md).
@@ -42,8 +42,8 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D107), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
-- **UI & performance tests:** `ios/UITests/HaloUITests.swift`.
-- **Docs:** `docs/testing/TEST_STRATEGY.md`, `docs/design/UX_AUDIT.md`, `docs/ROADMAP.md`, `HANDOFF.md`.
+- **UI tests & stickers:** `ios/UITests/HaloUITests.swift`, `ios/Packages/HaloApple/Sources/FeatureStickers/KlipyPanelView.swift`.
+- **Docs:** `HANDOFF.md`.
 
 ## 5. Outstanding issues
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
@@ -54,10 +54,10 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 **Needs the founder (`👤`) or physical device (`📱`)**
 - 👤 **Q-KLIPY-PROD:** the KLIPY key is a testing key (100 requests/hour); request production access in KLIPY's Partner Panel before Beta 1.
 - 📱 **UI tests on devices:** the iPhone 16 (`00008140-000222592ED0801C`, signed in as contractpeer on the LAN dev server) runs `HaloUITests` (composer, empty room, launch). The iPhone 17e still exited with code 74.
-- 📱 **Location, polls and articles:** send own location and a pin on a device, start a poll, send an article with headings/lists/code; check they render in Halo and Element (no live message was sent in the simulator).
+- 📱 **Location, polls and articles:** pinned location, poll, Markdown article, and KLIPY GIF live sends verified in Halo on iPhone 16 (`testLiveSendsLocationPollArticleAndKlipy`); still open: current-location send + Element interoperability check.
 - 📱 **Voice messages on a device:** record, cancel and send one; check it plays in Halo and Element (the simulator has no microphone test here).
-- 📱 **Composer panels on a device:** keyboard ↔ panel swap verified on the iPhone 16 (0.0 pt per frame); still open: iPad floating/hardware keyboard, the composer following the keyboard when it opens from nothing (only end positions measured), and a KLIPY GIF into an encrypted room seen in Element as a link (AC-CP3). The simulator here does not refresh its display without a viewer, so checks ran through XCUITest screenshots.
-- 📱 **Opening rooms on the device (D95):** open S10 and other large rooms with photos 10+ times; each must land at the newest message with no frame of the room's top and no spinner; also from a notification tap and Spotlight, and in the iPad split view.
+- 📱 **Composer panels on a device:** keyboard ↔ panel swap and KLIPY GIF inline send/play verified on iPhone 16; still open: iPad floating/hardware keyboard, composer following keyboard from idle, and KLIPY GIF link interoperability in Element (AC-CP3).
+- 📱 **Opening rooms on the device (D95):** S10 10× room-opening check verified green on iPhone 16 (`testRoomOpeningLandsAtNewestTenTimes`, 10/10 at newest message, no spinner); still open: notification-tap / Spotlight entry and iPad split view.
 - 👤 **R-14 (filtering entitlement):** request Apple's `com.apple.developer.usernotifications.filtering` entitlement (V-PUSH-3).
 - 👤 **R-18 & R-21 (upstream SDK gaps):** `SyncSettingsV2` filter and queued `sendRaw`/`sendSticker` need upstream `matrix-rust-sdk` PR + SDK bump.
 - 👤 **R-24 (Beta/Release push gateway deploy):** deploy `infra/sygnal/` (D112) with APNs keys, verify V-PUSH-5 live, and upload Beta 1 to TestFlight.
@@ -76,21 +76,21 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 
 ## 6. Next steps
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §"Remaining work".
-1. Founder deploys `infra/sygnal/` + APNs keys, requests KLIPY production access (`Q-KLIPY-PROD`), and uploads Beta 1 to internal TestFlight.
-2. Founder runs physical-device checks in §5 📱 (room opening, composer panels, voice/location/poll/article sending, iPad split/inspector, widgets, Focus filter, Siri/Spotlight, Share extension, 7-day AC-U8 soak, NFR-1/NFR-2 perf).
-3. Before Beta 2 / 1.0: publish `docs/release/{PRIVACY_POLICY,SUPPORT}.md`, finalize Beta 2 brand artwork, and complete legal/export compliance.
+1. **Autonomous loop (M17 → M18 → M19):** start M17 ship-readiness polish & hardening (land WIP `HaloUITests.swift` perf metric if ready, room-open smoothness & thumbnail caching, crash-safety/`try? await` sweep, Reduce Motion/Contrast, file-size splits, L10n string extraction), then proceed through M18 (everyday messaging completeness) and M19 (power-user organization, trust & ecosystem).
+2. Founder deploys `infra/sygnal/` + APNs keys, requests KLIPY production access (`Q-KLIPY-PROD`), and uploads Beta 1 to internal TestFlight.
+3. Founder runs physical-device checks in §5 📱 (room opening, composer panels, voice/location/poll/article sending, iPad split/inspector, widgets, Focus filter, Siri/Spotlight, Share extension, 7-day AC-U8 soak, NFR-1/NFR-2 perf).
+4. Before Beta 2 / 1.0: publish `docs/release/{PRIVACY_POLICY,SUPPORT}.md`, finalize Beta 2 brand artwork, and complete legal/export compliance.
 
 ## 7. Next Session Prompt
 ```text
-Read AGENTS.md and HANDOFF.md.
-All autonomous engineering work, technical debt (including TD-12 AES-GCM
-field encryption, D108), Halo Sygnal pushkin (infra/sygnal/, D112), gate
-confirmations (D109), release docs (docs/release/, D115), and open product
-decisions (D108–D117) are complete on main.
+/loop Read AGENTS.md, HANDOFF.md, docs/development/AUTONOMOUS_LOOP.md, and docs/ROADMAP.md.
+Execute the expanded roadmap in a continuous Plan → Implement → Verify → Review → Land loop across M17 (Ship-readiness polish & hardening), M18 (Everyday messaging completeness), and M19 (Power-user organization, trust & ecosystem).
 
-Next:
-Proceed with physical-device / Beta 1 TestFlight checks in HANDOFF.md §5,
-or any new feature, polish, or bug fix requested by the founder.
-Checks: HALO_SIM="iPhone Air" scripts/prepush.sh (or isolated CLI DerivedData
-under /tmp/halo-cli-dd when Xcode IDE is open).
+Start by inspecting any uncommitted WIP in ios/UITests/HaloUITests.swift on the current branch, then pick the first unchecked autonomous item in ROADMAP.md §"Remaining work" under M17 and proceed milestone by milestone until M17–M19 are complete.
+
+Checks per iteration:
+- HALO_SIM="iPhone Air" scripts/prepush.sh
+- scripts/contract-test.sh / scripts/contract-offline-test.sh when touching adapter, sync, timeline, or read-state code
+- Simulator visual verification (Light, Dark, AX5) for UI changes
+- Update HANDOFF.md and ROADMAP.md checkboxes in the last commit of every push (AGENTS.md §18).
 ```
