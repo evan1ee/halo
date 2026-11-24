@@ -241,13 +241,17 @@ struct NotificationProcessorTests {
         let records = FakeNotificationRecords()
         let shown = Mutex<[RoomID: Int]>([:])
         let evaluatedAt = now.addingTimeInterval(-10)
+        // Closures over the Mutex are made outside the task group: Swift 6.2 rejects capturing it in `addTask`.
+        let attention: @Sendable () -> AttentionBaseline = {
+            AttentionBaseline(counts: [:], displayed: shown.withLock { $0 }, evaluatedAt: evaluatedAt)
+        }
+        let storeDisplayed: @Sendable ([RoomID: Int]) -> Void = { counts in shown.withLock { $0 = counts } }
         await withTaskGroup(of: Void.self) { group in
             for (room, event) in ids {
                 group.addTask { [now] in
                     let processor = NotificationProcessor(
-                        fetcher: fetcher, records: records,
-                        attention: { AttentionBaseline(counts: [:], displayed: shown.withLock { $0 }, evaluatedAt: evaluatedAt) },
-                        storeDisplayed: { counts in shown.withLock { $0 = counts } }, isAppForeground: { false }, now: { now })
+                        fetcher: fetcher, records: records, attention: attention, storeDisplayed: storeDisplayed,
+                        isAppForeground: { false }, now: { now })
                     _ = await processor.process(room: room, event: event)
                 }
             }

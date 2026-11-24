@@ -292,9 +292,14 @@ public enum ReadStatePolicy {
         // R-07: the SDK's latest event leaves out events it can't decrypt, so "covers the latest event" can be true while
         // newer unread exists. The SDK's counts know better once the SDK has applied the read position: the receipt it holds
         // is at least the local one (E1), or the own latest event is on the server (E1b: the SDK takes an own event as a receipt).
+        // Not while an unconfirmed local position is past both (S11, D119): the latest event can lag at the own event (the
+        // user's join) behind what was read here, and a receipt that couldn't be sent is one the SDK can't have counted with.
         let sdkCountsAfterRead = counts.sdk != .zero && {
             if intentCovers, let receipt = input.receiptReadThrough, let intent = input.localIntent, intent <= receipt { return true }
-            if ownLatest, input.latestEvent?.isLocal == false { return true }
+            if ownLatest, let own = input.latestEvent, !own.isLocal {
+                guard let intent = input.localIntent, !input.localIntentConfirmed else { return true }
+                return intent <= max(own.timestamp, input.receiptReadThrough ?? own.timestamp)
+            }
             return false
         }()
         // R-06 (ADR-0020): once the receipt is confirmed on the server (echoed or followed by a sync), a stale intent

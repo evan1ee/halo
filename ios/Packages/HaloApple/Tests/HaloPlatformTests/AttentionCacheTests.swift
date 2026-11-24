@@ -65,7 +65,8 @@ struct AttentionCacheTests {
         cache.setForeground(false, at: start)
         #expect(!cache.isForeground(at: start))
         // The flag of an older version, left set by a kill, means nothing.
-        UserDefaults(suiteName: suite)?.set(true, forKey: "appForeground.v1")
+        let oldFlag = "appForeground.v1"
+        UserDefaults(suiteName: suite)?.set(true, forKey: oldFlag)
         #expect(!cache.isForeground(at: start))
     }
 
