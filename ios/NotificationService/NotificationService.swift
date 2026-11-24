@@ -5,6 +5,7 @@ import HaloMatrixAdapter
 import HaloPersistence
 import HaloPlatform
 import UserNotifications
+import WidgetKit
 
 /// Notification service extension (docs/matrix/PUSH_NOTIFICATIONS.md §3, gate G-NSE, ADR-0016).
 /// Thin wiring over `HaloApplication.NotificationProcessor`: fetches the event through the SDK, records it in
@@ -99,11 +100,15 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
             let decision = await processor.process(room: room, event: event)
             metrics.step("fetch")
             switch decision {
-            case .deliver(let title, let body, let threadID, let badge, let outcome):
+            case .deliver(let title, let body, let threadID, let badge, let outcome, let attentionCounts):
                 content.title = title
                 content.body = body
                 content.threadIdentifier = threadID
                 content.badge = badge.map(NSNumber.init(value:))
+                if let attentionCounts {
+                    attention.store(attentionCounts)
+                    WidgetCenter.shared.reloadAllTimelines()
+                }
                 deliver(content, outcome: outcome, metrics: metrics)
             case .suppressed(let outcome):
                 // Empty, silent, passive content (R-14): suppresses delivery completely once Apple's

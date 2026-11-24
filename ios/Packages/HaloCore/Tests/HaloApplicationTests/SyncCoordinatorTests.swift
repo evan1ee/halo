@@ -107,4 +107,16 @@ struct SyncCoordinatorTests {
         await coordinator.setForeground(true)
         #expect(sleeps.durations.withLock { $0 }.count == before)
     }
+
+    @Test("syncOnceInBackground runs one bounded sync pass while backgrounded without starting the foreground loop")
+    func backgroundSyncOnce() async throws {
+        let (coordinator, port, session, _) = try await make()
+        #expect(await coordinator.syncOnceInBackground() == false)
+        #expect(port.syncOnceCalls == 0)
+
+        await signIn(session)
+        #expect(await eventually { await coordinator.syncOnceInBackground() })
+        #expect(port.syncOnceCalls >= 1)
+        #expect(port.startCalls == 0)
+    }
 }

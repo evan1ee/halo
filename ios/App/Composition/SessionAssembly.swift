@@ -95,6 +95,20 @@ extension AppRoot {
         await readState.setForeground(active)
     }
 
+    /// Handles a silent background push (`content-available: 1`, ADR-0015 / D112): ensures the session is restored,
+    /// runs one bounded `/sync` pass, and reconciles read state so both app icon badge and widgets refresh in the background.
+    func handleBackgroundPush() async -> Bool {
+        HaloDatabase.resumeAll()
+        await readState.begin()
+        await sync.begin()
+        if signedInUser == nil {
+            await sessionCoordinator.start()
+        }
+        let synced = await sync.syncOnceInBackground()
+        await readState.reconcile()
+        return synced
+    }
+
     #if DEBUG
     static func exportNSEMetrics(namespace: String) {
         let fileManager = FileManager.default

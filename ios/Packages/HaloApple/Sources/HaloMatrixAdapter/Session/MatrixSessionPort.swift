@@ -300,6 +300,23 @@ public actor MatrixSessionPort: SessionPort {
         }
     }
 
+    /// Runs a single bounded classic `/sync` pass (`timeoutMs: 0`) without starting the foreground loop,
+    /// publishing any room changes so room list, read state, badge and widgets update in the background.
+    func syncOnce() async throws(HaloError) {
+        guard let client else { throw .unauthorized(soft: false) }
+        await stoppingTask?.value
+        do {
+            let response = try await client.syncOnceV2(settings: SyncSettingsV2(timeoutMs: 0, fullState: false))
+            publish(change: SyncChange(
+                joined: Set(response.rooms.joined),
+                invited: Set(response.rooms.invited),
+                left: Set(response.rooms.left)
+            ))
+        } catch {
+            throw ErrorMapper.map(error)
+        }
+    }
+
     /// Cancels the loop and returns once it has ended or after a short grace period: the SDK call in flight is a long
     /// poll (up to 30 s) that may not be interruptible, and a sign-out or a pause must not wait for it. A later `startSync`
     /// waits for the old loop to end before it begins.

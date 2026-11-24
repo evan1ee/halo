@@ -426,7 +426,7 @@ struct ServerReadStateScenarioTests {
         await stack.sync.stop()
         let pushedEv = try await http.send(b.token, room: r03, text: "s03-pushed")
         let decision1 = try await stack.runNSEPush(room: r03, event: pushedEv)
-        guard case .deliver(_, let body03, _, let badge03, _) = decision1 else {
+        guard case .deliver(_, let body03, _, let badge03, _, _) = decision1 else {
             Issue.record("S03 expected .deliver from NSE, got \(decision1)"); return
         }
         #expect(body03.contains("s03-pushed"))

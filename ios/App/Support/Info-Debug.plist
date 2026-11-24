@@ -27,5 +27,9 @@
 	<string>$(HALO_PUSH_GATEWAY_URL)</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Halo connects to your development homeserver on the local network.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>
