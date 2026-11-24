@@ -1,4 +1,10 @@
 import Foundation
+#if canImport(SwiftUI)
+import SwiftUI
+#endif
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Preserves the reader's scroll position when older history pages are prepended while scrolled up.
 enum PrependedAnchor {
@@ -105,3 +111,72 @@ struct BottomFollowState: Equatable {
         return pinnedToBottom
     }
 }
+
+#if canImport(SwiftUI)
+/// A `ButtonStyle` that applies no touch-down highlight/dimming effect so placing a finger on an image, map, or
+/// reply quote inside a `List` to begin scrolling never flashes a tap effect, while still letting `UIScrollView`
+/// cancel the button cleanly on vertical drags.
+struct ScrollFriendlyTapButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+    }
+}
+
+/// Attaches a scroll-safe long-press gesture that never delays or blocks `UIScrollView` vertical panning and never
+/// mutates view state on touch-down (preventing the tap/scale flash when scrolling over images, maps, or messages).
+struct ScrollSafeLongPressModifier: ViewModifier {
+    let enabled: Bool
+    let onTrigger: () -> Void
+
+    func body(content: Content) -> some View {
+        #if canImport(UIKit)
+        if enabled {
+            content.gesture(ScrollSafeLongPress(onTrigger: onTrigger))
+        } else {
+            content
+        }
+        #else
+        if enabled {
+            content.onLongPressGesture(minimumDuration: 0.4, maximumDistance: 10, perform: onTrigger)
+        } else {
+            content
+        }
+        #endif
+    }
+}
+
+#if canImport(UIKit)
+private struct ScrollSafeLongPress: UIGestureRecognizerRepresentable {
+    let onTrigger: () -> Void
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIGestureRecognizer(context: Context) -> UILongPressGestureRecognizer {
+        let recognizer = UILongPressGestureRecognizer()
+        recognizer.minimumPressDuration = 0.4
+        recognizer.allowableMovement = 10
+        recognizer.cancelsTouchesInView = false
+        recognizer.delaysTouchesBegan = false
+        recognizer.delegate = context.coordinator
+        return recognizer
+    }
+
+    func handleUIGestureRecognizerAction(_ recognizer: UILongPressGestureRecognizer, context: Context) {
+        if recognizer.state == .began {
+            onTrigger()
+        }
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            true
+        }
+    }
+}
+#endif
+#endif

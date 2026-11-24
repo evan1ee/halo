@@ -67,7 +67,7 @@ struct LocationCardView: View {
             .background(isOwn ? HaloColor.bubbleOwn : HaloColor.bubbleOther)
             .clipShape(RoundedRectangle(cornerRadius: HaloRadius.bubble, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ScrollFriendlyTapButtonStyle())
         .accessibilityLabel("\(location.title), \(location.subtitle)")
         .accessibilityHint("Opens in Apple Maps")
         .task(id: snapshotCacheKey) {
