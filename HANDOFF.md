@@ -1,6 +1,6 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-24 · Branch: `fix/unread-badge-consistency` · PRs #1–#87 merged
+Last updated: 2026-11-25 · Branch: `fix/unread-badge-consistency` · PRs #1–#87 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
@@ -16,6 +16,7 @@ Summary only; older history lives in `git log`.
   - Root causes: gateway down and Halo's pushkin never able to send (asyncio awaited on Twisted); dev ran the stock pushkin; background launches did nothing (handlers set in a view) and reported done before the badge was written; pre-sync evaluations overwrote what the NSE had counted; unordered badge writes; the NSE counted late pushes twice and raced itself; a sticky foreground flag; no refresh fallback; a widget reload on every open/close spent iOS's budget.
   - Verified on iPhone 16 via SpringBoard's icon value: pushes 8→10 suspended, 10→11 terminated; read elsewhere 11→0 in ~5 s suspended and from a cold background launch; 10 open/close cycles unchanged. A Focus with "Hide Notification Badges" hid the icon badge on the founder's phone (value was right throughout).
 - **S11 offline read (D119, 2026-11-24, same branch):** the own-latest case of `SDK_UNREAD_AFTER_READ` discarded a read that couldn't be sent when the SDK's latest event still was the user's own join. Real-server scenarios 8×: the ordering came up in 3 runs, S11 passed in all 8; one run failed later at S29 (see §5). Also fixed PR CI: a test closure Swift 6.2 on Linux rejects, and a gitleaks false positive.
+- **`readMarkers` and other contract tests (2026-11-25, same branch):** they waited for exactly `HALO_DEV_ROOMS` (106) rooms while the account was in 268, so they timed out before testing anything. They now wait for the room they need (`roomList` asks the server); the setting is gone. Rooms piled up because `defer { Task {…} }` cleanup never ran before the process ended: replaced by the awaited `withCleanup`. Full contract run: 33 passed, 2 skipped, `stickers` failed on an extra sticker in the fixture pack (test fixed; passes after the account data below was restored).
 - **Room info as pushed full-bleed navigation page (2026-11-24, `main`):**
   - Replaced Room info `.sheet` presentation (timeline avatar button and room-list context menu) with `ChatsRoute.roomInfo(RoomID)`, `ChatsRouter.openRoomInfo(_:)`, `ChatsRouter.removeRoom(_:)`, and `RoomInfoPresentation.page` (keeping `.inspector` on regular-width iPad).
   - Removed the nested `NavigationStack` from `RoomDetailsView` and matched the conversation page's transparent, title-free header with full-bleed edge-to-edge scrolling (`.scrollEdgeEffectHidden(true, for: .top)`); verified with `HaloUITests.testRoomInfoOpensAsPushedPage` on physical iPhone 16.
@@ -44,6 +45,8 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D119), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
+- **Widgets:** `HaloWidgets.swift` (`kind` is `nonisolated`; two concurrency warnings gone).
+- **Contract tests:** `AdapterContractTests`, `ClassicSyncEvidenceTests`, `ServerReadStateScenarioTests`, `Cleanup.swift` (new), `contract-test.sh`, `infra/dev/` (`create-fixtures.py`, example, README), `AUTONOMOUS_LOOP`, `OUTSTANDING_ISSUES`.
 - **S11 / CI:** `ReadState.swift`, policy, property and scenario tests, `NotificationProcessorTests`, `AttentionCacheTests`, `.gitleaksignore`, `UNREAD_STATE`, `UNREAD_REGRESSION_TESTS`, `DECISION_LOG`. The rest of the branch:
 - **Core:** `ReadState.swift` (E6), `BadgePort`, `RoomListPort`, `NotificationRecordPort`, `ReadStateCoordinator`, `RoomListCoordinator`, `NotificationProcessor`, `SyncCoordinator`, `BackgroundRefresh` (new), `ReadReceiptCoordinator`, fakes, tests.
 - **Apple / app:** `SystemBadge.swift` (`AttentionCache`), `BackgroundRefreshScheduler` (new), `MatrixRoomListPort`, `MatrixSessionPort`, `NotificationRecordStore`, NSE, widgets, `HaloApp`, `AppRoot`, `SessionAssembly`, both `Info.plist`s, `HaloUITests`.
@@ -55,7 +58,8 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 **Engineering (not blocking)**
 - **Accessibility audit is flaky on the signed-in simulator (failed on `main` too):** `testLaunchRootScreenPassesAccessibilityAudit`, "Potentially inaccessible text" without an element; it failed earlier on 2026-11-24 and passed in the last `prepush.sh` run. Cause unknown.
 - **Dev APNs stall (2026-11-24, 15:05–15:19 UTC):** APNs accepted pushes the iPhone never acted on (alerts and silent ones), then delivery resumed without a change; a later silent push also had no effect within 12 s (iOS throttles them; opening healed it). Cause unknown.
-- **Contract failure that also fails on `main` (b1a280b):** `AdapterContractTests.readMarkers` (60 s timeout).
+- **App bug: an early account-data write loses the list (found 2026-11-25, not fixed):** `MatrixStickerPorts` reads `m.image_pack.rooms` / `one.mbm.halo.sticker_rooms` from the SDK's store and writes the whole object back. Before the first sync of a new sign-in is stored (about 5 s with 268 rooms) the read is nil, so creating a pack replaces the account's list with that one pack. `createPack` in a full contract run did this to stickertester; both lists (29 and 28 entries) were restored from a test store. Until fixed, a full contract run can do it again. Same read-modify-write pattern to check: sticker prefs, bot allowlist, `MatrixChatCreationPort`, pinned events, media preview policy.
+- **Leftovers on the shared dev accounts:** stickertester is in 268 rooms and contractpeer in 310, mostly rooms earlier scenario runs never left (about 75–80 devices each). New runs of those suites add no rooms; a full `AdapterContractTests` run still adds 2 rooms to contractpeer and a few devices. Nothing depends on the numbers; cleaning up needs the founder's OK (the iPhone uses these accounts).
 - **S29 server flake (1 of 8 runs):** Synapse rotated its push counts 90 ms before the receipt arrived and kept reporting 3 past the test's 30 s wait; its database had the right count (1) afterwards. Not a Halo rule.
 - **Timeline follow-up:** the room appears ~150 ms after the push starts (the list is hidden until placed); an own thumbnail is downloaded once after an app restart (SDK caches the file under the new reference, thumbnails under their own key).
 

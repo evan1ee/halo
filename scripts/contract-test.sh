@@ -15,8 +15,8 @@ if [[ ! -f "$env_file" ]]; then
   exit 2
 fi
 
-# A full run, or the encryption test, needs a fresh E2EE account (recovery can be set up once) and a current room count.
-if [[ $# -eq 0 || " $* " == *" encryption "* || " $* " == *" roomList "* ]]; then
+# A full run, or the encryption test, needs a fresh E2EE account (recovery can be set up once).
+if [[ $# -eq 0 || " $* " == *" encryption "* ]]; then
   "$(dirname "$0")/../infra/dev/create-fixtures.py" --new-e2ee >/dev/null
 fi
 set -a

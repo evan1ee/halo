@@ -43,7 +43,7 @@ struct UnreadProvider: TimelineProvider {
 }
 
 struct UnreadWidget: Widget {
-    static let kind = "one.mbm.halo.widget.unread"
+    nonisolated static let kind = "one.mbm.halo.widget.unread"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: Self.kind, provider: UnreadProvider()) { entry in
@@ -134,7 +134,7 @@ struct UnreadChatsProvider: TimelineProvider {
 }
 
 struct UnreadChatsWidget: Widget {
-    static let kind = "one.mbm.halo.widget.unread-chats"
+    nonisolated static let kind = "one.mbm.halo.widget.unread-chats"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: Self.kind, provider: UnreadChatsProvider()) { entry in

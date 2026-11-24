@@ -33,6 +33,36 @@ struct AdapterContractTests {
         return MatrixSessionPort(baseDirectory: dir)
     }
 
+    /// Waits until sync delivered `roomID`: the client only knows a room then. Not a room count, which any other test or
+    /// device of the shared account changes.
+    private func waitForRoom(_ roomID: String, in session: MatrixSessionPort) async throws {
+        let room = try RoomID(roomID)
+        try await within(seconds: 60) {
+            var rooms: [RoomSummary] = []
+            for await diff in MatrixRoomListPort(session: session).rooms(filter: .all) {
+                try RoomListReducer.apply(diff, to: &rooms)
+                if rooms.contains(where: { $0.id == room }) { return }
+            }
+            throw ContractViolation("the list ended without the room")
+        }
+    }
+
+    /// The rooms the account is in or invited to now, asked from the server directly.
+    private func serverRoomCount(details: ServerDetails, stored: StoredSession) async throws -> Int {
+        struct Sync: Decodable {
+            struct Rooms: Decodable { var join: [String: Empty]?; var invite: [String: Empty]? }
+            struct Empty: Decodable {}
+            var rooms: Rooms?
+        }
+        let payload = try JSONDecoder().decode(MatrixSessionPort.SessionPayload.self, from: stored.payload)
+        var request = URLRequest(url: details.homeserverURL.appendingPathComponent("_matrix/client/v3/sync").appending(
+            queryItems: [URLQueryItem(name: "timeout", value: "0"), URLQueryItem(name: "filter", value: #"{"room":{"timeline":{"limit":1}}}"#)]))
+        request.setValue("Bearer \(payload.accessToken)", forHTTPHeaderField: "Authorization")
+        let (data, _) = try await URLSession.shared.data(for: request)
+        let rooms = try JSONDecoder().decode(Sync.self, from: data).rooms
+        return (rooms?.join?.count ?? 0) + (rooms?.invite?.count ?? 0)
+    }
+
     @Test("SessionPortContract")
     func session() async throws {
         let account = FakeSessionPort.Account(localpart: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "")
@@ -125,7 +155,7 @@ struct AdapterContractTests {
         try await appSession.logout()
     }
 
-    @Test("RoomListPortContract (the account must be in HALO_DEV_ROOMS rooms)")
+    @Test("RoomListPortContract (the list settles to the rooms the server says the account is in)")
     func roomList() async throws {
         let session = port()
         let server = env["HALO_DEV_SERVER"] ?? ""
@@ -135,8 +165,7 @@ struct AdapterContractTests {
                 username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "",
                 deviceDisplayName: "contract"),
             on: details)
-        _ = stored
-        let expected = Int(env["HALO_DEV_ROOMS"] ?? "0") ?? 0
+        let expected = try await serverRoomCount(details: details, stored: stored)
         try await MatrixSyncPort(session: session).start()
         try await within(seconds: 60) { try await RoomListPortContract.verify(MatrixRoomListPort(session: session), expectedRoomCount: expected) }
         try await session.logout()
@@ -151,9 +180,8 @@ struct AdapterContractTests {
                 username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
             on: details)
         // The client only knows a room once sync has delivered it.
-        let rooms = Int(env["HALO_DEV_ROOMS"] ?? "0") ?? 0
         try await MatrixSyncPort(session: session).start()
-        try await within(seconds: 60) { try await RoomListPortContract.verify(MatrixRoomListPort(session: session), expectedRoomCount: rooms) }
+        try await waitForRoom(env["HALO_DEV_TIMELINE_ROOM"] ?? "", in: session)
         let timeline = MatrixTimelinePort(session: session)
         let room = try RoomID(env["HALO_DEV_TIMELINE_ROOM"] ?? "")
         try await within(seconds: 60) { try await TimelinePortContract.verify(timeline, room: room, expectedBodies: ["first", "second", "a notice", "waves"]) }
@@ -186,8 +214,8 @@ struct AdapterContractTests {
         let cats = PackRef(room: room, stateKey: "cats")
         let pack = try #require(load.packs.first { $0.ref == cats }, "fixture pack not read, failedSources=\(load.failedSources)")
         #expect(pack.ref == PackRef(room: room, stateKey: "cats") && pack.displayName == "Cats" && pack.source == .userEnabled)
-        // `infra/dev/add-animated-sticker.py` may have added "spin" (an animated GIF): the two fixtures must be there, in order.
-        #expect(pack.stickers.map(\.shortcode).filter { $0 != "spin" } == ["dance", "wave"])
+        // Others may have been added (`infra/dev/add-animated-sticker.py`, the app): the two fixtures must be there, in order.
+        #expect(pack.stickers.map(\.shortcode).filter { ["dance", "wave"].contains($0) } == ["dance", "wave"])
         #expect(pack.stickers.allSatisfy { $0.image != nil })
         // Real sticker image bytes load from media (`MatrixMediaPort.content`).
         let stickerMedia = try await MatrixMediaPort(session: session).content(try #require(pack.stickers[0].image))
@@ -290,8 +318,7 @@ struct AdapterContractTests {
             PasswordCredentials(username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
             on: details)
         try await MatrixSyncPort(session: session).start()
-        let rooms = Int(env["HALO_DEV_ROOMS"] ?? "0") ?? 0
-        try await within(seconds: 60) { try await RoomListPortContract.verify(MatrixRoomListPort(session: session), expectedRoomCount: rooms) }
+        try await waitForRoom(env["HALO_DEV_TIMELINE_ROOM"] ?? "", in: session)
         let room = try RoomID(env["HALO_DEV_TIMELINE_ROOM"] ?? "")
         let timelines = MatrixTimelinePort(session: session)
         await timelines.warm([room])
@@ -351,7 +378,7 @@ struct AdapterContractTests {
         // As the current room's pack (whole-state path) it is found too, still once.
         let asRoom = try await packs.packs(currentRoom: ref.room)
         #expect(asRoom.packs.filter { $0.ref == ref }.count == 1)
-        // Leave no room or listing behind (the other contracts expect the account's fixed room count); before the logout.
+        // Leave no room or listing behind on the shared account; before the logout.
         try? await client.setAccountData(eventType: "im.ponies.emote_rooms", content: "{}")
         try? await local.leave()
         try? await local.forget()
@@ -492,7 +519,7 @@ struct AdapterContractTests {
         #expect(try await waitFor(toAccept, .joined) == .joined)
         try await rooms.declineInvite(toDecline)
         #expect(try await waitFor(toDecline, nil) == nil)
-        try await rooms.leave(toAccept)  // leave no room behind: the other contracts expect a fixed room count
+        try await rooms.leave(toAccept)  // leave no room behind on the shared account
         if let left = try? await session.room(toAccept) { try? await left.forget() }
         try await session.logout()
         await peer.logout()
@@ -1124,7 +1151,7 @@ struct AdapterContractTests {
             _ = try await creation.createPack(name: "x", images: [images[0], images[0]]) { _, _ in }
         }
         // Leave no trace: unlist the pack (otherwise every run adds one enabled pack to the account), then leave and
-        // forget the pack room; later tests expect the account to be in HALO_DEV_ROOMS rooms.
+        // forget the pack room.
         let client = try await session.signedInClient()
         for type in ["m.image_pack.rooms", "one.mbm.halo.sticker_rooms"] {
             guard let json = try await client.accountData(eventType: type),
@@ -1161,8 +1188,7 @@ struct AdapterContractTests {
                 username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
             on: details)
         try await MatrixSyncPort(session: session).start()
-        let rooms = Int(env["HALO_DEV_ROOMS"] ?? "0") ?? 0
-        try await within(seconds: 60) { try await RoomListPortContract.verify(MatrixRoomListPort(session: session), expectedRoomCount: rooms) }
+        try await waitForRoom(env["HALO_DEV_TIMELINE_ROOM"] ?? "", in: session)
 
         // Find the image through the timeline, like the UI does.
         let timeline = try await MatrixTimelinePort(session: session).open(room: try RoomID(env["HALO_DEV_TIMELINE_ROOM"] ?? ""))
@@ -1195,8 +1221,7 @@ struct AdapterContractTests {
                 username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
             on: details)
         try await MatrixSyncPort(session: session).start()
-        let rooms = Int(env["HALO_DEV_ROOMS"] ?? "0") ?? 0
-        try await within(seconds: 60) { try await RoomListPortContract.verify(MatrixRoomListPort(session: session), expectedRoomCount: rooms) }
+        try await waitForRoom(env["HALO_DEV_TIMELINE_ROOM"] ?? "", in: session)
         let room = try RoomID(env["HALO_DEV_TIMELINE_ROOM"] ?? "")
         let timeline = try await MatrixTimelinePort(session: session).open(room: room)
         let eventID: EventID? = try await within(seconds: 60) {

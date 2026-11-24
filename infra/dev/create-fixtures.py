@@ -151,15 +151,14 @@ def main():
         ensure_user(e2ee_user, e2ee_pw)
         values[P + "E2EE_USER"], values[P + "E2EE_PASSWORD"] = e2ee_user, e2ee_pw
 
-    # the room-list contract expects the number of rooms the account has joined
-    values[P + "ROOMS"] = str(len(call("GET", "/_matrix/client/v3/joined_rooms", token=token)["joined_rooms"]))
+    values.pop(P + "ROOMS", None)  # written by older versions; the tests ask the server
     write_env(values)
     for session in _SESSIONS:
         try:
             call("POST", "/_matrix/client/v3/logout", {}, session)
         except SystemExit:
             pass  # already gone
-    print(f"wrote {ENV_PATH}: {len(values)} settings, rooms={values[P + 'ROOMS']} (values not shown)")
+    print(f"wrote {ENV_PATH}: {len(values)} settings (values not shown)")
 
 
 if __name__ == "__main__":

@@ -360,6 +360,10 @@ struct ServerReadStateScenarioTests {
 
     @Test("Real-server client & server scenarios S01, S02, S03, S07b, S08, S09, S10, S11, S12, S13, S14, S15, S16, S17, S18, S19, S20, S25, S26, S27, S28, S29 against infra/dev")
     func realServerScenarios() async throws {
+        try await withCleanup { try await scenarios($0) }
+    }
+
+    private func scenarios(_ cleanup: Cleanup) async throws {
         let server = try #require(env["HALO_DEV_SERVER"])
         let user = try #require(env["HALO_DEV_USER"])
         let password = try #require(env["HALO_DEV_PASSWORD"])
@@ -371,17 +375,14 @@ struct ServerReadStateScenarioTests {
         let b = try await http.login(user: peerUser, password: peerPassword, device: "scenario-b")
         let stack = try await LiveStack(server: server, user: user, password: password)
         let createdRooms = Mutex<[RoomID]>([])
-        defer {
-            let rooms = createdRooms.withLock { $0 }
-            Task {
-                for r in rooms {
-                    await http.leaveAndForget(a2.token, room: r)
-                    await http.leaveAndForget(b.token, room: r)
-                }
-                await stack.shutdown()
-                await http.logout(a2.token)
-                await http.logout(b.token)
+        cleanup.add {
+            for r in createdRooms.withLock({ $0 }) {
+                await http.leaveAndForget(a2.token, room: r)
+                await http.leaveAndForget(b.token, room: r)
             }
+            await stack.shutdown()
+            await http.logout(a2.token)
+            await http.logout(b.token)
         }
 
         func makeRoom(_ name: String) async throws -> RoomID {
