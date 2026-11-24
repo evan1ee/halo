@@ -534,14 +534,14 @@ struct DeliveryIndicator: View {
                 .accessibilityIdentifier("delivery-sending")
         case .failed:
             Image(systemName: "exclamationmark.circle.fill")
-                .font(.system(size: size))
+                .font(HaloTypography.caption)
                 .foregroundStyle(HaloColor.danger)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(row.status ?? "Not sent")
                 .accessibilityIdentifier("delivery-failed")
         case .sent:
             Image(systemName: "checkmark.circle")
-                .font(.system(size: size))
+                .font(HaloTypography.caption)
                 .foregroundStyle(HaloColor.textSecondary)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Sent")

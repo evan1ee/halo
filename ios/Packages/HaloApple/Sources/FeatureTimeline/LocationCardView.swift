@@ -39,7 +39,7 @@ struct LocationCardView: View {
                         Image(systemName: "mappin.circle.fill")
                             .font(.title)
                             .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, HaloColor.danger)
+                            .foregroundStyle(HaloColor.onAccent, HaloColor.danger)
                             .shadow(color: .black.opacity(0.25), radius: 3, y: 2)
                     }
                     .clipped()
