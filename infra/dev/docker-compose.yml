@@ -57,7 +57,12 @@ services:
   # secrets/ (gitignored), published on the LAN only if HALO_DEV_BIND says so (the phone never talks to it; Synapse does).
   sygnal:
     profiles: [push]
-    image: matrixdotorg/sygnal:${SYGNAL_VERSION:-v0.15.1}
+    # Halo's pushkin (ADR-0015), never the stock one: stock Sygnal writes the server's count into `aps.badge`, which
+    # overwrites the icon badge Halo computed and wakes nothing.
+    build: ../sygnal
+    image: halo-sygnal:v0.15.1
+    # Without the gateway nothing can update the badge while the app is closed, so it comes back with Docker.
+    restart: unless-stopped
     environment:
       SYGNAL_CONF: /secrets/sygnal.yaml
     volumes:

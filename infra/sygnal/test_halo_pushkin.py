@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import unittest
+from types import SimpleNamespace
 
 from halo_pushkin import (
     PRIORITY_ALERT,
@@ -10,6 +12,7 @@ from halo_pushkin import (
     PUSH_TYPE_ALERT,
     PUSH_TYPE_BACKGROUND,
     HaloApnsPushkin,
+    apply_push_headers,
     build_apns_envelope,
     is_count_only,
 )
@@ -87,6 +90,42 @@ class HaloPushkinTests(unittest.TestCase):
         self.assertNotIn("badge", envelope.payload["aps"])
         self.assertEqual(envelope.payload["event_id"], "$ev9")
         self.assertEqual(envelope.payload["room_id"], "!room:x.org")
+
+    def test_headers_follow_the_payload(self) -> None:
+        silent = apply_push_headers(SimpleNamespace(message={"aps": {"content-available": 1}}, push_type="x", priority=10))
+        self.assertEqual((silent.push_type, silent.priority), (PUSH_TYPE_BACKGROUND, 5))
+        alert = apply_push_headers(
+            SimpleNamespace(message={"aps": {"alert": {"body": "New message"}, "mutable-content": 1}}, push_type="x", priority=5)
+        )
+        self.assertEqual((alert.push_type, alert.priority), (PUSH_TYPE_ALERT, 10))
+
+    def test_sygnal_hooks_build_halo_payloads(self) -> None:
+        pushkin = HaloApnsPushkin()
+        event = SimpleNamespace(event_id="$e", room_id="!r:x.org", counts=SimpleNamespace(unread=4))
+        device = SimpleNamespace(data={"default_payload": {"aps": {"badge": 9, "alert": "New message"}}})
+        payload = pushkin._get_payload_event_id_only(event, device.data["default_payload"])
+        self.assertEqual((payload["event_id"], payload["room_id"]), ("$e", "!r:x.org"))
+        self.assertNotIn("badge", payload["aps"])
+        self.assertNotIn("unread_count", payload)
+        count_only = SimpleNamespace(event_id=None, room_id=None, counts=SimpleNamespace(unread=4))
+        self.assertEqual(pushkin._get_payload_full(count_only, device, None), {"aps": {"content-available": 1}})
+
+    def test_sending_goes_through_sygnals_own_bridge(self) -> None:
+        # Regression: awaiting aioapns directly on Twisted failed every push ("await wasn't used with future").
+        sent: list[SimpleNamespace] = []
+
+        class Base:
+            async def _send_notification(self, request: SimpleNamespace) -> str:
+                sent.append(request)
+                return "ok"
+
+        class Pushkin(HaloApnsPushkin, Base):
+            pass
+
+        request = SimpleNamespace(message={"aps": {"content-available": 1}}, push_type="alert", priority=10)
+        self.assertEqual(asyncio.run(Pushkin()._send_notification(request)), "ok")
+        self.assertEqual([(r.push_type, r.priority) for r in sent], [(PUSH_TYPE_BACKGROUND, 5)])
+        self.assertNotIn("_dispatch_notification_unlimited", vars(HaloApnsPushkin))
 
 
 if __name__ == "__main__":

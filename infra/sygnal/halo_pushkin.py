@@ -93,23 +93,41 @@ def build_apns_envelope(
     )
 
 
-try:
-    from aioapns import NotificationRequest, PushType  # type: ignore[import-not-found]
-    from sygnal.apnspushkin import ApnsPushkin  # type: ignore[import-not-found]
-    from sygnal.notifications import Device, Notification  # type: ignore[import-not-found]
+def is_background(payload: Mapping[str, Any]) -> bool:
+    """A payload without an alert, sound or badge is a silent wake-up (APNs requires push type ``background``)."""
+    aps = payload.get("aps")
+    return isinstance(aps, Mapping) and "alert" not in aps and aps.get("content-available") == 1
 
-    _SYGNAL_AVAILABLE = True
+
+def apply_push_headers(request: Any, *, alert: Any = PUSH_TYPE_ALERT, background: Any = PUSH_TYPE_BACKGROUND) -> Any:
+    """Set ``apns-push-type`` and ``apns-priority`` per notification (Sygnal has one push type per app)."""
+    if is_background(request.message):
+        request.push_type = background
+        request.priority = int(PRIORITY_BACKGROUND)
+    else:
+        request.push_type = alert
+        request.priority = int(PRIORITY_ALERT)
+    return request
+
+
+try:
+    from aioapns.common import PushType  # type: ignore[import-not-found]
+    from sygnal.apnspushkin import ApnsPushkin  # type: ignore[import-not-found]
+
+    _ALERT: Any = PushType.ALERT
+    _BACKGROUND: Any = PushType.BACKGROUND
 except ImportError:  # pragma: no cover - exercised in unit tests without Sygnal
     ApnsPushkin = object  # type: ignore[assignment,misc]
-    NotificationRequest = None  # type: ignore[assignment]
-    PushType = None  # type: ignore[assignment]
-    Device = Any  # type: ignore[assignment]
-    Notification = Any  # type: ignore[assignment]
-    _SYGNAL_AVAILABLE = False
+    _ALERT = PUSH_TYPE_ALERT
+    _BACKGROUND = PUSH_TYPE_BACKGROUND
 
 
 class HaloApnsPushkin(ApnsPushkin):  # type: ignore[valid-type,misc]
     """Sygnal APNs pushkin subclass enforcing ADR-0015 per notification.
+
+    Only the payload and the per-notification headers are overridden. Connecting to APNs, retries, metrics and the
+    classification of rejected tokens stay Sygnal's: aioapns runs on asyncio while Sygnal dispatches on Twisted, and
+    only Sygnal's own ``_send_notification`` bridges the two (awaiting aioapns directly fails every send).
 
     Configure in ``sygnal.yaml`` as::
 
@@ -129,44 +147,17 @@ class HaloApnsPushkin(ApnsPushkin):  # type: ignore[valid-type,misc]
             default_payload = None
         return build_apns_envelope(notification, default_payload=default_payload)
 
-    async def _dispatch_notification_unlimited(
-        self, n: Any, device: Any, context: Any
-    ) -> list[str]:
-        """Override Sygnal v0.15.1 APNs dispatch to choose push_type & priority per notification."""
-        if not _SYGNAL_AVAILABLE:
-            raise RuntimeError("Sygnal runtime is not installed in this environment.")
+    @staticmethod
+    def _ids(n: Any) -> dict[str, Any]:
+        return {"event_id": getattr(n, "event_id", None), "room_id": getattr(n, "room_id", None)}
 
-        raw_notification = {
-            "id": getattr(n, "id", None),
-            "event_id": getattr(n, "event_id", None),
-            "room_id": getattr(n, "room_id", None),
-            "type": getattr(n, "type", None),
-            "counts": getattr(n, "counts", None),
-        }
-        envelope = self.build_halo_envelope(raw_notification, getattr(device, "data", None))
+    def _get_payload_event_id_only(self, n: Any, default_payload: Mapping[str, Any]) -> dict[str, Any]:
+        return build_apns_envelope(self._ids(n), default_payload=default_payload).payload
 
-        pushkey = device.pushkey
-        if getattr(self, "convert_device_token_to_hex", False):
-            import base64
+    def _get_payload_full(self, n: Any, device: Any, log: Any) -> dict[str, Any]:
+        # Sygnal comes here for count-only notifications (no event) and for pushers without ``event_id_only``. Halo
+        # never sends message content through the gateway, so both use the same envelope.
+        return self.build_halo_envelope(self._ids(n), getattr(device, "data", None)).payload
 
-            pushkey = base64.b64decode(pushkey).hex()
-
-        apns_push_type = (
-            PushType.BACKGROUND
-            if envelope.push_type == PUSH_TYPE_BACKGROUND
-            else PushType.ALERT
-        )
-        request = NotificationRequest(
-            device_token=pushkey,
-            message=envelope.payload,
-            push_type=apns_push_type,
-            priority=envelope.priority,
-        )
-        response = await self.apns_client.send_notification(request)
-        if not response.is_successful and response.description in {
-            "BadDeviceToken",
-            "Unregistered",
-            "DeviceTokenNotForTopic",
-        }:
-            return [device.pushkey]
-        return []
+    async def _send_notification(self, request: Any) -> Any:
+        return await super()._send_notification(apply_push_headers(request, alert=_ALERT, background=_BACKGROUND))

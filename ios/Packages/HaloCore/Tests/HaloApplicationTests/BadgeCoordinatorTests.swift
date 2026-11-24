@@ -2,6 +2,7 @@ import Foundation
 import HaloDomain
 import HaloFoundation
 import HaloTestSupport
+import Synchronization
 import Testing
 @testable import HaloApplication
 
@@ -17,8 +18,8 @@ struct BadgeCoordinatorTests {
         NotificationRecord(roomID: try RoomID(room), eventID: try EventID(event), timestamp: Date(), isMention: false)
     }
 
-    private func eventually(_ condition: @Sendable () -> Bool) async -> Bool {
-        for _ in 0..<500_000 { if condition() { return true }; await Task.yield() }
+    private func eventually(_ condition: @Sendable () async -> Bool) async -> Bool {
+        for _ in 0..<500_000 { if await condition() { return true }; await Task.yield() }
         return false
     }
 
@@ -250,13 +251,19 @@ struct BadgeCoordinatorTests {
         try rooms.emit(.reset([]))
         #expect(await eventually { !port.history.isEmpty && port.history.count >= 2 })
         #expect(port.history.allSatisfy { $0.count == 2 })
-        // Only room A has loaded, and it is read: A drops, B (not shown yet) stays.
+        // Only room A has loaded, as the local replica of the last run knows it: that proves nothing yet (E6).
         try rooms.emit(.reset([try summary("!a:x.org")]))
+        #expect(await eventually { !(await badge.roomStates).isEmpty })
+        #expect(await badge.badge == 2)
+        #expect(await badge.roomStates[try RoomID("!a:x.org")]?.display == .count(1))  // the list agrees with the icon
+        // The first sync response confirms A is read: it drops; B (not shown yet) stays.
+        rooms.emitSyncComplete(present: [try RoomID("!a:x.org"), try RoomID("!b:x.org")])
         #expect(await eventually { port.badge == 1 })
         #expect(await badge.attentionRooms == [try RoomID("!b:x.org")])
         // B loads and is read: now it drops too.
         try rooms.emit(.reset([try summary("!a:x.org"), try summary("!b:x.org")]))
         #expect(await eventually { port.badge == 0 })
+        #expect(port.countsHistory.allSatisfy { $0.values.allSatisfy { $0 == 1 } })
     }
 
     @Test("a room that was shown and then leaves the list is dropped, not carried; reset clears the stored set explicitly")
@@ -403,9 +410,10 @@ struct BadgeCoordinatorTests {
         let alive = try RoomID("!alive:x.org")
         let pending = try RoomID("!pending:x.org")
         let (rooms, port, badge) = try await started(preloaded: [gone.rawValue, alive.rawValue, pending.rawValue])
-        // Before the first sync response: partial list keeps all unshown carried rooms.
+        // Before the first sync response: a partial list keeps all carried rooms, also the one it shows as read (E6).
         try rooms.emit(.reset([try summary(alive.rawValue)]))
-        #expect(await eventually { port.history.last == [gone, pending] })
+        #expect(await eventually { !(await badge.roomStates).isEmpty })
+        #expect(await badge.attentionRooms == [gone, alive, pending])
 
         // First sync response completes: SDK reports only `alive` and `pending` as joined/invited (`gone` was left while closed).
         // `gone` is dropped immediately; `pending` stays carried (no flicker) until its diff arrives.
@@ -424,7 +432,7 @@ struct BadgeCoordinatorTests {
         let coordinator = RoomListCoordinator(port: rooms)
         let port = FakeBadgePort()
         let roomA = try RoomID("!a:x.org")
-        await port.update(attentionCounts: [roomA: 3])
+        await port.update(BadgeSnapshot(attentionCounts: [roomA: 3], evaluatedAt: Date()))
         let beforeWrites = port.history.count
 
         let badge = ReadStateCoordinator(rooms: coordinator, port: port)
@@ -445,5 +453,166 @@ struct BadgeCoordinatorTests {
         await badge.reconcile()
         #expect(port.history.count == writesBefore + 1)
         #expect(port.badge == 3)
+    }
+
+    // MARK: One consistent count (icon, widgets, list)
+
+    @Test("E6: opening the app never lowers what is shown before the first sync; reading the room in this run does at once")
+    func openingNeverLowers() async throws {
+        let a = try RoomID("!a:x.org")
+        let rooms = FakeRoomListPort()
+        let coordinator = RoomListCoordinator(port: rooms)
+        let receipts = ReadReceiptCoordinator(port: FakeReadMarkerPort())
+        let port = FakeBadgePort()
+        port.preload([a: 8])  // the extension counted 8 while the app was closed
+        let badge = BadgeCoordinator(rooms: coordinator, records: FakeNotificationRecords(), port: port, receipts: receipts)
+        await badge.begin()
+        await coordinator.start()
+        func room(notify: Int, latest: Double = 100) throws -> RoomSummary {
+            RoomSummary(
+                id: a, name: "a", isDirect: false, isEncrypted: false, membership: .joined,
+                read: RoomReadCounts(mode: .allMessages, server: ServerCounts(notification: notify, highlight: 0), sdk: .zero, isMarkedUnread: false),
+                latestEvent: LatestEventRef(timestamp: Date(timeIntervalSince1970: latest), senderIsSelf: false))
+        }
+        // The replica still says 3, as when the app was last open; the app is closed again before any sync.
+        try rooms.emit(.reset([try room(notify: 3)]))
+        #expect(await eventually { !(await badge.roomStates).isEmpty })
+        await badge.reconcile()
+        #expect(port.countsHistory.allSatisfy { $0 == [a: 8] })
+        // Offline, the user opens the room and reads it: no sync is needed for that.
+        await receipts.reportSeen(room: a, event: try EventID("$e"), timestamp: Date(timeIntervalSince1970: 100))
+        #expect(await eventually { port.badge == 0 })
+        // The first response brings a newer message: from here on only sync decides.
+        try rooms.emit(.set(index: 0, try room(notify: 1, latest: 200)))
+        rooms.emitSyncComplete()
+        #expect(await eventually { port.badge == 1 })
+    }
+
+    @Test("writes land in evaluation order: a slow older write never overwrites a newer count")
+    func writesAreOrdered() async throws {
+        let (rooms, _, records, port, badge) = await make()
+        let release = AsyncStream<Void>.makeStream()
+        let held = Mutex(false)
+        port.beforeWrite { counts in
+            guard counts.isEmpty else { return }
+            held.withLock { $0 = true }
+            for await _ in release.stream { break }
+        }
+        try rooms.emit(.reset([try summary("!a:x.org")]))  // evaluates to 0; its write hangs
+        #expect(await eventually { held.withLock { $0 } })
+        for n in 1...3 { records.add(try record("!a:x.org", "$\(n)")) }  // pushes, on their own path
+        #expect(await eventually { await badge.badge == 3 })
+        #expect(port.countsHistory.isEmpty)  // not before the older one
+        release.continuation.yield()
+        #expect(await eventually { port.badge == 3 })
+        #expect(port.countsHistory.first == [:])
+    }
+
+    @Test("every sync response writes the counts again, so a badge something else changed is corrected")
+    func syncReasserts() async throws {
+        let (rooms, _, _, port, badge) = await make()
+        defer { withExtendedLifetime(badge) {} }
+        try rooms.emit(.reset([try summary("!a:x.org", notify: 3)]))
+        #expect(await eventually { port.badge == 3 })
+        let before = port.history.count
+        rooms.emitSyncComplete()
+        #expect(await eventually { port.history.count == before + 1 })
+        #expect(port.badge == 3)
+    }
+
+    @Test("a sync completion never arrives before the list changes of its response")
+    func syncFollowsItsDiffs() async throws {
+        let (rooms, coordinator, _, _, badge) = await make()
+        defer { withExtendedLifetime(badge) {} }
+        for n in 1...200 {
+            try rooms.emit(.reset([try summary("!a:x.org", notify: n)]))
+            rooms.emitSyncComplete()
+        }
+        for await snapshot in await coordinator.readSnapshots() {
+            if snapshot.syncCount > 0 { #expect((snapshot.inputs.first?.counts.server.notification ?? 0) >= snapshot.syncCount) }
+            if snapshot.syncCount == 200 { break }
+        }
+    }
+
+    @Test("waitForSync returns only once the new counts have been written, and gives up at its limit")
+    func waitForSync() async throws {
+        let (rooms, _, _, port, badge) = await make()
+        let epoch = await badge.syncEpoch
+        let waiter = Task { (await badge.waitForSync(after: epoch, timeout: .seconds(60)), port.badge) }
+        try rooms.emit(.reset([try summary("!a:x.org", notify: 4)]))
+        rooms.emitSyncComplete()
+        let (reached, shown) = await waiter.value
+        #expect(reached && shown == 4)
+
+        let impatient = BadgeCoordinator(rooms: RoomListCoordinator(port: FakeRoomListPort()), port: FakeBadgePort(), sleep: { _ in })
+        await impatient.begin()
+        #expect(await impatient.waitForSync(after: 0, timeout: .seconds(1)) == false)
+    }
+
+    @Test("records that can't be read right now (suspended or locked database) are unknown, not none")
+    func unreadableRecords() async throws {
+        final class Flaky: NotificationRecordPort {
+            let inner = FakeNotificationRecords()
+            let readable = Mutex(true)
+            func all() -> [NotificationRecord] { load() ?? [] }
+            func load() -> [NotificationRecord]? { readable.withLock { $0 } ? inner.all() : nil }
+            func add(_ record: NotificationRecord) -> Bool { inner.add(record) }
+            func clear(room: RoomID) { inner.clear(room: room) }
+            func clear(rooms: Set<RoomID>) { inner.clear(rooms: rooms) }
+            func remove(events: Set<EventID>) { inner.remove(events: events) }
+            func clearAll() { inner.clearAll() }
+            func changes() -> AsyncStream<Void> { inner.changes() }
+        }
+        let records = Flaky()
+        let rooms = FakeRoomListPort()
+        let coordinator = RoomListCoordinator(port: rooms)
+        let port = FakeBadgePort()
+        let badge = BadgeCoordinator(rooms: coordinator, records: records, port: port)
+        await badge.begin()
+        await coordinator.start()
+        try rooms.emit(.reset([try summary("!a:x.org")]))
+        _ = records.add(try record("!a:x.org", "$1"))
+        #expect(await eventually { port.badge == 1 })
+        records.readable.withLock { $0 = false }
+        await badge.reconcile()
+        #expect(port.badge == 1)
+    }
+
+    @Test("the extension's baseline carries when the app evaluated and what sync has delivered per room")
+    func snapshotForTheExtension() async throws {
+        let rooms = FakeRoomListPort()
+        let coordinator = RoomListCoordinator(port: rooms)
+        let port = FakeBadgePort()
+        let at = Date(timeIntervalSince1970: 500)
+        let badge = BadgeCoordinator(rooms: coordinator, port: port, now: { at })
+        await badge.begin()
+        await coordinator.start()
+        let a = try RoomID("!a:x.org")
+        try rooms.emit(.reset([RoomSummary(
+            id: a, name: "a", isDirect: false, isEncrypted: false, membership: .joined,
+            latestEvent: LatestEventRef(timestamp: Date(timeIntervalSince1970: 400), senderIsSelf: false))]))
+        #expect(await eventually { port.snapshots.last?.syncedThrough == [a: Date(timeIntervalSince1970: 400)] || !port.snapshots.isEmpty })
+        rooms.emitSyncComplete()
+        #expect(await eventually { port.snapshots.last == BadgeSnapshot(attentionCounts: [:], evaluatedAt: at, syncedThrough: [a: Date(timeIntervalSince1970: 400)]) })
+    }
+
+    @Test("E6 ends with the first sync: a list that stops and resubscribes doesn't bring launch-time counts back")
+    func floorEndsForGood() async throws {
+        let a = try RoomID("!a:x.org")
+        let rooms = FakeRoomListPort()
+        let coordinator = RoomListCoordinator(port: rooms)
+        let port = FakeBadgePort()
+        port.preload([a: 5])
+        let badge = BadgeCoordinator(rooms: coordinator, records: FakeNotificationRecords(), port: port)
+        await badge.begin()
+        await coordinator.start()
+        try rooms.emit(.reset([try summary("!a:x.org")]))
+        rooms.emitSyncComplete()
+        #expect(await eventually { port.badge == 0 })
+        await coordinator.stop()
+        await coordinator.start()
+        for _ in 0..<2_000 { await Task.yield() }
+        await badge.reconcile()
+        #expect(port.badge == 0)
     }
 }

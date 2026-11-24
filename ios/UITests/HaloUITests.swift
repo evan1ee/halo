@@ -1063,65 +1063,66 @@ final class HaloUITests: XCTestCase {
         returnToChatList(app)
     }
 
-    /// Verifies that the SpringBoard app icon badge matches unread messages and never disappears across
-    /// repeated background/foreground and cold-relaunch cycles. Opt-in via `HALO_RUN_DEVICE_CHECKS=1`.
+    /// The unread count SpringBoard holds for Halo's icon, 0 for none. Read from the icon's accessibility value ("3 new
+    /// items"), which is there even while a Focus hides badges on the Home Screen. Halo's widget is also an "icon" labelled
+    /// "Halo" and comes first; its value is "Widget". `nil` when the icon isn't on the Home Screen.
+    @MainActor
+    private func iconBadge() -> Int? {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let icons = springboard.icons.matching(NSPredicate(format: "label == 'Halo'")).allElementsBoundByIndex
+        guard let icon = icons.first(where: { ($0.value as? String) != "Widget" }) else { return nil }
+        return Int((icon.value as? String ?? "").prefix(while: \.isNumber)) ?? 0
+    }
+
+    /// Verifies that the SpringBoard app icon badge never changes or disappears across repeated background/foreground and
+    /// cold-relaunch cycles that read nothing. Opt-in via `HALO_RUN_DEVICE_CHECKS=1`; the account needs unread messages.
     @MainActor
     func testUnreadBadgePersistsAcrossOpenCloseCycles() throws {
         guard ProcessInfo.processInfo.environment["HALO_RUN_DEVICE_CHECKS"] == "1" else {
             throw XCTSkip("Set HALO_RUN_DEVICE_CHECKS=1 to run SpringBoard badge persistence check.")
         }
         let app = XCUIApplication()
-        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         app.launch()
         dismissFirstRunSheets(app)
         if !chatsRoot(app).waitForExistence(timeout: 3) { returnToChatList(app) }
         guard chatsRoot(app).waitForExistence(timeout: 10) else { throw XCTSkip("App is signed out.") }
         if app.buttons["focus-show-all"].exists { app.buttons["focus-show-all"].tap() }
-        // Let initial sync settle on Chats root without opening any room.
         _ = app.collectionViews.firstMatch.waitForExistence(timeout: 5)
-        RunLoop.current.run(until: Date().addingTimeInterval(2.0))
+        RunLoop.current.run(until: Date().addingTimeInterval(3.0))
 
-        var trace: [String] = []
-        func readIconBadge(_ step: String) -> String {
-            let icon = springboard.icons.matching(NSPredicate(format: "label BEGINSWITH 'Halo'")).firstMatch
-            _ = icon.waitForExistence(timeout: 3)
-            let desc = "\(step): exists=\(icon.exists) label='\(icon.label)' value='\(String(describing: icon.value))'"
-            trace.append(desc)
-            return "\(icon.label)|\(String(describing: icon.value))"
+        XCUIDevice.shared.press(.home)
+        RunLoop.current.run(until: Date().addingTimeInterval(2.0))
+        guard let expected = iconBadge() else { throw XCTSkip("Halo's icon isn't on the Home Screen.") }
+        guard expected > 0 else { throw XCTSkip("The account has no unread messages.") }
+        var trace = ["start=\(expected)"]
+        func check(_ step: String) {
+            let value = iconBadge()
+            trace.append("\(step)=\(value.map(String.init) ?? "none")")
+            XCTAssertEqual(value, expected, "The badge changed at \(step): \(trace.joined(separator: " "))")
         }
 
-        // 1. Background / foreground 5 times
         for cycle in 1...5 {
-            XCUIDevice.shared.press(.home)
-            RunLoop.current.run(until: Date().addingTimeInterval(1.2))
-            _ = readIconBadge("bg-\(cycle)")
             app.activate()
             _ = chatsRoot(app).waitForExistence(timeout: 3)
             RunLoop.current.run(until: Date().addingTimeInterval(0.6))
-        }
-        XCUIDevice.shared.press(.home)
-        RunLoop.current.run(until: Date().addingTimeInterval(1.2))
-        _ = readIconBadge("after-bg-5")
-
-        // 2. Cold terminate + quick open/close 3 times (simulates force-close & quick open/close before sync finishes)
-        for cycle in 1...3 {
-            app.terminate()
-            RunLoop.current.run(until: Date().addingTimeInterval(0.8))
-            _ = readIconBadge("terminated-\(cycle)")
-            app.launch()
-            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
             XCUIDevice.shared.press(.home)
             RunLoop.current.run(until: Date().addingTimeInterval(1.2))
-            _ = readIconBadge("quick-close-\(cycle)")
+            check("background-\(cycle)")
         }
-
+        // Closed again before the first sync can finish: the replica of the last run must not overwrite the icon.
+        for cycle in 1...5 {
+            app.terminate()
+            check("terminated-\(cycle)")
+            app.launch()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1 * Double(cycle)))
+            XCUIDevice.shared.press(.home)
+            RunLoop.current.run(until: Date().addingTimeInterval(1.2))
+            check("quick-close-\(cycle)")
+        }
         let attachment = XCTAttachment(string: trace.joined(separator: "\n"))
-        attachment.name = "springboard-badge-trace"
+        attachment.name = "icon-badge-trace"
         attachment.lifetime = .keepAlways
         add(attachment)
-        print("SPRINGBOARD_BADGE_TRACE:\n" + trace.joined(separator: "\n"))
-
-        let missing = trace.filter { !$0.contains("3") }
-        XCTAssertTrue(missing.isEmpty, "Badge disappeared on steps:\n" + trace.joined(separator: "\n"))
+        print("ICON_BADGE_TRACE \(trace.joined(separator: " "))")
     }
 }

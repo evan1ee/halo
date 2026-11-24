@@ -39,7 +39,7 @@ sequenceDiagram
 4. Already read? If the room's `notifiedThroughTs ≥ event ts` ([UNREAD_STATE.md](UNREAD_STATE.md) §5) → suppress.
 5. Should notify? Use `item.is_noisy`, `item.has_mention` (on-device push-rule evaluation by the SDK) **[VERIFIED F-FFI-10 field names]** together with the room's mode.
 6. Content: communication notification (`INSendMessageIntent`) with the sender's name and avatar, body (or "Sticker", "Image" …); `threadIdentifier = room_id`; `request identifier = event_id`.
-7. Badge = `BadgeCalculator` over the policy inputs for all rooms that can be loaded within budget **[ASSUMPTION V-NSE-2: reading RoomInfo for all rooms in the NSE fits the time/memory budget; fallback = cached last badge ± this event's room]**.
+7. Badge = the app's last evaluation (`AttentionBaseline`) plus this room's records since then, evaluated by `ReadStatePolicy` with the room's mode; other rooms stay as displayed. Recomputed for every push, never counted up (D118): an event sync had already delivered to the app (`timestamp ≤ syncedThrough`) or a duplicate changes nothing, and concurrent pushes are committed one at a time. `nil` while the app is in front.
 8. Timeout (`serviceExtensionTimeWillExpire`) → deliver generic content with the cached badge.
 
 **Suppression requires** `com.apple.developer.usernotifications.filtering` **[ASSUMPTION V-PUSH-3: Apple grants it; request in M1]**.
@@ -66,6 +66,8 @@ Triggers: every reconcile in the app, background push wake-ups, BG refresh (D11)
 |---|---|
 | NSE killed (memory) | iOS shows the original alert from the payload: Synapse's `default_payload` alert text must be a generic "New message" (no content) |
 | Keys missing (UTD) | "Encrypted message" placeholder; once the app decrypts later, notification content isn't updated (iOS limitation) |
-| Sygnal down | No pushes; the app catches up on foreground; the settings screen shows push health from the last delivery time |
+| A Focus with "Hide Notification Badges" is on | iOS draws no badge on any app outside the Focus; the value is kept (SpringBoard's accessibility value "3 new items") and drawn when the Focus ends. Not detectable or overridable by the app |
+| Widget reload budget spent | iOS ignores reloads asked for in the background until it refills; the next foreground sync reloads every widget whose rendered counts differ (`staleWidgets()`) |
+| Sygnal down | No pushes; the app catches up at the next app refresh (BACKGROUND_EXECUTION) or on foreground; the settings screen shows push health from the last delivery time |
 | Relay fallback active instead of the pushkin (ADR-0015 condition 4) | No wrong badge; read-elsewhere clearing waits for the next foreground or NSE run; T-BADGEPUSH stays open until the pushkin is back |
 | Sygnal deployed without the ADR-0015 handling | The icon shows the server's room count after every read until Halo next runs; the device checklist catches it (TEST_STRATEGY §8) |

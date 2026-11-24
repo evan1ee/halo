@@ -22,6 +22,11 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
+		<string>fetch</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>$(HALO_BG_REFRESH_TASK)</string>
 	</array>
 </dict>
 </plist>

@@ -12,6 +12,7 @@ public final class FakeSyncPort: SyncPort {
         var syncOnceCalls = 0
         var nextStartError: HaloError?
         var nextSyncOnceError: HaloError?
+        var onSyncOnce: (@Sendable () -> Void)?
         var continuations: [UUID: AsyncStream<SyncStatus>.Continuation] = [:]
     }
 
@@ -25,6 +26,8 @@ public final class FakeSyncPort: SyncPort {
     public var status: SyncStatus { state.withLock { $0.status } }
 
     public func failNextStart(with error: HaloError) { state.withLock { $0.nextStartError = error } }
+    /// Runs inside every `syncOnce()`, e.g. to deliver the room changes the pass found.
+    public func onSyncOnce(_ body: (@Sendable () -> Void)?) { state.withLock { $0.onSyncOnce = body } }
     public func failNextSyncOnce(with error: HaloError) { state.withLock { $0.nextSyncOnceError = error } }
 
     /// Sets the status as if the SDK had reported it (e.g. `.offline`, `.failed`).
@@ -52,6 +55,7 @@ public final class FakeSyncPort: SyncPort {
             return state.nextSyncOnceError
         }
         if let error { throw error }
+        state.withLock { $0.onSyncOnce }?()
     }
 
     public func statuses() -> AsyncStream<SyncStatus> {

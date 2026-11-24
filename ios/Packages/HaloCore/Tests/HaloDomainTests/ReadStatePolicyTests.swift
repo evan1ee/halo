@@ -273,4 +273,23 @@ struct ReadStatePolicyTests {
             }
         }
     }
+
+    @Test("E6: what was shown before the first sync is a floor per mode, never a ceiling, and zero once synced")
+    func carriedUnsynced() throws {
+        let room = try RoomID("!e6:x.org")
+        func state(_ mode: NotificationMode, server: Int, carried: Int) -> RoomReadState {
+            ReadStatePolicy.evaluate(RoomReadInputs(
+                roomID: room, membership: .joined, isEncrypted: false,
+                counts: RoomReadCounts(mode: mode, server: ServerCounts(notification: server, highlight: 0), sdk: .zero, isMarkedUnread: false),
+                unsyncedCarried: carried))
+        }
+        let held = state(.allMessages, server: 3, carried: 8)
+        #expect(held.badgeCount == 8 && held.display == .count(8) && held.reasons.contains(.carriedUnsynced))
+        #expect(state(.allMessages, server: 0, carried: 8).badgeCount == 8)
+        let higher = state(.allMessages, server: 9, carried: 8)
+        #expect(higher.badgeCount == 9 && !higher.reasons.contains(.carriedUnsynced))
+        #expect(state(.allMessages, server: 0, carried: 0).badgeCount == 0)
+        #expect(state(.mentionsAndKeywords, server: 0, carried: 2).badgeCount == 2)
+        #expect(state(.mute, server: 0, carried: 2).badgeCount == 0)  // muted meanwhile
+    }
 }

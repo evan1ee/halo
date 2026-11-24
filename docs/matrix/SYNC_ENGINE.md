@@ -25,7 +25,7 @@ stateDiagram-v2
 
 ## 2. SyncCoordinator rules
 1. `scenePhase == .active` → `start()`; `.background` → flush receipt outbox → `stop()`.
-2. Entering `.running` → each sync response publishes changed room IDs (`SyncChange`) and post-sync present room IDs (`RoomListPort.syncCompletions()`, R-04) so `ReadStateCoordinator` drops stale carry-over and reconciles; `ReadReceiptCoordinator` flushes queued receipts.
+2. Entering `.running` → each sync response publishes changed room IDs (`SyncChange`) and post-sync present room IDs (`RoomListUpdate.synced`, in order with the list, R-04) so `ReadStateCoordinator` drops stale carry-over and reconciles; `ReadReceiptCoordinator` flushes queued receipts.
 3. Expose `SyncStatus` (`.idle`, `.running`, `.offline`, `.failed`, `.stopped`) to the UI.
 4. BG refresh (planned): start → wait for one sync response or 20 s → reconcile → stop.
 5. The NSE never starts sync.

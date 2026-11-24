@@ -19,6 +19,8 @@ public actor ReadReceiptCoordinator {
         var timestamp: Date
         var sent: Bool
         var sequence: Int64
+        /// Reached in this run of the app, not restored from storage.
+        var isFromThisRun = true
     }
 
     /// The last storage failure, if any (also logged). Intents stay in memory and are still sent.
@@ -90,7 +92,7 @@ public actor ReadReceiptCoordinator {
                 if current.sequence > intent.sequence { continue }
                 if current.sequence == intent.sequence && current.timestamp >= intent.timestamp { continue }
             }
-            intents[intent.room] = Intent(event: intent.event, timestamp: intent.timestamp, sent: intent.isSent, sequence: intent.sequence)
+            intents[intent.room] = Intent(event: intent.event, timestamp: intent.timestamp, sent: intent.isSent, sequence: intent.sequence, isFromThisRun: false)
             created[intent.room] = intent.createdAt
             if !intent.isSent { schedule(intent.room, after: dueIn(intent.room)) }
         }
@@ -126,7 +128,7 @@ public actor ReadReceiptCoordinator {
     private func currentPositions() -> [RoomID: Date] { intents.mapValues(\.timestamp) }
 
     private func currentReadPositions() -> [RoomID: LocalReadPosition] {
-        intents.mapValues { LocalReadPosition(eventID: $0.event, timestamp: $0.timestamp, isSent: $0.sent) }
+        intents.mapValues { LocalReadPosition(eventID: $0.event, timestamp: $0.timestamp, isSent: $0.sent, isFromThisRun: $0.isFromThisRun) }
     }
 
     private func publishPositions() {
@@ -139,7 +141,7 @@ public actor ReadReceiptCoordinator {
 
     /// The full local read position (event ID, timestamp, sent flag) in `room`, if any (R-06).
     public func localReadPosition(of room: RoomID) -> LocalReadPosition? {
-        intents[room].map { LocalReadPosition(eventID: $0.event, timestamp: $0.timestamp, isSent: $0.sent) }
+        intents[room].map { LocalReadPosition(eventID: $0.event, timestamp: $0.timestamp, isSent: $0.sent, isFromThisRun: $0.isFromThisRun) }
     }
 
     /// The newest event the user has seen in `room`. Local echoes have no event ID and must not be reported.
@@ -169,6 +171,7 @@ public actor ReadReceiptCoordinator {
         let timestamp = latestEventTime ?? intents[room]?.timestamp ?? wallClock()
         if let current = intents[room], current.event == event {
             intents[room]?.sent = true
+            intents[room]?.isFromThisRun = true
             publishPositions()
             await persist(room)
             return

@@ -14,7 +14,7 @@ docker compose -f infra/dev/docker-compose.yml down       # stop; add -v to wipe
 |---|---|---|
 | Server name | `halo.localhost` (fixed on first start) | `HALO_DEV_SERVER_NAME` before the first `up` |
 | Listen address | `127.0.0.1:8008` | `HALO_DEV_BIND=0.0.0.0` to reach it from a device on your LAN; `HALO_DEV_PORT` |
-| Push (optional) | off | `HALO_APNS_TEAM_ID=<team> infra/dev/sygnal-config.sh`, put your APNs key at `infra/dev/secrets/AuthKey_<KEYID>.p8` (gitignored), then `docker compose -f infra/dev/docker-compose.yml --profile push up -d` |
+| Push (optional) | off | `HALO_APNS_TEAM_ID=<team> infra/dev/sygnal-config.sh`, put your APNs key at `infra/dev/secrets/AuthKey_<KEYID>.p8` (gitignored), then `docker compose -f infra/dev/docker-compose.yml --profile push up -d --build` (Halo's pushkin from `infra/sygnal`, ADR-0015; `restart: unless-stopped`). Check `docker ps`: without the gateway no badge or widget changes while the app is closed |
 | Synapse version | `v1.165.0` (SOURCES) | `SYNAPSE_VERSION` — bump only together with SOURCES |
 | MAS (optional OIDC stack) | off | `docker compose -f infra/dev/docker-compose.mas.yml up -d --wait && infra/dev/smoke-mas.sh` (isolated `halo-dev-mas` stack: Synapse `127.0.0.1:8009`, MAS `v1.29.0` on `127.0.0.1:8080`; contract: `TEST_RUNNER_HALO_DEV_MAS_SYNAPSE_URL=http://127.0.0.1:8009 scripts/contract-test.sh oidcDiscovery`) |
 

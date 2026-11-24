@@ -29,6 +29,8 @@ public actor ReadStateCoordinator {
     /// Per-room badge counts carried from the last write (loaded from the port at launch) for rooms this run's room
     /// list hasn't shown yet. Kept until the list shows them or the first sync completes (D73, R-04, D82).
     private var carried: [RoomID: Int] = [:]
+    /// What was shown when this run started: a floor for each room until the first sync response (rule E6), then empty.
+    private var shownAtLaunch: [RoomID: Int] = [:]
     /// Rooms the list has shown in this run; once shown, a room that disappears from the list is dropped, not carried.
     private var seen: Set<RoomID> = []
     /// Rooms that must not count towards attention (left, hidden sticker-pack rooms, ignored-inviter invites, R-03).
@@ -55,7 +57,15 @@ public actor ReadStateCoordinator {
     private var readPositions: [RoomID: LocalReadPosition] = [:]
     /// Incremented on every completed sync response; used to know when a sent receipt has gone through at least one
     /// sync round-trip (R-06, ADR-0020).
-    private var syncEpoch = 0
+    public private(set) var syncEpoch = 0
+    /// The room list's sync count this coordinator last applied, and the newest epoch whose evaluation has been written.
+    private var appliedSyncCount = 0
+    private var writtenSyncEpoch = 0
+    private var syncWaiters: [UUID: (epoch: Int, continuation: CheckedContinuation<Bool, Never>)] = [:]
+    /// The newest queued port write; writes run one at a time in evaluation order, so an older one can't land last.
+    private var lastWrite: Task<Void, Never>?
+    /// Records as last read; kept when the database can't be read (suspended, still locked) instead of counting none.
+    private var lastRecords: [NotificationRecord] = []
     /// For each room whose local intent became `.isSent`, the `(eventID, syncEpoch)` at which it was observed sent.
     private var sentAtEpoch: [RoomID: (eventID: EventID, epoch: Int)] = [:]
     private var inputs: [RoomReadInputs] = []
@@ -64,14 +74,16 @@ public actor ReadStateCoordinator {
     private var recordsTask: Task<Void, Never>?
     private let auditInterval: Duration
     private let sleep: Sleep
+    private let now: @Sendable () -> Date
     private var isForeground = false
     private var periodicAudit: Task<Void, Never>?
 
     public init(
         rooms: RoomListCoordinator, records: (any NotificationRecordPort)? = nil, port: any BadgePort,
         receipts: ReadReceiptCoordinator? = nil, auditInterval: Duration = ReadStateCoordinator.defaultAuditInterval,
-        sleep: @escaping Sleep = { try await Task.sleep(for: $0) }
+        sleep: @escaping Sleep = { try await Task.sleep(for: $0) }, now: @escaping @Sendable () -> Date = { Date() }
     ) {
+        self.now = now
         self.receipts = receipts
         self.rooms = rooms
         self.records = records
@@ -95,18 +107,17 @@ public actor ReadStateCoordinator {
     public func begin() async {
         guard tasks.isEmpty else { return }
         carried = await port.lastAttention()
-        let roomInputs = await rooms.readInputs()
+        shownAtLaunch = carried
+        let snapshots = await rooms.readSnapshots()
         let excluded = await rooms.excludedRoomChanges()
-        let syncs = await rooms.syncCompletions()
         var follow: [Task<Void, Never>] = []
         if let receipts {
             let positions = await receipts.readPositions()
             follow.append(Task { [weak self] in for await positions in positions { await self?.readPositionsChanged(positions) } })
         }
         tasks = follow + [
-            Task { [weak self] in for await inputs in roomInputs { await self?.roomsChanged(inputs) } },
+            Task { [weak self] in for await snapshot in snapshots { await self?.snapshotChanged(snapshot) } },
             Task { [weak self] in for await rooms in excluded { await self?.excludedChanged(rooms) } },
-            Task { [weak self] in for await present in syncs { await self?.syncCompleted(present) } },
         ]
         observeRecords()
     }
@@ -114,6 +125,7 @@ public actor ReadStateCoordinator {
     /// Attaches (or, with `nil`, detaches) the signed-in account's persistent notification record store (R-13).
     public func attach(records: (any NotificationRecordPort)?) async {
         self.records = records
+        lastRecords = []
         if !tasks.isEmpty { observeRecords() }
         if records != nil { await recompute() }
     }
@@ -161,11 +173,31 @@ public actor ReadStateCoordinator {
         await recompute()
     }
 
+    /// Waits until the evaluation of a sync response after `epoch` has reached the badge and the widgets, so background work
+    /// can report "done" to iOS only then (iOS suspends the app right after). `false` if it takes longer than `timeout`.
+    public func waitForSync(after epoch: Int, timeout: Duration) async -> Bool {
+        if writtenSyncEpoch > epoch { return true }
+        let id = UUID()
+        return await withCheckedContinuation { continuation in
+            syncWaiters[id] = (epoch, continuation)
+            Task { [weak self, sleep] in
+                try? await sleep(timeout)
+                await self?.finishWaiter(id, reached: false)
+            }
+        }
+    }
+
+    private func finishWaiter(_ id: UUID, reached: Bool) {
+        syncWaiters.removeValue(forKey: id)?.continuation.resume(returning: reached)
+    }
+
     /// Account change or sign-out: forgets everything, including the stored counts and notification records, and clears the badge (R-03).
     public func reset() async {
         periodicAudit?.cancel()
         periodicAudit = nil
         carried = [:]
+        shownAtLaunch = [:]
+        lastRecords = []
         seen = []
         excludedRooms = []
         hasSynced = false
@@ -182,7 +214,19 @@ public actor ReadStateCoordinator {
         hasWritten = false
         audited = [:]
         records?.clearAll()
-        await port.reset()
+        await enqueue { [port] in await port.reset() }
+    }
+
+    /// Runs `write` after every earlier one and returns when it has landed. Not tied to the caller's cancellation: a scene
+    /// phase change must not drop a badge write halfway.
+    private func enqueue(_ write: @escaping @Sendable () async -> Void) async {
+        let previous = lastWrite
+        let task = Task {
+            await previous?.value
+            await write()
+        }
+        lastWrite = task
+        await task.value
     }
 
     /// The badge value for the current states: total unread messages across rooms needing attention (D82).
@@ -209,7 +253,8 @@ public actor ReadStateCoordinator {
     private static func evaluatedWithSuperseded(
         inputs: [RoomReadInputs], records: [NotificationRecord],
         readPositions: [RoomID: LocalReadPosition] = [:], legacyPositions: [RoomID: Date] = [:],
-        syncEpoch: Int = 0, sentAtEpoch: [RoomID: (eventID: EventID, epoch: Int)] = [:]
+        syncEpoch: Int = 0, sentAtEpoch: [RoomID: (eventID: EventID, epoch: Int)] = [:],
+        unsyncedCarried: [RoomID: Int] = [:]
     ) -> (results: [(input: RoomReadInputs, state: RoomReadState)], superseded: Set<EventID>) {
         let byRoom = Dictionary(grouping: records, by: \.roomID)
         var results: [(input: RoomReadInputs, state: RoomReadState)] = []
@@ -248,7 +293,7 @@ public actor ReadStateCoordinator {
                 roomID: input.roomID, membership: input.membership, isEncrypted: input.isEncrypted, counts: input.counts,
                 latestEvent: input.latestEvent, localIntent: readThrough, receiptReadThrough: input.receiptReadThrough,
                 localIntentEventID: intentEventID, localIntentConfirmed: intentConfirmed, ownReceiptEventID: input.ownReceiptEventID,
-                unconfirmedNotified: partition.unconfirmed)
+                unconfirmedNotified: partition.unconfirmed, unsyncedCarried: unsyncedCarried[input.roomID] ?? 0)
             results.append((effective, ReadStatePolicy.evaluate(effective)))
         }
         return (results, superseded)
@@ -269,29 +314,19 @@ public actor ReadStateCoordinator {
         await recompute()
     }
 
-    private func roomsChanged(_ inputs: [RoomReadInputs]) async {
-        self.inputs = inputs
-        await recompute()
-    }
-
-    private func excludedChanged(_ rooms: Set<RoomID>) async {
-        excludedRooms = rooms
-        if !rooms.isEmpty {
-            for room in rooms { carried.removeValue(forKey: room) }
-            seen.formUnion(rooms)
-            records?.clear(rooms: rooms)
-        }
-        await recompute()
-    }
-
-    private func syncCompleted(_ present: Set<RoomID>?) async {
-        guard let present else {
+    private func snapshotChanged(_ snapshot: RoomReadSnapshot) async {
+        inputs = snapshot.inputs
+        let responses = snapshot.syncCount - appliedSyncCount
+        appliedSyncCount = snapshot.syncCount
+        guard let present = snapshot.present else {
             hasSynced = false
             syncedRooms = []
-            return
+            return await recompute()
         }
+        guard responses > 0 else { return await recompute() }
         hasSynced = true
-        syncEpoch += 1
+        shownAtLaunch = [:]  // a later resubscription must not bring launch-time counts back
+        syncEpoch += responses
         syncedRooms = present
         // Drop any carried room that the server did not report as joined/invited (R-04).
         // Rooms in `present` whose diff hasn't arrived yet remain carried until their inputs arrive.
@@ -300,6 +335,22 @@ public actor ReadStateCoordinator {
         if let stored = records?.all() {
             let absent = Set(stored.map(\.roomID)).subtracting(present)
             if !absent.isEmpty { records?.clear(rooms: absent) }
+        }
+        // Each sync response writes even unchanged counts: whatever else touched the icon since (a push handled by the
+        // extension while the app was opening, the system) is corrected within one sync.
+        hasWritten = false
+        let epoch = syncEpoch
+        await recompute()
+        writtenSyncEpoch = max(writtenSyncEpoch, epoch)
+        for (id, waiter) in syncWaiters where writtenSyncEpoch > waiter.epoch { finishWaiter(id, reached: true) }
+    }
+
+    private func excludedChanged(_ rooms: Set<RoomID>) async {
+        excludedRooms = rooms
+        if !rooms.isEmpty {
+            for room in rooms { carried.removeValue(forKey: room) }
+            seen.formUnion(rooms)
+            records?.clear(rooms: rooms)
         }
         await recompute()
     }
@@ -344,11 +395,23 @@ public actor ReadStateCoordinator {
             inputs: inputs, records: stored, readPositions: readPositions, syncEpoch: syncEpoch, sentAtEpoch: sentAtEpoch).results)
     }
 
+    /// The stored records, or the last ones read when the database can't be read right now.
+    private func currentRecords() -> [NotificationRecord] {
+        guard let records else { return [] }
+        if let stored = records.load() { lastRecords = stored }
+        return lastRecords
+    }
+
+    /// Evaluates everything and queues the result. No suspension point between reading the inputs and queueing the write, so
+    /// the queue order is the evaluation order.
     private func recompute() async {
+        let evaluatedAt = now()
         if !excludedRooms.isEmpty { records?.clear(rooms: excludedRooms) }
-        let stored = records?.all() ?? []
+        let stored = currentRecords()
+        let floor = shownAtLaunch.filter { readPositions[$0.key]?.isFromThisRun != true }
         let pass = Self.evaluatedWithSuperseded(
-            inputs: inputs, records: stored, readPositions: readPositions, syncEpoch: syncEpoch, sentAtEpoch: sentAtEpoch)
+            inputs: inputs, records: stored, readPositions: readPositions, syncEpoch: syncEpoch, sentAtEpoch: sentAtEpoch,
+            unsyncedCarried: floor)
         if !pass.superseded.isEmpty {
             records?.remove(events: pass.superseded)
         }
@@ -357,7 +420,6 @@ public actor ReadStateCoordinator {
             roomStates = nextStates
             statesBroadcaster.publish(nextStates)
         }
-        await runAudit(pass.results)
         seen.formUnion(inputs.map(\.roomID))
         seen.formUnion(excludedRooms)
         let activeRecords = stored.filter { !pass.superseded.contains($0.eventID) && !excludedRooms.contains($0.roomID) }
@@ -375,14 +437,20 @@ public actor ReadStateCoordinator {
         }
         let carryable = hasSynced ? carried.filter { syncedRooms.contains($0.key) } : carried
         for (room, count) in carryable where !seen.contains(room) && !excludedRooms.contains(room) && count > 0 {
-            if counts[room] == nil { counts[room] = count }
+            // The stored count already includes the records the extension added to it: the larger one, never the sum.
+            counts[room] = max(counts[room] ?? 0, count)
         }
         for room in excludedRooms { counts.removeValue(forKey: room) }
         carried = counts
-        guard counts != attentionCounts || !hasWritten else { return }
-        hasWritten = true
-        attentionCounts = counts
-        await port.update(attentionCounts: counts)
+        if counts != attentionCounts || !hasWritten {
+            hasWritten = true
+            attentionCounts = counts
+            let snapshot = BadgeSnapshot(
+                attentionCounts: counts, evaluatedAt: evaluatedAt,
+                syncedThrough: inputs.reduce(into: [:]) { $0[$1.roomID] = $1.latestEvent?.timestamp })
+            await enqueue { [port] in await port.update(snapshot) }
+        }
+        await runAudit(pass.results)
     }
 }
 

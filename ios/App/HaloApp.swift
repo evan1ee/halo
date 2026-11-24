@@ -23,12 +23,24 @@ import UserNotifications
 /// Composition root of the app (AGENTS.md §5: wiring only; D85 single-stack navigation).
 @main
 struct HaloApp: App {
-    @State private var root = AppRoot()
+    @State private var root: AppRoot
     @UIApplicationDelegateAdaptor(PushDelegate.self) private var delegate
+
+    init() {
+        // Not in a view: a background launch (silent push, app refresh) connects no scene, so no view ever appears.
+        let root = AppRoot()
+        _root = State(initialValue: root)
+        PushDelegate.coordinator = root.push
+        PushDelegate.onBackgroundPush = { await root.refreshInBackground() ? .newData : .noData }
+    }
 
     var body: some Scene {
         WindowGroup {
             RootView(root: root)
+        }
+        .backgroundTask(.appRefresh(BackgroundRefreshScheduler.identifier())) { [root] in
+            BackgroundRefreshScheduler.schedule()
+            _ = await root.refreshInBackground()
         }
     }
 }
@@ -237,20 +249,11 @@ private struct RootView: View {
             }
         }
         .task {
-            PushDelegate.coordinator = root.push
             PushDelegate.onNotificationTap = { room, event in
                 router.openRoom(room, focus: event)
             }
-            PushDelegate.onBackgroundPush = {
-                await root.handleBackgroundPush() ? .newData : .noData
-            }
             root.shareHandoff.onSent = { room in router.openRoom(room) }
-            await root.push?.begin()
-            await root.readState.begin()
-            Task { await root.followReadIntents() }
-            await root.sync.begin()
-            await root.recovery.start()  // before the banner exists: a hidden banner view runs no task
-            await root.auth.start()
+            await root.begin()
         }
         .preferredColorScheme(colorScheme)
         .overlay {
@@ -377,7 +380,9 @@ private struct RootView: View {
                 // M16 Focus filter: the system's current filter is the truth; a change missed in the background is caught here.
                 root.focus.chats = (try? await HaloFocusFilter.current)?.chats.domain
                 await root.receipts.flush()
+                await root.renewForeground()
             case .background:
+                BackgroundRefreshScheduler.schedule(log: root.log)
                 let lease = BackgroundTaskLease(name: "halo.receipts.flush", onEnd: { HaloDatabase.suspendAll() })
                 defer { lease.end() }
                 await root.setForeground(false)

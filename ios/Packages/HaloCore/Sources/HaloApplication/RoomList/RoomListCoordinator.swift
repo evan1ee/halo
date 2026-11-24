@@ -1,6 +1,18 @@
 import HaloDomain
 import HaloFoundation
 
+/// The read inputs of every visible room together with the sync responses they include. One value, so a consumer never
+/// sees "sync has completed" with the inputs from before it.
+public struct RoomReadSnapshot: Sendable, Equatable {
+    public let inputs: [RoomReadInputs]
+    /// The joined/invited rooms at the last sync response of this subscription; `nil` before the first one (R-04).
+    public let present: Set<RoomID>?
+    /// How many sync responses have been applied since launch.
+    public let syncCount: Int
+
+    static let empty = RoomReadSnapshot(inputs: [], present: nil, syncCount: 0)
+}
+
 /// Keeps the ordered room list from `RoomListPort` and publishes its status, including the room
 /// count that M0's exit criterion shows (docs/ROADMAP.md M0).
 public actor RoomListCoordinator {
@@ -42,15 +54,16 @@ public actor RoomListCoordinator {
     private var broadcaster = SnapshotBroadcaster<Status>()
     private var readBroadcaster = SnapshotBroadcaster<[RoomReadInputs]>()
     private var readInputsCache: [RoomReadInputs] = []
+    private var snapshotBroadcaster = SnapshotBroadcaster<RoomReadSnapshot>()
+    private var snapshotCache = RoomReadSnapshot.empty
     private var summaryBroadcaster = SnapshotBroadcaster<[RoomSummary]>()
     private var summaryCache: [RoomSummary] = []
     private var excludedBroadcaster = SnapshotBroadcaster<Set<RoomID>>()
     private var excludedCache: Set<RoomID> = []
-    private var syncBroadcaster = SnapshotBroadcaster<Set<RoomID>?>()
     private var lastSyncedRooms: Set<RoomID>?
+    private var syncCount = 0
     private var subscription: Task<Void, Never>?
     private var leftSubscription: Task<Void, Never>?
-    private var syncSubscription: Task<Void, Never>?
     private var generation = 0
     private var consecutiveFailures = 0
     private var diffsInSubscription = 0
@@ -69,7 +82,6 @@ public actor RoomListCoordinator {
     deinit {
         subscription?.cancel()
         leftSubscription?.cancel()
-        syncSubscription?.cancel()
     }
 
     /// The current status, then its changes; latest value wins (CONCURRENCY §3).
@@ -88,9 +100,8 @@ public actor RoomListCoordinator {
     /// sticker-pack rooms, and pending invitations from ignored users (R-03).
     public func excludedRoomChanges() -> AsyncStream<Set<RoomID>> { excludedBroadcaster.subscribe(current: excludedCache) }
 
-    /// Fires after each completed sync response with the complete set of joined/invited rooms from the SDK (`nil`
-    /// before the first sync response of this subscription, R-04).
-    public func syncCompletions() -> AsyncStream<Set<RoomID>?> { syncBroadcaster.subscribe(current: lastSyncedRooms) }
+    /// The read inputs and the sync progress they belong to, now and after each change; latest value wins.
+    public func readSnapshots() -> AsyncStream<RoomReadSnapshot> { snapshotBroadcaster.subscribe(current: snapshotCache) }
 
     /// Always subscribes to `.all` so `readInputs()` never shrinks the badge's room set; UI filters run in
     /// `RoomListViewModel` (R-27).
@@ -105,14 +116,12 @@ public actor RoomListCoordinator {
         subscription = nil
         leftSubscription?.cancel()
         leftSubscription = nil
-        syncSubscription?.cancel()
-        syncSubscription = nil
         generation += 1
         hidden = []
         ignored = []
         left = []
         lastSyncedRooms = nil
-        syncBroadcaster.publish(nil)
+        publishSnapshot()
         publishExcluded()
         status = .idle
     }
@@ -132,17 +141,20 @@ public actor RoomListCoordinator {
     private func subscribe(filter: RoomListFilter) {
         subscription?.cancel()
         leftSubscription?.cancel()
-        syncSubscription?.cancel()
         generation += 1
         diffsInSubscription = 0
         let current = generation
         status = .loading
-        let diffs = port.rooms(filter: filter)
+        let updates = port.updates(filter: filter)
         let leftStream = port.leftRooms()
-        let syncStream = port.syncCompletions()
         subscription = Task { [weak self] in
-            for await diff in diffs {
-                guard let self, await self.apply(diff, generation: current, filter: filter) else { return }
+            for await update in updates {
+                switch update {
+                case .diff(let diff):
+                    guard let self, await self.apply(diff, generation: current, filter: filter) else { return }
+                case .synced(let present):
+                    await self?.syncCompleted(present, generation: current)
+                }
             }
         }
         leftSubscription = Task { [weak self] in
@@ -150,17 +162,13 @@ public actor RoomListCoordinator {
                 await self?.roomsLeft(rooms, generation: current)
             }
         }
-        syncSubscription = Task { [weak self] in
-            for await present in syncStream {
-                await self?.syncCompleted(present, generation: current)
-            }
-        }
     }
 
     private func syncCompleted(_ present: Set<RoomID>, generation: Int) {
         guard generation == self.generation else { return }
         lastSyncedRooms = present
-        syncBroadcaster.publish(present)
+        syncCount += 1
+        publishSnapshot()
     }
 
     private func roomsLeft(_ rooms: Set<RoomID>, generation: Int) {
@@ -234,6 +242,14 @@ public actor RoomListCoordinator {
         guard inputs != readInputsCache else { return }
         readInputsCache = inputs
         readBroadcaster.publish(inputs)
+        publishSnapshot()
+    }
+
+    private func publishSnapshot() {
+        let snapshot = RoomReadSnapshot(inputs: readInputsCache, present: lastSyncedRooms, syncCount: syncCount)
+        guard snapshot != snapshotCache else { return }
+        snapshotCache = snapshot
+        snapshotBroadcaster.publish(snapshot)
     }
 
     /// Applies one diff; returns `false` when this subscription must stop.

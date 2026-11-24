@@ -77,11 +77,14 @@ public struct LocalReadPosition: Sendable, Equatable {
     public let eventID: EventID
     public let timestamp: Date
     public let isSent: Bool
+    /// The user reached this position in this run of the app (not restored from storage).
+    public let isFromThisRun: Bool
 
-    public init(eventID: EventID, timestamp: Date, isSent: Bool = false) {
+    public init(eventID: EventID, timestamp: Date, isSent: Bool = false, isFromThisRun: Bool = false) {
         self.eventID = eventID
         self.timestamp = timestamp
         self.isSent = isSent
+        self.isFromThisRun = isFromThisRun
     }
 }
 
@@ -117,11 +120,15 @@ public struct RoomReadInputs: Sendable, Equatable {
     /// The event ID of the user's own newest receipt from the SDK, when resolved (R-06).
     public let ownReceiptEventID: EventID?
     public let unconfirmedNotified: [NotifiedRef]
+    /// What the room showed when the app started, until the first sync response of the run confirms or replaces it
+    /// (rule E6); 0 once synced, or when the user read the room in this run.
+    public let unsyncedCarried: Int
 
     public init(
         roomID: RoomID, membership: Membership, isEncrypted: Bool, counts: RoomReadCounts, latestEvent: LatestEventRef? = nil,
         localIntent: Date? = nil, receiptReadThrough: Date? = nil, localIntentEventID: EventID? = nil,
-        localIntentConfirmed: Bool = false, ownReceiptEventID: EventID? = nil, unconfirmedNotified: [NotifiedRef] = []
+        localIntentConfirmed: Bool = false, ownReceiptEventID: EventID? = nil, unconfirmedNotified: [NotifiedRef] = [],
+        unsyncedCarried: Int = 0
     ) {
         self.roomID = roomID
         self.membership = membership
@@ -134,6 +141,7 @@ public struct RoomReadInputs: Sendable, Equatable {
         self.localIntentConfirmed = localIntentConfirmed
         self.ownReceiptEventID = ownReceiptEventID
         self.unconfirmedNotified = unconfirmedNotified
+        self.unsyncedCarried = unsyncedCarried
     }
 }
 
@@ -168,6 +176,8 @@ public enum ReasonCode: String, Sendable, Equatable, CaseIterable {
     /// A sent local intent was confirmed by the server, yet the server (when countable) or SDK still counts unread:
     /// a newer event arrived with an equal or skewed timestamp, so E1 gives way (R-06, ADR-0020).
     case intentStale = "INTENT_STALE"
+    /// Before the first sync of the run the local replica is older than what is already shown (rule E6): the shown count stays.
+    case carriedUnsynced = "CARRIED_UNSYNCED"
 }
 
 public struct RoomReadState: Sendable, Equatable {
@@ -344,6 +354,23 @@ public enum ReadStatePolicy {
         if counts.isMarkedUnread {
             reasons.insert(.markedUnread)
             hasUnread = true
+        }
+
+        // E6: before the first sync of this run, an evaluation lower than what is already shown proves nothing (the replica
+        // is as old as the app's last run, while pushes have arrived since). It may rise, never fall, until sync answers.
+        if input.unsyncedCarried > 0 {
+            switch counts.mode {
+            case .allMessages where input.unsyncedCarried > max(notify, highlight):
+                notify = input.unsyncedCarried
+                reasons.insert(.carriedUnsynced)
+                hasUnread = true
+            case .mentionsAndKeywords where input.unsyncedCarried > highlight:
+                highlight = input.unsyncedCarried
+                notify = max(notify, highlight)
+                reasons.insert(.carriedUnsynced)
+                hasUnread = true
+            default: break
+            }
         }
 
         let attention: Bool

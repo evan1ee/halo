@@ -34,10 +34,12 @@ public final class NotificationRecordStore: NotificationRecordPort {
         self.externalChanges = externalChanges
     }
 
-    public func all() -> [NotificationRecord] {
+    public func all() -> [NotificationRecord] { load() ?? [] }
+
+    public func load() -> [NotificationRecord]? {
         let cutoff = Self.millis(now().addingTimeInterval(-Self.maximumAge))
         let account = account
-        return (try? database.pool.read { db in
+        return try? database.pool.read { db in
             try Row.fetchAll(
                 db,
                 sql: """
@@ -56,7 +58,7 @@ public final class NotificationRecordStore: NotificationRecordPort {
                     isMention: (row["is_mention"] as Int) != 0, deliveredAt: Self.date(row["delivered_at"]),
                     source: source)
             }
-        }) ?? []
+        }
     }
 
     @discardableResult

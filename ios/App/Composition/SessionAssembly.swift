@@ -4,6 +4,7 @@ import HaloDomain
 import HaloFoundation
 import HaloPersistence
 import HaloPlatform
+import UIKit
 
 /// Account session lifecycle, GRDB attachment, foreground transitions, and debug exports (ADR-0022 step 2).
 extension AppRoot {
@@ -95,18 +96,24 @@ extension AppRoot {
         await readState.setForeground(active)
     }
 
-    /// Handles a silent background push (`content-available: 1`, ADR-0015 / D112): ensures the session is restored,
-    /// runs one bounded `/sync` pass, and reconciles read state so both app icon badge and widgets refresh in the background.
-    func handleBackgroundPush() async -> Bool {
+    /// Catches up without a window (a silent push, ADR-0015 / D112, or iOS's app refresh): the badge and the widgets have the
+    /// new counts when this returns. `true` when a sync succeeded.
+    func refreshInBackground() async -> Bool {
+        guard UIApplication.shared.applicationState != .active else { return false }  // the sync loop delivers it
         HaloDatabase.resumeAll()
-        await readState.begin()
-        await sync.begin()
-        if signedInUser == nil {
-            await sessionCoordinator.start()
+        await begin()
+        let refreshed = await BackgroundRefresh(session: sessionCoordinator, sync: sync, rooms: roomCoordinator, readState: readState).run()
+        // iOS suspends the app next: hold no SQLite lock in the App Group (R-25), unless a window came to the front meanwhile.
+        if UIApplication.shared.applicationState == .background { HaloDatabase.suspendAll() }
+        return refreshed
+    }
+
+    /// Keeps the shared foreground flag alive while the app is in front (it ends by itself, so a crash can't leave it set).
+    func renewForeground() async {
+        while !Task.isCancelled {
+            do { try await Task.sleep(for: .seconds(AttentionCache.foregroundRenewal)) } catch { return }
+            attentionCache.setForeground(true)
         }
-        let synced = await sync.syncOnceInBackground()
-        await readState.reconcile()
-        return synced
     }
 
     #if DEBUG

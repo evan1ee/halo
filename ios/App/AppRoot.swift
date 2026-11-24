@@ -74,6 +74,7 @@ final class AppRoot {
     let ringLog: RingLogSink
     let webAuth = WebAuthSessionPresenter()
     var auditPort: (any AuditEventPort)?
+    private(set) var hasBegun = false
 
     init() {
         let preferencesPort = UserDefaultsPreferencesStore()
@@ -189,6 +190,22 @@ final class AppRoot {
         #endif
         self.log = log
         log.info("app launched")
+    }
+}
+
+extension AppRoot {
+    /// Starts everything that must run whenever the process runs, with or without a window: iOS launches the app in the
+    /// background for a silent push or an app refresh without connecting a scene. Call it as often as you like.
+    func begin() async {
+        guard !hasBegun else { return }
+        hasBegun = true
+        await push?.begin()
+        await readState.begin()
+        Task { await followReadIntents() }
+        await sync.begin()
+        await roomList.start()  // subscribes the room list, which the badge is computed from
+        await recovery.start()  // before the banner exists: a hidden banner view runs no task
+        await auth.start()
     }
 }
 

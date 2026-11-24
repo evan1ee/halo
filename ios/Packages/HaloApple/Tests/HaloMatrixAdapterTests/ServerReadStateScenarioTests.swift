@@ -288,7 +288,7 @@ struct ServerReadStateScenarioTests {
             let processor = NotificationProcessor(
                 fetcher: fetcher,
                 records: recordStore,
-                lastAttention: { (badgePort.countsHistory.last ?? [:], Date(timeIntervalSince1970: 0)) },
+                attention: { AttentionBaseline(counts: badgePort.countsHistory.last ?? [:]) },
                 isAppForeground: { isForeground })
             return await processor.process(room: room, event: event)
         }

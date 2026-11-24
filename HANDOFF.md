@@ -1,28 +1,30 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-24 · Branch: `main` · PRs #1–#87 merged
+Last updated: 2026-11-24 · Branch: `fix/unread-badge-consistency` · PRs #1–#87 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
 - **Roadmap / Autonomous Loop:** all autonomous work across M0–M16, ADR-0022, Tech Debt A–D (including TD-12), the Halo Sygnal pushkin (`infra/sygnal/`, R-24), and release documentation (`docs/release/`, D115) is complete; all open product decisions in `OPEN_QUESTIONS.md` are resolved (`D108–D117`). Physical iPhone 16 `HaloUITests`, NFR-1 cold launch (0.357 s responsive), timeline memory (76.8 MB peak), D95 10× room-opening, live sends, image-scroll & mid-scroll jump-to-bottom (PR #87), pushed full-bleed Room info page, Voice messages, Share extension (`V-SHARE-1`), Focus filter, and Siri/Spotlight all passed; P0 badge/widget/background-sync fixes (PR #85) landed. The roadmap has been slimmed and expanded with **M17–M19** in [docs/ROADMAP.md](docs/ROADMAP.md). External-account / legal (`👤`) and remaining physical-device (`📱`) items remain in §5.
 - **Milestones:** M0–M16 done except external/device items (deploy `infra/sygnal/` + APNs keys + TestFlight, 7-day AC-U8 soak, interactive Xcode/Instruments NFR-2 scroll hitch + 300-room + MetricKit run, Q-KLIPY-PROD portal request, publish `docs/release/` privacy/support URLs, final Beta 2 brand artwork, legal/export review). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1).
-- **Last checks (`main`):** `swift test --package-path ios/Packages/HaloCore -Xswiftc -warnings-as-errors`, `validate-docs.sh`, `check-boundaries.sh`, `check-design-tokens.sh`, `swiftlint lint --strict ios/` (0 violations), `gitleaks`, `check_handoff.py`, and physical iPhone 16 `HaloUITests.testRoomInfoOpensAsPushedPage` (26.50 s, 0 failures) passed.
+- **Last checks (`fix/unread-badge-consistency`):** `swift test` HaloCore (373 tests), all 16 HaloApple suites, app build, `infra/sygnal` unit tests (7), docs, boundaries, design tokens, swiftlint (0 violations) and gitleaks passed; iPhone 16 `testUnreadBadgePersistsAcrossOpenCloseCycles` passed (10 cycles). `prepush.sh` is red only for `testLaunchRootScreenPassesAccessibilityAudit` ("Potentially inaccessible text"), which fails the same on `main`.
 - **CI:** PRs #1–#87 merged. Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
+- **Unread badge, widgets and background sync (D118, 2026-11-24, `fix/unread-badge-consistency`):**
+  - Root causes: gateway down and Halo's pushkin never able to send (asyncio awaited on Twisted); dev ran the stock pushkin; background launches did nothing (handlers set in a view) and reported done before the badge was written; pre-sync evaluations overwrote what the NSE had counted; unordered badge writes; the NSE counted late pushes twice and raced itself; a sticky foreground flag; no refresh fallback; a widget reload on every open/close spent iOS's budget.
+  - Verified on iPhone 16 via SpringBoard's icon value: pushes 8→10 suspended, 10→11 terminated; read elsewhere 11→0 in ~5 s suspended and from a cold background launch; 10 open/close cycles unchanged. A Focus with "Hide Notification Badges" hid the icon badge on the founder's phone (value was right throughout).
 - **Room info as pushed full-bleed navigation page (2026-11-24, `main`):**
   - Replaced Room info `.sheet` presentation (timeline avatar button and room-list context menu) with `ChatsRoute.roomInfo(RoomID)`, `ChatsRouter.openRoomInfo(_:)`, `ChatsRouter.removeRoom(_:)`, and `RoomInfoPresentation.page` (keeping `.inspector` on regular-width iPad).
   - Removed the nested `NavigationStack` from `RoomDetailsView` and matched the conversation page's transparent, title-free header with full-bleed edge-to-edge scrolling (`.scrollEdgeEffectHidden(true, for: .top)`); verified with `HaloUITests.testRoomInfoOpensAsPushedPage` on physical iPhone 16.
 - **Scroll-safe timeline long-press & image/map tap style + iPhone 16 verification (2026-11-24, PR #87):**
   - Removed SwiftUI `.simultaneousGesture(LongPressGesture)` + touch-down `.scaleEffect(0.96)` (which flashed a tap/press effect and interfered with scrolling over images, maps, and messages) and replaced it with a UIKit-backed `UILongPressGestureRecognizer` (`ScrollSafeLongPressModifier`, `cancelsTouchesInView = false`, `delaysTouchesBegan = false`, simultaneous with `UIScrollView`) plus no-highlight `ScrollFriendlyTapButtonStyle` on images, maps (`LocationCardView`), and reply quotes.
   - Made `jump-to-bottom` interrupt ongoing deceleration synchronously on the tap frame before converging; added and passed `HaloUITests.testTimelineImageScrollAndJumpToBottomWhileScrolling` on physical iPhone 16 (`00008140-000222592ED0801C`).
-- **P0 badge, widget & background-push sync fixes + iPhone 16 walkthrough (2026-11-24, PR #85):**
-  - Fixed 4 root causes of badge/widget desync (`ReadStateCoordinator.reconcile()` on `.active`/`.background`, synchronous foreground flag clearing on background/terminate, multi-room NSE `AttentionCache` + `WidgetCenter` reload, and `remote-notification` silent-push `syncOnceInBackground()`); Voice, Share (`V-SHARE-1`), Focus, and Siri/Spotlight passed on iPhone 16.
 
 ## 3. Key decisions
-Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D107), [docs/adr/README.md](docs/adr/README.md).
+Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D118), [docs/adr/README.md](docs/adr/README.md).
+- **D118:** one unread count for icon, widgets and list (E6, recomputed NSE badge, ordered writes, background refresh).
 - **D73 / D74 / D78–D80 (ADR-0020):** classic sync unread evidence, encrypted-room SDK counts decide, identity/timeline-index read ordering.
 - **D82 (ADR-0021):** app icon badge sums `RoomReadState.badgeCount` for `attention == true`.
 - **D83:** Global Media Gallery is a preset virtual room entry in the room list (not a tab, excluded from unread/badge).
@@ -41,14 +43,17 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D107), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
-- **Navigation / Core:** `ios/Packages/HaloCore/Sources/HaloApplication/Navigation/ChatsRoute.swift`, `ios/Packages/HaloCore/Tests/HaloApplicationTests/ChatsRouterTests.swift`.
-- **Room info / App / UI tests:** `ios/Packages/HaloApple/Sources/FeatureRoomDetails/RoomDetailsView.swift`, `ios/Packages/HaloApple/Sources/FeatureRoomList/RoomListView.swift`, `ios/App/HaloApp.swift`, `ios/UITests/HaloUITests.swift`.
-- **Docs / Config:** `docs/design/NAVIGATION.md`, `HANDOFF.md`, `.gitleaksignore`.
+- **Core:** `ReadState.swift` (E6), `BadgePort`, `RoomListPort`, `NotificationRecordPort`, `ReadStateCoordinator`, `RoomListCoordinator`, `NotificationProcessor`, `SyncCoordinator`, `BackgroundRefresh` (new), `ReadReceiptCoordinator`, fakes, tests.
+- **Apple / app:** `SystemBadge.swift` (`AttentionCache`), `BackgroundRefreshScheduler` (new), `MatrixRoomListPort`, `MatrixSessionPort`, `NotificationRecordStore`, NSE, widgets, `HaloApp`, `AppRoot`, `SessionAssembly`, both `Info.plist`s, `HaloUITests`.
+- **Infra / docs:** `infra/sygnal/`, `infra/dev/` (Halo pushkin), `UNREAD_STATE`, `PUSH_NOTIFICATIONS`, `BACKGROUND_EXECUTION`, `PORTS_CONTRACT`, `SYNC_ENGINE`, ADR-0015, `DECISION_LOG`, `OPEN_QUESTIONS`.
 
 ## 5. Outstanding issues
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
 
 **Engineering (not blocking)**
+- **Accessibility audit on the signed-in simulator (also fails on `main`):** `testLaunchRootScreenPassesAccessibilityAudit`, "Potentially inaccessible text" without an element.
+- **Dev APNs stall (2026-11-24, 15:05–15:19 UTC):** APNs accepted pushes the iPhone never acted on (alerts and silent ones), then delivery resumed without a change; a later silent push also had no effect within 12 s (iOS throttles them; opening healed it). Cause unknown.
+- **Contract failures that also fail on `main` (b1a280b):** `ServerReadStateScenarioTests` S11 ("cleared locally" while the receipt can't be sent: `SDK_UNREAD_AFTER_READ` overrides the unsent intent) and `AdapterContractTests.readMarkers` (60 s timeout).
 - **Timeline follow-up:** the room appears ~150 ms after the push starts (the list is hidden until placed); an own thumbnail is downloaded once after an app restart (SDK caches the file under the new reference, thumbnails under their own key).
 
 **Needs the founder (`👤`) or physical device (`📱`)**
@@ -64,7 +69,7 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 - 👤 **UX/ship external items (D84, D115):** publish `docs/release/{PRIVACY_POLICY,SUPPORT}.md` with founder domain/contact, final Beta 2 brand artwork (`Q-BRAND`), legal review (D38), export compliance (V-LEGAL), and App Store Connect privacy nutrition labels.
 - 📱 **Drag and drop (iPad):** drop a photo, a PDF and a link from Photos/Files/Safari into an open chat, and drag text, a photo, and a file out of a chat (also Split View with another app); a > 50 MiB file shows the size error.
 - 📱 **Keyboard shortcuts (iPad/hardware keyboard):** ⌘N, ⌘,, ⌘F, ⌘1–⌘6 work and ⌘F focuses the search field.
-- 📱 **Widgets & background push badge (device, D89/D93):** app-open/close badge healing, NSE widget refresh, and silent-push background sync fixed in `fix/badge-widget-background-sync`; verify live background badge + widget refresh once APNs push gateway (`R-24` / `--profile push`) is delivering pushes.
+- 📱 **Widgets in the background (D118):** icon verified live; the widget refreshed on open, but on the founder's phone iOS ignored every background reload (extension and app) on 2026-11-24, most likely a spent daily reload budget. Re-check with Settings → Developer → WidgetKit Developer Mode, or after a day. iOS's own scheduling of the app refresh was only simulated (debugger).
 - 📱 **iPad on a device / dev homeserver (D91):** only the signed-out screen was checked in the iPad simulator. Check sidebar selection, trailing Room info inspector (button + ⌘I), Slide Over / Split View collapse to a sheet, rotation, and Settings/Stickers in the detail column.
 - 📱 **Physical-device validation:** 7-day AC-U8 daily-driver soak, Release/TestFlight G-NSE spot check, interactive Xcode/Instruments NFR-2 scroll hitch ratio + 300-room NFR-1 check + MetricKit hang/launch review (dev-account iPhone 16 baseline recorded in `TEST_STRATEGY.md` §7: 0.357 s responsive launch, 76.8–78.1 MB peak memory), and Beta 1 → Beta 2 → 1.0 release. (Voice, Share extension `V-SHARE-1`, Focus filter `D90`/`D104`, and Siri/Spotlight `D88` verified green on iPhone 16.)
 

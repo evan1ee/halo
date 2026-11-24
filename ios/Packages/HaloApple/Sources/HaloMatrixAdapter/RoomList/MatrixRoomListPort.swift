@@ -43,7 +43,6 @@ public final class MatrixRoomListPort: RoomListPort {
     private let hasRecords: @Sendable (RoomID) -> Bool
     private let current = Mutex<Subscription?>(nil)
     private let leftObservers = Mutex<[UUID: AsyncStream<Set<RoomID>>.Continuation]>([:])
-    private let syncObservers = Mutex<[UUID: AsyncStream<Set<RoomID>>.Continuation]>([:])
     /// Instance-scoped, bounded event id → time cache for resolved receipt targets (R-27); cleared on stream end.
     private let eventTimes = EventTimeCache()
 
@@ -52,8 +51,8 @@ public final class MatrixRoomListPort: RoomListPort {
         self.hasRecords = hasRecords
     }
 
-    public func rooms(filter: RoomListFilter) -> AsyncStream<RoomListDiff> {
-        let (output, continuation) = AsyncStream<RoomListDiff>.makeStream(bufferingPolicy: .unbounded)
+    public func updates(filter: RoomListFilter) -> AsyncStream<RoomListUpdate> {
+        let (output, continuation) = AsyncStream<RoomListUpdate>.makeStream(bufferingPolicy: .unbounded)
         let id = UUID()
         let (refresh, refreshContinuation) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
         let filterBox = FilterBox(filter)
@@ -105,12 +104,14 @@ public final class MatrixRoomListPort: RoomListPort {
                     list.sort(by: Self.order)
                     if list != last {
                         last = list
-                        continuation.yield(.reset(list))
+                        continuation.yield(.diff(.reset(list)))
                     }
                     return presentIDs
                 }
-                try await publish(changed: nil, forceAll: true)
+                // Subscribed before the first load: a response that arrives while it runs is buffered, not lost (its rooms
+                // would keep their old counts until something else changed in them).
                 let changes = await session.syncChanges()
+                try await publish(changed: nil, forceAll: true)
                 enum Event: Sendable { case sync(Set<String>), refresh }
                 // Sync responses and filter changes feed one loop, so the list is rebuilt one change at a time.
                 let (events, eventContinuation) = AsyncStream<Event>.makeStream(bufferingPolicy: .unbounded)
@@ -129,7 +130,7 @@ public final class MatrixRoomListPort: RoomListPort {
                     switch event {
                     case .sync(let changed):
                         let present = try await publish(changed: changed)
-                        self?.publishSynced(present)
+                        continuation.yield(.synced(present))
                     case .refresh:
                         try await publish(changed: nil, forceAll: true)
                     }
@@ -171,19 +172,6 @@ public final class MatrixRoomListPort: RoomListPort {
         guard !rooms.isEmpty else { return }
         let continuations = leftObservers.withLock { Array($0.values) }
         for continuation in continuations { continuation.yield(rooms) }
-    }
-
-    public func syncCompletions() -> AsyncStream<Set<RoomID>> {
-        let (stream, continuation) = AsyncStream<Set<RoomID>>.makeStream(bufferingPolicy: .unbounded)
-        let id = UUID()
-        syncObservers.withLock { $0[id] = continuation }
-        continuation.onTermination = { [weak self] _ in self?.syncObservers.withLock { _ = $0.removeValue(forKey: id) } }
-        return stream
-    }
-
-    private func publishSynced(_ present: Set<RoomID>) {
-        let continuations = syncObservers.withLock { Array($0.values) }
-        for continuation in continuations { continuation.yield(present) }
     }
 
     // MARK: Mapping
