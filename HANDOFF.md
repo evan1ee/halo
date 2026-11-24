@@ -1,26 +1,26 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-24 · Branch: `test/iphone16-d95-and-live-sends` · PRs #1–#83 merged
+Last updated: 2026-11-24 · Branch: `fix/badge-widget-background-sync` · PRs #1–#84 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
-- **Roadmap / Autonomous Loop:** all autonomous work across M0–M16, ADR-0022, Tech Debt A–D (including TD-12), the Halo Sygnal pushkin (`infra/sygnal/`, R-24), and release documentation (`docs/release/`, D115) is complete; all open product decisions in `OPEN_QUESTIONS.md` are resolved (`D108–D117`). Physical iPhone 16 `HaloUITests`, NFR-1 cold launch (0.357 s responsive), timeline memory (76.8 MB peak), D95 10× room-opening check, and live sends (location pin, poll, Markdown article, KLIPY GIF) are all verified green. The roadmap has been expanded with **M17 (Ship-readiness polish & hardening)**, **M18 (Everyday messaging completeness)**, and **M19 (Power-user organization, trust & ecosystem)** in [docs/ROADMAP.md](docs/ROADMAP.md). External-account / legal (`👤`) and remaining physical-device (`📱`) items remain in §5.
+- **Roadmap / Autonomous Loop:** all autonomous work across M0–M16, ADR-0022, Tech Debt A–D (including TD-12), the Halo Sygnal pushkin (`infra/sygnal/`, R-24), and release documentation (`docs/release/`, D115) is complete; all open product decisions in `OPEN_QUESTIONS.md` are resolved (`D108–D117`). Physical iPhone 16 `HaloUITests`, NFR-1 cold launch (0.357 s responsive), timeline memory (76.8 MB peak), D95 10× room-opening, live sends, Voice messages, Share extension (`V-SHARE-1`), Focus filter, and Siri/Spotlight all passed; P0 badge/widget/background-sync fixes landed on `fix/badge-widget-background-sync`. The roadmap has been expanded with **M17–M19** in [docs/ROADMAP.md](docs/ROADMAP.md). External-account / legal (`👤`) and remaining physical-device (`📱`) items remain in §5.
 - **Milestones:** M0–M16 done except external/device items (deploy `infra/sygnal/` + APNs keys + TestFlight, 7-day AC-U8 soak, interactive Xcode/Instruments NFR-2 scroll hitch + 300-room + MetricKit run, Q-KLIPY-PROD portal request, publish `docs/release/` privacy/support URLs, final Beta 2 brand artwork, legal/export review). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1).
-- **Last checks (`test/iphone16-d95-and-live-sends`):** physical iPhone 16 `testRoomOpeningLandsAtNewestTenTimes` (10/10 passes in S10) & `testLiveSendsLocationPollArticleAndKlipy` (location pin, poll, Markdown article, KLIPY GIF sent & rendered inline) passed (0 failures, 0 skips); `validate-docs.sh`, `check-boundaries.sh`, `check-design-tokens.sh`, `swiftlint --strict`, `gitleaks` passed.
-- **CI:** PRs #1–#83 merged. Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
+- **Last checks (`fix/badge-widget-background-sync`):** `swift test --package-path ios/Packages/HaloCore -Xswiftc -warnings-as-errors` (198 tests in 27 suites, including 4 new badge/NSE/background-sync regression tests), `Halo-Debug` arm64 build & install on physical iPhone 16, `validate-docs.sh`, `check-boundaries.sh`, `check-design-tokens.sh`, `swiftlint --strict` (268 files, 0 violations), `gitleaks` passed.
+- **CI:** PRs #1–#84 merged. Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
-- **Physical iPhone 16 D95 10× room-opening & live-send checks (2026-11-24, `test/iphone16-d95-and-live-sends`):**
+- **P0 badge, widget & background-push sync fixes + iPhone 16 walkthrough (2026-11-24, `fix/badge-widget-background-sync`):**
+  - Fixed 4 root causes of badge/widget desync: (1) `ReadStateCoordinator.reconcile()` guarded before `begin()` and invoked on `.active`/`.background` (inside `BackgroundTaskLease`) so dropped OS badges always heal; (2) synchronous `attentionCache.setForeground(false)` on `didEnterBackgroundNotification`/`willTerminateNotification` so force-quit never leaves NSE thinking the app is foregrounded; (3) `NotificationProcessor` folds unconfirmed records across all rooms and returns `attentionCounts`, and `NotificationService` updates `AttentionCache` + calls `WidgetCenter.shared.reloadAllTimelines()`; (4) added `UIBackgroundModes: [remote-notification]`, `SyncPort.syncOnce()`, `SyncCoordinator.syncOnceInBackground()`, and `PushDelegate.application(_:didReceiveRemoteNotification:fetchCompletionHandler:)` for silent background pushes (ADR-0015 / D112).
+  - Physical iPhone 16 manual walkthrough: Voice messages, Share extension (`V-SHARE-1`), Focus filter (`D90`/`D104`), and Siri/Spotlight (`D88`) all passed; fixed build installed on iPhone 16.
+- **Physical iPhone 16 D95 10× room-opening & live-send checks (2026-11-24, PR #84):**
   - Added opt-in (`HALO_RUN_DEVICE_CHECKS=1`) `testRoomOpeningLandsAtNewestTenTimes` and `testLiveSendsLocationPollArticleAndKlipy` to `ios/UITests/HaloUITests.swift` plus `klipy-gif-item`/`klipy-sticker-item` identifiers in `KlipyPanelView.swift`.
   - Passed on physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1, `Halo-Debug`): S10 opened 10/10 times at the newest message (no `jump-to-bottom`, no spinner); live pinned location, poll, Markdown article, and KLIPY GIF all sent and rendered inline.
 - **Physical iPhone 16 UI tests & NFR-1/memory baseline (2026-11-24, PR #83):**
   - Added `testTimelineScrollPerformanceMetric` (`XCTOSSignpostMetric.scrollingAndDecelerationMetric` + `XCTMemoryMetric`) and `XCTApplicationLaunchMetric(waitUntilResponsive: true)` to `ios/UITests/HaloUITests.swift`; fixed physical-device software-keyboard detection (`requireSoftwareKeyboard` checking any hittable key after settle) and `testEmptyRoomStaysResponsive` returning from a `@SceneStorage`-restored room.
   - Ran `HaloUITests` + `TEST_RUNNER_HALO_RUN_PERF_TESTS=1` on physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1): 0 failures across all 7 applicable device tests; recorded NFR-1 launch (**0.348 s** / **0.357 s** responsive ≤ 1.0 s) and `S10` timeline peak memory (**76.8–78.1 MB** < 200 MB) in `docs/testing/TEST_STRATEGY.md` §7, `docs/design/UX_AUDIT.md`, and `docs/ROADMAP.md`.
-- **Release docs & remaining founder decisions (2026-11-24, PR #82, D113–D117):**
-  - Scaffolded `docs/release/{APP_STORE_METADATA,PRIVACY_POLICY,SUPPORT}.md` grounded in `PRIVACY.md` and `PrivacyInfo.xcprivacy` (D115).
-  - Recorded founder decisions closing `Q-SDK-BUILD` (D113), `Q-CRASH` (D114), `Q-BRAND`/`Q-APPSTORE` Beta 1 (D115), `Q-KLIPY-REHOST` (D116), and `Q-MAS-ACCOUNT`/`Q-E2EE-STRATEGY`/`Q-BOT-OWNER`/`Q-ACT-REFRESH` (D117).
 
 ## 3. Key decisions
 Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D107), [docs/adr/README.md](docs/adr/README.md).
@@ -42,8 +42,8 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D107), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
-- **UI tests & stickers:** `ios/UITests/HaloUITests.swift`, `ios/Packages/HaloApple/Sources/FeatureStickers/KlipyPanelView.swift`.
-- **Docs:** `HANDOFF.md`.
+- **HaloCore:** `SyncPort.swift`, `SyncCoordinator.swift`, `ReadStateCoordinator.swift`, `NotificationProcessor.swift`, `FakeSyncPort.swift`, plus regression tests in `BadgeCoordinatorTests.swift`, `NotificationProcessorTests.swift`, `SyncCoordinatorTests.swift`.
+- **HaloApple / App / NSE:** `MatrixSessionPort.swift`, `MatrixSyncPort.swift`, `ServerReadStateScenarioTests.swift`, `NotificationService.swift`, `HaloApp.swift`, `SessionAssembly.swift`, `Info.plist`, `Info-Debug.plist`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
@@ -55,7 +55,7 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 - 👤 **Q-KLIPY-PROD:** the KLIPY key is a testing key (100 requests/hour); request production access in KLIPY's Partner Panel before Beta 1.
 - 📱 **UI tests on devices:** the iPhone 16 (`00008140-000222592ED0801C`, signed in as contractpeer on the LAN dev server) runs `HaloUITests` (composer, empty room, launch). The iPhone 17e still exited with code 74.
 - 📱 **Location, polls and articles:** pinned location, poll, Markdown article, and KLIPY GIF live sends verified in Halo on iPhone 16 (`testLiveSendsLocationPollArticleAndKlipy`); still open: current-location send + Element interoperability check.
-- 📱 **Voice messages on a device:** record, cancel and send one; check it plays in Halo and Element (the simulator has no microphone test here).
+- 📱 **Voice messages on a device:** record, cancel, send, and playback verified green on iPhone 16; still open: Element interoperability check.
 - 📱 **Composer panels on a device:** keyboard ↔ panel swap and KLIPY GIF inline send/play verified on iPhone 16; still open: iPad floating/hardware keyboard, composer following keyboard from idle, and KLIPY GIF link interoperability in Element (AC-CP3).
 - 📱 **Opening rooms on the device (D95):** S10 10× room-opening check verified green on iPhone 16 (`testRoomOpeningLandsAtNewestTenTimes`, 10/10 at newest message, no spinner); still open: notification-tap / Spotlight entry and iPad split view.
 - 👤 **R-14 (filtering entitlement):** request Apple's `com.apple.developer.usernotifications.filtering` entitlement (V-PUSH-3).
@@ -64,15 +64,9 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 - 👤 **UX/ship external items (D84, D115):** publish `docs/release/{PRIVACY_POLICY,SUPPORT}.md` with founder domain/contact, final Beta 2 brand artwork (`Q-BRAND`), legal review (D38), export compliance (V-LEGAL), and App Store Connect privacy nutrition labels.
 - 📱 **Drag and drop (iPad):** drop a photo, a PDF and a link from Photos/Files/Safari into an open chat, and drag text, a photo, and a file out of a chat (also Split View with another app); a > 50 MiB file shows the size error.
 - 📱 **Keyboard shortcuts (iPad/hardware keyboard):** ⌘N, ⌘,, ⌘F, ⌘1–⌘6 work and ⌘F focuses the search field.
-- 📱 **Unread chats widget (device, D93):** add the medium widget with the setting on and off; names hidden on a locked screen.
-- 📱 **V-SHARE-1 (device, ADR-0023):** share a photo and a link to an encrypted room from Photos/Safari with Halo closed, then with it running; one copy each, no undecryptable event; also signed out (fallback) and with Airplane mode (queued).
-- 📱 **Share hand-back (device):** share a photo with notifications allowed, tap the notification, check "Send to…" appears; with notifications off the extension says to open Halo. Auto-opening Halo from the extension is not possible with public API; a chat picker inside the extension would be the alternative.
+- 📱 **Widgets & background push badge (device, D89/D93):** app-open/close badge healing, NSE widget refresh, and silent-push background sync fixed in `fix/badge-widget-background-sync`; verify live background badge + widget refresh once APNs push gateway (`R-24` / `--profile push`) is delivering pushes.
 - 📱 **iPad on a device / dev homeserver (D91):** only the signed-out screen was checked in the iPad simulator. Check sidebar selection, trailing Room info inspector (button + ⌘I), Slide Over / Split View collapse to a sheet, rotation, and Settings/Stickers in the detail column.
-- 📱 **Focus filter on a device (D90):** add Halo's filter to a Focus, toggle the Focus, check the list narrows, "Show all chats" works, and it restores when the Focus ends (also whether the system calls the intent on deactivation).
-- 📱 **Widgets on a device (D89):** add the small and lock-screen widgets, receive a message and check the count refreshes; check the lock-screen redaction.
-- 📱 **App Intents on a device (D88):** turn on "Chats in Siri and Spotlight", then say "Open <chat> in Halo", "Send a message to <chat> in Halo" (confirm online and offline), and tap a Spotlight result.
-- 📱 **Share extension on a device (D87):** App Group sharing needs a signed build; check Safari link, several Photos, a Files PDF and a > 50 MiB file end to end. The simulator build only proves it compiles and the inbox logic.
-- 📱 **Physical-device validation:** 7-day AC-U8 daily-driver soak, Release/TestFlight G-NSE spot check, interactive Xcode/Instruments NFR-2 scroll hitch ratio + 300-room NFR-1 check + MetricKit hang/launch review (dev-account iPhone 16 baseline recorded in `TEST_STRATEGY.md` §7: 0.357 s responsive launch, 76.8–78.1 MB peak memory), and Beta 1 → Beta 2 → 1.0 release.
+- 📱 **Physical-device validation:** 7-day AC-U8 daily-driver soak, Release/TestFlight G-NSE spot check, interactive Xcode/Instruments NFR-2 scroll hitch ratio + 300-room NFR-1 check + MetricKit hang/launch review (dev-account iPhone 16 baseline recorded in `TEST_STRATEGY.md` §7: 0.357 s responsive launch, 76.8–78.1 MB peak memory), and Beta 1 → Beta 2 → 1.0 release. (Voice, Share extension `V-SHARE-1`, Focus filter `D90`/`D104`, and Siri/Spotlight `D88` verified green on iPhone 16.)
 
 ## 6. Next steps
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §"Remaining work".

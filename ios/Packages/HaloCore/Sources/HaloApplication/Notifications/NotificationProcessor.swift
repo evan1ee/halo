@@ -4,9 +4,9 @@ import HaloFoundation
 
 /// What the notification service extension should deliver to Notification Center (PUSH_NOTIFICATIONS §3, R-08).
 public enum NotificationDecision: Sendable, Equatable {
-    /// Rewrite the notification content. `badge` is `nil` when the app is foregrounded (avoiding an overwrite race,
-    /// R-08) or when the event does not add attention to the room under `ReadStatePolicy`.
-    case deliver(title: String, body: String, threadID: String, badge: Int?, outcome: String)
+    /// Rewrite the notification content. `badge` and `attentionCounts` are `nil` when the app is foregrounded
+    /// (avoiding an overwrite race, R-08) or when the event does not add attention to the room under `ReadStatePolicy`.
+    case deliver(title: String, body: String, threadID: String, badge: Int?, outcome: String, attentionCounts: [RoomID: Int]? = nil)
     /// Nothing should be shown (filtered out, redacted, or duplicate push AC-U7).
     case suppressed(outcome: String)
     /// Fetch failed: deliver the original generic content with no badge.
@@ -69,12 +69,12 @@ public struct NotificationProcessor: Sendable {
                 roomID: room, eventID: event, timestamp: timestamp,
                 isMention: display.isMention, deliveredAt: deliveredAt, source: .nse)
             guard records.add(record) else { return .suppressed(outcome: "duplicate") }
-            let badge = fallbackBadge(
+            let fallback = fallbackBadge(
                 room: room, membership: display.isInvite ? .invited : .joined,
                 isEncrypted: false, mode: display.mode, timestamp: timestamp, isMention: display.isMention)
             return .deliver(
                 title: display.title, body: display.body, threadID: room.rawValue,
-                badge: badge, outcome: "display")
+                badge: fallback?.badge, outcome: "display", attentionCounts: fallback?.attentionCounts)
 
         case .encrypted(let roomName, let timestamp, let mode):
             let eventTimestamp = timestamp ?? deliveredAt
@@ -82,12 +82,12 @@ public struct NotificationProcessor: Sendable {
                 roomID: room, eventID: event, timestamp: eventTimestamp,
                 isMention: false, deliveredAt: deliveredAt, source: .nse)
             guard records.add(record) else { return .suppressed(outcome: "duplicate") }
-            let badge = fallbackBadge(
+            let fallback = fallbackBadge(
                 room: room, membership: .joined,
                 isEncrypted: true, mode: mode, timestamp: eventTimestamp, isMention: false)
             return .deliver(
                 title: roomName ?? "Halo", body: "Encrypted message", threadID: room.rawValue,
-                badge: badge, outcome: "encrypted")
+                badge: fallback?.badge, outcome: "encrypted", attentionCounts: fallback?.attentionCounts)
 
         case .suppressed:
             return .suppressed(outcome: "suppressed")
@@ -95,13 +95,13 @@ public struct NotificationProcessor: Sendable {
     }
 
     /// Mode-aware unread-message badge recomputation over the app's last authoritative per-room counts plus
-    /// unconfirmed `notification_record` entries delivered since that write (R-08, D82).
+    /// unconfirmed `notification_record` entries delivered since that write across all rooms (R-08, D82).
     /// Returns `nil` while the app is foregrounded (the app handles the badge via Darwin signal) or when the event
     /// does not give this room attention under `ReadStatePolicy` (e.g. non-mention in mentions-only or muted room).
     private func fallbackBadge(
         room: RoomID, membership: Membership, isEncrypted: Bool, mode: NotificationMode,
         timestamp: Date, isMention: Bool
-    ) -> Int? {
+    ) -> (badge: Int, attentionCounts: [RoomID: Int])? {
         guard !isAppForeground() else { return nil }
         let single = ReadStatePolicy.evaluate(RoomReadInputs(
             roomID: room, membership: membership, isEncrypted: isEncrypted,
@@ -110,14 +110,15 @@ public struct NotificationProcessor: Sendable {
         guard single.attention else { return nil }
 
         let snapshot = lastAttention()
-        let addedRecords = records.all().filter { record in
-            guard record.roomID == room else { return false }
+        let recentAll = records.all().filter { record in
             if let cutoff = snapshot.updatedAt { return record.deliveredAt >= cutoff }
             return true
         }
-        let unconfirmed = addedRecords.isEmpty
+        let byRoom = Dictionary(grouping: recentAll, by: \.roomID)
+        let currentRoomRecords = byRoom[room] ?? []
+        let unconfirmed = currentRoomRecords.isEmpty
             ? [NotifiedRef(timestamp: timestamp, isMention: isMention)]
-            : addedRecords.map { NotifiedRef(timestamp: $0.timestamp, isMention: $0.isMention) }
+            : currentRoomRecords.map { NotifiedRef(timestamp: $0.timestamp, isMention: $0.isMention) }
         let roomDelta = ReadStatePolicy.evaluate(RoomReadInputs(
             roomID: room, membership: membership, isEncrypted: isEncrypted,
             counts: RoomReadCounts(mode: mode, server: .zero, sdk: .zero, isMarkedUnread: false),
@@ -126,7 +127,17 @@ public struct NotificationProcessor: Sendable {
 
         var effective = snapshot.counts
         effective[room] = (effective[room] ?? 0) + max(roomDelta.badgeCount, 1)
-        return effective.values.reduce(0, +)
+        // Preserve unconfirmed background pushes that arrived in other rooms since the app's last authoritative write.
+        for (otherRoom, otherRecords) in byRoom where otherRoom != room && !otherRecords.isEmpty {
+            let otherDelta = ReadStatePolicy.evaluate(RoomReadInputs(
+                roomID: otherRoom, membership: .joined, isEncrypted: false,
+                counts: RoomReadCounts(mode: .allMessages, server: .zero, sdk: .zero, isMarkedUnread: false),
+                unconfirmedNotified: otherRecords.map { NotifiedRef(timestamp: $0.timestamp, isMention: $0.isMention) }))
+            if otherDelta.attention {
+                effective[otherRoom] = (effective[otherRoom] ?? 0) + max(otherDelta.badgeCount, 1)
+            }
+        }
+        return (effective.values.reduce(0, +), effective)
     }
 }
 

@@ -29,6 +29,10 @@ public final class MatrixSyncPort: SyncPort {
         if status == .idle || status == .running || status == .offline { publish(.stopped) }
     }
 
+    public func syncOnce() async throws(HaloError) {
+        try await session.syncOnce()
+    }
+
     public func statuses() -> AsyncStream<SyncStatus> {
         let (stream, continuation) = AsyncStream<SyncStatus>.makeStream(bufferingPolicy: .bufferingNewest(1))
         let id = UUID()

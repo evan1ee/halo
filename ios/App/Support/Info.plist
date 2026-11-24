@@ -19,5 +19,9 @@
 	<string>$(HALO_PUSH_APP_ID)</string>
 	<key>HaloPushGatewayURL</key>
 	<string>$(HALO_PUSH_GATEWAY_URL)</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>

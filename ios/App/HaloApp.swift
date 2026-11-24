@@ -253,6 +253,9 @@ private struct RootView: View {
             PushDelegate.onNotificationTap = { room, event in
                 router.openRoom(room, focus: event)
             }
+            PushDelegate.onBackgroundPush = {
+                await root.handleBackgroundPush() ? .newData : .noData
+            }
             root.shareHandoff.onSent = { room in router.openRoom(room) }
             await root.push?.begin()
             await root.readState.begin()
@@ -367,11 +370,20 @@ private struct RootView: View {
             @unknown default: break
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+            // Synchronously clear the shared foreground flag before iOS suspends or terminates the app so the NSE
+            // never sees a stale foreground state (R-08).
+            root.attentionCache.setForeground(false)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willTerminateNotification)) { _ in
+            root.attentionCache.setForeground(false)
+        }
         .task(id: scenePhase) {
             switch scenePhase {
             case .active:
                 HaloDatabase.resumeAll()
                 await root.setForeground(true)
+                await root.readState.reconcile()
                 if case .signedIn = root.auth.screen { await root.shareHandoff.refresh() }
                 UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ["halo.share.ready"])
                 // M16 Focus filter: the system's current filter is the truth; a change missed in the background is caught here.
@@ -382,6 +394,7 @@ private struct RootView: View {
                 defer { lease.end() }
                 await root.setForeground(false)
                 await root.receipts.flush()
+                await root.readState.reconcile()
             case .inactive:
                 let lease = BackgroundTaskLease(name: "halo.receipts.flush")
                 defer { lease.end() }
@@ -687,6 +700,7 @@ private struct ThreadScreen: View {
 final class PushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     @MainActor static var coordinator: PushCoordinator?
     @MainActor static var onNotificationTap: (@MainActor (RoomID, EventID?) -> Void)?
+    @MainActor static var onBackgroundPush: (@MainActor () async -> UIBackgroundFetchResult)?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
@@ -695,6 +709,17 @@ final class PushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCen
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         Task { @MainActor in await Self.coordinator?.deviceTokenReceived(deviceToken) }
+    }
+
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        Task { @MainActor in
+            let result = await Self.onBackgroundPush?() ?? .noData
+            completionHandler(result)
+        }
     }
 
     nonisolated func userNotificationCenter(

@@ -28,9 +28,9 @@ struct NotificationProcessorTests {
 
         // Room B had 3 unread; first push in room A gives badge 4, second push in room A gives badge 5.
         let first = await processor.process(room: roomA, event: ev1)
-        #expect(first == .deliver(title: "Alice", body: "Hello 1", threadID: roomA.rawValue, badge: 4, outcome: "display"))
+        #expect(first == .deliver(title: "Alice", body: "Hello 1", threadID: roomA.rawValue, badge: 4, outcome: "display", attentionCounts: [roomB: 3, roomA: 1]))
         let second = await processor.process(room: roomA, event: ev2)
-        #expect(second == .deliver(title: "Alice", body: "Hello 2", threadID: roomA.rawValue, badge: 5, outcome: "display"))
+        #expect(second == .deliver(title: "Alice", body: "Hello 2", threadID: roomA.rawValue, badge: 5, outcome: "display", attentionCounts: [roomB: 3, roomA: 2]))
         #expect(records.all().count == 2)
     }
 
@@ -57,7 +57,7 @@ struct NotificationProcessorTests {
         let ev3 = try! EventID("$e3")
         fetcher.setResult(.success(.display(NotificationDisplay(
             title: "Team", body: "Bob: @you", timestamp: eventTs, isMention: true, mode: .mentionsAndKeywords))), for: ev3)
-        #expect(await bg.process(room: roomA, event: ev3) == .deliver(title: "Team", body: "Bob: @you", threadID: roomA.rawValue, badge: 2, outcome: "display"))
+        #expect(await bg.process(room: roomA, event: ev3) == .deliver(title: "Team", body: "Bob: @you", threadID: roomA.rawValue, badge: 2, outcome: "display", attentionCounts: [roomB: 1, roomA: 1]))
 
         // 4. Muted room in background: badge stays nil even for a mention.
         let ev4 = try! EventID("$e4")
@@ -75,7 +75,7 @@ struct NotificationProcessorTests {
         let processor = NotificationProcessor(
             fetcher: fetcher, records: records, lastAttention: { [:] }, isAppForeground: { false }, now: { now })
 
-        #expect(await processor.process(room: roomA, event: ev1) == .deliver(title: "Secret", body: "Encrypted message", threadID: roomA.rawValue, badge: 1, outcome: "encrypted"))
+        #expect(await processor.process(room: roomA, event: ev1) == .deliver(title: "Secret", body: "Encrypted message", threadID: roomA.rawValue, badge: 1, outcome: "encrypted", attentionCounts: [roomA: 1]))
         #expect(await processor.process(room: roomB, event: ev2) == .deliver(title: "Group", body: "Encrypted message", threadID: roomB.rawValue, badge: nil, outcome: "encrypted"))
         #expect(records.all().first?.timestamp == eventTs)
     }
@@ -92,7 +92,7 @@ struct NotificationProcessorTests {
         let processor = NotificationProcessor(
             fetcher: fetcher, records: records, lastAttention: { [:] }, isAppForeground: { false }, now: { now })
 
-        #expect(await processor.process(room: roomA, event: ev1) == .deliver(title: "A", body: "1", threadID: roomA.rawValue, badge: 1, outcome: "display"))
+        #expect(await processor.process(room: roomA, event: ev1) == .deliver(title: "A", body: "1", threadID: roomA.rawValue, badge: 1, outcome: "display", attentionCounts: [roomA: 1]))
         #expect(await processor.process(room: roomA, event: ev1) == .suppressed(outcome: "duplicate"))
         #expect(await processor.process(room: roomA, event: ev2) == .suppressed(outcome: "suppressed"))
         #expect(await processor.process(room: roomA, event: ev3) == .fallback(outcome: "error"))
@@ -161,5 +161,32 @@ struct NotificationProcessorTests {
         #expect(try await cache.value(for: "alice:dev1") { await gate.beginBuild() } == 1)
         #expect(try await cache.value(for: "bob:dev2") { await gate.beginBuild() } == 2)
         #expect(await gate.buildCount() == 2)
+    }
+
+    @Test("background pushes across multiple rooms preserve earlier rooms and return attention counts for widgets")
+    func multiRoomBackgroundPushesPreserveEarlierRooms() async {
+        let fetcher = FakeNotificationFetchPort()
+        fetcher.setResult(.success(.display(NotificationDisplay(
+            title: "Alice", body: "In A", timestamp: eventTs, isMention: false, mode: .allMessages))), for: ev1)
+        fetcher.setResult(.success(.display(NotificationDisplay(
+            title: "Bob", body: "In B", timestamp: eventTs.addingTimeInterval(1), isMention: false, mode: .allMessages))), for: ev2)
+        let records = FakeNotificationRecords()
+        let cutoff = now.addingTimeInterval(-60)
+        let processor = NotificationProcessor(
+            fetcher: fetcher, records: records,
+            lastAttention: { ([:], cutoff) }, isAppForeground: { false }, now: { now })
+
+        let first = await processor.process(room: roomA, event: ev1)
+        let second = await processor.process(room: roomB, event: ev2)
+        if case .deliver(_, _, _, let badge1, _, _) = first {
+            #expect(badge1 == 1)
+        } else {
+            Issue.record("Expected deliver for first push")
+        }
+        if case .deliver(_, _, _, let badge2, _, _) = second {
+            #expect(badge2 == 2)
+        } else {
+            Issue.record("Expected deliver for second push")
+        }
     }
 }

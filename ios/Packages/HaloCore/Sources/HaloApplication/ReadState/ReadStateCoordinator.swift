@@ -154,7 +154,9 @@ public actor ReadStateCoordinator {
 
     /// Forces a fresh evaluation of all current read inputs, notification records and read positions,
     /// writing the badge and running the auditor (ROOM_LIST FR-8, SETTINGS §3). Preserves carried-over rooms (D73).
+    /// No-op before `begin()` so a cold-launch foreground transition never overwrites the cached badge with 0.
     public func reconcile() async {
+        guard !tasks.isEmpty else { return }
         hasWritten = false
         await recompute()
     }

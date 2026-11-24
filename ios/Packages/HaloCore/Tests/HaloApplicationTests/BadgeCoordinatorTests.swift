@@ -417,4 +417,33 @@ struct BadgeCoordinatorTests {
         try rooms.emit(.reset([try summary(alive.rawValue), try summary(pending.rawValue)]))
         #expect(await eventually { port.history.last == [] })
     }
+
+    @Test("reconcile before begin does not overwrite cached badge with zero")
+    func reconcileBeforeBeginDoesNotOverwriteCachedBadge() async throws {
+        let rooms = FakeRoomListPort()
+        let coordinator = RoomListCoordinator(port: rooms)
+        let port = FakeBadgePort()
+        let roomA = try RoomID("!a:x.org")
+        await port.update(attentionCounts: [roomA: 3])
+        let beforeWrites = port.history.count
+
+        let badge = ReadStateCoordinator(rooms: coordinator, port: port)
+        await badge.reconcile()
+
+        #expect(port.history.count == beforeWrites)
+        #expect(port.badge == 3)
+    }
+
+    @Test("reconcile re-asserts unchanged unread badge to the port so dropped OS badges heal")
+    func reconcileReassertsUnchangedBadge() async throws {
+        let (rooms, _, _, port, badge) = await make()
+        defer { withExtendedLifetime(badge) {} }
+        try rooms.emit(.reset([try summary("!a:x.org", notify: 3)]))
+        #expect(await eventually { port.badge == 3 })
+        let writesBefore = port.history.count
+
+        await badge.reconcile()
+        #expect(port.history.count == writesBefore + 1)
+        #expect(port.badge == 3)
+    }
 }

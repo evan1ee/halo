@@ -9,7 +9,9 @@ public final class FakeSyncPort: SyncPort {
         var status: SyncStatus = .idle
         var startCalls = 0
         var stopCalls = 0
+        var syncOnceCalls = 0
         var nextStartError: HaloError?
+        var nextSyncOnceError: HaloError?
         var continuations: [UUID: AsyncStream<SyncStatus>.Continuation] = [:]
     }
 
@@ -19,9 +21,11 @@ public final class FakeSyncPort: SyncPort {
 
     public var startCalls: Int { state.withLock { $0.startCalls } }
     public var stopCalls: Int { state.withLock { $0.stopCalls } }
+    public var syncOnceCalls: Int { state.withLock { $0.syncOnceCalls } }
     public var status: SyncStatus { state.withLock { $0.status } }
 
     public func failNextStart(with error: HaloError) { state.withLock { $0.nextStartError = error } }
+    public func failNextSyncOnce(with error: HaloError) { state.withLock { $0.nextSyncOnceError = error } }
 
     /// Sets the status as if the SDK had reported it (e.g. `.offline`, `.failed`).
     public func report(_ status: SyncStatus) { set(status) }
@@ -39,6 +43,15 @@ public final class FakeSyncPort: SyncPort {
     public func stop() async {
         state.withLock { $0.stopCalls += 1 }
         if status != .stopped && status != .idle { set(.stopped) }
+    }
+
+    public func syncOnce() async throws(HaloError) {
+        let error: HaloError? = state.withLock { state in
+            state.syncOnceCalls += 1
+            defer { state.nextSyncOnceError = nil }
+            return state.nextSyncOnceError
+        }
+        if let error { throw error }
     }
 
     public func statuses() -> AsyncStream<SyncStatus> {

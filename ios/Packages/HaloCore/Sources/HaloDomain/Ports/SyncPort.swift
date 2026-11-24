@@ -10,6 +10,9 @@ public protocol SyncPort: Sendable {
     /// Stops syncing and waits until the loop has ended. Idempotent.
     func stop() async
 
+    /// Runs a single bounded sync pass without starting the foreground long-poll loop (e.g. on a silent background push).
+    func syncOnce() async throws(HaloError)
+
     /// The current status, then every change. Snapshot semantics: the latest value wins (CONCURRENCY §3).
     func statuses() -> AsyncStream<SyncStatus>
 }

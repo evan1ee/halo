@@ -65,6 +65,19 @@ public actor SyncCoordinator {
         await reconcile()
     }
 
+    /// Runs a single bounded sync pass in the background (e.g. when woken by a silent push, ADR-0015 / D112)
+    /// without starting the foreground long-poll loop. Returns `true` when the sync succeeded.
+    @discardableResult
+    public func syncOnceInBackground() async -> Bool {
+        guard isSessionReady else { return false }
+        do {
+            try await port.syncOnce()
+            return true
+        } catch {
+            return false
+        }
+    }
+
     // MARK: Private
 
     private func setSessionReady(_ ready: Bool) async {
