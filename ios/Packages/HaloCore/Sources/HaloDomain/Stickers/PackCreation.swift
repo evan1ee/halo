@@ -59,6 +59,47 @@ public enum ImagePackBuilder {
         }
         return ["images": images, "pack": ["display_name": name.trimmingCharacters(in: .whitespacesAndNewlines), "usage": ["sticker"]]]
     }
+
+    /// Returns `content` with `pack.display_name` updated to `name`, preserving all images, pack metadata and unknown keys.
+    public static func renaming(to name: String, in content: [String: Any]) throws(HaloError) -> [String: Any] {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw .invalidInput("EMPTY_PACK_NAME") }
+        var updated = content
+        var pack = updated["pack"] as? [String: Any] ?? [:]
+        pack["display_name"] = trimmed
+        updated["pack"] = pack
+        return updated
+    }
+
+    /// Returns `content` with `uploaded` merged into `images`, preserving existing stickers, pack metadata and unknown keys.
+    public static func adding(uploaded: [(image: NewStickerImage, url: String)], to content: [String: Any]) throws(HaloError) -> [String: Any] {
+        guard !uploaded.isEmpty else { throw .invalidInput("NO_IMAGES") }
+        var updated = content
+        var images = updated["images"] as? [String: Any] ?? [:]
+        guard images.count + uploaded.count <= maximumImages else { throw .invalidInput("TOO_MANY_IMAGES") }
+        var seen = Set(images.keys)
+        for (image, url) in uploaded {
+            guard ShortcodeRules.isValid(image.shortcode) else { throw .invalidInput("BAD_SHORTCODE") }
+            guard seen.insert(image.shortcode).inserted else { throw .invalidInput("DUPLICATE_SHORTCODE") }
+            var entry: [String: Any] = ["url": url, "body": image.body ?? image.shortcode]
+            var info: [String: Any] = ["mimetype": image.mimeType, "size": image.data.count]
+            if let w = image.width { info["w"] = w }
+            if let h = image.height { info["h"] = h }
+            entry["info"] = info
+            images[image.shortcode] = entry
+        }
+        updated["images"] = images
+        return updated
+    }
+
+    /// Returns `content` with `shortcode` removed from `images`, or `nil` when `shortcode` is not present.
+    public static func removing(shortcode: String, from content: [String: Any]) -> [String: Any]? {
+        var updated = content
+        guard var images = updated["images"] as? [String: Any], images[shortcode] != nil else { return nil }
+        images[shortcode] = nil
+        updated["images"] = images
+        return updated
+    }
 }
 
 /// Edits the account data that lists packs. Unknown properties are preserved (the spec requires it).
@@ -109,6 +150,17 @@ public enum PackRegistry {
         guard (content["version"] as? Int ?? 1) <= 1 else { return nil }
         var rooms = content["rooms"] as? [String] ?? []
         if !rooms.contains(room.rawValue) { rooms.append(room.rawValue) }
+        content["rooms"] = rooms
+        content["version"] = 1
+        return content
+    }
+
+    /// `one.mbm.halo.sticker_rooms` with `room` removed; `nil` when `room` is not listed or the stored content is from a newer version.
+    public static func removingPackRoom(_ room: RoomID, in content: [String: Any]?) -> [String: Any]? {
+        guard var content, (content["version"] as? Int ?? 1) <= 1,
+              var rooms = content["rooms"] as? [String],
+              rooms.contains(room.rawValue) else { return nil }
+        rooms.removeAll { $0 == room.rawValue }
         content["rooms"] = rooms
         content["version"] = 1
         return content

@@ -25,6 +25,7 @@ public final class FakeTimelinePort: TimelinePort {
         var files: [OutgoingFile] = []
         var locations: [OutgoingLocation] = []
         var polls: [OutgoingPoll] = []
+        var pinned: [EventID] = []
         var fileFailure: HaloError?
         var imageFailure: HaloError?
         var stickerFailure: HaloError?
@@ -71,6 +72,9 @@ public final class FakeTimelinePort: TimelinePort {
     public func sentFiles(in id: RoomID) -> [OutgoingFile] { rooms.withLock { $0[id]?.files ?? [] } }
     /// The locations sent, in order.
     public func sentLocations(in id: RoomID) -> [OutgoingLocation] { rooms.withLock { $0[id]?.locations ?? [] } }
+
+    /// The pinned event IDs in `id`, in order.
+    public func pinnedEvents(in id: RoomID) -> [EventID] { rooms.withLock { $0[id]?.pinned ?? [] } }
     /// The polls started, in order.
     public func sentPolls(in id: RoomID) -> [OutgoingPoll] { rooms.withLock { $0[id]?.polls ?? [] } }
     /// The next `sendFile` in `id` throws `error`.
@@ -209,6 +213,26 @@ public final class FakeTimelinePort: TimelinePort {
         func createPoll(_ poll: OutgoingPoll) async throws(HaloError) {
             try poll.validate()
             port.rooms.withLock { $0[room]?.polls.append(poll) }
+        }
+
+        func pinnedEventIDs() async -> [EventID] {
+            port.rooms.withLock { $0[room]?.pinned ?? [] }
+        }
+
+        func pin(event: EventID) async throws(HaloError) {
+            port.rooms.withLock { rooms in
+                guard var state = rooms[room] else { return }
+                if !state.pinned.contains(event) { state.pinned.append(event) }
+                rooms[room] = state
+            }
+        }
+
+        func unpin(event: EventID) async throws(HaloError) {
+            port.rooms.withLock { rooms in
+                guard var state = rooms[room] else { return }
+                state.pinned.removeAll { $0 == event }
+                rooms[room] = state
+            }
         }
 
         func members() async throws(HaloError) -> [RoomMember] { port.rooms.withLock { $0[room]?.members ?? [] } }

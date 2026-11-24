@@ -40,3 +40,19 @@ public protocol HiddenRoomsPort: Sendable {
     /// The pack rooms listed in the account data; empty when there are none or the data can't be read.
     func hiddenRooms() async -> Set<RoomID>
 }
+
+/// Edits and deletes sticker packs (`m.room.image_pack` state + `m.image_pack.rooms` / `one.mbm.halo.sticker_rooms`).
+public protocol StickerPackManagementPort: Sendable {
+    /// Renames `ref` in `m.room.image_pack` (and updates the room name when Halo owns the pack room).
+    func renamePack(_ ref: PackRef, to name: String) async throws(HaloError)
+
+    /// Uploads `images` and merges them into `ref`'s `m.room.image_pack` state event.
+    func addStickers(_ images: [NewStickerImage], to ref: PackRef, progress: @escaping @Sendable (Int, Int) -> Void) async throws(HaloError)
+
+    /// Removes the sticker named `shortcode` from `ref`'s `m.room.image_pack` state event.
+    func removeSticker(shortcode: String, from ref: PackRef) async throws(HaloError)
+
+    /// Removes `ref` from the user's enabled packs; when `ref` lives in a Halo-owned personal pack room, also removes it from
+    /// `one.mbm.halo.sticker_rooms` and leaves + forgets the room.
+    func deletePack(_ ref: PackRef) async throws(HaloError)
+}

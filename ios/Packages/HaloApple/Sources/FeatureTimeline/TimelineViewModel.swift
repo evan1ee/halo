@@ -254,6 +254,8 @@ public final class TimelineViewModel {
     public internal(set) var isAtBottom = true
     /// Number of incoming messages appended while the user is scrolled up (`!isAtBottom`). Cleared on returning to the bottom.
     public internal(set) var newSinceDetached = 0
+    /// Event IDs currently pinned in the room (`m.room.pinned_events`).
+    public internal(set) var pinnedEventIDs: [EventID] = []
     var trackedTailID: String?
 
     /// How long an event must stay visible before it counts as seen (READ_RECEIPTS §1, D6).
@@ -369,6 +371,7 @@ public final class TimelineViewModel {
             for await status in statuses { self?.apply(status) }
         }
         await coordinator.open()
+        pinnedEventIDs = await coordinator.pinnedEventIDs()
         await draftRestored.value
         clearMarkedUnreadIfVisible()
     }

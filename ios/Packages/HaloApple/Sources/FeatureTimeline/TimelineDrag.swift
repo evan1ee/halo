@@ -42,16 +42,24 @@ struct DraggedTimelineFile: Transferable, Sendable {
     }
 }
 
-/// Attaches `.draggable(text)` only when a row has draggable text, leaving system/media rows untouched.
+/// Attaches `.draggable(text)` on iPad when a row has draggable text (on iPhone, `UIDragInteraction` intercepts long-press actions).
 struct OptionalTextDragModifier: ViewModifier {
     let text: String?
 
     func body(content: Content) -> some View {
+        #if canImport(UIKit)
+        if let text, UIDevice.current.userInterfaceIdiom == .pad {
+            content.draggable(text)
+        } else {
+            content
+        }
+        #else
         if let text {
             content.draggable(text)
         } else {
             content
         }
+        #endif
     }
 }
 #endif

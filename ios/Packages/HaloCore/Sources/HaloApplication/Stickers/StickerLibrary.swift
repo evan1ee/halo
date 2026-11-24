@@ -69,6 +69,9 @@ public actor StickerLibrary {
 
     public func snapshots() -> AsyncStream<Snapshot> { broadcaster.subscribe(current: snapshot()) }
 
+    /// Reloads using the last requested room.
+    public func reload() async { await load(currentRoom: currentRoom) }
+
     /// Loads packs and prefs for the panel opened in `currentRoom`. Safe to call again to refresh.
     public func load(currentRoom: RoomID?) async {
         self.currentRoom = currentRoom

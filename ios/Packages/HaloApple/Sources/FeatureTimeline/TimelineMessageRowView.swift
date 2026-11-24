@@ -15,45 +15,33 @@ struct RowView: View {
     let model: TimelineViewModel
     let onOpenThread: ((EventID) -> Void)?
     let onOpenPhoto: ((String) -> Void)?
+    let onSaveAsSticker: ((Data, String) -> Void)?
     @State private var showingSource = false
     @State private var showingReaders = false
+    @State private var showingActions = false
+    @GestureState private var isPressingMessage = false
     /// A sent message is removed for everyone and can't be brought back: ask first.
     @State private var confirmingDelete = false
     @State private var showingOriginal = false
     @State private var reactionHaptic = 0
     @State private var replyHaptic = 0
 
-    /// Long-press menu for confirmed messages: quick reactions, and edit/delete for own messages.
-    @ViewBuilder private var actions: some View {
-        // One row of quick reactions, as in Messages, rather than a full-width row each.
-        ControlGroup {
-            ForEach(TimelineViewModel.quickReactions, id: \.self) { key in
-                Button(key) { Task { await model.toggleReaction(on: row, key: key) } }
-            }
-            Button("More reactions", systemImage: "face.smiling") { model.beginReactionPicker(row) }
-        }
-        .controlGroupStyle(.compactMenu)
-        Button("Reply", systemImage: "arrowshape.turn.up.left") { model.beginReply(row) }
-        if let onOpenThread, let eventID = row.eventID {
-            Button("Reply in thread", systemImage: "bubble.left.and.text.bubble.right") { onOpenThread(eventID) }
-        }
-        #if canImport(UIKit)
-        if row.file == nil, !row.isSticker, let text = row.source?.body ?? (row.showsText ? row.text : nil) {
-            Button("Copy", systemImage: "doc.on.doc") { UIPasteboard.general.string = text }
-        }
-        #endif
-        if row.isEdited { Button("View edit history", systemImage: "clock.arrow.circlepath") { Task { await model.showEditHistory(row) } } }
-        if row.source != nil { Button("View source", systemImage: "chevron.left.forwardslash.chevron.right") { showingSource = true } }
-        if row.isOwn {
-            if row.canEdit { Button("Edit", systemImage: "pencil") { model.beginEdit(row) } }
-            Button("Delete", systemImage: "trash", role: .destructive) { confirmingDelete = true }
-        }
+    private var hasActions: Bool { row.eventID != nil || row.failedLocalID != nil }
+
+    private func triggerActions() {
+        guard hasActions else { return }
+        reactionHaptic += 1
+        showingActions = true
     }
 
-    /// Menu for an own message that couldn't be sent.
-    @ViewBuilder private var failedActions: some View {
-        Button("Try again", systemImage: "arrow.clockwise") { Task { await model.retry(row) } }
-        Button("Delete", systemImage: "trash", role: .destructive) { Task { await model.discard(row) } }
+    private var messageLongPressGesture: some Gesture {
+        LongPressGesture(minimumDuration: 0.35, maximumDistance: 16)
+            .updating($isPressingMessage) { current, state, _ in
+                if hasActions { state = current }
+            }
+            .onEnded { _ in
+                triggerActions()
+            }
     }
 
     /// The icon for a placeholder row, from its wording (set by the view model).
@@ -100,50 +88,66 @@ struct RowView: View {
                             .onTapGesture { Task { await model.jumpToReplyOriginal(from: row) } }
                             .accessibilityAddTraits(.isButton)
                         }
-                        if let image = row.image {
-                            ThumbnailView(image: image, model: model, isSticker: row.isSticker)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    if !row.isSticker, model.showsPreview(of: image) {
-                                        onOpenPhoto?(row.id)
+                        VStack(alignment: row.style == .ownMessage ? .trailing : .leading, spacing: 2) {
+                            if let image = row.image {
+                                ThumbnailView(image: image, model: model, isSticker: row.isSticker)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        if !row.isSticker, model.showsPreview(of: image) {
+                                            onOpenPhoto?(row.id)
+                                        }
                                     }
-                                }
-                                .accessibilityLabel(row.isSticker ? row.text : "Image")
+                                    .accessibilityLabel(row.isSticker ? row.text : "Image")
+                            }
+                            if let file = row.file { FileTileView(file: file, isOpening: model.openingRow == row.id, model: model) { Task { await model.openFile(row) } } }
+                            if let location = row.location {
+                                LocationCardView(location: location, isOwn: row.style == .ownMessage)
+                                    .opacity(row.status == nil ? 1 : 0.6)
+                            }
+                            if let card = row.card, !showingOriginal {
+                                BotCardView(
+                                    card: card,
+                                    state: { id in
+                                        switch model.botRowState(bot: row.source?.sender, id: id) {
+                                        case .open: .open
+                                        case .pending: .pending
+                                        case .completed: .completed
+                                        case .noResponse: .noResponse
+                                        case .unavailable: .unavailable
+                                        }
+                                    },
+                                    tick: { id in Task { await model.tickBotTask(bot: row.source?.sender, id: id) } })
+                                Button("Show original") { showingOriginal = true }.font(.caption2)
+                            } else if let url = row.klipyURL, model.showsKlipyMedia {
+                                KlipyMessageMedia(url: url, model: model)
+                                    .opacity(row.status == nil ? 1 : 0.6)
+                            } else if row.isJumboEmoji {
+                                Text(row.text)
+                                    .font(.largeTitle)
+                                    .padding(.vertical, HaloSpacing.xxs)
+                                    .opacity(row.status == nil ? 1 : 0.6)
+                                    .modifier(OptionalTextDragModifier(text: TimelineDragExtractor.text(for: row)))
+                            } else if row.showsText {
+                                Text(row.styled ?? AttributedString(row.text))
+                                    .padding(HaloSpacing.s)
+                                    .background(row.style == .ownMessage ? HaloColor.bubbleOwn : HaloColor.bubbleOther, in: RoundedRectangle(cornerRadius: HaloRadius.bubble, style: .continuous))
+                                    .opacity(row.status == nil ? 1 : 0.6)
+                                    .modifier(OptionalTextDragModifier(text: TimelineDragExtractor.text(for: row)))
+                                if row.card != nil { Button("Show card") { showingOriginal = false }.font(.caption2) }
+                            }
                         }
-                        if let file = row.file { FileTileView(file: file, isOpening: model.openingRow == row.id, model: model) { Task { await model.openFile(row) } } }
-                        if let card = row.card, !showingOriginal {
-                            BotCardView(
-                                card: card,
-                                state: { id in
-                                    switch model.botRowState(bot: row.source?.sender, id: id) {
-                                    case .open: .open
-                                    case .pending: .pending
-                                    case .completed: .completed
-                                    case .noResponse: .noResponse
-                                    case .unavailable: .unavailable
-                                    }
-                                },
-                                tick: { id in Task { await model.tickBotTask(bot: row.source?.sender, id: id) } })
-                            Button("Show original") { showingOriginal = true }.font(.caption2)
-                        } else if let url = row.klipyURL, model.showsKlipyMedia {
-                            KlipyMessageMedia(url: url, model: model)
-                                .opacity(row.status == nil ? 1 : 0.6)
-                        } else if row.isJumboEmoji {
-                            Text(row.text)
-                                .font(.largeTitle)
-                                .padding(.vertical, HaloSpacing.xxs)
-                                .opacity(row.status == nil ? 1 : 0.6)
-                                .modifier(OptionalTextDragModifier(text: TimelineDragExtractor.text(for: row)))
-                        } else if row.showsText {
-                            Text(row.styled ?? AttributedString(row.text))
-                                .padding(HaloSpacing.s)
-                                .background(row.style == .ownMessage ? HaloColor.bubbleOwn : HaloColor.bubbleOther, in: RoundedRectangle(cornerRadius: HaloRadius.bubble, style: .continuous))
-                                .opacity(row.status == nil ? 1 : 0.6)
-                                .modifier(OptionalTextDragModifier(text: TimelineDragExtractor.text(for: row)))
-                            if row.card != nil { Button("Show card") { showingOriginal = false }.font(.caption2) }
-                        }
-                        if row.delivery != nil || (row.endsRun && row.time != nil) {
+                        .contentShape(.rect)
+                        .scaleEffect(isPressingMessage ? 0.96 : 1.0)
+                        .animation(.snappy(duration: 0.16), value: isPressingMessage)
+                        .simultaneousGesture(messageLongPressGesture)
+                        if model.isPinned(row) || row.delivery != nil || (row.endsRun && row.time != nil) {
                             HStack(spacing: HaloSpacing.xs) {
+                                if model.isPinned(row) {
+                                    Image(systemName: "pin.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(HaloColor.textSecondary)
+                                        .accessibilityLabel("Pinned")
+                                }
                                 if case .failed = row.delivery, let status = row.status {
                                     Text(status).font(.caption2).foregroundStyle(HaloColor.danger)
                                 } else if row.endsRun, let time = row.time {
@@ -157,9 +161,6 @@ struct RowView: View {
                         reactionBar
                     }
                     .frame(maxWidth: .infinity, alignment: row.style == .ownMessage ? .trailing : .leading)
-                    .contextMenu {
-                        if row.eventID != nil { actions } else if row.failedLocalID != nil { failedActions }
-                    }
                     .accessibilityActions {
                         if row.eventID != nil {
                             Button("Reply") { model.beginReply(row) }
@@ -178,37 +179,45 @@ struct RowView: View {
                 .padding(row.style == .ownMessage ? .leading : .trailing, 48)
             case .notice:
                 VStack(alignment: .leading, spacing: 2) {
-                    if let card = row.card, !showingOriginal {
-                        BotCardView(
-                            card: card,
-                            state: { id in
-                                switch model.botRowState(bot: row.source?.sender, id: id) {
-                                case .open: .open
-                                case .pending: .pending
-                                case .completed: .completed
-                                case .noResponse: .noResponse
-                                case .unavailable: .unavailable
-                                }
-                            },
-                            tick: { id in Task { await model.tickBotTask(bot: row.source?.sender, id: id) } })
-                        Button("Show original") { showingOriginal = true }.font(.caption2)
-                    } else {
-                        Text(row.styled ?? AttributedString(row.text)).font(.callout).foregroundStyle(.secondary)
-                            .modifier(OptionalTextDragModifier(text: TimelineDragExtractor.text(for: row)))
-                        if row.card != nil { Button("Show card") { showingOriginal = false }.font(.caption2) }
+                    Group {
+                        if let card = row.card, !showingOriginal {
+                            BotCardView(
+                                card: card,
+                                state: { id in
+                                    switch model.botRowState(bot: row.source?.sender, id: id) {
+                                    case .open: .open
+                                    case .pending: .pending
+                                    case .completed: .completed
+                                    case .noResponse: .noResponse
+                                    case .unavailable: .unavailable
+                                    }
+                                },
+                                tick: { id in Task { await model.tickBotTask(bot: row.source?.sender, id: id) } })
+                            Button("Show original") { showingOriginal = true }.font(.caption2)
+                        } else {
+                            Text(row.styled ?? AttributedString(row.text)).font(.callout).foregroundStyle(.secondary)
+                                .modifier(OptionalTextDragModifier(text: TimelineDragExtractor.text(for: row)))
+                            if row.card != nil { Button("Show card") { showingOriginal = false }.font(.caption2) }
+                        }
                     }
+                    .contentShape(.rect)
+                    .scaleEffect(isPressingMessage ? 0.96 : 1.0)
+                    .animation(.snappy(duration: 0.16), value: isPressingMessage)
+                    .simultaneousGesture(messageLongPressGesture)
                     reactionBar
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .contextMenu { if row.eventID != nil { actions } }
             case .emote:
                 VStack(alignment: .leading, spacing: 2) {
                     Text(row.text).italic()
                         .modifier(OptionalTextDragModifier(text: TimelineDragExtractor.text(for: row)))
+                        .contentShape(.rect)
+                        .scaleEffect(isPressingMessage ? 0.96 : 1.0)
+                        .animation(.snappy(duration: 0.16), value: isPressingMessage)
+                        .simultaneousGesture(messageLongPressGesture)
                     reactionBar
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .contextMenu { if row.eventID != nil { actions } }
             case .placeholder:
                 // A deleted, unreadable or unknown message still belongs to its sender: a quiet outlined bubble on their side,
                 // with their name, instead of a full-width line of italics.
@@ -226,6 +235,16 @@ struct RowView: View {
             case .divider:
                 Text(row.text).font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity)
             }
+        }
+        .sheet(isPresented: $showingActions) {
+            MessageActionsSheet(
+                row: row,
+                model: model,
+                onOpenThread: onOpenThread,
+                onViewSource: { showingSource = true },
+                onRequestDelete: { confirmingDelete = true },
+                onSaveAsSticker: onSaveAsSticker
+            )
         }
         .sheet(isPresented: $showingReaders) { ReadersView(row: row, model: model) }
         .sheet(isPresented: $showingSource) { if let source = row.source { MessageSourceView(source: source) } }
@@ -247,10 +266,208 @@ struct RowView: View {
         }
         .haloFeedback(.reaction, trigger: reactionHaptic)
         .haloFeedback(.swipeThreshold, trigger: replyHaptic)
-        .confirmationDialog("Delete this message for everyone?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+        .alert("Delete this message for everyone?", isPresented: $confirmingDelete) {
             Button("Delete", role: .destructive) { Task { await model.delete(row) } }
             Button("Cancel", role: .cancel) {}
         } message: { Text("It can't be undone.") }
+    }
+}
+
+/// Bottom sheet with grabber presented on long-press of a message bubble (no full-row lift or floating window).
+private struct MessageActionsSheet: View {
+    let row: TimelineRow
+    let model: TimelineViewModel
+    let onOpenThread: ((EventID) -> Void)?
+    let onViewSource: () -> Void
+    let onRequestDelete: () -> Void
+    let onSaveAsSticker: ((Data, String) -> Void)?
+    @Environment(\.dismiss) private var dismiss
+
+    private static let sheetReactions = ["👍", "👎", "🎉", "❤️", "😀", "😂"]
+
+    private var previewText: String {
+        if let location = row.location { return location.title }
+        if let file = row.file { return file.name }
+        if row.isSticker { return "Sticker" }
+        if row.image != nil, !row.showsText { return "Photo" }
+        return row.text
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Message header preview: avatar, sender, 1-line snippet, timestamp
+            HStack(spacing: HaloSpacing.s) {
+                SenderAvatar(name: row.sender ?? (row.isOwn ? "You" : "?"), ref: row.avatar, model: model, size: 34)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(row.sender ?? (row.isOwn ? "You" : "Message"))
+                        .font(HaloTypography.headline)
+                        .foregroundStyle(HaloColor.textPrimary)
+                        .lineLimit(1)
+                    Text(previewText)
+                        .font(HaloTypography.body)
+                        .foregroundStyle(HaloColor.textSecondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: HaloSpacing.s)
+                if let time = row.time {
+                    Text(time)
+                        .font(HaloTypography.caption)
+                        .foregroundStyle(HaloColor.textSecondary)
+                }
+            }
+            .padding(.horizontal, HaloSpacing.l)
+            .padding(.top, HaloSpacing.l)
+            .padding(.bottom, HaloSpacing.m)
+
+            Divider()
+
+            if row.eventID != nil {
+                // Full-width quick reaction strip
+                HStack(spacing: 0) {
+                    ForEach(Self.sheetReactions, id: \.self) { emoji in
+                        Button {
+                            dismiss()
+                            Task { await model.toggleReaction(on: row, key: emoji) }
+                        } label: {
+                            Text(emoji)
+                                .font(.title2)
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Button {
+                        dismiss()
+                        model.beginReactionPicker(row)
+                    } label: {
+                        Image(systemName: "face.smiling")
+                            .font(.title3)
+                            .foregroundStyle(HaloColor.textSecondary)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("More reactions")
+                }
+                .padding(.horizontal, HaloSpacing.m)
+                .padding(.vertical, HaloSpacing.xs)
+
+                Divider()
+
+                ScrollView {
+                    VStack(spacing: 0) {
+                        actionRow("Reply", systemImage: "arrowshape.turn.up.left") {
+                            dismiss()
+                            model.beginReply(row)
+                        }
+                        if let onOpenThread, let eventID = row.eventID {
+                            actionRow("Reply in thread", systemImage: "bubble.left.and.text.bubble.right") {
+                                dismiss()
+                                onOpenThread(eventID)
+                            }
+                        }
+                        #if canImport(UIKit)
+                        if row.file == nil, !row.isSticker, let text = row.source?.body ?? (row.showsText ? row.text : nil) {
+                            actionRow("Copy", systemImage: "doc.on.doc") {
+                                UIPasteboard.general.string = text
+                                dismiss()
+                            }
+                        }
+                        #endif
+                        if let image = row.image, let onSaveAsSticker {
+                            actionRow("Add to Stickers", systemImage: "face.smiling") {
+                                let isSticker = row.isSticker
+                                let filename = row.text.isEmpty ? "sticker.png" : row.text
+                                dismiss()
+                                Task {
+                                    let loaded: Data?
+                                    if isSticker {
+                                        if let full = await model.stickerContent(for: image) {
+                                            loaded = full
+                                        } else {
+                                            loaded = await model.thumbnail(for: image)
+                                        }
+                                    } else {
+                                        if let full = await model.fullImageData(for: image) {
+                                            loaded = full
+                                        } else {
+                                            loaded = await model.thumbnail(for: image)
+                                        }
+                                    }
+                                    if let loaded {
+                                        onSaveAsSticker(loaded, filename)
+                                    }
+                                }
+                            }
+                        }
+                        let pinned = model.isPinned(row)
+                        actionRow(pinned ? "Unpin" : "Pin", systemImage: pinned ? "pin.slash" : "pin") {
+                            dismiss()
+                            Task { await model.togglePin(row) }
+                        }
+                        if row.isEdited {
+                            actionRow("View edit history", systemImage: "clock.arrow.circlepath") {
+                                dismiss()
+                                Task { await model.showEditHistory(row) }
+                            }
+                        }
+                        if row.source != nil {
+                            actionRow("View source", systemImage: "chevron.left.forwardslash.chevron.right") {
+                                dismiss()
+                                onViewSource()
+                            }
+                        }
+                        if row.isOwn, row.canEdit {
+                            actionRow("Edit", systemImage: "pencil") {
+                                dismiss()
+                                model.beginEdit(row)
+                            }
+                        }
+                        if row.isOwn {
+                            actionRow("Delete", systemImage: "trash", isDestructive: true) {
+                                dismiss()
+                                onRequestDelete()
+                            }
+                        }
+                    }
+                    .padding(.vertical, HaloSpacing.xs)
+                }
+            } else if row.failedLocalID != nil {
+                VStack(spacing: 0) {
+                    actionRow("Try again", systemImage: "arrow.clockwise") {
+                        dismiss()
+                        Task { await model.retry(row) }
+                    }
+                    actionRow("Delete", systemImage: "trash", isDestructive: true) {
+                        dismiss()
+                        Task { await model.discard(row) }
+                    }
+                }
+                .padding(.vertical, HaloSpacing.xs)
+                Spacer(minLength: 0)
+            }
+        }
+        .presentationBackground(HaloColor.bgPrimary)
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func actionRow(_ title: String, systemImage: String, isDestructive: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: HaloSpacing.m) {
+                Image(systemName: systemImage)
+                    .font(.body)
+                    .frame(width: 24, alignment: .center)
+                Text(title)
+                    .font(HaloTypography.body)
+                Spacer()
+            }
+            .foregroundStyle(isDestructive ? HaloColor.danger : HaloColor.textPrimary)
+            .padding(.horizontal, HaloSpacing.l)
+            .padding(.vertical, 13)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
     }
 }
 

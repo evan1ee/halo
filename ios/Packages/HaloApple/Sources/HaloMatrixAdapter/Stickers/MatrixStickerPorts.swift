@@ -141,6 +141,26 @@ public final class MatrixStickerPackPort: StickerPackPort {
         } catch { throw ErrorMapper.map(error) }
     }
 
+    internal func readPackContent(_ ref: PackRef) async throws(HaloError) -> [String: Any] {
+        let client = try await session.signedInClient()
+        do {
+            guard let content = try await stateContent(client, room: ref.room, key: ref.stateKey) else {
+                throw HaloError.notFound
+            }
+            return content
+        } catch let error as HaloError {
+            throw error
+        } catch is Forbidden {
+            throw .forbidden
+        } catch {
+            throw ErrorMapper.map(error)
+        }
+    }
+
+    internal func invalidateRoom(_ room: RoomID) async {
+        await roomPacks.invalidate(room)
+    }
+
     private static let legacyType = "im.ponies.room_emotes"
 
     /// The current room's packs. A small room's whole state is read (every state key); a large room's state can be
@@ -238,6 +258,8 @@ actor RoomPackCache {
     }
 
     func store(_ packs: [StickerPack], for room: RoomID) { entries[room] = (now(), packs) }
+
+    func invalidate(_ room: RoomID) { entries[room] = nil }
 }
 
 /// `StickerPackCreationPort`: uploads the images, creates an unencrypted private room, writes the pack state, and lists the
@@ -300,6 +322,96 @@ public final class MatrixStickerPackCreationPort: StickerPackCreationPort {
 
     /// Read-modify-write of account data; `nil` from `change` leaves it alone.
     private func update(_ client: Client, _ type: String, _ change: ([String: Any]?) -> [String: Any]?) async throws {
+        let current = try await client.accountData(eventType: type).flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+        guard let updated = change(current) else { return }
+        try await client.setAccountData(eventType: type, content: String(decoding: try JSONSerialization.data(withJSONObject: updated, options: [.sortedKeys]), as: UTF8.self))
+    }
+}
+
+/// `StickerPackManagementPort`: renames packs, adds or removes individual stickers, and deletes packs.
+public final class MatrixStickerPackManagementPort: StickerPackManagementPort {
+    private let session: MatrixSessionPort
+    private let packs: MatrixStickerPackPort
+
+    public init(session: MatrixSessionPort, packs: MatrixStickerPackPort) {
+        self.session = session
+        self.packs = packs
+    }
+
+    public func renamePack(_ ref: PackRef, to name: String) async throws(HaloError) {
+        let current = try await packs.readPackContent(ref)
+        let updated = try ImagePackBuilder.renaming(to: name, in: current)
+        let client = try await session.signedInClient()
+        let room = try await session.room(ref.room)
+        do {
+            try await writePackState(updated, to: room, stateKey: ref.stateKey)
+            // Keep the personal pack room's own display name aligned with the renamed pack.
+            if await isPersonalPackRoom(ref.room, client: client) {
+                try? await room.setName(name: ImagePackBuilder.roomName(for: name.trimmingCharacters(in: .whitespacesAndNewlines)))
+            }
+            await packs.invalidateRoom(ref.room)
+        } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
+    }
+
+    public func addStickers(_ images: [NewStickerImage], to ref: PackRef, progress: @escaping @Sendable (Int, Int) -> Void) async throws(HaloError) {
+        guard !images.isEmpty else { throw .invalidInput("NO_IMAGES") }
+        for image in images where !image.mimeType.hasPrefix("image/") { throw .invalidInput("NOT_AN_IMAGE") }
+        let current = try await packs.readPackContent(ref)
+        // Validate before uploading so bad shortcodes or pack size overflow never waste uploads.
+        let existingCount = (current["images"] as? [String: Any])?.count ?? 0
+        guard existingCount + images.count <= ImagePackBuilder.maximumImages else { throw .invalidInput("TOO_MANY_IMAGES") }
+        let client = try await session.signedInClient()
+        let room = try await session.room(ref.room)
+        do {
+            var uploaded: [(image: NewStickerImage, url: String)] = []
+            for image in images {
+                let url = try await client.uploadMedia(mimeType: image.mimeType, data: image.data, progressWatcher: nil)
+                uploaded.append((image, url))
+                progress(uploaded.count, images.count)
+            }
+            let updated = try ImagePackBuilder.adding(uploaded: uploaded, to: current)
+            try await writePackState(updated, to: room, stateKey: ref.stateKey)
+            await packs.invalidateRoom(ref.room)
+        } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
+    }
+
+    public func removeSticker(shortcode: String, from ref: PackRef) async throws(HaloError) {
+        let current = try await packs.readPackContent(ref)
+        guard let updated = ImagePackBuilder.removing(shortcode: shortcode, from: current) else { return }
+        let room = try await session.room(ref.room)
+        do {
+            try await writePackState(updated, to: room, stateKey: ref.stateKey)
+            await packs.invalidateRoom(ref.room)
+        } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
+    }
+
+    public func deletePack(_ ref: PackRef) async throws(HaloError) {
+        let client = try await session.signedInClient()
+        do {
+            try await updateAccountData(client, "m.image_pack.rooms") { PackRegistry.disabling(ref, in: $0) }
+            if await isPersonalPackRoom(ref.room, client: client) {
+                try? await updateAccountData(client, "one.mbm.halo.sticker_rooms") { PackRegistry.removingPackRoom(ref.room, in: $0) }
+                if let room = try? await session.room(ref.room) {
+                    try? await room.leave()
+                    try? await room.forget()
+                }
+            }
+            await packs.invalidateRoom(ref.room)
+        } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
+    }
+
+    private func writePackState(_ content: [String: Any], to room: Room, stateKey: String) async throws {
+        let json = String(decoding: try JSONSerialization.data(withJSONObject: content, options: [.sortedKeys]), as: UTF8.self)
+        _ = try await room.sendStateEventRaw(eventType: "m.room.image_pack", stateKey: stateKey, content: json, requestConfigOverride: nil)
+    }
+
+    private func isPersonalPackRoom(_ room: RoomID, client: Client) async -> Bool {
+        guard let json = try? await client.accountData(eventType: "one.mbm.halo.sticker_rooms"),
+              let object = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else { return false }
+        return PackRegistry.packRooms(in: object).contains(room)
+    }
+
+    private func updateAccountData(_ client: Client, _ type: String, _ change: ([String: Any]?) -> [String: Any]?) async throws {
         let current = try await client.accountData(eventType: type).flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
         guard let updated = change(current) else { return }
         try await client.setAccountData(eventType: type, content: String(decoding: try JSONSerialization.data(withJSONObject: updated, options: [.sortedKeys]), as: UTF8.self))

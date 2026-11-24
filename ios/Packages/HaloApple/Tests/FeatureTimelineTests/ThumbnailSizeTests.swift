@@ -24,7 +24,7 @@ struct ThumbnailSizeTests {
     func unknownSizeKeepsBox() {
         let placeholder = size(Rectangle().fill(.gray).modifier(ThumbnailSize(isSticker: false, aspectRatio: nil)))
         let loaded = size(Image(uiImage: widePicture).resizable().scaledToFit().modifier(ThumbnailSize(isSticker: false, aspectRatio: nil)))
-        #expect(placeholder == CGSize(width: 240, height: 180))
+        #expect(placeholder == CGSize(width: 400, height: 300))
         #expect(loaded == placeholder)
     }
 
@@ -32,7 +32,7 @@ struct ThumbnailSizeTests {
     func announcedSizeKeepsBox() {
         let placeholder = size(Rectangle().fill(.gray).modifier(ThumbnailSize(isSticker: false, aspectRatio: 0.5)))
         let loaded = size(Image(uiImage: widePicture).resizable().scaledToFit().modifier(ThumbnailSize(isSticker: false, aspectRatio: 0.5)))
-        #expect(placeholder == CGSize(width: 240, height: 480))
+        #expect(placeholder == CGSize(width: 400, height: 800))
         #expect(loaded == placeholder)
     }
 }

@@ -38,11 +38,6 @@ public struct BotActivityView: View {
                 ToolbarItem(placement: .primaryAction) { filterMenu }
             }
         }
-        .confirmationDialog("Rebuild the list?", isPresented: $confirmingRebuild, titleVisibility: .visible) {
-            Button("Rebuild", role: .destructive) { Task { await model.rebuild() } }
-        } message: {
-            Text("This empties the list. It fills again as you open rooms with your bots and as they write.")
-        }
         .task { await model.load() }
         .task { await model.observeActions() }
     }
@@ -65,6 +60,12 @@ public struct BotActivityView: View {
             section("Completed this week", sections.completed)
             Section {
                 Button("Rebuild list", role: .destructive) { confirmingRebuild = true }
+                    .confirmationDialog("Rebuild the list?", isPresented: $confirmingRebuild, titleVisibility: .visible) {
+                        Button("Rebuild", role: .destructive) { Task { await model.rebuild() } }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("This empties the list. It fills again as you open rooms with your bots and as they write.")
+                    }
             }
         }
         .refreshable { await model.load() }

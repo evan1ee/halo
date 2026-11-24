@@ -1,6 +1,6 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-24 · Branch: `feat/room-list-avatar-style` · PRs #1–#75 merged
+Last updated: 2026-11-24 · Branch: `feat/ios26-ux-stickers-viewer-pins` · PRs #1–#78 merged
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
@@ -12,7 +12,14 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
-- **Room list, avatar, floating header, jump button & media gallery polish (2026-11-24, `feat/room-list-avatar-style`):**
+- **iOS 26 UX refinements, full Sticker Pack Manager, Photo Viewer & Pinned Messages (2026-11-24, `feat/ios26-ux-stickers-viewer-pins`):**
+  - *Tiered confirmations & sheet grabbers:* switched high-stakes confirmations (`Sign out`, `Change recovery key`, `Leave room`, `Delete message`) to centered `.alert` modals; anchored `Rebuild list` `.confirmationDialog` to its trigger button; added `.presentationDragIndicator(.visible)` grabbers and removed redundant `Done` buttons on Room Info (`RoomDetailsView`) and Quick Look (`TimelineView`).
+  - *Floating Liquid Glass headers & menus:* hid top scroll-edge blur and bar backgrounds with floating `44 pt` Liquid Glass capsule title pills on Stickers, Pack Detail, Settings, Acknowledgements, and Global Media Gallery (dynamic visible-section date pill + grouped `photo.on.rectangle.angled` file-type & `bubble.left.and.bubble.right` room filter pill); swapped `New chat` above `Saved Messages` with outlined `bookmark` icon.
+  - *Full Sticker Pack Manager:* added `ImagePackBuilder` mutations, `StickerPackManagementPort`, `StickerPackManager`, `MatrixStickerPackManagementPort`, visual `StickerLibraryView` (thumbnail preview strips, rename, add/delete stickers, delete pack), `StickerPackDetailView`, and `AddToStickerPackSheet`.
+  - *Timeline location cards, full-width photos, long-press sheet & pins:* added static `MKMapSnapshotter` `LocationCardView`, expanded timeline photo thumbnails to full message width preserving aspect ratio, replaced full-row `.contextMenu` with a message-only long-press and `MessageActionsSheet` (preview header, 6-emoji reaction strip, neutral rows, `Pin`/`Unpin`, `Add to Stickers`), and implemented room-wide + `one.mbm.halo.pinned_events` personal-pin fallback with a swipeable principal toolbar pin pill and `PinnedMessagesSheet`.
+  - *Photo viewer (`ZoomableImageView`, `PagedPhotoViewer`):* added VisionKit Live Text / Data Detectors / Visual Look Up / Subject Lift, swipe-down dismiss, tap-to-hide chrome, Save to Photos (`NSPhotoLibraryAddUsageDescription`), Copy, Reply, Quick React, and Save as Sticker; fixed `SendMessageIntent.requestConfirmation` deprecation warning.
+  - *Checks:* `scripts/check-boundaries.sh`, `scripts/validate-docs.sh`, `gitleaks git --redact .`, `HaloCore` full suite, `HaloDesignSystemTests`, `FeatureStickersTests`, `FeatureTimelineTests` (100 tests), and `Halo-Debug` simulator build passed; `HaloUITests` not run.
+- **Room list, avatar, floating header, jump button & media gallery polish (2026-11-24, PR #78 merged):**
   - *Room list (`RoomRow`, `RoomListView`):* switched to `.listStyle(.plain)` with text-aligned dividers, hid the top section separator (`.listSectionSeparator(.hidden, edges: .top)`), enlarged room list avatars to clean borderless `52 pt` circles, stacked `UnreadIndicator` directly under the trailing date, and enabled 2-line previews with emphasized sender prefixes (`RoomRow.splitPreviewPrefix`).
   - *Toolbar avatars & floating headers (`HaloApp`, `AvatarCircle`, `RoomListView`, `TimelineView`, `RoomDetailsView`):* replaced the top-leading yellow `verify-dot` with a `2 pt` `HaloColor.warning` border on the `30 pt` user avatar inside an exact `44 × 44` circular Liquid Glass button (`.sharedBackgroundVisibility(.hidden)` + `.glassEffect(.regular.interactive(), in: .circle)`), applied the same `44 × 44` circular glass treatment to the timeline room avatar, removed navigation titles on home, conversation, and room info screens, and hid the top navigation bar background and scroll-edge blur (`.toolbarBackgroundVisibility(.hidden, for: .navigationBar)`, `.scrollEdgeEffectHidden(true, for: .top)`) so only the floating icons sit above scrolling content.
   - *Timeline jump-to-bottom button (`TimelineView`):* applied `.glassEffect(.regular.interactive(), in: .circle)` at `34 × 34` with `HaloColor.textPrimary` arrow, centered inside a `44 × 44` frame aligned to the voice button circle below.
@@ -63,10 +70,10 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D107), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
-- **Design system:** `HaloDesignSystem/Components/{AvatarCircle,RoomRow}.swift` (+ tests `AvatarTests.swift`, `RoomRowAccessibilityTests.swift`).
-- **Features:** `FeatureRoomList/RoomListView.swift`, `FeatureTimeline/TimelineView.swift`, `FeatureRoomDetails/RoomDetailsView.swift`, `FeatureMedia/GlobalMediaGalleryView.swift`.
-- **App:** `ios/App/HaloApp.swift`.
-- **Docs:** `docs/design/DESIGN_SYSTEM.md`, `HANDOFF.md`.
+- **Domain / Application / TestSupport (`HaloCore`):** `HaloDomain/{Ports/StickerPorts,Ports/TimelinePort,Stickers/PackCreation,Timeline/PersonalPinnedEvents}.swift`, `HaloApplication/{Stickers/StickerLibrary,Stickers/StickerPackManager,Timeline/TimelineCoordinator}.swift`, `HaloTestSupport/{Stickers/FakeStickerPorts,Timeline/FakeTimelinePort}.swift`, + unit tests (`StickerPackManagementDomainTests`, `PersonalPinnedEventsTests`, `StickerPackManagerTests`).
+- **Adapter (`HaloMatrixAdapter`):** `Stickers/MatrixStickerPorts.swift`, `Timeline/MatrixTimelinePort.swift`.
+- **Design System & Features (`HaloApple`):** `HaloDesignSystem/Media/{PagedPhotoViewer,ZoomableImageView}.swift`, `FeatureStickers/{AddToStickerPackSheet,StickerLibraryView,StickerLibraryViewModel}.swift`, `FeatureTimeline/{LocationCardView,PinnedMessagesSheet,TimelineDrag,TimelineMediaViews,TimelineMessageRowView,TimelineRow,TimelineView,TimelineViewModel,TimelineViewModel+Actions,TimelineViewModel+Mapping}.swift`, `FeatureMedia/GlobalMediaGalleryView.swift`, `FeatureSettings/SettingsView.swift`, `FeatureRoomDetails/RoomDetailsView.swift`, `FeatureBotActivity/BotActivityView.swift`, + tests (`StickerLibraryViewModelTests`, `PinMessageTests`, `ThumbnailSizeTests`).
+- **App & Docs:** `ios/App/{AppRoot,Composition/SettingsAssembly,HaloApp,Intents/SendMessageIntent}.swift`, `ios/App/Support/{Info,Info-Debug}.plist`, `HANDOFF.md`.
 
 ## 5. Outstanding issues
 - **UI flakes:** `testComposerPanelsSwapWithKeyboard` and `testEmptyRoomStaysResponsive` still fail in the full UI run (pre-existing); an own thumbnail is downloaded once after an app restart (SDK caches the file under the new reference, thumbnails under their own key).

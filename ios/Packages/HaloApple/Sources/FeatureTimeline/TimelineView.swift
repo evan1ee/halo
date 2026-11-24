@@ -14,10 +14,13 @@ public struct TimelineView: View {
     private let stickerPanel: (@MainActor () -> AnyView)?
     private let gifPanel: (@MainActor () -> AnyView)?
     private let onOpenThread: (@MainActor (EventID) -> Void)?
+    private let onSaveAsSticker: (@MainActor (Data, String) -> Void)?
     /// Keyboard vs. Halo's panels under the composer (COMPOSER_PANELS §3, D97).
     @State private var input = ComposerInputController()
     @State private var choosingFile = false
     @State private var viewerPhoto: TimelineViewModel.PhotoViewerItem?
+    @State private var showingPinnedMessages = false
+    @State private var activePinIndex = 0
     @State private var headerVisible = false
     /// History is only loaded after the opening scroll: rows prepended before it would push the landing row out of place.
     @State private var landed = false
@@ -54,12 +57,14 @@ public struct TimelineView: View {
         model: TimelineViewModel,
         stickerPanel: (@MainActor () -> AnyView)? = nil,
         gifPanel: (@MainActor () -> AnyView)? = nil,
-        onOpenThread: (@MainActor (EventID) -> Void)? = nil
+        onOpenThread: (@MainActor (EventID) -> Void)? = nil,
+        onSaveAsSticker: (@MainActor (Data, String) -> Void)? = nil
     ) {
         self.model = model
         self.stickerPanel = stickerPanel
         self.gifPanel = gifPanel
         self.onOpenThread = onOpenThread
+        self.onSaveAsSticker = onSaveAsSticker
     }
 
     public var body: some View {
@@ -124,7 +129,8 @@ public struct TimelineView: View {
                             onOpenThread: onOpenThread,
                             onOpenPhoto: { rowID in
                                 viewerPhoto = model.viewerPhotos.first(where: { $0.id == rowID })
-                            }
+                            },
+                            onSaveAsSticker: onSaveAsSticker
                         )
                             .background(model.highlightedRowID == row.id ? Color.accentColor.opacity(0.18) : .clear, in: .rect(cornerRadius: 8))
                             .animation(.easeOut(duration: 0.4), value: model.highlightedRowID)
@@ -323,6 +329,60 @@ public struct TimelineView: View {
                 }
             }
         }
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                let pins = model.pinnedMessages
+                if !pins.isEmpty {
+                    let index = min(max(activePinIndex, 0), pins.count - 1)
+                    let current = pins[index]
+                    Button {
+                        showingPinnedMessages = true
+                    } label: {
+                        HStack(spacing: HaloSpacing.xs) {
+                            Image(systemName: "pin.fill")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(HaloColor.accent)
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(pins.count == 1 ? "Pinned" : "Pinned \(index + 1)/\(pins.count)")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(HaloColor.textPrimary)
+                                    .lineLimit(1)
+                                    .contentTransition(.numericText())
+                                Text(current.preview)
+                                    .font(.caption2)
+                                    .foregroundStyle(HaloColor.textSecondary)
+                                    .lineLimit(1)
+                                    .id(current.eventID)
+                                    .transition(.opacity)
+                            }
+                            .frame(maxWidth: 165, alignment: .leading)
+                            .animation(.snappy(duration: 0.2), value: index)
+                        }
+                        .padding(.horizontal, HaloSpacing.m)
+                        .frame(height: 44)
+                        .contentShape(.capsule)
+                        .glassEffect(.regular.interactive(), in: .capsule)
+                    }
+                    .buttonStyle(.plain)
+                    .highPriorityGesture(
+                        DragGesture(minimumDistance: 20)
+                            .onEnded { value in
+                                guard pins.count > 1, abs(value.translation.width) > abs(value.translation.height) else { return }
+                                withAnimation(.snappy(duration: 0.2)) {
+                                    if value.translation.width > 20 {
+                                        activePinIndex = (index + 1) % pins.count
+                                    } else if value.translation.width < -20 {
+                                        activePinIndex = (index - 1 + pins.count) % pins.count
+                                    }
+                                }
+                            }
+                    )
+                    .accessibilityLabel(pins.count == 1 ? "Pinned message: \(current.preview)" : "Pinned \(index + 1) of \(pins.count): \(current.preview)")
+                    .accessibilityIdentifier("pinned-messages-banner")
+                }
+            }
+            .sharedBackgroundVisibility(.hidden)
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
                 Composer(model: model, input: input, choosingFile: $choosingFile)
@@ -339,7 +399,11 @@ public struct TimelineView: View {
         // must not also move the composer for the keyboard: two animations made it dip and creep back in every keyboard/panel
         // swap (D102). Applied always: switching it rebuilds the message field, which then loses focus.
         .ignoresSafeArea(.keyboard, edges: .bottom)
-        .sheet(item: Binding(get: { model.openedFile }, set: { if $0 == nil { model.closeFile() } })) { QuickLookView(url: $0.url).ignoresSafeArea() }
+        .sheet(item: Binding(get: { model.openedFile }, set: { if $0 == nil { model.closeFile() } })) {
+            QuickLookView(url: $0.url)
+                .ignoresSafeArea()
+                .presentationDragIndicator(.visible)
+        }
         .fullScreenCover(item: $viewerPhoto) { photo in
             photoViewer(initial: photo)
         }
@@ -351,6 +415,9 @@ public struct TimelineView: View {
         .alert("Can't open file", isPresented: Binding(get: { model.openFileError != nil }, set: { if !$0 { model.dismissOpenFileError() } })) {
             Button("OK", role: .cancel) {}
         } message: { Text(model.openFileError ?? "") }
+        .sheet(isPresented: $showingPinnedMessages) {
+            PinnedMessagesSheet(model: model)
+        }
         .sheet(isPresented: Binding(get: { model.editHistory != nil }, set: { if !$0 { model.closeEditHistory() } })) {
             EditHistoryView(state: model.editHistory ?? .loading)
         }
@@ -379,6 +446,24 @@ public struct TimelineView: View {
             exportItem: { item in
                 guard let target = byID[item.id] else { return nil }
                 return await model.exportViewerPhoto(target)
+            },
+            onReply: { item in
+                guard case .live(let rows, _, _, _) = model.content,
+                      let row = rows.first(where: { $0.id == item.id }),
+                      row.eventID != nil else { return }
+                model.beginReply(row)
+            },
+            onReact: { item, emoji in
+                guard case .live(let rows, _, _, _) = model.content,
+                      let row = rows.first(where: { $0.id == item.id }),
+                      row.eventID != nil else { return }
+                Task { await model.toggleReaction(on: row, key: emoji) }
+            },
+            onSaveAsSticker: onSaveAsSticker.map { save in
+                { data, filename in
+                    viewerPhoto = nil
+                    save(data, filename)
+                }
             }
         )
     }

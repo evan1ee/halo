@@ -8,14 +8,18 @@ import SwiftUI
 public struct GlobalMediaGalleryView: View {
     @Bindable private var model: GlobalMediaGalleryViewModel
     private let onJumpToMessage: (RoomID, EventID) -> Void
+    private let onSaveAsSticker: (@MainActor (Data, String) -> Void)?
     @State private var selectedItem: GlobalMediaItem?
+    @State private var visibleSectionIDs: Set<String> = []
 
     public init(
         model: GlobalMediaGalleryViewModel,
-        onJumpToMessage: @escaping (RoomID, EventID) -> Void = { _, _ in }
+        onJumpToMessage: @escaping (RoomID, EventID) -> Void = { _, _ in },
+        onSaveAsSticker: (@MainActor (Data, String) -> Void)? = nil
     ) {
         self.model = model
         self.onJumpToMessage = onJumpToMessage
+        self.onSaveAsSticker = onSaveAsSticker
     }
 
     private let gridColumns = [
@@ -23,6 +27,13 @@ public struct GlobalMediaGalleryView: View {
         GridItem(.flexible(), spacing: 2),
         GridItem(.flexible(), spacing: 2),
     ]
+
+    private var currentDateTitle: String {
+        if let active = model.sections.first(where: { visibleSectionIDs.contains($0.id) }) {
+            return active.title
+        }
+        return model.sections.first?.title ?? "Media"
+    }
 
     public var body: some View {
         Group {
@@ -43,40 +54,33 @@ public struct GlobalMediaGalleryView: View {
                 )
             }
         }
-        .safeAreaInset(edge: .top) {
-            VStack(spacing: 8) {
-                Picker("Media filter", selection: $model.filter) {
-                    ForEach(GlobalMediaFilter.allCases) { kind in
-                        Text(kind.rawValue).tag(kind)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
-                .padding(.top, 6)
-                .padding(.bottom, 6)
-
-                if let error = model.error {
-                    Text(error)
-                        .font(HaloTypography.meta)
-                        .foregroundStyle(HaloColor.danger)
-                        .padding(.horizontal)
-                        .padding(.bottom, 4)
-                }
-            }
-            .background(.bar)
-        }
-        .navigationTitle("Media Gallery")
+        .navigationTitle("")
         .searchable(text: $model.searchText, prompt: "Search photos, files, rooms")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
         #endif
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text(currentDateTitle)
+                    .font(HaloTypography.headline)
+                    .foregroundStyle(HaloColor.textPrimary)
+                    .lineLimit(1)
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.2), value: currentDateTitle)
+                    .padding(.horizontal, HaloSpacing.m)
+                    .frame(height: 44)
+                    .glassEffect(.regular, in: .capsule)
+            }
+            .sharedBackgroundVisibility(.hidden)
             #if os(iOS)
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                fileTypeFilterMenu
                 roomFilterMenu
             }
             #else
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItemGroup(placement: .primaryAction) {
+                fileTypeFilterMenu
                 roomFilterMenu
             }
             #endif
@@ -114,6 +118,12 @@ public struct GlobalMediaGalleryView: View {
                     guard let target = byID[media.id] else { return }
                     selectedItem = nil
                     onJumpToMessage(target.roomID, target.item.eventID)
+                },
+                onSaveAsSticker: onSaveAsSticker.map { save in
+                    { data, filename in
+                        selectedItem = nil
+                        save(data, filename)
+                    }
                 }
             )
         }
@@ -144,6 +154,46 @@ public struct GlobalMediaGalleryView: View {
     }
 
     @ViewBuilder
+    private var fileTypeFilterMenu: some View {
+        Menu {
+            ForEach(GlobalMediaFilter.allCases) { kind in
+                Button {
+                    model.filter = kind
+                } label: {
+                    if model.filter == kind {
+                        Label(kind.rawValue, systemImage: "checkmark")
+                    } else {
+                        Label(kind.rawValue, systemImage: Self.filterSymbol(for: kind))
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: Self.filterButtonSymbol(for: model.filter))
+                .foregroundStyle(model.filter == .all ? HaloColor.textPrimary : HaloColor.accent)
+        }
+        .accessibilityLabel("Filter by type")
+        .accessibilityIdentifier("global-media-type-filter")
+    }
+
+    private static func filterSymbol(for kind: GlobalMediaFilter) -> String {
+        switch kind {
+        case .all: "photo.on.rectangle.angled"
+        case .photos: "photo"
+        case .videos: "video"
+        case .files: "doc"
+        }
+    }
+
+    private static func filterButtonSymbol(for kind: GlobalMediaFilter) -> String {
+        switch kind {
+        case .all: "photo.on.rectangle.angled"
+        case .photos: "photo.fill"
+        case .videos: "video.fill"
+        case .files: "doc.fill"
+        }
+    }
+
+    @ViewBuilder
     private var roomFilterMenu: some View {
         Menu {
             Button {
@@ -171,8 +221,9 @@ public struct GlobalMediaGalleryView: View {
             }
         } label: {
             Image(systemName: model.selectedRoomID == nil
-                ? "line.3.horizontal.decrease.circle"
-                : "line.3.horizontal.decrease.circle.fill")
+                ? "bubble.left.and.bubble.right"
+                : "bubble.left.and.bubble.right.fill")
+                .foregroundStyle(model.selectedRoomID == nil ? HaloColor.textPrimary : HaloColor.accent)
         }
         .accessibilityLabel("Filter by room")
         .accessibilityIdentifier("global-media-room-filter")
@@ -181,6 +232,12 @@ public struct GlobalMediaGalleryView: View {
     private var mediaGrid: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
+                if let error = model.error {
+                    Text(error)
+                        .font(HaloTypography.meta)
+                        .foregroundStyle(HaloColor.danger)
+                        .padding(.horizontal)
+                }
                 ForEach(model.sections) { section in
                     VStack(alignment: .leading, spacing: 6) {
                         Text(section.title)
@@ -200,15 +257,32 @@ public struct GlobalMediaGalleryView: View {
                             }
                         }
                     }
+                    .onScrollVisibilityChange(threshold: 0.01) { isVisible in
+                        if isVisible {
+                            visibleSectionIDs.insert(section.id)
+                        } else {
+                            visibleSectionIDs.remove(section.id)
+                        }
+                    }
                 }
             }
             .padding(.vertical, 8)
         }
+        #if os(iOS)
+        .scrollEdgeEffectHidden(true, for: .top)
+        #endif
         .accessibilityIdentifier("global-media-grid")
     }
 
     private var filesList: some View {
         List {
+            if let error = model.error {
+                Section {
+                    Text(error)
+                        .font(HaloTypography.meta)
+                        .foregroundStyle(HaloColor.danger)
+                }
+            }
             ForEach(model.sections) { section in
                 Section(section.title) {
                     ForEach(section.items) { entry in
@@ -246,10 +320,15 @@ public struct GlobalMediaGalleryView: View {
                             }
                         }
                         .buttonStyle(.plain)
+                        .onAppear { visibleSectionIDs.insert(section.id) }
+                        .onDisappear { visibleSectionIDs.remove(section.id) }
                     }
                 }
             }
         }
+        #if os(iOS)
+        .scrollEdgeEffectHidden(true, for: .top)
+        #endif
         .accessibilityIdentifier("global-media-files")
     }
 }

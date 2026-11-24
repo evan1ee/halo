@@ -1,10 +1,12 @@
 import FeatureOnboarding
 import FeatureProfile
 import FeatureSettings
+import FeatureStickers
 import Foundation
 import HaloApplication
 import HaloDomain
 import HaloFoundation
+import HaloMatrixAdapter
 import HaloPlatform
 import SwiftUI
 import UIKit
@@ -278,6 +280,19 @@ extension AppRoot {
             guard let devices = try? await port.devices() else { return nil }
             return devices.map { .init(id: $0.id, name: $0.displayName ?? $0.id, lastSeen: $0.lastSeen, isCurrent: $0.isCurrent) }
         })
+    }
+
+    func makeStickerLibrary() -> StickerLibraryViewModel {
+        let creator = StickerPackCreator(
+            port: MatrixStickerPackCreationPort(session: matrixSession),
+            preparer: ImagePreparer(maximumDimension: 512)
+        )
+        return StickerLibraryViewModel(
+            library: stickers,
+            manager: stickerPackManager,
+            media: media,
+            newPack: { done in NewPackViewModel(creator: creator, onCreated: done) }
+        )
     }
 
     func stickerPackSettings() -> StickerPackSettingsActions {
