@@ -192,7 +192,7 @@ public struct GlobalMediaGalleryView: View {
                                     selectedItem = entry
                                 } label: {
                                     GlobalMediaGridTile(entry: entry) { ref in
-                                        await model.thumbnailData(ref, size: 240)
+                                        await model.thumbnailData(ref, size: 400)
                                     }
                                 }
                                 .buttonStyle(.plain)
@@ -277,37 +277,38 @@ private struct GlobalMediaGridTile: View {
     }
 
     var body: some View {
-        ZStack {
-            Color.secondary.opacity(0.12)
-            #if canImport(UIKit)
-            if let data, let image = UIImage(data: data) {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else {
+        HaloColor.bgSecondary
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                #if canImport(UIKit)
+                if let data, let image = UIImage(data: data) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    placeholder
+                }
+                #else
                 placeholder
+                #endif
             }
-            #else
-            placeholder
-            #endif
-        }
-        .aspectRatio(1, contentMode: .fill)
-        .clipped()
-        .overlay(alignment: .bottomTrailing) {
-            if entry.item.attachment.kind == .video {
-                Image(systemName: "video.fill")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(HaloColor.mediaOverlayForeground)
-                    .padding(4)
-                    .background(HaloColor.mediaOverlayBackground, in: RoundedRectangle(cornerRadius: HaloRadius.small))
-                    .padding(4)
+            .clipped()
+            .contentShape(.rect)
+            .overlay(alignment: .bottomTrailing) {
+                if entry.item.attachment.kind == .video {
+                    Image(systemName: "video.fill")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(HaloColor.mediaOverlayForeground)
+                        .padding(4)
+                        .background(HaloColor.mediaOverlayBackground, in: RoundedRectangle(cornerRadius: HaloRadius.small))
+                        .padding(4)
+                }
             }
-        }
-        .task(id: previewRef) {
-            data = nil
-            guard let previewRef else { return }
-            data = await load(previewRef)
-        }
+            .task(id: previewRef) {
+                data = nil
+                guard let previewRef else { return }
+                data = await load(previewRef)
+            }
     }
 
     private var placeholder: some View {

@@ -68,25 +68,51 @@ public enum AvatarTint {
 #if canImport(SwiftUI)
 import SwiftUI
 
-/// A round avatar: the image when `imageData` decodes, otherwise the initial of `name` in a stable soft tint.
-/// Loading the bytes is the caller's job.
+/// A round avatar with an optional circular outer frame and inner ring: shows the image when `imageData` decodes,
+/// otherwise the initial of `name` in a stable soft tint. Loading the bytes is the caller's job.
 public struct AvatarCircle: View {
     private let name: String
     private let imageData: Data?
     private let size: CGFloat
+    private let showsOuterFrame: Bool
+    private let avatarBorderColor: Color?
     @Environment(\.colorScheme) private var colorScheme
 
-    public init(name: String, imageData: Data?, size: CGFloat = 44) {
+    public init(
+        name: String,
+        imageData: Data?,
+        size: CGFloat = 44,
+        showsOuterFrame: Bool = true,
+        avatarBorderColor: Color? = nil
+    ) {
         self.name = name
         self.imageData = imageData
         self.size = size
+        self.showsOuterFrame = showsOuterFrame
+        self.avatarBorderColor = avatarBorderColor
+    }
+
+    /// Thickness of the circular ring between the outer circle border and the inner avatar circle.
+    public static func ringInset(for size: CGFloat) -> CGFloat {
+        max(1.5, (size * 0.10).rounded(.toNearestOrAwayFromZero))
+    }
+
+    /// Diameter of the inner clipped avatar circle inside the circular frame.
+    public static func innerDiameter(for size: CGFloat) -> CGFloat {
+        max(1, size - ringInset(for: size) * 2)
+    }
+
+    /// Stroke width of the outer circular border.
+    public static func borderWidth(for size: CGFloat) -> CGFloat {
+        max(0.75, min(1.5, size * 0.02))
     }
 
     private func color(_ rgb: AvatarTint.RGB) -> Color {
         Color(.sRGB, red: rgb.r, green: rgb.g, blue: rgb.b)
     }
 
-    public var body: some View {
+    @ViewBuilder
+    private func avatarContent(diameter: CGFloat) -> some View {
         ZStack {
             if let image = Self.image(imageData) {
                 Circle().fill(.quaternary)
@@ -96,12 +122,41 @@ public struct AvatarCircle: View {
                 let dark = colorScheme == .dark
                 Circle().fill(color(AvatarTint.background(hue, dark: dark)))
                 Text(avatarInitial(for: name))
-                    .font(.system(size: size * 0.4, weight: .semibold, design: .rounded))
+                    .font(.system(size: diameter * 0.42, weight: .semibold, design: .rounded))
                     .foregroundStyle(color(AvatarTint.letter(hue, dark: dark)))
             }
         }
-        .frame(width: size, height: size)
+        .frame(width: diameter, height: diameter)
         .clipShape(Circle())
+        .overlay {
+            if let avatarBorderColor {
+                Circle()
+                    .strokeBorder(avatarBorderColor, lineWidth: 2)
+            }
+        }
+    }
+
+    public var body: some View {
+        Group {
+            if showsOuterFrame {
+                ZStack {
+                    Circle()
+                        .fill(HaloColor.bgElevated)
+                    avatarContent(diameter: Self.innerDiameter(for: size))
+                }
+                .frame(width: size, height: size)
+                .clipShape(Circle())
+                .overlay(
+                    Circle()
+                        .strokeBorder(
+                            HaloColor.textSecondary.opacity(colorScheme == .dark ? 0.42 : 0.26),
+                            lineWidth: Self.borderWidth(for: size)
+                        )
+                )
+            } else {
+                avatarContent(diameter: size)
+            }
+        }
         .accessibilityHidden(true)
     }
 
@@ -113,5 +168,24 @@ public struct AvatarCircle: View {
         return nil
         #endif
     }
+}
+
+#Preview("AvatarCircle — Light") {
+    HStack(spacing: HaloSpacing.m) {
+        AvatarCircle(name: "Alice", imageData: nil, size: 30)
+        AvatarCircle(name: "Moments", imageData: nil, size: 52)
+        AvatarCircle(name: "Food", imageData: nil, size: 80)
+    }
+    .padding()
+}
+
+#Preview("AvatarCircle — Dark") {
+    HStack(spacing: HaloSpacing.m) {
+        AvatarCircle(name: "Alice", imageData: nil, size: 30)
+        AvatarCircle(name: "Moments", imageData: nil, size: 52)
+        AvatarCircle(name: "Food", imageData: nil, size: 80)
+    }
+    .padding()
+    .preferredColorScheme(.dark)
 }
 #endif

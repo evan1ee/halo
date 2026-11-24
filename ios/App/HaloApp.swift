@@ -129,8 +129,9 @@ private struct RootView: View {
                             router.openRoom(room, focus: event)
                         }
                     }
-                    .navigationTitle("Chats")
-                    .navigationBarTitleDisplayMode(.large)
+                    .navigationTitle("")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
                     .searchable(text: $searchModel.query, isPresented: $searchPresented, prompt: Self.isPad ? "Search" : "Search chats & messages")  // the iPad sidebar is too narrow for the long prompt at large text sizes
                     .background {
                         // ⌘F starts a search (hardware keyboard).
@@ -157,19 +158,24 @@ private struct RootView: View {
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
                             Button { router.push(.settings) } label: {
-                                AvatarCircle(name: ownName.isEmpty ? (root.signedInUserID ?? "?") : ownName, imageData: ownAvatar, size: 30)
-                                    .overlay(alignment: .topTrailing) {
-                                        if root.recovery.needsRecovery {
-                                            Circle().fill(HaloColor.warning).frame(width: 10, height: 10)
-                                                .overlay(Circle().stroke(.background, lineWidth: 1.5))
-                                                .accessibilityIdentifier("verify-dot")
-                                        }
-                                    }
+                                AvatarCircle(
+                                    name: ownName.isEmpty ? (root.signedInUserID ?? "?") : ownName,
+                                    imageData: ownAvatar,
+                                    size: 30,
+                                    showsOuterFrame: false,
+                                    avatarBorderColor: root.recovery.needsRecovery ? HaloColor.warning : nil
+                                )
+                                .frame(width: 44, height: 44)
+                                .contentShape(.circle)
                             }
+                            .buttonStyle(.plain)
+                            .glassEffect(.regular.interactive(), in: .circle)
                             .accessibilityLabel("Settings")
+                            .accessibilityValue(root.recovery.needsRecovery ? "Verification needed" : "")
                             .accessibilityIdentifier("settings")
                             .keyboardShortcut(",", modifiers: .command)
                         }
+                        .sharedBackgroundVisibility(.hidden)
                         ToolbarItemGroup(placement: .topBarTrailing) {
                             moreMenu
                         }
@@ -575,22 +581,25 @@ private struct TimelineScreen: View {
             gifPanel: klipyGIFs.map { gifs -> @MainActor () -> AnyView in { AnyView(KlipyPanelView(model: gifs)) } },
             onOpenThread: openThread
         )
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                Button { toggleRoomInfo() } label: {
-                    Text(title).font(.headline).lineLimit(1).foregroundStyle(.primary)
-                }
-                .accessibilityIdentifier("roomTitle")
-            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button { toggleRoomInfo() } label: {
-                    AvatarView(name: title, ref: roomAvatar, size: 30) { [roomList = root.roomList] in await roomList.avatarData($0) }
+                    AvatarView(name: title, ref: roomAvatar, size: 30, showsOuterFrame: false) { [roomList = root.roomList] in
+                        await roomList.avatarData($0)
+                    }
+                    .frame(width: 44, height: 44)
+                    .contentShape(.circle)
                 }
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .circle)
                 .keyboardShortcut("i", modifiers: .command)
                 .accessibilityLabel("Room info")
                 .accessibilityIdentifier("roomInfo")
             }
+            .sharedBackgroundVisibility(.hidden)
         }
         .modifier(RoomInfoInspector(
             enabled: UIDevice.current.userInterfaceIdiom == .pad,
@@ -666,6 +675,7 @@ private struct ThreadScreen: View {
         TimelineView(model: model)
             .navigationTitle("Thread")
             .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
     }
 }
 
