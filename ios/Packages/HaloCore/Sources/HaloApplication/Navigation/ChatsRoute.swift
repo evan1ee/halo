@@ -7,6 +7,7 @@ import HaloFoundation
 /// as a short-task sheet.
 public enum ChatsRoute: Hashable, Codable, Sendable {
     case room(RoomID, focus: EventID? = nil)
+    case roomInfo(RoomID)
     case thread(RoomID, rootEvent: EventID)
     case settings
     case stickerLibrary
@@ -42,6 +43,21 @@ public struct ChatsRouter: Sendable, Equatable {
         path.append(.room(room, focus: focus))
     }
 
+    /// Opens the room info page for `room`, deduplicating if already on top.
+    /// On iPad (`replacesDetail`), keeps the room below when already viewing `room`; otherwise replaces the detail.
+    public mutating func openRoomInfo(_ room: RoomID) {
+        let target = ChatsRoute.roomInfo(room)
+        guard path.last != target else { return }
+        if replacesDetail {
+            if case .room(let current, _) = path.last, current == room {
+                // Keep the open room beneath Room info so Back returns to it.
+            } else {
+                path.removeAll()
+            }
+        }
+        path.append(target)
+    }
+
     /// Opens a thread rooted at `rootEvent` in `room`, deduplicating if already on top.
     public mutating func openThread(room: RoomID, rootEvent: EventID) {
         let target = ChatsRoute.thread(room, rootEvent: rootEvent)
@@ -54,6 +70,8 @@ public struct ChatsRouter: Sendable, Equatable {
         switch route {
         case .room(let room, let focus):
             openRoom(room, focus: focus)
+        case .roomInfo(let room):
+            openRoomInfo(room)
         case .thread(let room, let rootEvent):
             openThread(room: room, rootEvent: rootEvent)
         case .settings, .stickerLibrary, .activity, .globalMediaGallery:
@@ -70,12 +88,24 @@ public struct ChatsRouter: Sendable, Equatable {
         path.removeAll()
     }
 
-    /// Removes `.room` and `.thread` entries whose room is no longer joined (NAVIGATION §4 state restoration).
+    /// Removes all routes belonging to `room` (e.g. after leaving the room from its info page).
+    public mutating func removeRoom(_ room: RoomID) {
+        path.removeAll { route in
+            switch route {
+            case .room(let id, _), .roomInfo(let id), .thread(let id, _):
+                return id == room
+            case .settings, .stickerLibrary, .activity, .globalMediaGallery:
+                return false
+            }
+        }
+    }
+
+    /// Removes `.room`, `.roomInfo`, and `.thread` entries whose room is no longer joined (NAVIGATION §4 state restoration).
     /// Non-room destinations (Settings, Stickers, Activity, Media Gallery) are preserved.
     public mutating func pruneInvalidRooms(joinedRoomIDs: Set<RoomID>) {
         path.removeAll { route in
             switch route {
-            case .room(let room, _), .thread(let room, _):
+            case .room(let room, _), .roomInfo(let room), .thread(let room, _):
                 return !joinedRoomIDs.contains(room)
             case .settings, .stickerLibrary, .activity, .globalMediaGallery:
                 return false
@@ -95,12 +125,12 @@ public struct ChatsRouter: Sendable, Equatable {
     }
 }
 
-/// Decides whether Room info docks as a third inspector column on iPad or presents as a modal sheet (M16, D91).
+/// Decides whether Room info docks as a third inspector column on regular-width iPad or pushes as a page on the navigation stack.
 public enum RoomInfoPresentation: Equatable, Sendable {
-    case sheet
+    case page
     case inspector
 
     public static func style(isPad: Bool, regularWidth: Bool) -> Self {
-        isPad && regularWidth ? .inspector : .sheet
+        isPad && regularWidth ? .inspector : .page
     }
 }

@@ -43,7 +43,6 @@ private struct RootView: View {
     @State private var pathRestored = false
     @State private var searchModel: MessageSearchViewModel
     @State private var newChat: NewChatViewModel?
-    @State private var roomInfo: RoomDetailsViewModel?
     @State private var showingNotificationPriming = false
     @State private var showingWhatsNew = false
     @State private var ownName = ""
@@ -121,7 +120,7 @@ private struct RootView: View {
                     RoomListView(
                         model: root.roomList,
                         searchQuery: searchModel.query,
-                        onRoomInfo: { roomInfo = root.makeRoomDetails(room: $0) },
+                        onRoomInfo: { router.openRoomInfo($0) },
                         onMediaGallery: { router.push(.globalMediaGallery) },
                         onSelect: { router.openRoom($0) }
                     ) {
@@ -196,17 +195,6 @@ private struct RootView: View {
                         savedPath = router.encodePath()
                     }
                     .sheet(item: $newChat) { NewChatView(model: $0) }
-                    .sheet(item: $roomInfo) { model in
-                        RoomDetailsView(
-                            model: model,
-                            profileSheet: { member in
-                                root.makeUserProfile(member: member) { target in
-                                    roomInfo = nil
-                                    router.openRoom(target)
-                                }.map { AnyView(UserProfileView(model: $0)) }
-                            }
-                        )
-                    }
     }
 
     /// iPad (M16, D91): the chat list as a sidebar and the router's path as the detail; narrow windows collapse to one column.
@@ -471,7 +459,15 @@ private struct RootView: View {
                 room: room,
                 jumpTo: focus,
                 openRoom: { router.openRoom($0) },
+                openRoomInfo: { router.openRoomInfo(room) },
                 openThread: { router.openThread(room: room, rootEvent: $0) }
+            )
+        case .roomInfo(let room):
+            RoomDetailsScreen(
+                root: root,
+                room: room,
+                openRoom: { router.openRoom($0) },
+                onLeft: { router.removeRoom(room) }
             )
         case .thread(let room, let rootEvent):
             ThreadScreen(root: root, room: room, rootEvent: rootEvent)
@@ -529,6 +525,7 @@ private struct TimelineScreen: View {
     private let root: AppRoot
     private let room: RoomID
     private let openRoom: @MainActor (RoomID) -> Void
+    private let openRoomInfo: @MainActor () -> Void
     private let openThread: @MainActor (EventID) -> Void
 
     init(
@@ -536,9 +533,11 @@ private struct TimelineScreen: View {
         room: RoomID,
         jumpTo: EventID? = nil,
         openRoom: @escaping @MainActor (RoomID) -> Void,
+        openRoomInfo: @escaping @MainActor () -> Void,
         openThread: @escaping @MainActor (EventID) -> Void
     ) {
         self.openRoom = openRoom
+        self.openRoomInfo = openRoomInfo
         self.openThread = openThread
         self.root = root
         self.room = room
@@ -557,7 +556,7 @@ private struct TimelineScreen: View {
     }
 
     /// On regular-width iPad, Room info docks as a trailing third column (M16 three-column layout, D91); on iPhone and
-    /// compact Slide Over / Split View it stays a modal sheet.
+    /// compact Slide Over / Split View it pushes as a page on the navigation stack.
     private var usesInspector: Bool {
         RoomInfoPresentation.style(
             isPad: UIDevice.current.userInterfaceIdiom == .pad,
@@ -566,23 +565,32 @@ private struct TimelineScreen: View {
     }
 
     private func toggleRoomInfo() {
-        if details != nil {
-            details = nil
+        if usesInspector {
+            if details != nil {
+                details = nil
+            } else {
+                details = root.makeRoomDetails(room: room)
+            }
         } else {
-            details = root.makeRoomDetails(room: room)
+            openRoomInfo()
         }
     }
 
-    private func roomDetailsView(_ model: RoomDetailsViewModel) -> some View {
-        RoomDetailsView(
-            model: model,
-            profileSheet: { member in
-                root.makeUserProfile(member: member, onOpenRoom: { room in details = nil; openRoom(room) })
-                    .map { AnyView(UserProfileView(model: $0)) }
-            },
-            onRenamed: { title = $0 },
-            onLeft: { details = nil; dismiss() }
-        )
+    private func roomDetailsInspectorView(_ model: RoomDetailsViewModel) -> some View {
+        NavigationStack {
+            RoomDetailsView(
+                model: model,
+                profileSheet: { member, dismissProfile in
+                    root.makeUserProfile(member: member, onOpenRoom: { room in
+                        dismissProfile()
+                        details = nil
+                        openRoom(room)
+                    }).map { AnyView(UserProfileView(model: $0)) }
+                },
+                onRenamed: { title = $0 },
+                onLeft: { details = nil; dismiss() }
+            )
+        }
     }
 
     var body: some View {
@@ -624,15 +632,43 @@ private struct TimelineScreen: View {
                 get: { usesInspector && details != nil },
                 set: { if !$0 { details = nil; Task { title = await root.roomName(room) ?? title } } }
             ),
-            content: { if let model = details { roomDetailsView(model).inspectorColumnWidth(min: 300, ideal: 340, max: 420) } }
+            content: { if let model = details { roomDetailsInspectorView(model).inspectorColumnWidth(min: 300, ideal: 340, max: 420) } }
         ))
-        .sheet(item: Binding(
-            get: { usesInspector ? nil : details },
-            set: { details = $0 }
-        ), onDismiss: { Task { title = await root.roomName(room) ?? title } }) { model in
-            roomDetailsView(model)
-        }
         .task { title = await root.roomName(room) ?? "Unnamed room" }
+        .onAppear { Task { title = await root.roomName(room) ?? title } }
+    }
+}
+
+/// Pushed Room info page on the single `NavigationStack`.
+private struct RoomDetailsScreen: View {
+    @State private var model: RoomDetailsViewModel
+    private let root: AppRoot
+    private let openRoom: @MainActor (RoomID) -> Void
+    private let onLeft: @MainActor () -> Void
+
+    init(
+        root: AppRoot,
+        room: RoomID,
+        openRoom: @escaping @MainActor (RoomID) -> Void,
+        onLeft: @escaping @MainActor () -> Void
+    ) {
+        self.root = root
+        self.openRoom = openRoom
+        self.onLeft = onLeft
+        _model = State(initialValue: root.makeRoomDetails(room: room))
+    }
+
+    var body: some View {
+        RoomDetailsView(
+            model: model,
+            profileSheet: { member, dismissProfile in
+                root.makeUserProfile(member: member, onOpenRoom: { target in
+                    dismissProfile()
+                    openRoom(target)
+                }).map { AnyView(UserProfileView(model: $0)) }
+            },
+            onLeft: onLeft
+        )
     }
 }
 

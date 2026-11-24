@@ -5,18 +5,19 @@ Last updated: 2026-11-24 · Branch: `main` · PRs #1–#87 merged
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
-- **Roadmap / Autonomous Loop:** all autonomous work across M0–M16, ADR-0022, Tech Debt A–D (including TD-12), the Halo Sygnal pushkin (`infra/sygnal/`, R-24), and release documentation (`docs/release/`, D115) is complete; all open product decisions in `OPEN_QUESTIONS.md` are resolved (`D108–D117`). Physical iPhone 16 `HaloUITests`, NFR-1 cold launch (0.357 s responsive), timeline memory (76.8 MB peak), D95 10× room-opening, live sends, image-scroll & mid-scroll jump-to-bottom (PR #87), Voice messages, Share extension (`V-SHARE-1`), Focus filter, and Siri/Spotlight all passed; P0 badge/widget/background-sync fixes (PR #85) landed. The roadmap has been slimmed and expanded with **M17–M19** in [docs/ROADMAP.md](docs/ROADMAP.md). External-account / legal (`👤`) and remaining physical-device (`📱`) items remain in §5.
+- **Roadmap / Autonomous Loop:** all autonomous work across M0–M16, ADR-0022, Tech Debt A–D (including TD-12), the Halo Sygnal pushkin (`infra/sygnal/`, R-24), and release documentation (`docs/release/`, D115) is complete; all open product decisions in `OPEN_QUESTIONS.md` are resolved (`D108–D117`). Physical iPhone 16 `HaloUITests`, NFR-1 cold launch (0.357 s responsive), timeline memory (76.8 MB peak), D95 10× room-opening, live sends, image-scroll & mid-scroll jump-to-bottom (PR #87), pushed full-bleed Room info page, Voice messages, Share extension (`V-SHARE-1`), Focus filter, and Siri/Spotlight all passed; P0 badge/widget/background-sync fixes (PR #85) landed. The roadmap has been slimmed and expanded with **M17–M19** in [docs/ROADMAP.md](docs/ROADMAP.md). External-account / legal (`👤`) and remaining physical-device (`📱`) items remain in §5.
 - **Milestones:** M0–M16 done except external/device items (deploy `infra/sygnal/` + APNs keys + TestFlight, 7-day AC-U8 soak, interactive Xcode/Instruments NFR-2 scroll hitch + 300-room + MetricKit run, Q-KLIPY-PROD portal request, publish `docs/release/` privacy/support URLs, final Beta 2 brand artwork, legal/export review). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1).
-- **Last checks (`main`):** `validate-docs.sh`, `check_handoff.py`, `gitleaks` passed (code/device tests passed on PRs #85–#87).
+- **Last checks (`main`):** `swift test --package-path ios/Packages/HaloCore -Xswiftc -warnings-as-errors`, `validate-docs.sh`, `check-boundaries.sh`, `check-design-tokens.sh`, `swiftlint lint --strict ios/` (0 violations), `gitleaks`, `check_handoff.py`, and physical iPhone 16 `HaloUITests.testRoomInfoOpensAsPushedPage` (26.50 s, 0 failures) passed.
 - **CI:** PRs #1–#87 merged. Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
-- **Scroll-safe timeline long-press & image/map tap style + iPhone 16 verification (2026-11-24, `fix/timeline-scroll-safe-gestures`):**
+- **Room info as pushed full-bleed navigation page (2026-11-24, `main`):**
+  - Replaced Room info `.sheet` presentation (timeline avatar button and room-list context menu) with `ChatsRoute.roomInfo(RoomID)`, `ChatsRouter.openRoomInfo(_:)`, `ChatsRouter.removeRoom(_:)`, and `RoomInfoPresentation.page` (keeping `.inspector` on regular-width iPad).
+  - Removed the nested `NavigationStack` from `RoomDetailsView` and matched the conversation page's transparent, title-free header with full-bleed edge-to-edge scrolling (`.scrollEdgeEffectHidden(true, for: .top)`); verified with `HaloUITests.testRoomInfoOpensAsPushedPage` on physical iPhone 16.
+- **Scroll-safe timeline long-press & image/map tap style + iPhone 16 verification (2026-11-24, PR #87):**
   - Removed SwiftUI `.simultaneousGesture(LongPressGesture)` + touch-down `.scaleEffect(0.96)` (which flashed a tap/press effect and interfered with scrolling over images, maps, and messages) and replaced it with a UIKit-backed `UILongPressGestureRecognizer` (`ScrollSafeLongPressModifier`, `cancelsTouchesInView = false`, `delaysTouchesBegan = false`, simultaneous with `UIScrollView`) plus no-highlight `ScrollFriendlyTapButtonStyle` on images, maps (`LocationCardView`), and reply quotes.
   - Made `jump-to-bottom` interrupt ongoing deceleration synchronously on the tap frame before converging; added and passed `HaloUITests.testTimelineImageScrollAndJumpToBottomWhileScrolling` on physical iPhone 16 (`00008140-000222592ED0801C`).
-- **Timeline image scrolling & jump-to-bottom state machine (2026-11-24, PR #86):**
-  - Replaced bare `.onTapGesture` on photos/replies/KLIPY retry with plain `Button`s and added pure `BottomFollowState` (`TimelineScrollHelpers.swift`, `BottomFollowStateTests`) + cancellable convergence `jumpToBottomTask`.
 - **P0 badge, widget & background-push sync fixes + iPhone 16 walkthrough (2026-11-24, PR #85):**
   - Fixed 4 root causes of badge/widget desync (`ReadStateCoordinator.reconcile()` on `.active`/`.background`, synchronous foreground flag clearing on background/terminate, multi-room NSE `AttentionCache` + `WidgetCenter` reload, and `remote-notification` silent-push `syncOnceInBackground()`); Voice, Share (`V-SHARE-1`), Focus, and Siri/Spotlight passed on iPhone 16.
 
@@ -40,7 +41,9 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D107), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
-- **Docs:** `docs/ROADMAP.md`, `HANDOFF.md`.
+- **Navigation / Core:** `ios/Packages/HaloCore/Sources/HaloApplication/Navigation/ChatsRoute.swift`, `ios/Packages/HaloCore/Tests/HaloApplicationTests/ChatsRouterTests.swift`.
+- **Room info / App / UI tests:** `ios/Packages/HaloApple/Sources/FeatureRoomDetails/RoomDetailsView.swift`, `ios/Packages/HaloApple/Sources/FeatureRoomList/RoomListView.swift`, `ios/App/HaloApp.swift`, `ios/UITests/HaloUITests.swift`.
+- **Docs / Config:** `docs/design/NAVIGATION.md`, `HANDOFF.md`, `.gitleaksignore`.
 
 ## 5. Outstanding issues
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).

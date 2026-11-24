@@ -3,7 +3,7 @@ import HaloDomain
 import PhotosUI
 import SwiftUI
 
-/// The room info sheet. Content and actions come from `RoomDetailsViewModel`; no logic here.
+/// The room info page. Content and actions come from `RoomDetailsViewModel`; no logic here.
 public struct RoomDetailsView: View {
     @State private var model: RoomDetailsViewModel
     @Environment(\.dismiss) private var dismiss
@@ -14,17 +14,19 @@ public struct RoomDetailsView: View {
     @State private var inviteText = ""
     @State private var picked: PhotosPickerItem?
 
-    private let onLeft: @MainActor () -> Void
+    private let onLeft: (@MainActor () -> Void)?
     private let onRenamed: @MainActor (String) -> Void
-    private let profileSheet: (@MainActor (RoomMemberInfo) -> AnyView?)?
+    private let profileSheet: (@MainActor (RoomMemberInfo, @escaping @MainActor () -> Void) -> AnyView?)?
     @State private var shownMember: RoomMemberInfo?
 
-    /// `onLeft` runs after the user left the room and the sheet closed (the caller closes the room's screen).
+    /// `onLeft` runs after the user left the room (the caller pops the room and info pages from the stack).
     /// `onRenamed` runs when the user saves a new room name so the caller can update its navigation title at once.
     /// `profileSheet` builds the profile view for a tapped member (wired by the composition root so features don't import each other).
     public init(
-        model: RoomDetailsViewModel, profileSheet: (@MainActor (RoomMemberInfo) -> AnyView?)? = nil,
-        onRenamed: @escaping @MainActor (String) -> Void = { _ in }, onLeft: @escaping @MainActor () -> Void = {}
+        model: RoomDetailsViewModel,
+        profileSheet: (@MainActor (RoomMemberInfo, @escaping @MainActor () -> Void) -> AnyView?)? = nil,
+        onRenamed: @escaping @MainActor (String) -> Void = { _ in },
+        onLeft: (@MainActor () -> Void)? = nil
     ) {
         _model = State(initialValue: model)
         self.profileSheet = profileSheet
@@ -33,26 +35,24 @@ public struct RoomDetailsView: View {
     }
 
     public var body: some View {
-        NavigationStack {
-            Group {
-                switch model.content {
-                case .loading: ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-                case .failed(let text):
-                    ContentUnavailableView {
-                        Label("Couldn't load the room", systemImage: "exclamationmark.triangle")
-                    } description: {
-                        Text(text)
-                    } actions: {
-                        Button("Try again") { Task { await model.load() } }.buttonStyle(.borderedProminent)
-                    }
-                case .loaded(let details, let members): list(details, members)
+        Group {
+            switch model.content {
+            case .loading: ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .failed(let text):
+                ContentUnavailableView {
+                    Label("Couldn't load the room", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(text)
+                } actions: {
+                    Button("Try again") { Task { await model.load() } }.buttonStyle(.borderedProminent)
                 }
+            case .loaded(let details, let members): list(details, members)
             }
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarVisibility(.hidden, for: .navigationBar)
         }
-        .presentationDragIndicator(.visible)
+        .accessibilityIdentifier("roomDetailsPage")
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
         .task { await model.load() }
         .onChange(of: picked) { _, item in
             guard let item else { return }
@@ -62,12 +62,20 @@ public struct RoomDetailsView: View {
                 await model.changePhoto(data)
             }
         }
-        .onChange(of: model.hasLeft) { _, left in if left { dismiss(); onLeft() } }
+        .onChange(of: model.hasLeft) { _, left in
+            guard left else { return }
+            if let onLeft {
+                onLeft()
+            } else {
+                dismiss()
+            }
+        }
     }
 
     private func list(_ details: RoomDetails, _ members: [RoomMemberInfo]) -> some View {
         listBody(details, members)
             .refreshable { await model.refresh() }
+            .scrollEdgeEffectHidden(true, for: .top)
     }
 
     private func listBody(_ details: RoomDetails, _ members: [RoomMemberInfo]) -> some View {
@@ -178,7 +186,7 @@ public struct RoomDetailsView: View {
             }
         }
         .sheet(item: $shownMember) { member in
-            if let view = profileSheet?(member) { view }
+            if let view = profileSheet?(member, { shownMember = nil }) { view }
         }
         .alert("Edit room", isPresented: $editing) {
             TextField("Name", text: $draftName)

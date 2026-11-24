@@ -51,4 +51,4 @@ flowchart TB
 | Share extension (P2) | Room picker → composer |
 
 ## 4. Presentation rules
-Sheets for short tasks (new chat, room details on iPhone, sticker panel), full-screen covers only for blocking flows (re-auth, verification). State restoration: the navigation path (open room, and Settings or Activity if they were open) is restored on relaunch (`@SceneStorage`), dropping a room that is no longer joined.
+Sheets for short tasks (new chat, member profile, sticker panel), full-screen covers only for blocking flows (re-auth, verification). Room info is pushed as a page on the `NavigationStack` on iPhone and compact iPad, and docks as a trailing inspector column on regular-width iPad. State restoration: the navigation path (open room, room info, and Settings or Activity if they were open) is restored on relaunch (`@SceneStorage`), dropping a room that is no longer joined.

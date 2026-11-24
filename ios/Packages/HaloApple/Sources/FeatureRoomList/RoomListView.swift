@@ -12,7 +12,7 @@ public struct RoomListView<SearchResults: View>: View {
     private let onMediaGallery: (() -> Void)?
     private let searchResults: SearchResults
 
-    /// `onSelect` is called when a room is tapped; `onRoomInfo` opens the room info sheet from a row's context menu;
+    /// `onSelect` is called when a room is tapped; `onRoomInfo` opens the room info page from a row's context menu;
     /// `onMediaGallery` opens the preset non-Matrix Global Media Gallery entry (D83);
     /// `searchQuery` filters rooms by name while typing and `searchResults` embeds a "Messages" section (D85).
     /// Navigation itself belongs to the composition root.

@@ -1018,4 +1018,110 @@ final class HaloUITests: XCTestCase {
 
         returnToChatList(app)
     }
+
+    /// Physical-device verification that tapping the room avatar pushes Room info as a navigation page (not a sheet).
+    /// Opt-in via `HALO_RUN_DEVICE_CHECKS=1`.
+    @MainActor
+    func testRoomInfoOpensAsPushedPage() throws {
+        guard ProcessInfo.processInfo.environment["HALO_RUN_DEVICE_CHECKS"] == "1" else {
+            throw XCTSkip("Set HALO_RUN_DEVICE_CHECKS=1 to run physical-device Room info verification.")
+        }
+        let app = XCUIApplication()
+        app.launch()
+        dismissFirstRunSheets(app)
+        if !chatsRoot(app).waitForExistence(timeout: 3) { returnToChatList(app) }
+        guard chatsRoot(app).waitForExistence(timeout: 10) else { throw XCTSkip("App is signed out.") }
+        if app.buttons["focus-show-all"].exists { app.buttons["focus-show-all"].tap() }
+
+        try openFirstChat(app)
+        let roomInfoButton = app.buttons["roomInfo"]
+        XCTAssertTrue(roomInfoButton.waitForExistence(timeout: 5), "Expected roomInfo avatar button in timeline")
+        roomInfoButton.tap()
+
+        // Verify pushed page appears with a transparent navigation bar (no title) and a Back button (not a modal sheet).
+        let navBar = app.navigationBars.firstMatch
+        XCTAssertTrue(navBar.waitForExistence(timeout: 5), "Expected navigation bar on pushed Room info page")
+        XCTAssertTrue(app.buttons["roomMediaGallery"].waitForExistence(timeout: 5), "Expected Room info content")
+        XCTAssertTrue(navBar.buttons.firstMatch.exists, "Expected native Back button on pushed Room info page")
+        XCTAssertTrue(app.sheets.count == 0, "Room info must not be presented as a sheet")
+
+        // Scroll down and verify the list stays clipped below the navigation bar header.
+        let list = app.collectionViews.firstMatch
+        if list.exists {
+            list.swipeUp(velocity: .default)
+        }
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "room-info-scrolled"
+        shot.lifetime = .keepAlways
+        add(shot)
+
+        // Tap Back and verify we return cleanly to the timeline (not popped out to Chats).
+        navBar.buttons.firstMatch.tap()
+        XCTAssertTrue(roomInfoButton.waitForExistence(timeout: 5), "Tapping Back should return to the timeline")
+        XCTAssertTrue(app.buttons["sticker-button"].exists, "Timeline composer should still be visible after Back")
+
+        returnToChatList(app)
+    }
+
+    /// Verifies that the SpringBoard app icon badge matches unread messages and never disappears across
+    /// repeated background/foreground and cold-relaunch cycles. Opt-in via `HALO_RUN_DEVICE_CHECKS=1`.
+    @MainActor
+    func testUnreadBadgePersistsAcrossOpenCloseCycles() throws {
+        guard ProcessInfo.processInfo.environment["HALO_RUN_DEVICE_CHECKS"] == "1" else {
+            throw XCTSkip("Set HALO_RUN_DEVICE_CHECKS=1 to run SpringBoard badge persistence check.")
+        }
+        let app = XCUIApplication()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        app.launch()
+        dismissFirstRunSheets(app)
+        if !chatsRoot(app).waitForExistence(timeout: 3) { returnToChatList(app) }
+        guard chatsRoot(app).waitForExistence(timeout: 10) else { throw XCTSkip("App is signed out.") }
+        if app.buttons["focus-show-all"].exists { app.buttons["focus-show-all"].tap() }
+        // Let initial sync settle on Chats root without opening any room.
+        _ = app.collectionViews.firstMatch.waitForExistence(timeout: 5)
+        RunLoop.current.run(until: Date().addingTimeInterval(2.0))
+
+        var trace: [String] = []
+        func readIconBadge(_ step: String) -> String {
+            let icon = springboard.icons.matching(NSPredicate(format: "label BEGINSWITH 'Halo'")).firstMatch
+            _ = icon.waitForExistence(timeout: 3)
+            let desc = "\(step): exists=\(icon.exists) label='\(icon.label)' value='\(String(describing: icon.value))'"
+            trace.append(desc)
+            return "\(icon.label)|\(String(describing: icon.value))"
+        }
+
+        // 1. Background / foreground 5 times
+        for cycle in 1...5 {
+            XCUIDevice.shared.press(.home)
+            RunLoop.current.run(until: Date().addingTimeInterval(1.2))
+            _ = readIconBadge("bg-\(cycle)")
+            app.activate()
+            _ = chatsRoot(app).waitForExistence(timeout: 3)
+            RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+        }
+        XCUIDevice.shared.press(.home)
+        RunLoop.current.run(until: Date().addingTimeInterval(1.2))
+        _ = readIconBadge("after-bg-5")
+
+        // 2. Cold terminate + quick open/close 3 times (simulates force-close & quick open/close before sync finishes)
+        for cycle in 1...3 {
+            app.terminate()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.8))
+            _ = readIconBadge("terminated-\(cycle)")
+            app.launch()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+            XCUIDevice.shared.press(.home)
+            RunLoop.current.run(until: Date().addingTimeInterval(1.2))
+            _ = readIconBadge("quick-close-\(cycle)")
+        }
+
+        let attachment = XCTAttachment(string: trace.joined(separator: "\n"))
+        attachment.name = "springboard-badge-trace"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        print("SPRINGBOARD_BADGE_TRACE:\n" + trace.joined(separator: "\n"))
+
+        let missing = trace.filter { !$0.contains("3") }
+        XCTAssertTrue(missing.isEmpty, "Badge disappeared on steps:\n" + trace.joined(separator: "\n"))
+    }
 }

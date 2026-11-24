@@ -133,11 +133,45 @@ struct ChatsRouterSplitTests {
         #expect(router.path.count == 3)
     }
 
-    @Test("room info docks as a third inspector column on regular-width iPad and uses a sheet elsewhere")
+    @Test("openRoomInfo pushes a deduplicated page, round-trips state restoration, and removeRoom/prune clear it")
+    func roomInfoRouting() throws {
+        let roomA = try RoomID("!a:x.org")
+        let roomB = try RoomID("!b:x.org")
+
+        var router = ChatsRouter()
+        router.openRoom(roomA)
+        router.openRoomInfo(roomA)
+        router.openRoomInfo(roomA)
+        #expect(router.path == [.room(roomA, focus: nil), .roomInfo(roomA)])
+
+        let data = try #require(router.encodePath())
+        var restored = ChatsRouter()
+        restored.restorePath(from: data)
+        #expect(restored.path == router.path)
+
+        restored.pruneInvalidRooms(joinedRoomIDs: [roomB])
+        #expect(restored.path.isEmpty)
+
+        router.push(.settings)
+        router.removeRoom(roomA)
+        #expect(router.path == [.settings])
+    }
+
+    @Test("room info docks as a third inspector column on regular-width iPad and pushes as a page elsewhere")
     func roomInfoPresentation() {
         #expect(RoomInfoPresentation.style(isPad: true, regularWidth: true) == .inspector)
-        #expect(RoomInfoPresentation.style(isPad: true, regularWidth: false) == .sheet)
-        #expect(RoomInfoPresentation.style(isPad: false, regularWidth: true) == .sheet)
-        #expect(RoomInfoPresentation.style(isPad: false, regularWidth: false) == .sheet)
+        #expect(RoomInfoPresentation.style(isPad: true, regularWidth: false) == .page)
+        #expect(RoomInfoPresentation.style(isPad: false, regularWidth: true) == .page)
+        #expect(RoomInfoPresentation.style(isPad: false, regularWidth: false) == .page)
+    }
+
+    @Test("on iPad, openRoomInfo stacks over the same room and replaces a different room")
+    func iPadRoomInfoRouting() {
+        var router = ChatsRouter(replacesDetail: true)
+        router.openRoom(roomA)
+        router.openRoomInfo(roomA)
+        #expect(router.path == [.room(roomA, focus: nil), .roomInfo(roomA)])
+        router.openRoomInfo(roomB)
+        #expect(router.path == [.roomInfo(roomB)])
     }
 }
