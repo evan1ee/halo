@@ -160,6 +160,23 @@ final class HaloUITests: XCTestCase {
         start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.97)))
     }
 
+    /// Skips a test that taps keys when this simulator shows no software keyboard (a hardware keyboard is connected: its keys
+    /// exist but lie off screen). Fix: I/O → Keyboard → Connect Hardware Keyboard (⇧⌘K). A skip is not a pass.
+    @MainActor
+    private func requireSoftwareKeyboard(_ app: XCUIApplication) throws {
+        let key = app.keys.firstMatch
+        try XCTSkipUnless(key.exists && key.isHittable, "No software keyboard: a hardware keyboard is connected to this simulator.")
+    }
+
+    /// Back to the chat list. On the iPad the list is the always-visible sidebar, so the first navigation button is its
+    /// show/hide toggle, not a back button: tapping it would hide the list.
+    @MainActor
+    private func returnToChatList(_ app: XCUIApplication) {
+        if app.navigationBars["Chats"].exists, app.navigationBars["Chats"].isHittable { return }
+        let back = app.navigationBars.buttons.element(boundBy: 0)
+        if back.waitForExistence(timeout: 3) { back.tap() }
+    }
+
     /// Opens the first chat (not the Media Gallery) on a signed-in simulator so the composer is shown; skips when signed out.
     @MainActor
     /// A fresh install shows "What's New" and the notifications prompt over the chats; answer both so tests see the app.
@@ -340,9 +357,11 @@ final class HaloUITests: XCTestCase {
             // while the room has no message rows. Responsiveness below is checked either way.
             let hasMessages = app.staticTexts["Waiting for this message's key"].exists
                 || app.descendants(matching: .any).matching(identifier: "message-row").firstMatch.exists
+                || app.images.firstMatch.exists  // photos (other tests post some into this room)
             if !hasMessages { XCTAssertTrue(emptyState, "\(name): an empty room says so instead of a blank list") }
             composer.tap()
             XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3), "\(name): the keyboard opens")
+            try requireSoftwareKeyboard(app)
             // Real key taps (XCUIElement.typeText may touch the screen, which a person typing doesn't).
             app.keys.matching(NSPredicate(format: "label ==[c] 'h'")).firstMatch.tap()
             app.keys.matching(NSPredicate(format: "label ==[c] 'i'")).firstMatch.tap()
@@ -352,7 +371,7 @@ final class HaloUITests: XCTestCase {
             XCTAssertTrue(app.buttons["emoji-delete"].waitForExistence(timeout: 3))
             app.buttons["emoji-delete"].tap()
             app.buttons["emoji-delete"].tap()
-            app.navigationBars.buttons.element(boundBy: 0).tap()
+            returnToChatList(app)
             XCTAssertTrue(app.navigationBars["Chats"].waitForExistence(timeout: 5), "\(name): back to the chat list")
         }
     }
@@ -396,8 +415,7 @@ final class HaloUITests: XCTestCase {
         dismissComposerInput(app)
         _ = search.waitForNonExistence(timeout: 3)
         _ = app.staticTexts["settle"].waitForExistence(timeout: 1)
-        let back = app.navigationBars.buttons.element(boundBy: 0)
-        if back.waitForExistence(timeout: 3) { back.tap() }
+        returnToChatList(app)
         XCTAssertTrue(app.navigationBars["Chats"].waitForExistence(timeout: 5), "Should return to Chats root")
     }
 
@@ -443,6 +461,7 @@ final class HaloUITests: XCTestCase {
             // Hold the keyboard's delete key (it speeds up to whole words) until the field is empty; the value is truncated,
             // and a long typeText of deletes stops early.
             XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+            try requireSoftwareKeyboard(app)
             for _ in 0..<8 {
                 let value = composer.value as? String ?? ""
                 if value.isEmpty || value == "Message" { break }
@@ -486,6 +505,9 @@ final class HaloUITests: XCTestCase {
         let firstSwap = sampleComposerTop("first-panel-to-keyboard") { app.buttons["sticker-button"].tap() }
         shot("0-first-swap")
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        // With a hardware keyboard connected the simulator shows no software keyboard (only a thin shortcut bar), so there is
+        // no keyboard height to match: skip instead of failing (I/O → Keyboard → Connect Hardware Keyboard, ⇧⌘K).
+        try XCTSkipIf(app.keyboards.firstMatch.frame.height < 150, "No software keyboard: a hardware keyboard is connected to this simulator.")
         _ = app.staticTexts["settle"].waitForExistence(timeout: 1)
         let firstKeyboardTop = Double(attach.frame.minY)
         let firstNote = XCTAttachment(string: String(format: "first open: panel %.1f, keyboard %.1f, samples %@", firstPanelTop, firstKeyboardTop,
