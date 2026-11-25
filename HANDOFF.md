@@ -1,25 +1,26 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-25 · Branch: `fix/unread-badge-consistency` · PRs #1–#87 merged
+Last updated: 2026-11-25 · Branch: `main` (this push through `docs/production-roadmap`) · PRs #1–#88 merged before it
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
-- **Roadmap / Autonomous Loop:** all autonomous work across M0–M16, ADR-0022, Tech Debt A–D (including TD-12), the Halo Sygnal pushkin (`infra/sygnal/`, R-24), and release documentation (`docs/release/`, D115) is complete; all open product decisions in `OPEN_QUESTIONS.md` are resolved (`D108–D117`). Physical iPhone 16 `HaloUITests`, NFR-1 cold launch (0.357 s responsive), timeline memory (76.8 MB peak), D95 10× room-opening, live sends, image-scroll & mid-scroll jump-to-bottom (PR #87), pushed full-bleed Room info page, Voice messages, Share extension (`V-SHARE-1`), Focus filter, and Siri/Spotlight all passed; P0 badge/widget/background-sync fixes (PR #85) landed. The roadmap has been slimmed and expanded with **M17–M19** in [docs/ROADMAP.md](docs/ROADMAP.md). External-account / legal (`👤`) and remaining physical-device (`📱`) items remain in §5.
-- **Milestones:** M0–M16 done except external/device items (deploy `infra/sygnal/` + APNs keys + TestFlight, 7-day AC-U8 soak, interactive Xcode/Instruments NFR-2 scroll hitch + 300-room + MetricKit run, Q-KLIPY-PROD portal request, publish `docs/release/` privacy/support URLs, final Beta 2 brand artwork, legal/export review). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1).
-- **Last checks (`fix/unread-badge-consistency`):** `swift test` HaloCore (375 tests, also on Linux Swift 6.2), all 16 HaloApple suites, app build, `infra/sygnal` unit tests (7), docs, boundaries, design tokens, swiftlint (0 violations) and gitleaks passed; iPhone 16 `testUnreadBadgePersistsAcrossOpenCloseCycles` passed (10 cycles). `prepush.sh` passed in full (device-only UI tests skip themselves).
-- **CI:** PRs #1–#87 merged. Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
+- **Roadmap:** M0–M16 are built and merged. Re-planned 2026-11-25 to a production release (D121): M17 measure → M18 security and reliability → M19 performance → M20 messaging → M21 experience → M22 beta and launch, with gates G-SCALE, G-PERF, G-SHIP ([docs/ROADMAP.md](docs/ROADMAP.md)). The audit behind it found 26 gaps (ROADMAP §2); Halo isn't a release candidate yet.
+- **Milestones:** M0–M16 built, partly for M14–M15 (GA-24…GA-26); device and founder leftovers in §5. Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1).
+- **Last checks:** this push changes documents only: `scripts/validate-docs.sh` and the handoff check passed; no code was built or tested for it. The code on `main` (`155f745`, PR #88) passed `prepush.sh` in full, the full contract suite (36 passed, 2 skipped by design) and all CI.
+- **CI:** PRs #1–#88 merged. Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
-- **Unread badge, widgets and background sync (D118, 2026-11-24, `fix/unread-badge-consistency`):**
+- **Production roadmap (D121, 2026-11-25, `docs/production-roadmap`):** audited code against every product, design, security, testing and release document at `155f745`; rewrote ROADMAP (gap table, R/C/P tasks with "Done when", gates, release plan), added AC-REL/AC-SEC/AC-MOT and NFR-11–15, V-SCALE-1, V-OIDC-1, V-INTEROP-1, Q-SCOPE, Q-SYNC-SCALE, Q-REPORT, Q-SIGNUP, Q-VERIFY, Q-REVIEW; corrected specs that promised unbuilt behaviour or described sliding sync.
+- **Unread badge, widgets and background sync (D118, 2026-11-24, PR #88):**
   - Root causes: gateway down and Halo's pushkin never able to send (asyncio awaited on Twisted); dev ran the stock pushkin; background launches did nothing (handlers set in a view) and reported done before the badge was written; pre-sync evaluations overwrote what the NSE had counted; unordered badge writes; the NSE counted late pushes twice and raced itself; a sticky foreground flag; no refresh fallback; a widget reload on every open/close spent iOS's budget.
   - Verified on iPhone 16 via SpringBoard's icon value: pushes 8→10 suspended, 10→11 terminated; read elsewhere 11→0 in ~5 s suspended and from a cold background launch; 10 open/close cycles unchanged. A Focus with "Hide Notification Badges" hid the icon badge on the founder's phone (value was right throughout).
-- **S11 offline read (D119, 2026-11-24, same branch):** the own-latest case of `SDK_UNREAD_AFTER_READ` discarded a read that couldn't be sent when the SDK's latest event still was the user's own join. Real-server scenarios 8×: the ordering came up in 3 runs, S11 passed in all 8; one run failed later at S29 (see §5). Also fixed PR CI: a test closure Swift 6.2 on Linux rejects, and a gitleaks false positive.
-- **`readMarkers` and other contract tests (2026-11-25, same branch):** they waited for exactly `HALO_DEV_ROOMS` (106) rooms while the account was in 268, so they timed out before testing anything. They now wait for the room they need (`roomList` asks the server); the setting is gone. Rooms piled up because `defer { Task {…} }` cleanup never ran before the process ended: replaced by an awaited cleanup. Full contract run: 33 passed, 2 skipped, `stickers` failed on an extra sticker in the fixture pack (test fixed; passes after the account data below was restored).
-- **Account data no longer overwritten (D120, 2026-11-25, same branch):** sticker-pack lists, personal pins, the media-preview setting and the bot allowlist are changed from the server's copy (`ServerAccountData`), bot edits as a difference (`BotListEditor`), Saved Messages asks the server before making a room, and ignore/unignore write the server's list; creating a pack right after sign-in had replaced the account's list (`createPack` in a full contract run did it to stickertester; restored). `createPack`, `botAllowlist`, `savedRoom` and `ignoreKeepsOthers` failed before and pass now; the full contract suite is green with the accounts' data unchanged. Two tests assumed fixed sizes and were corrected: the timeline contract paged at most 200 events back (the room grew past it) and `testSentPhotoStaysVisibleAndShowsDeliveryState` counted images on screen (checked with a mutation run). It and `unavailablePack` put the shared account's lists back whatever happens.
-- **Leftover test rooms and devices (2026-11-25, same branch):** removed with the founder's OK: stickertester 269 → 9 rooms, contractpeer 320 → 6, 170 test devices, and 28 sticker-pack list entries of those or long-left rooms; backup in `~/.config/halo-dev/synapse-before-leftovers-2026-11-25.dump`. Tests now undo everything through the `.cleansUp` trait, also after a failure, and `contract-test.sh` fails a run that left something (`infra/dev/leftovers.py`, replaces `prune-sessions.py`; failed on the old tests, passes now). `createPack` only caught D120 on a large account; it now starts sync after creating the pack (mutation run).
-- **Test harness (2026-11-25, same branch):** the two keyboard UI tests no longer skip on the simulator (`prepush.sh` turns off the software keyboard's hiding; both pass), S29 survives the Synapse flake above (a real mismatch still fails, checked by mutation), and `create-fixtures.py --new-e2ee` / `smoke.sh` deactivate their throwaway user.
+- **S11 offline read (D119, 2026-11-24, PR #88):** the own-latest case of `SDK_UNREAD_AFTER_READ` discarded a read that couldn't be sent when the SDK's latest event still was the user's own join. Real-server scenarios 8×: the ordering came up in 3 runs, S11 passed in all 8; one run failed later at S29 (see §5). Also fixed PR CI: a test closure Swift 6.2 on Linux rejects, and a gitleaks false positive.
+- **`readMarkers` and other contract tests (2026-11-25, PR #88):** they waited for exactly `HALO_DEV_ROOMS` (106) rooms while the account was in 268, so they timed out before testing anything. They now wait for the room they need (`roomList` asks the server); the setting is gone. Rooms piled up because `defer { Task {…} }` cleanup never ran before the process ended: replaced by an awaited cleanup. Full contract run: 33 passed, 2 skipped, `stickers` failed on an extra sticker in the fixture pack (test fixed; passes after the account data below was restored).
+- **Account data no longer overwritten (D120, 2026-11-25, PR #88):** sticker-pack lists, personal pins, the media-preview setting and the bot allowlist are changed from the server's copy (`ServerAccountData`), bot edits as a difference (`BotListEditor`), Saved Messages asks the server before making a room, and ignore/unignore write the server's list; creating a pack right after sign-in had replaced the account's list (`createPack` in a full contract run did it to stickertester; restored). `createPack`, `botAllowlist`, `savedRoom` and `ignoreKeepsOthers` failed before and pass now; the full contract suite is green with the accounts' data unchanged. Two tests assumed fixed sizes and were corrected: the timeline contract paged at most 200 events back (the room grew past it) and `testSentPhotoStaysVisibleAndShowsDeliveryState` counted images on screen (checked with a mutation run). It and `unavailablePack` put the shared account's lists back whatever happens.
+- **Leftover test rooms and devices (2026-11-25, PR #88):** removed with the founder's OK: stickertester 269 → 9 rooms, contractpeer 320 → 6, 170 test devices, and 28 sticker-pack list entries of those or long-left rooms; backup in `~/.config/halo-dev/synapse-before-leftovers-2026-11-25.dump`. Tests now undo everything through the `.cleansUp` trait, also after a failure, and `contract-test.sh` fails a run that left something (`infra/dev/leftovers.py`, replaces `prune-sessions.py`; failed on the old tests, passes now). `createPack` only caught D120 on a large account; it now starts sync after creating the pack (mutation run).
+- **Test harness (2026-11-25, PR #88):** the two keyboard UI tests no longer skip on the simulator (`prepush.sh` turns off the software keyboard's hiding; both pass), S29 survives the Synapse flake above (a real mismatch still fails, checked by mutation), and `create-fixtures.py --new-e2ee` / `smoke.sh` deactivate their throwaway user.
 - **Room info as pushed full-bleed navigation page (2026-11-24, `main`):**
   - Replaced Room info `.sheet` presentation (timeline avatar button and room-list context menu) with `ChatsRoute.roomInfo(RoomID)`, `ChatsRouter.openRoomInfo(_:)`, `ChatsRouter.removeRoom(_:)`, and `RoomInfoPresentation.page` (keeping `.inspector` on regular-width iPad).
   - Removed the nested `NavigationStack` from `RoomDetailsView` and matched the conversation page's transparent, title-free header with full-bleed edge-to-edge scrolling (`.scrollEdgeEffectHidden(true, for: .top)`); verified with `HaloUITests.testRoomInfoOpensAsPushedPage` on physical iPhone 16.
@@ -28,7 +29,8 @@ Summary only; older history lives in `git log`.
   - Made `jump-to-bottom` interrupt ongoing deceleration synchronously on the tap frame before converging; added and passed `HaloUITests.testTimelineImageScrollAndJumpToBottomWhileScrolling` on physical iPhone 16 (`00008140-000222592ED0801C`).
 
 ## 3. Key decisions
-Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D120), [docs/adr/README.md](docs/adr/README.md).
+Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D121), [docs/adr/README.md](docs/adr/README.md).
+- **D121:** roadmap re-planned; R/C/P classes; G-SCALE before M19; scope and sync path wait for Q-SCOPE and Q-SYNC-SCALE.
 - **D118:** one unread count for icon, widgets and list (E6, recomputed NSE badge, ordered writes, background refresh).
 - **D73 / D74 / D78–D80 (ADR-0020):** classic sync unread evidence, encrypted-room SDK counts decide, identity/timeline-index read ordering.
 - **D82 (ADR-0021):** app icon badge sums `RoomReadState.badgeCount` for `attention == true`.
@@ -48,18 +50,18 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D120), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
-- **D120:** `ServerAccountData.swift` (new) and tests, `MatrixStickerPorts`, `MatrixTimelinePort`, `MatrixMediaPreviewPolicyPort`, `MatrixBotAllowlistPort`, `MatrixChatCreationPort`, `MatrixProfilePort`, `PortContracts`, `HaloUITests`, `BotAllowlist`, `BotListEditor` (new), `SettingsView`, `BotsAssembly`, `AdapterContractTests`, `SETTINGS`, `DATA_MODELS`, `PERSISTENCE`, `STICKERS`, `DECISION_LOG`.
-- **Widgets:** `HaloWidgets.swift` (`kind` is `nonisolated`; two concurrency warnings gone).
-- **Contract tests:** `AdapterContractTests`, `ClassicSyncEvidenceTests`, `ServerReadStateScenarioTests`, `Cleanup.swift` (new), `HaloUITests` (empty room), `contract-test.sh`, `infra/dev/` (`create-fixtures.py`, `leftovers.py`, example, README), `AUTONOMOUS_LOOP`, `OUTSTANDING_ISSUES`.
-- **S11 / CI:** `ReadState.swift`, policy, property and scenario tests, `NotificationProcessorTests`, `AttentionCacheTests`, `.gitleaksignore`, `UNREAD_STATE`, `UNREAD_REGRESSION_TESTS`, `DECISION_LOG`. The rest of the branch:
-- **Core:** `ReadState.swift` (E6), `BadgePort`, `RoomListPort`, `NotificationRecordPort`, `ReadStateCoordinator`, `RoomListCoordinator`, `NotificationProcessor`, `SyncCoordinator`, `BackgroundRefresh` (new), `ReadReceiptCoordinator`, fakes, tests.
-- **Apple / app:** `SystemBadge.swift` (`AttentionCache`), `BackgroundRefreshScheduler` (new), `MatrixRoomListPort`, `MatrixSessionPort`, `NotificationRecordStore`, NSE, widgets, `HaloApp`, `AppRoot`, `SessionAssembly`, both `Info.plist`s, `HaloUITests`.
-- **Infra / docs:** `infra/sygnal/`, `infra/dev/` (Halo pushkin), `UNREAD_STATE`, `PUSH_NOTIFICATIONS`, `BACKGROUND_EXECUTION`, `PORTS_CONTRACT`, `SYNC_ENGINE`, ADR-0015, `DECISION_LOG`, `OPEN_QUESTIONS`.
+Documents only, no code.
+- **Plan:** `ROADMAP`, `REQUIREMENTS`, `OPEN_QUESTIONS`, `DECISION_LOG` (D121), `RISK_REGISTER`, `SOURCES` (F-FFI-24), `PRODUCT_VISION`, `README`, `docs/README`, `AUTONOMOUS_LOOP`.
+- **Specs:** every `features/` document except stickers, bots and composer panels; `MEDIA`, `SYNC_ENGINE`, `NAVIGATION`, `SCREEN_SPECIFICATIONS`, `DESIGN_SYSTEM`, `UX_AUDIT`, architecture documents, `MIGRATIONS`.
+- **Quality and release:** `TEST_STRATEGY`, `UNREAD_REGRESSION_TESTS`, `INTEGRATION_TESTS`, `TECH_DEBT`, `CI_CD`, `BUILD_AND_RELEASE`, `DEVELOPMENT_SETUP`, `SECURITY`, `PRIVACY`, `docs/release/*`.
 
 ## 5. Outstanding issues
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
 
-**Engineering (not blocking)**
+**Waiting for the founder before work can pass a point**
+- 👤 **Q-SCOPE** (what 1.0 contains; the plan assumes the smaller scope) before M20 · **G-SCALE / Q-SYNC-SCALE** after M17-4, before M19 · **Q-VERIFY** before M18 ends · **Q-REPORT**, **Q-SIGNUP**, **Q-REVIEW** later.
+
+**Engineering (not blocking)** — the 26 audited gaps are in ROADMAP §2, not repeated here.
 - **Accessibility audit (watch):** `testLaunchRootScreenPassesAccessibilityAudit` failed at times until 2026-11-24 (also on `main`), "Potentially inaccessible text" without an element; 12 of 12 runs passed on 2026-11-25 with the cleaned-up account. Cause unknown, no exemption added.
 - **Dev APNs stall (2026-11-24, 15:05–15:19 UTC):** APNs accepted pushes the iPhone never acted on (alerts and silent ones), then delivery resumed without a change; a later silent push also had no effect within 12 s (iOS throttles them; opening healed it). Cause unknown.
 - **Account data (D120 limit):** two devices writing the same type in the same moment can still lose one change (Matrix has no conditional write).
@@ -85,22 +87,26 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 - 📱 **Physical-device validation:** 7-day AC-U8 daily-driver soak, Release/TestFlight G-NSE spot check, interactive Xcode/Instruments NFR-2 scroll hitch ratio + 300-room NFR-1 check + MetricKit hang/launch review (dev-account iPhone 16 baseline recorded in `TEST_STRATEGY.md` §7: 0.357 s responsive launch, 76.8–78.1 MB peak memory), and Beta 1 → Beta 2 → 1.0 release. (Voice, Share extension `V-SHARE-1`, Focus filter `D90`/`D104`, and Siri/Spotlight `D88` verified green on iPhone 16.)
 
 ## 6. Next steps
-Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §"Remaining work".
-1. **Autonomous loop (M17 → M18 → M19):** start M17 ship-readiness polish & hardening (land WIP `HaloUITests.swift` perf metric if ready, room-open smoothness & thumbnail caching, crash-safety/`try? await` sweep, Reduce Motion/Contrast, file-size splits, L10n string extraction), then proceed through M18 (everyday messaging completeness) and M19 (power-user organization, trust & ecosystem).
-2. Founder deploys `infra/sygnal/` + APNs keys, requests KLIPY production access (`Q-KLIPY-PROD`), and uploads Beta 1 to internal TestFlight.
-3. Founder runs physical-device checks in §5 📱 (room opening, composer panels, voice/location/poll/article sending, iPad split/inspector, widgets, Focus filter, Siri/Spotlight, Share extension, 7-day AC-U8 soak, NFR-1/NFR-2 perf).
-4. Before Beta 2 / 1.0: publish `docs/release/{PRIVACY_POLICY,SUPPORT}.md`, finalize Beta 2 brand artwork, and complete legal/export compliance.
+Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §3.
+1. M17-1 and M17-2 (signposts, MetricKit): small, and every later number depends on them.
+2. M17-3 → M17-4: scale fixture and measurement; report the numbers for G-SCALE.
+3. M17-5…M17-7, then M18 top to bottom (M18 may start before G-SCALE is decided; M19 may not).
+4. Founder, long lead times: push gateway (M22-1), legal (M22-4), KLIPY production key, filtering entitlement, artwork; answer Q-SCOPE.
+5. Founder/device checks in §5 📱.
 
 ## 7. Next Session Prompt
 ```text
-/loop Read AGENTS.md, HANDOFF.md, docs/development/AUTONOMOUS_LOOP.md, and docs/ROADMAP.md.
-Execute the expanded roadmap in a continuous Plan → Implement → Verify → Review → Land loop across M17 (Ship-readiness polish & hardening), M18 (Everyday messaging completeness), and M19 (Power-user organization, trust & ecosystem).
+/loop Read AGENTS.md, HANDOFF.md, docs/development/AUTONOMOUS_LOOP.md and docs/ROADMAP.md (§1–§3, §7).
+Work the ROADMAP §3 queue from M17-1: Plan → Implement → Verify → Review → Land, R tasks first.
 
-Start by inspecting any uncommitted WIP in ios/UITests/HaloUITests.swift on the current branch, then pick the first unchecked autonomous item in ROADMAP.md §"Remaining work" under M17 and proceed milestone by milestone until M17–M19 are complete.
+A task is done only when its "Done when" holds by a test that failed before, its GA row is removed, its spec no longer says
+"not built", and the rules of ROADMAP §1 hold. Measure M17-4 and record the table in TEST_STRATEGY §7; G-SCALE, G-PERF and
+G-SHIP are the founder's. Don't start M19 before G-SCALE is decided. Open decisions: Q-SCOPE, Q-SYNC-SCALE, Q-VERIFY.
 
 Checks per iteration:
 - HALO_SIM="iPhone Air" scripts/prepush.sh
-- scripts/contract-test.sh / scripts/contract-offline-test.sh when touching adapter, sync, timeline, or read-state code
-- Simulator visual verification (Light, Dark, AX5) for UI changes
-- Update HANDOFF.md and ROADMAP.md checkboxes in the last commit of every push (AGENTS.md §18).
+- scripts/contract-test.sh (adapter, sync, timeline, read state); it fails if a run leaves rooms or devices
+- Simulator check in light, dark and AX5 for UI changes
+- Never scale-test on stickertester or contractpeer; use the M17-3 accounts
+- Update HANDOFF.md, ROADMAP.md and the owning spec in the last commit of every push (AGENTS.md §18).
 ```

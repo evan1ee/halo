@@ -2,7 +2,7 @@
 
 What stands between today's build (M0–M10 done, see [../ROADMAP.md](../ROADMAP.md)) and an app that **feels like an Apple-native
 app** (**[DECISION D84]**) and can ship to external TestFlight and the App Store. Each finding names its evidence in the code at
-commit `8da66aa`, the rule it breaks, and the roadmap item that fixes it (M11–M15). Close a finding by ticking its roadmap
+commit `8da66aa`, the rule it breaks, and the roadmap item that fixes it. The 2026-11-25 gaps are in [../ROADMAP.md](../ROADMAP.md) §2 (GA-*); this file keeps what only a UX audit shows. Close a finding by ticking its roadmap
 item; remove it from this file when the item is merged.
 
 Severity: **Blocker** (no external release without it) · **High** (users notice in the first five minutes) · **Medium** (daily
@@ -26,17 +26,22 @@ Halo should be indistinguishable in feel from Messages, Mail and Photos while ke
 
 | ID | Sev. | Finding | Evidence | Breaks | Fix |
 |---|---|---|---|---|---|
-| UX-04 | Blocker | Sign-in artwork pending Q-BRAND (founder's halo disc `AppIcon` and `Assets.xcassets` landed in M11) | `ios/App/Resources/Assets.xcassets`; `FeatureOnboarding/SignInView.swift` | App Store submission; DESIGN_SYSTEM §5 | Q-BRAND (👤) |
-| UX-16 | Low | No system integrations users expect from a native messenger: share extension, App Intents / Siri, Spotlight, Focus filter, Live Activity for uploads | none present | NAVIGATION §3 (share extension P2) | Post-1.0 (M16 backlog) |
+| UX-04 | Blocker | Sign-in artwork pending Q-BRAND (founder's halo disc `AppIcon` and `Assets.xcassets` landed in M11) | `ios/App/Resources/Assets.xcassets`; `FeatureOnboarding/SignInView.swift` | App Store submission; DESIGN_SYSTEM §5 | M22-6, Q-BRAND (👤) |
+| UX-17 | High | Videos and voice notes leave the chat for Quick Look; polls can't be answered; no camera | GA-18, GA-19, GA-20 | Familiar patterns (§1.3) | M20-2…M20-5 |
+| UX-18 | High | Links to people and rooms leave the app | GA-14 | NAVIGATION §3 | M18-9 |
+| UX-19 | Medium | Skeletons and the shared error state exist on two screens only; other screens use bare spinners (about 40 `ProgressView`s) | GA-25 | AC-UX-6, DESIGN_SYSTEM §8 | M21-1 |
+| UX-20 | Medium | Animations mostly bypass `HaloMotion`; Reduce Motion is read in two views and for stickers; contrast is handled only by the colour tokens, Reduce Transparency and Bold Text nowhere | GA-25 | DESIGN_SYSTEM §6, AC-MOT-2 | M21-3 |
 
 ## 3. Findings — ship readiness
 
 | ID | Sev. | Finding | Fix |
 |---|---|---|---|
-| SR-02 | Blocker | Push gateway for Beta/Release, APNs keys and TestFlight are not configured (R-24) | M5 leftover, 👤 |
-| SR-03 | Blocker | Legal review (D38), export compliance (V-LEGAL) and App Store privacy labels ([../security/PRIVACY.md](../security/PRIVACY.md) §5) not done | M15, 👤 |
-| SR-04 | High | No App Store Connect metadata: name, subtitle, keywords, screenshots (6.9" and 6.3"), support URL, privacy-policy URL (Q-APPSTORE) | M15, 👤 |
-| SR-06 | Medium | NFR-1 cold launch (0.357 s responsive) and timeline peak memory (76.8 MB) measured on iPhone 16 (`TEST_STRATEGY.md` §7); NFR-2 scroll hitch ratio (`XCTOSSignpostMetric`) and 300-room scale still need interactive Xcode/Instruments + MetricKit check | M15, 📱 |
+| SR-02 | Blocker | Push gateway for Beta/Release, APNs keys and TestFlight are not configured (R-24) | M22-1, 👤 |
+| SR-03 | Blocker | Legal review (D38), export compliance (V-LEGAL) and App Store privacy labels ([../security/PRIVACY.md](../security/PRIVACY.md) §5) not done | M22-3, M22-4, 👤 |
+| SR-07 | Blocker | No way to report content (App Review 1.2) | M20-7 |
+| SR-08 | Blocker | Classic sync unmeasured on large accounts | M17-4, G-SCALE |
+| SR-04 | High | No App Store Connect metadata: name, subtitle, keywords, screenshots (6.9" and 6.3"), support URL, privacy-policy URL (Q-APPSTORE) | M22-6, M22-8, 👤 |
+| SR-06 | Medium | NFR-1 cold launch (0.357 s responsive) and timeline peak memory (76.8 MB) measured on iPhone 16 (`TEST_STRATEGY.md` §7); NFR-2 scroll hitch ratio (`XCTOSSignpostMetric`) and 300-room scale still need interactive Xcode/Instruments + MetricKit check | M17-5, M19-8, 📱 |
 
 ## 4. What is already good (keep it)
 `ContentUnavailableView` for empty states (16 uses), `.searchable` lists, swipe actions and context menus on rows, `ShareLink`

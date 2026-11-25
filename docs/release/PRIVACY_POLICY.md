@@ -1,6 +1,6 @@
 # Halo Privacy Policy
 
-*Last updated: 2026-11-24 — Publish at `[https://YOUR_DOMAIN/privacy]` before Beta 2 / App Store submission.*
+*Last updated: 2026-11-24 — Publish at `[https://YOUR_DOMAIN/privacy]` before Beta 2 / App Store submission. Draft: publish only text that matches the build (ROADMAP M22-3; MetricKit isn't in the app yet, M17-2).*
 
 Halo is an independent iOS and iPadOS client for the Matrix messaging protocol. Privacy is a core design principle: Halo contains **no third-party analytics, advertising, tracking, or crash-reporting SDKs**.
 

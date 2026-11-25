@@ -9,7 +9,7 @@ Tell the user about what matters — once, with useful content — and remove it
 ## 2. User stories
 - An encrypted DM shows the sender's name, avatar and text on the lock screen.
 - When I read a conversation on my Mac, its notifications disappear from my iPhone.
-- The app icon shows how many conversations need me.
+- The app icon shows how many unread messages need me (D82).
 - I choose per room: all messages, mentions only, or mute.
 
 ## 3. Functional requirements
@@ -17,9 +17,9 @@ Tell the user about what matters — once, with useful content — and remove it
 - FR-2 Pusher registration and re-registration ([../matrix/PUSH_NOTIFICATIONS.md](../matrix/PUSH_NOTIFICATIONS.md) §2).
 - FR-3 NSE pipeline incl. de-duplication and suppression (§3 there).
 - FR-4 Communication notifications grouped by room (`threadIdentifier = room_id`).
-- FR-5 Notification actions: Reply (text input, sent by the app in the background **[ASSUMPTION V-PUSH-4: the app is launched in the background for the action]**), Mark as read.
+- FR-5 Notification actions: Reply (text input, sent by the app in the background **[ASSUMPTION V-PUSH-4: the app is launched in the background for the action]**), Mark as read. *Not built: no notification category is registered* (ROADMAP M18-7).
 - FR-6 Clearing on read anywhere (§5 there).
-- FR-7 Badge = rooms needing attention (D5), set via `setBadgeCount` by app and NSE only from `BadgeCalculator`.
+- FR-7 Badge = unread messages of rooms needing attention (D82), set via `setBadgeCount` by app and NSE only from `BadgeCalculator`; one count for icon, widgets and list (D118).
 - FR-8 Per-room mode in Room details; the global defaults (DMs: all, groups: mentions) in Settings, stored as push rules on the server via the SDK notification settings API (`get_notification_settings`) **[VERIFIED F-FFI-18]**. Trade-off of the group default: encrypted groups in mentions mode get no server cross-check for unread state (rule E2x, [../matrix/UNREAD_STATE.md](../matrix/UNREAD_STATE.md) §9).
 - FR-9 Settings show push health: permission, token registered, last push received time.
 
@@ -48,6 +48,7 @@ Two devices of the same user (only this device's pusher) · a push for a room le
 AC-U2, AC-U3, AC-U6, AC-U7 plus:
 - AC-N1 An encrypted DM from a verified user shows sender + text in ≥ 95 % of pushes in a 100-push test (rest: generic text, never a crash).
 - AC-N2 An edit never creates a second notification.
+- AC-N3 A reply from the lock screen with the app terminated reaches the server once, or a notification says it wasn't sent.
 
 **NSE robustness — gate G-NSE, end of M1 (ADR-0016).** Measured on the oldest supported device class (recorded with the results),
 with the app in the background, over a 100-push run of mixed encrypted DMs and group messages unless stated otherwise. The time and

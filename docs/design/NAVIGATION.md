@@ -46,9 +46,9 @@ flowchart TB
 | Source | Target |
 |---|---|
 | Notification tap | Room at event (pushed on the stack) |
-| `matrix.to` / `matrix:` links | Room (join preview if not joined) / profile |
+| `matrix.to` / `matrix:` links | Room (join preview if not joined) / profile. **Not reachable yet:** the scheme isn't registered, links in messages open Safari, and `resolveMatrixLink` joins or starts a chat without asking, which must be fixed first (ROADMAP M18-9) |
 | Activity item | Room at source event |
-| Share extension (P2) | Room picker → composer |
+| Share extension | Room picker → sends from the share sheet (D92) |
 
 ## 4. Presentation rules
 Sheets for short tasks (new chat, member profile, sticker panel), full-screen covers only for blocking flows (re-auth, verification). Room info is pushed as a page on the `NavigationStack` on iPhone and compact iPad, and docks as a trailing inspector column on regular-width iPad. State restoration: the navigation path (open room, room info, and Settings or Activity if they were open) is restored on relaunch (`@SceneStorage`), dropping a room that is no longer joined.

@@ -91,7 +91,7 @@ the paths are keyed by user id from day one: adding a second account later shoul
 
 | Service | Purpose | Configured in |
 |---|---|---|
-| Synapse | Homeserver (native sliding sync) | `infra/` ([../development/DEVELOPMENT_SETUP.md](../development/DEVELOPMENT_SETUP.md)) |
+| Synapse | Homeserver (classic `/sync`, D74) | `infra/` ([../development/DEVELOPMENT_SETUP.md](../development/DEVELOPMENT_SETUP.md)) |
 | MAS | OIDC login | `infra/` |
 | Sygnal | Push gateway → APNs | `infra/`, APNs key in a secret store (never in the repo) |
 | APNs | Delivery to the device | Apple Developer account |

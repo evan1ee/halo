@@ -35,8 +35,8 @@ CI job `swift-linux` runs `swift test` for these packages; GRDB needs `libsqlite
 Problem: Halo's real Matrix stack only runs on Apple platforms, but scenario tests must run in Linux CI.
 Approach **[DECISION D35, ADR-0009]**:
 1. The **policy under test is pure Swift**. Scenarios feed it with the *same inputs the adapter would produce*.
-2. A Linux **scenario driver** (`tools/scenario-driver`, Swift on Linux, plain HTTP to the CS API) controls several users and devices against a real Synapse (Docker): send events, send receipts from "device B", toggle `m.marked_unread`, change push rules, redact, go "offline".
-3. After each step the driver fetches what the device's SDK would see — `/sync` (sliding sync `POST /_matrix/client/unstable/org.matrix.simplified_msc3575/sync` **[VERIFIED F-SPEC-5]**) for server counts, receipts, account data — and builds `RoomReadInputs` (server-count fields real; SDK-count fields simulated by a reference counter over the fetched events, or captured from the real SDK in local runs).
+2. A Linux **scenario driver** (`tools/scenario-driver/run_scenarios.py`, plain HTTP to the CS API) controls several users and devices against a real Synapse (Docker): send events, send receipts from "device B", toggle `m.marked_unread`, change push rules, redact, go "offline".
+3. After each step the driver fetches what the device's SDK would see — classic `/sync` (D74) for server counts, receipts, account data — and builds `RoomReadInputs` (server-count fields real; SDK-count fields simulated by a reference counter over the fetched events, or captured from the real SDK in local runs).
 4. It asserts the policy's `RoomReadState` and badge against the scenario's expected values.
 5. **Local Mac runs** additionally replay the same scenarios through the real adapter + SDK (FFI) and compare its inputs with the driver's — this catches adapter mapping bugs and SDK count behaviour.
 6. Every scenario writes a trace (inputs + outputs as JSON); traces from failures become **replay fixtures** that run in unit tests without Synapse.
@@ -47,7 +47,7 @@ Approach **[DECISION D35, ADR-0009]**:
 - Persistence: two `DatabasePool`s on one file in parallel threads performing monotonic upserts → final state = maximum.
 
 ## 5. Offline and reconnect tests
-Scenario driver toggles a Toxiproxy-like proxy **[DECISION ADR-0009: a tiny proxy container in `infra/test`]** between the device's client and Synapse to simulate drops, latency and blackholes during the local FFI runs.
+*Planned (ROADMAP M17-6; neither the proxy nor `infra/test` exists yet):* the scenario driver toggles a Toxiproxy-like proxy **[DECISION ADR-0009: a tiny proxy container in `infra/test`]** between the device's client and Synapse to simulate drops, latency and blackholes during the local FFI runs.
 
 ## 6. Fixtures
 Bot messages: copied **verbatim** from the bot repo's tests (MIT, attribution file in the fixture folder). Spec examples for image packs. Recorded sync traces (anonymised).
@@ -61,13 +61,40 @@ Targets in [../REQUIREMENTS.md](../REQUIREMENTS.md) NFR-1..3; measured with sign
 - **Timeline memory (`HaloUITests.testTimelineScrollPerformanceMetric` in `S10 scroll test`, 5 iterations):** `Memory Peak Physical` **76.8–78.1 MB** avg (`76,778–78,108 kB`, RSD 0.51–0.69%); `Absolute Memory Physical` **76.7–78.0 MB** avg — well below the 200 MB budget.
 - **NFR-2 scroll hitch ratio (`XCTOSSignpostMetric.scrollingAndDecelerationMetric`):** did not emit hitch-ratio lines in non-interactive `xcodebuild` (device diagnostics timed out waiting for interactive auth); measure interactively via Xcode Test Navigator / Instruments Animation Hitches on device.
 
-## 7b. UI and accessibility tests (M14)
+**Release budgets (gate G-PERF, ROADMAP M19).** Reference: iPhone 15-class device, **Release** build, signed in, Wi-Fi; scale rows on the M17-3 fixtures. Targets are the NFRs; the two baselines above are a **Debug** build on a small account and don't count for the gate.
+
+| Budget | Target | Measured by | Baseline |
+|---|---|---|---|
+| NFR-1 launch → interactive list, 300 and 1,000 rooms | ≤ 1 s / record | `XCTApplicationLaunchMetric` + M17-1 signpost | small account 0.357 s (Debug) |
+| NFR-2 scrolling, mixed media | hitch ratio ≤ 5 ms/s **[ASSUMPTION]** | Instruments Animation Hitches, 3 runs | none |
+| NFR-11 room open p95 | ≤ 250 ms | signpost, 30 opens | ~150 ms after the push (observed, not measured) |
+| NFR-12 memory | ≤ 200 / 300 MB, ≤ 10 % growth over 50 cycles | `XCTMemoryMetric` | 76.8–78.1 MB, one small room |
+| NFR-13 main thread | no hang ≥ 250 ms | MetricKit + `XCTHitchMetric`-style script | none |
+| NFR-14 sync at scale | ≤ 60 s first, ≤ 10 s after 24 h | M17-4 | none |
+| NFR-15 energy | ≤ 4 %/h idle foreground | Xcode energy log, 1 h | none |
+
+Rules: same device and OS for baseline and gate; median of 5 unless p95 is named; over 20 % worse than the last release blocks. Simulator numbers show trends only.
+
+## 7b. UI and accessibility tests
 `HaloUITests` runs the golden path against `infra/dev` and `XCUIApplication.performAccessibilityAudit()` on every root screen
-(AC-UX-8); a pseudo-language launch argument checks clipping (AC-UX-10). Screenshots for App Store Connect come from the same
+(AC-UX-8); a pseudo-language launch argument checks clipping (AC-UX-10; not run yet, ROADMAP M21-6). Visual regression tests: ROADMAP M21-4. Screenshots for App Store Connect come from the same
 target with fixture data (Q-APPSTORE).
 
 ## 8. Device checklist (per TestFlight release)
 Encrypted DM push on the lock screen · read on another client → banner gone and the icon badge matches Halo's count while Halo stays in the background (ADR-0015) · airplane mode 1 h → recover · force-quit during sync · low-power mode · 300-room account cold start · sticker send/receive with Element Web · bot card tick with the real bot · VoiceOver golden path and AX5 text size (AC-UX-9) · light/dark/Increase Contrast walk-through of every tab.
+
+## 8b. Release test plan (what must be green, and when)
+| Suite | Every push | Milestone exit | Beta build | Release candidate |
+|---|---|---|---|---|
+| `prepush.sh`, Linux CI | ✅ | ✅ | ✅ | ✅ |
+| Adapter contracts incl. leftovers check | touched ones | full | full | full |
+| Fault scenarios (M17-6) | read-state and send changes | full | full | full |
+| Interop matrix (M17-7) | — | M17, M20 | spot check | full |
+| Device read-state matrix (M18-10) | — | M18 | ✅ | ✅ |
+| Performance budgets | — | M19 on | trend | gate, twice |
+| VoiceOver, AX5, languages, iPad | — | M21 | spot check | full |
+| Upgrade from every shipped build | — | M18 on | ✅ | ✅ |
+| Sign-out, restore, lost-key drills | — | M18 | ✅ | ✅ |
 
 ## 9. Reporting rule
 Test results are reported **as executed**, with commands and output (AGENTS.md §0 step 5, §13). "Should pass" isn't a result.

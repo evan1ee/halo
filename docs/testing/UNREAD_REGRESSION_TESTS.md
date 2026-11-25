@@ -62,6 +62,19 @@ Actors: **A** = the Halo user on device A1 (under test); **A2** = the same user'
 | S28 | Carried attention and stale notification record for a room left while the app was closed (never reappears in the room list) | Dropped after the first completed sync response of the run (`RoomListPort.syncCompletions`), while rooms present in that sync keep carry-over until their inputs arrive (R-04, R-03) |
 | S29 | Two messages from B with identical `origin_server_ts`; A views only the first, then views the second | Viewing only the first does not hide the second once the first receipt is confirmed (`INTENT_STALE`); viewing the second advances the receipt to the second and brings server counts to 0 (R-06, D80, ADR-0020) |
 
+## 3b. Device matrix (AC-REL-1, AC-REL-2; ROADMAP M18-10)
+Run on a device against `infra/dev`, reading the icon from SpringBoard and the widget on screen. Record build, date and result per cell.
+
+| State of Halo | Message arrives | Read elsewhere | Mention in a muted room | Reply from notification |
+|---|---|---|---|---|
+| Foreground, other room open | | | | — |
+| Suspended | ✅ 2026-11-24 (8→10) | ✅ 2026-11-24 (11→0, ~5 s) | | |
+| Terminated | ✅ 2026-11-24 (10→11) | ✅ 2026-11-24 (count cleared) | | |
+| Rebooted, locked | | | | |
+| Airplane 1 h, then online | | | | |
+| Clock moved ± 1 day | | | | |
+| Low Power Mode / Background App Refresh off | | | | |
+
 ## 4. Regression procedure
 1. Reproduce with the auditor export or a recorded trace.
 2. Add the trace as a fixture (`HaloDomainTests/ReadState/Fixtures/<issue-id>.json`) with the expected final state.

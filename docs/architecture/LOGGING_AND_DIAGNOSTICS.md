@@ -30,8 +30,8 @@ anonymised room snapshots (hashed ids, counts only). Shared through the share sh
 ## 4. Crash reporting
 - **[DECISION D59]** No third-party crash SDK in the personal phase. Use Xcode Organizer / TestFlight crash reports
   and MetricKit (`MXMetricManager`) payloads saved to the diagnostics folder.
-- Revisit before public release ([OPEN Q-CRASH]).
+- Decided for the public release too (D114). **Status (2026-11-25): MetricKit isn't wired** (ROADMAP M17-2).
 
 ## 5. Metrics (local only)
 Signposts (`OSSignposter`) for: cold start → room list, room open → first timeline frame, NSE duration, sync
-round trip. Used with Instruments; performance tests read them ([../testing/TEST_STRATEGY.md](../testing/TEST_STRATEGY.md) §7).
+round trip, image decode. **Status (2026-11-25): none exist yet** (ROADMAP M17-1). Used with Instruments; performance tests read them ([../testing/TEST_STRATEGY.md](../testing/TEST_STRATEGY.md) §7).

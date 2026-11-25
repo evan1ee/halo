@@ -12,13 +12,13 @@ flowchart LR
     NSE --- Group
   end
   subgraph Server["Founder's infrastructure"]
-    Synapse["Synapse<br/>(native sliding sync)"]
+    Synapse["Synapse"]
     MAS["MAS (OIDC)"]
     Sygnal["Sygnal"]
     Bot["matrix-bot<br/>(unchanged)"]
   end
   APNs["Apple Push<br/>Notification service"]
-  App <-- "Client-Server API<br/>sliding sync (HTTPS)" --> Synapse
+  App <-- "Client-Server API<br/>classic /sync (HTTPS, D74)" --> Synapse
   NSE <-- "fetch + decrypt one event" --> Synapse
   App <-- OIDC --> MAS
   Synapse -- "push (event_id_only)" --> Sygnal -- "APNs (token auth)" --> APNs --> NSE

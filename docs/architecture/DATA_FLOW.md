@@ -28,13 +28,13 @@ Rules:
 ```mermaid
 sequenceDiagram
   participant HS as Synapse
-  participant SDK as matrix-rust-sdk (SyncService)
+  participant SDK as matrix-rust-sdk (syncOnceV2)
   participant AD as HaloMatrixAdapter
   participant RS as ReadStateCoordinator
   participant P as ReadStatePolicy
   participant UI as RoomList / Timeline VMs
   participant NC as NotificationCoordinator
-  HS->>SDK: sliding sync response
+  HS->>SDK: classic /sync response (D74)
   SDK->>SDK: persist, decrypt, update RoomInfo counts
   SDK-->>AD: RoomInfo / room list diffs
   AD-->>RS: RoomSnapshot (value) via AsyncStream

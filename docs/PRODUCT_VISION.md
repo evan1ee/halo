@@ -16,16 +16,17 @@ Discord's and native, structured rendering of personal assistant bots.
 | G4 | Bot messages are clearer than plain text without any change to the bot | AC-B* |
 | G5 | Proprietary codebase with a defensible licensing position | Licence gate green; clean-room record; legal review before public release |
 | G6 | One part-time engineer can maintain it for years | Module boundaries respected; SDK bumps take ≤ 1 day |
+| G7 | Feels immediate and never lies: no freeze, flash, silent failure or wrong state | NFR-11–NFR-15, AC-REL-*, AC-MOT-*; gates G-PERF and G-SHIP ([ROADMAP.md](ROADMAP.md)) |
 
 ## Non-goals (for now)
 
 - A fork, rebrand or redistribution of Element X (D37).
 - Our own Matrix protocol implementation or crypto (we use matrix-rust-sdk).
-- Homeservers without native sliding sync (D4).
+- Homeservers that offer neither password nor OIDC sign-in (D81; native sliding sync is no longer needed, D74).
 - Voice/video calls: never (D94; was "not in the MVP", D43).
 - An in-app LLM or AI backend (D18).
-- Feature parity with Element X in every corner (e.g. spaces management, polls creation, location sharing, widgets) before the MVP.
-- Android, macOS, iPad-optimised layouts for 1.0 (iPad runs the iPhone layout until M16; the split-view layout landed after 1.0, D91).
+- Feature parity with Element X in every corner (e.g. spaces management, room widgets) for 1.0 (Q-SCOPE).
+- Android and macOS (the iPad split view is built, D91).
 
 ## Core principles
 
@@ -54,4 +55,4 @@ Discord's and native, structured rendering of personal assistant bots.
 | Phase | Users | Infrastructure |
 |---|---|---|
 | Personal (months 0–12) | The founder + a small trusted circle (TestFlight) | Self-hosted Synapse + MAS + Sygnal |
-| Public (year 2+) | Matrix power users on servers with sliding sync | Same push gateway, operated as a service; legal review done |
+| Public (year 2+) | Matrix power users on any server with password or OIDC sign-in, within the account size G-SCALE proves | Same push gateway, operated as a service; legal review done |

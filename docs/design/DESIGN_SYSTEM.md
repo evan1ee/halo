@@ -104,5 +104,5 @@ System (default), Light, Dark. P2: accent colour choices.
 Short, plain, sentence case, no blame, no jargon, one action. Say what happened and what to do: "Couldn't send. Tap to try again."
 — not "Error M_UNKNOWN (500)". Matrix words are allowed only where the user needs them (homeserver, recovery key) and get a
 one-line explanation the first time. Technical detail goes to diagnostics, never into an alert. Every `HaloError` case has a
-user-facing sentence (ROADMAP M13 copy pass).
+user-facing sentence (`HaloErrorCopy`; the remaining private maps go in ROADMAP M21-7).
 

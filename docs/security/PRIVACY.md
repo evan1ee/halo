@@ -25,7 +25,7 @@ gateway and Apple (APNs metadata), KLIPY when GIF/sticker search is used (D98, r
 The prebuilt `MatrixSDKFFI` binary is built with the `sentry` feature, so the Sentry crates are linked into the app
 **[VERIFIED F-LIC-2]**. Halo passes `sentry_config = nil` to `init_platform` and never calls `enable_sentry_logging`
 ([../architecture/LOGGING_AND_DIAGNOSTICS.md](../architecture/LOGGING_AND_DIAGNOSTICS.md) §1), so no data is sent. The code is still
-shipped: say so in the App Store privacy review, and prefer an SDK build without `sentry` (Q-SDK-BUILD).
+shipped: say so in the App Store privacy review, and the prebuilt binary stays (D113).
 
 ## 3. Bot privacy (D18)
 Halo never sends data to a bot or AI service on its own. Rendering and indexing of bot messages happen on the device, from
@@ -39,5 +39,5 @@ Off by default. When the person turns on "Chats in Siri and Spotlight", the name
 
 ## 5. App Store privacy (before public release)
 Every target (app, NSE, later extensions) ships a `PrivacyInfo.xcprivacy` declaring the required-reason APIs it uses, no tracking
-and no tracking domains (NFR-10, ROADMAP M15); the archive's privacy report is checked before each upload (AC-UX-12).
-Privacy nutrition labels: "Data not collected" for analytics; "Data linked to you" only as needed for the account at the user's own homeserver (to be reviewed with the legal review, D38).
+and no tracking domains (NFR-10, ROADMAP M22-3); the archive's privacy report is checked before each upload (AC-UX-12).
+Privacy nutrition labels: "Data not collected" for analytics; "Data linked to you" only as needed for the account at the user's own homeserver (to be reviewed with the legal review, D38). Open: whether KLIPY search (text, region, per-install ID sent to a third party) must be declared as collected data; the manifests declare none today (ROADMAP M22-3).

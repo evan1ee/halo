@@ -13,8 +13,8 @@
 ## 2. End-to-end encryption considerations
 - All crypto runs in matrix-rust-sdk (vodozemac). Halo never handles key material directly.
 - New rooms created by Halo are encrypted by default (DMs and private rooms) **[DECISION D60]**.
-- Unverified devices: show an "unverified" state; sending into rooms with unverified devices follows the SDK's default room-key recipient strategy (configurable via `ClientBuilder.room_key_recipient_strategy` **[VERIFIED F-FFI-18]**; the default choice is **[OPEN Q-E2EE-STRATEGY]**).
-- Identity changes of contacts are shown in the timeline (ENCRYPTION_AND_DEVICES FR-7).
+- Unverified devices: show an "unverified" state; sending into rooms with unverified devices follows the SDK's default room-key recipient strategy (configurable via `ClientBuilder.room_key_recipient_strategy` **[VERIFIED F-FFI-18]**; the SDK default is kept, D117).
+- Identity changes of contacts are shown in the timeline (ENCRYPTION_AND_DEVICES FR-7). **Not built** (2026-11-25): a changed identity is silent today (ROADMAP M18-1, AC-SEC-1).
 - **Unencrypted surfaces** users must know about: image packs/stickers (F-SPEC-3), room names/topics/avatars (state), push metadata (room/event ids to Sygnal and Apple).
 
 ## 3. Key and session storage
@@ -29,12 +29,12 @@
 
 ## 4. Secure local persistence
 File protection `completeUntilFirstUserAuthentication` for all Halo/SDK files; caches excluded from iCloud backups
-(`isExcludedFromBackup`); field encryption in `halo.sqlite` ([../data/PERSISTENCE.md](../data/PERSISTENCE.md) §3).
+(`isExcludedFromBackup`; **not set anywhere yet**, ROADMAP M18-4); field encryption in `halo.sqlite` ([../data/PERSISTENCE.md](../data/PERSISTENCE.md) §3).
 Screenshots in the app switcher: a privacy blur when backgrounding (setting, default on) **[DECISION D61]**. It covers the screen only while the app is leaving (active → inactive → background), so the snapshot is blurred, and is lifted as soon as the app comes back; it is never shown during a cold launch and carries no icon (D105).
 
 ## 5. Network security
 - TLS via the SDK (rustls with aws-lc-rs, F-FFI-1); system trust store plus the SDK's built-in roots.
-- **Never** call `disable_ssl_verification` (exists in the builder, F-FFI-18) outside a debug-only local-CA setup; a build check fails release builds that reference it.
+- **Never** call `disable_ssl_verification` (exists in the builder, F-FFI-18) outside a debug-only local-CA setup; a build check fails release builds that reference it (the check doesn't exist yet, ROADMAP M18-12).
 - ATS stays enabled with no exceptions; the Sygnal and homeserver endpoints use HTTPS.
 - Halo makes direct HTTP calls only for documented exceptions (sticker state fetch, option B in STICKERS §9; KLIPY GIF/sticker search and media, COMPOSER_PANELS §6 / D98, without any Matrix token), through the same TLS settings, with the access token in the `Authorization` header only where one is sent.
 
@@ -46,7 +46,7 @@ Screenshots in the app switcher: a privacy blur when backgrounding (setting, def
 | Full Matrix IDs (users, rooms, events) | `HaloLog.id(x)` → short salted hash (salt per install) |
 | Media URLs (`mxc://`) | Hash |
 | Push tokens | Last 4 characters |
-Lint: a SwiftLint custom rule flags `print(` and string interpolation of known sensitive types into `Logger` without `privacy: .private` (planned for M0).
+Lint: a SwiftLint custom rule flags `print(` and string interpolation of known sensitive types into `Logger` without `privacy: .private` (not in `.swiftlint.yml` yet, ROADMAP M18-12).
 
 ## 7. Private repository practices
 - The repository is private (D2); branch protection on `main` (when collaborators join).
@@ -58,4 +58,4 @@ Lint: a SwiftLint custom rule flags `print(` and string interpolation of known s
 See [LICENSE_COMPLIANCE.md](LICENSE_COMPLIANCE.md) and [DEPENDENCY_INVENTORY.md](DEPENDENCY_INVENTORY.md). Additionally: the SDK is pinned by exact version + checksum; bumps are reviewed (changelog + security advisories, e.g. vodozemac/matrix-sdk-crypto advisories) before merge.
 
 ## 9. Vulnerability response
-A `SECURITY.md` contact isn't needed while the app is private; before public release, add a disclosure policy and track SDK security advisories (GitHub advisories for matrix-org/matrix-rust-sdk).
+A `SECURITY.md` contact isn't needed while the app is private; before public release (ROADMAP M18-12), add a disclosure policy and track SDK security advisories (GitHub advisories for matrix-org/matrix-rust-sdk).
