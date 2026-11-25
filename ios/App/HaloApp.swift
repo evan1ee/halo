@@ -37,6 +37,7 @@ struct HaloApp: App {
         PushDelegate.coordinator = root.push
         SearchProcessingTask.register { await root.processSearchInBackground() }
         PushDelegate.onBackgroundPush = { await root.refreshInBackground() ? .newData : .noData }
+        PushDelegate.onNotificationAction = { action in await root.perform(action) }
     }
 
     var body: some Scene {
@@ -797,9 +798,11 @@ final class PushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCen
     @MainActor static var coordinator: PushCoordinator?
     @MainActor static var onNotificationTap: (@MainActor (RoomID, EventID?) -> Void)?
     @MainActor static var onBackgroundPush: (@MainActor () async -> UIBackgroundFetchResult)?
+    @MainActor static var onNotificationAction: (@MainActor (NotificationAction) async -> Void)?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        NotificationActions.register()  // Reply and Mark as read (M18-7)
         return true
     }
 
@@ -827,13 +830,26 @@ final class PushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCen
         let threadID = response.notification.request.content.threadIdentifier
         let roomRaw = (userInfo["room_id"] as? String) ?? (threadID.isEmpty ? nil : threadID)
         let eventRaw = userInfo["event_id"] as? String
-        if let roomRaw, let room = try? RoomID(roomRaw) {
-            let event = eventRaw.flatMap { try? EventID($0) }
+        guard let roomRaw, let room = try? RoomID(roomRaw) else { return completionHandler() }
+        let event = eventRaw.flatMap { try? EventID($0) }
+        switch response.actionIdentifier {
+        case NotificationActions.reply, NotificationActions.markRead:
+            // iOS runs Halo in the background for these; the handler must finish before `completionHandler`, or the work is cut off.
+            let action = NotificationAction(
+                kind: response.actionIdentifier == NotificationActions.reply ? .reply : .markRead,
+                room: room, text: (response as? UNTextInputNotificationResponse)?.userText,
+                notification: response.notification.request.identifier, date: response.notification.date)
+            nonisolated(unsafe) let completionHandler = completionHandler
+            Task { @MainActor in
+                await Self.onNotificationAction?(action)
+                completionHandler()
+            }
+        default:
             Task { @MainActor in
                 Self.onNotificationTap?(room, event)
             }
+            completionHandler()
         }
-        completionHandler()
     }
 }
 

@@ -107,6 +107,7 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
                 content.title = title
                 content.body = body
                 content.threadIdentifier = threadID
+                content.categoryIdentifier = NotificationActions.messageCategory  // Reply and Mark as read (M18-7)
                 content.badge = badge.map(NSNumber.init(value:))
                 if attentionCounts != nil { WidgetCenter.shared.reloadAllTimelines() }
                 deliver(content, outcome: outcome, metrics: metrics)
@@ -115,6 +116,7 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
                 // com.apple.developer.usernotifications.filtering entitlement (V-PUSH-3) is granted.
                 deliver(silentSuppressedContent(), outcome: outcome, metrics: metrics)
             case .fallback(let outcome):
+                content.categoryIdentifier = NotificationActions.messageCategory
                 deliver(content, outcome: outcome, metrics: metrics)
             }
         } catch {

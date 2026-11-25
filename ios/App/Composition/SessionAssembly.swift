@@ -140,7 +140,7 @@ extension AppRoot {
     }
 
     /// Whether a session is there within a few seconds of a background launch.
-    private func sessionIsReady() async -> Bool {
+    func sessionIsReady() async -> Bool {
         for _ in 0..<20 {
             if case .ready = await sessionCoordinator.state { return true }
             do { try await Task.sleep(for: .milliseconds(250)) } catch { return false }
