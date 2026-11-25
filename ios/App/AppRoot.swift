@@ -71,6 +71,17 @@ final class AppRoot {
         joinedRooms: { [unowned self] in Set(await roomCoordinator.rooms.filter { $0.membership == .joined }.map(\.id)) },
         chats: chatCreation
     )
+    /// Reply and Mark as read on a notification, also when iOS starts Halo in the background for them (M18-7).
+    lazy var notificationActions = NotificationActionCoordinator(
+        send: { [unowned self] text, room throws(HaloError) in
+            try await SiriSendCoordinator(session: sessionCoordinator, timelines: timelinePort).send(text: text, to: room)
+        },
+        markRead: { [unowned self] room, time throws(HaloError) in
+            guard await sessionIsReady() else { throw HaloError.unauthorized(soft: false) }
+            try await receipts.markRoomRead(room, latestEventTime: time)
+        },
+        keepDraft: { [unowned self] text, room in await drafts.save(text, for: room) }
+    )
     /// The signed-in account, once the session is ready (kept out of "New chat" results).
     var signedInUser: UserID?
     /// The signed-in Matrix ID, for the avatar's initial before the display name is known.
