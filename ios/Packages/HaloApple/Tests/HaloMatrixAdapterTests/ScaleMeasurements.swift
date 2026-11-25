@@ -24,7 +24,7 @@ struct ScaleMeasurements {
         let memory = PeakMemory()
 
         // 1. Sign-in and first sync, as the app does it: the list subscribes, then the loop starts.
-        let session = MatrixSessionPort(baseDirectory: directory)
+        let session = port(directory)
         let details = try await session.loginDetails(server: server)
         let stored = try await session.loginPassword(
             PasswordCredentials(username: user, password: env["HALO_SCALE_PASSWORD"] ?? "", deviceDisplayName: "scale"), on: details)
@@ -48,6 +48,7 @@ struct ScaleMeasurements {
         try await Task.sleep(for: .seconds(60))
         result["idleCPUSecondsPerMinute"] = cpuSeconds() - cpuBefore
         result["idleTraffic"] = await proxy("GET", "/stats")
+        result["threads"] = threads()
         result["settledMB"] = memory.currentMB
         result["storeMB"] = size(of: directory)
 
@@ -71,7 +72,7 @@ struct ScaleMeasurements {
         await proxy("DELETE", "/stats")
         memory.reset()
         let restart = clock.now
-        let again = MatrixSessionPort(baseDirectory: directory)
+        let again = port(directory)
         try await again.restore(stored)
         Cleanup.current.add { try? await again.logout() }
         result["restoreSeconds"] = (clock.now - restart).seconds
@@ -93,6 +94,22 @@ struct ScaleMeasurements {
     }
 
     // MARK: Helpers
+
+    /// `HALO_SCALE_SEARCH=0` leaves the SDK's message search index out, `live` only its sweep through history, to see what they cost.
+    private func port(_ directory: URL) -> MatrixSessionPort {
+        MatrixSessionPort(
+            baseDirectory: directory, indexesMessages: env["HALO_SCALE_SEARCH"] != "0", backfillsSearch: env["HALO_SCALE_SEARCH"] != "live",
+            initialisePlatform: MatrixBootstrap.initialise(lightweightRuntime:))
+    }
+
+    private func threads() -> Int {
+        var list: thread_act_array_t?
+        var count: mach_msg_type_number_t = 0
+        guard task_threads(mach_task_self_, &list, &count) == KERN_SUCCESS else { return -1 }
+        for index in 0..<Int(count) { if let thread = list?[index] { mach_port_deallocate(mach_task_self_, thread) } }
+        vm_deallocate(mach_task_self_, vm_address_t(UInt(bitPattern: list)), vm_size_t(Int(count) * MemoryLayout<thread_t>.stride))
+        return Int(count)
+    }
 
     private func follow(_ session: MatrixSessionPort) -> ListFollower {
         let follower = ListFollower()

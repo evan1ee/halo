@@ -3,7 +3,7 @@
 
     scripts/scale-measure.py [scale300|scale1000|scalebig …]     (default: all three)
 
-Needs `infra/dev/scale-fixtures.py up` to have finished. HALO_SIM picks the simulator. Numbers from a simulator run on the Mac's CPU and
+HALO_SCALE_SEARCH=0 leaves the message search index out, HALO_SCALE_SEARCH=live only its sweep through history. Needs `infra/dev/scale-fixtures.py up` to have finished. HALO_SIM picks the simulator. Numbers from a simulator run on the Mac's CPU and
 network: they show the amount of work (bytes, requests, memory, store) and trends, not what an iPhone takes (TEST_STRATEGY §7).
 Raw results go to ~/.config/halo-dev/scale/results-<time>.json; no identifiers or passwords are printed.
 """
@@ -38,7 +38,7 @@ def main():
         for account in accounts:
             env = dict(os.environ, **{"TEST_RUNNER_" + key: value for key, value in {
                 "HALO_SCALE_SERVER": f"http://localhost:{PROXY}", "HALO_SCALE_CONTROL": f"http://localhost:{CONTROL}",
-                "HALO_SCALE_DIRECT": f"http://localhost:{PORT}", "HALO_SCALE_USER": account, "HALO_SCALE_PASSWORD": passwords[account],
+                "HALO_SCALE_SEARCH": os.environ.get("HALO_SCALE_SEARCH", "1"), "HALO_SCALE_DIRECT": f"http://localhost:{PORT}", "HALO_SCALE_USER": account, "HALO_SCALE_PASSWORD": passwords[account],
                 "HALO_SCALE_PROBE_PASSWORD": passwords["scaleprobe"], "HALO_SCALE_ROOMS": str(ROOMS[account])}.items()})
             run = subprocess.run(["xcodebuild", "-scheme", "HaloApple-Package", "-destination", f"platform=iOS Simulator,name={os.environ.get('HALO_SIM', 'iPhone 17')}",
                                   "-only-testing:HaloMatrixAdapterTests/ScaleMeasurements", "test"],
@@ -61,6 +61,7 @@ def main():
         ("Memory settled", lambda r: f"{r['settledMB']:.0f} MB"),
         ("Store on disk", lambda r: f"{r['storeMB']:.0f} MB"),
         ("Idle, per minute", lambda r: f"{r['idleCPUSecondsPerMinute']:.2f} s CPU, " + "{} requests, {:.3f} MB".format(*traffic(r["idleTraffic"]))),
+        ("Threads, after the idle minute", lambda r: str(r["threads"])),
         ("Live message → in the list", lambda r: f"{r['liveMessageSeconds']:.2f} s" if "liveMessageSeconds" in r else "—"),
         ("Restart: session restored", lambda r: f"{r['restoreSeconds']:.2f} s"),
         ("Restart: cached list complete", lambda r: f"{r['cachedListSeconds']:.2f} s"),
