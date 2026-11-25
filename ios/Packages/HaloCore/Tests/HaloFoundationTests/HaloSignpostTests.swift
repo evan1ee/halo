@@ -6,9 +6,8 @@ struct HaloSignpostTests {
     @Test("measure returns the result and passes errors through")
     func measure() {
         #expect(HaloSignpost.measure(.imageDecode) { 42 } == 42)
-        #expect(throws: HaloError.unauthorized(soft: false)) {
-            try HaloSignpost.measure(.imageDecode) { () throws(HaloError) in throw HaloError.unauthorized(soft: false) }
-        }
+        func fail() throws(HaloError) -> Int { throw .unauthorized(soft: false) }
+        #expect(throws: HaloError.unauthorized(soft: false)) { _ = try HaloSignpost.measure(.imageDecode, fail) }
     }
 
     #if canImport(os)

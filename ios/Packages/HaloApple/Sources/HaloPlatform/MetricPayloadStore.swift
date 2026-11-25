@@ -96,6 +96,7 @@ public final class MetricPayloadStore: Sendable {
 enum MetricPayloadRedaction {
     static let placeholder = "<redacted>"
     private static let droppedKeys: Set<String> = ["composedMessage", "formatString", "arguments"]
+    /// `Regex` isn't `Sendable`; this one is a constant that is only read.
     nonisolated(unsafe) private static let identifier = /[@!#$][^\s:]+:[A-Za-z0-9.\-\[\]]+|\$[A-Za-z0-9_\-]{20,}|(?i)(?:https?|mxc|matrix):\/{0,2}[^\s"]+/
 
     static func redact(_ json: Data) -> Data? {

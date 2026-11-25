@@ -36,14 +36,25 @@ final class HaloPerformanceTests: XCTestCase {
         dismissSheets(app, for: 4)
     }
 
-    /// NFR-1: launch → interactive room list, with the app's own `cold-start` interval.
+    /// NFR-1: launch → first frame, as iOS measures it.
+    @MainActor
+    func test1Launch() throws {
+        try requireSignedIn()
+        let options = XCTMeasureOptions()
+        options.iterationCount = 5
+        measure(metrics: [XCTApplicationLaunchMetric()], options: options) { application().launch() }
+    }
+
+    /// NFR-1: launch → the room list has its rows (`cold-start`). Apart from `test1Launch`: the launch metric ends the recording too early for it.
     @MainActor
     func test1ColdStart() throws {
         try requireSignedIn()
         let options = XCTMeasureOptions()
-        options.iterationCount = 7
-        measure(metrics: [XCTApplicationLaunchMetric(waitUntilResponsive: true), signpost("cold-start")], options: options) {
-            application().launch()
+        options.iterationCount = 5
+        measure(metrics: [signpost("cold-start"), signpost("main-thread-hang")], options: options) {
+            let app = launch()
+            _ = app.buttons["settings"].waitForExistence(timeout: 20)
+            app.terminate()
         }
     }
 
@@ -55,7 +66,7 @@ final class HaloPerformanceTests: XCTestCase {
         options.iterationCount = 30
         var index = 0
         measure(metrics: [signpost("room-open")], options: options) {
-            openRoom(app, index % 6)
+            openRoom(app, index)
             index += 1
             goBack(app)
         }
@@ -88,7 +99,7 @@ final class HaloPerformanceTests: XCTestCase {
         options.iterationCount = 1
         measure(metrics: [XCTMemoryMetric(application: app), signpost("main-thread-hang")], options: options) {
             for index in 0..<25 {  // `measure` runs the block twice
-                openRoom(app, index % 6)
+                openRoom(app, index)
                 goBack(app)
             }
         }
@@ -146,7 +157,8 @@ final class HaloPerformanceTests: XCTestCase {
     @MainActor
     private func openRoom(_ app: XCUIApplication, _ index: Int, named name: String? = nil) {
         let cells = app.collectionViews.firstMatch.cells
-        var cell = cells.element(boundBy: index + 1)
+        // An account with fewer chats (scalebig has two) takes turns through those it has.
+        var cell = cells.element(boundBy: 1 + index % max(1, min(6, cells.count - 1)))
         if let name {
             let found = cells.containing(NSPredicate(format: "label CONTAINS %@", name)).firstMatch
             if found.waitForExistence(timeout: 3) { cell = found }

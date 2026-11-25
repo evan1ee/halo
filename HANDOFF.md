@@ -1,17 +1,23 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-25 · Branch: `main` (this push through `docs/production-roadmap`) · PRs #1–#88 merged before it
+Last updated: 2026-11-25 · Branch: `main` (this push through `feat/m17-measure`) · PRs #1–#89 merged before it
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
 - **Roadmap:** M0–M16 are built and merged. Re-planned 2026-11-25 to a production release (D121): M17 measure → M18 security and reliability → M19 performance → M20 messaging → M21 experience → M22 beta and launch, with gates G-SCALE, G-PERF, G-SHIP ([docs/ROADMAP.md](docs/ROADMAP.md)). The audit behind it found 26 gaps (ROADMAP §2); Halo isn't a release candidate yet.
-- **Milestones:** M0–M16 built, partly for M14–M15 (GA-24…GA-26); device and founder leftovers in §5. Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1).
-- **Last checks:** this push changes documents only: `scripts/validate-docs.sh` and the handoff check passed; no code was built or tested for it. The code on `main` (`155f745`, PR #88) passed `prepush.sh` in full, the full contract suite (36 passed, 2 skipped by design) and all CI.
-- **CI:** PRs #1–#88 merged. Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
+- **Milestones:** M0–M16 built, partly for M14–M15 (GA-24…GA-26). **M17 in progress:** M17-1, 2, 3, 6 done; M17-4, M17-5 and M17-7 done except what needs a device or the founder (§5). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1).
+- **Last checks:** @@CHECKS@@
+- **CI:** PRs #1–#89 merged. New `scenarios.yml` (Synapse behind the fault proxy). Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
+- **M17 measure and prove (2026-11-25, `feat/m17-measure`):**
+  - **M17-1** `HaloSignpost` (cold start, room open, sync, image decode, NSE, hangs) read by XCTest in the running app. **M17-2** MetricKit payloads on the device, redacted and bounded, in the diagnostics export.
+  - **M17-3** `infra/dev/scale-fixtures.py`: a server of its own (`halo-scale`, port 8108) with 300 and 1,000 rooms, a 10,000-member and a 20,000-event room. **M17-6** `infra/test` with the fault proxy, F01–F06, `FaultTests`, `scenarios.yml`.
+  - **M17-4** measured (TEST_STRATEGY §7): classic sync is fine at 1,000 rooms (11.8 s first sync, 0.9 s catch-up) **without the SDK's message search index**; with it 32–43 s and 13–19 s, 25 s CPU per idle minute, up to 925 threads. New Q-SEARCH-INDEX.
+  - **M17-5** `scripts/perf.py` + `HaloPerformanceTests` with `docs/testing/perf-baseline.json`. **M17-7** `InteropTests` (wire level) and the signed checklist (INTEGRATION_TESTS §4).
+  - Found: GA-27 (search index), GA-28 (one request per unread room per launch), GA-29 (39 s to recover from a half-open connection), GA-30 (mention's plain text), GA-31 (unknown types hidden).
 - **Production roadmap (D121, 2026-11-25, `docs/production-roadmap`):** audited code against every product, design, security, testing and release document at `155f745`; rewrote ROADMAP (gap table, R/C/P tasks with "Done when", gates, release plan), added AC-REL/AC-SEC/AC-MOT and NFR-11–15, V-SCALE-1, V-OIDC-1, V-INTEROP-1, Q-SCOPE, Q-SYNC-SCALE, Q-REPORT, Q-SIGNUP, Q-VERIFY, Q-REVIEW; corrected specs that promised unbuilt behaviour or described sliding sync.
 - **Unread badge, widgets and background sync (D118, 2026-11-24, PR #88):**
   - Root causes: gateway down and Halo's pushkin never able to send (asyncio awaited on Twisted); dev ran the stock pushkin; background launches did nothing (handlers set in a view) and reported done before the badge was written; pre-sync evaluations overwrote what the NSE had counted; unordered badge writes; the NSE counted late pushes twice and raced itself; a sticky foreground flag; no refresh fallback; a widget reload on every open/close spent iOS's budget.
@@ -51,18 +57,19 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D122), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
-Documents only, no code.
-- **Plan:** `ROADMAP`, `REQUIREMENTS`, `OPEN_QUESTIONS`, `DECISION_LOG` (D121, D122), `RISK_REGISTER`, `SOURCES` (F-FFI-24), `PRODUCT_VISION`, `README`, `docs/README`, `AUTONOMOUS_LOOP`.
-- **Specs:** every `features/` document except stickers, bots and composer panels; `MEDIA`, `SYNC_ENGINE`, `NAVIGATION`, `SCREEN_SPECIFICATIONS`, `DESIGN_SYSTEM`, `UX_AUDIT`, architecture documents, `MIGRATIONS`.
-- **Quality and release:** `TEST_STRATEGY`, `UNREAD_REGRESSION_TESTS`, `INTEGRATION_TESTS`, `TECH_DEBT`, `CI_CD`, `BUILD_AND_RELEASE`, `DEVELOPMENT_SETUP`, `SECURITY`, `PRIVACY`, `docs/release/*`.
+- **App:** `HaloSignpost`, `MetricPayloadStore`, `MetricKitRecorder`, `MainThreadHangs`; call sites in `HaloApp`, `AppRoot`, assemblies, `TimelineView`, `StickerImage`, `AsyncAnimatedImage`, `MatrixSessionPort` (also the measurement switches), NSE.
+- **Tests:** `HaloSignpostTests`, `ImageDecodeSignpostTests`, `MetricPayloadStoreTests`, `MainThreadHangsTests`, `ScaleMeasurements`, `FaultTests`, `InteropTests`, `TestServerStage`, `HaloPerformanceTests` (the two perf tests moved out of `HaloUITests`).
+- **Infrastructure:** `infra/test/`, `infra/dev/scale-fixtures.py` + compose/config, `tools/scenario-driver`, `scripts/{scale-measure,perf}.py`, `scenarios.yml`.
+- **Docs:** ROADMAP, OPEN_QUESTIONS, RISK_REGISTER, TEST_STRATEGY, INTEGRATION_TESTS, LOGGING, CI_CD, SYNC_ENGINE, PRIVACY, SECURITY, PRIVACY_POLICY, TECH_DEBT, DEVELOPMENT_SETUP, `infra/dev/README`.
 
 ## 5. Outstanding issues
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
 
 **Waiting for the founder before work can pass a point**
-- 👤 **G-SCALE / Q-SYNC-SCALE** after M17-4, before M19 · **Q-VERIFY** before M18 ends · **Q-REPORT**, **Q-SIGNUP**, **Q-REVIEW** later.
+- 👤 **Q-SEARCH-INDEX, then G-SCALE** (numbers in TEST_STRATEGY §7; recommendation: index only when the person turns message search on, plus an upstream fix), before M19 · **Q-VERIFY** before M18 ends · **Q-REPORT**, **Q-SIGNUP**, **Q-REVIEW** later.
 
-**Engineering (not blocking)** — the 26 audited gaps are in ROADMAP §2, not repeated here.
+**Engineering (not blocking)** — the gaps are in ROADMAP §2, not repeated here.
+- **Scale server:** `halo-scale` (about 1 GB) is left stopped or running on the dev Mac for M19; `infra/dev/scale-fixtures.py down` / `remove --yes`. Simulator `Halo Perf` belongs to `scripts/perf.py`.
 - **Accessibility audit (watch):** `testLaunchRootScreenPassesAccessibilityAudit` failed at times until 2026-11-24 (also on `main`), "Potentially inaccessible text" without an element; 12 of 12 runs passed on 2026-11-25 with the cleaned-up account. Cause unknown, no exemption added.
 - **Dev APNs stall (2026-11-24, 15:05–15:19 UTC):** APNs accepted pushes the iPhone never acted on (alerts and silent ones), then delivery resumed without a change; a later silent push also had no effect within 12 s (iOS throttles them; opening healed it). Cause unknown.
 - **Account data (D120 limit):** two devices writing the same type in the same moment can still lose one change (Matrix has no conditional write).
@@ -71,6 +78,9 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 - **Timeline follow-up:** the room appears ~150 ms after the push starts (the list is hidden until placed); an own thumbnail is downloaded once after an app restart (SDK caches the file under the new reference, thumbnails under their own key).
 
 **Needs the founder (`👤`) or physical device (`📱`)**
+- 📱 **M17-4/M17-5 on the iPhone 16:** `scripts/perf.py --device 00008140-000222592ED0801C --save-baseline` (signed-in account), one hour idle for energy (NFR-15), first sync of `scale1000` with and without the search index (needs the phone signed in to the scale server: `HALO_SCALE_BIND=0.0.0.0`).
+- 👤 **M17-4:** first sync and catch-up of one real public-server account. 👤 **M17-7:** the Element Web / Element X checklist, about an hour.
+- 📱 **M17-1/M17-2:** the NSE interval and a MetricKit payload on a device (Xcode → Debug → Simulate MetricKit Payloads, then Settings → Diagnostics → Export).
 - 👤 **Q-KLIPY-PROD:** the KLIPY key is a testing key (100 requests/hour); request production access in KLIPY's Partner Panel before Beta 1.
 - 📱 **UI tests on devices:** the iPhone 16 (`00008140-000222592ED0801C`, signed in as contractpeer on the LAN dev server) runs `HaloUITests` (composer, empty room, launch). The iPhone 17e still exited with code 74.
 - 📱 **Location, polls and articles:** pinned location, poll, Markdown article, and KLIPY GIF live sends verified in Halo on iPhone 16 (`testLiveSendsLocationPollArticleAndKlipy`); still open: current-location send + Element interoperability check.
@@ -89,25 +99,24 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 
 ## 6. Next steps
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §3.
-1. M17-1 and M17-2 (signposts, MetricKit): small, and every later number depends on them.
-2. M17-3 → M17-4: scale fixture and measurement; report the numbers for G-SCALE.
-3. M17-5…M17-7, then M18 top to bottom (M18 may start before G-SCALE is decided; M19 may not).
-4. Founder, long lead times: push gateway (M22-1), legal (M22-4), KLIPY production key, filtering entitlement, artwork.
-5. Founder/device checks in §5 📱.
+1. Founder: Q-SEARCH-INDEX and G-SCALE; the device and hand checks of §5.
+2. M18 top to bottom (may start now; M19 may not before G-SCALE). Re-run `infra/test/run.sh faults` for send and sync changes.
+3. Founder, long lead times: push gateway (M22-1), legal (M22-4), KLIPY production key, filtering entitlement, artwork.
 
 ## 7. Next Session Prompt
 ```text
 /loop Read AGENTS.md, HANDOFF.md, docs/development/AUTONOMOUS_LOOP.md and docs/ROADMAP.md (§1–§3, §7).
-Work the ROADMAP §3 queue from M17-1: Plan → Implement → Verify → Review → Land, R tasks first.
+Work the ROADMAP §3 queue from M18-1: Plan → Implement → Verify → Review → Land, R tasks first.
 
 A task is done only when its "Done when" holds by a test that failed before, its GA row is removed, its spec no longer says
-"not built", and the rules of ROADMAP §1 hold. Measure M17-4 and record the table in TEST_STRATEGY §7; G-SCALE, G-PERF and
-G-SHIP are the founder's. Don't start M19 before G-SCALE is decided. 1.0 scope is fixed (D122). Open decisions: Q-SYNC-SCALE, Q-VERIFY.
+"not built", and the rules of ROADMAP §1 hold. G-SCALE (numbers in TEST_STRATEGY §7, Q-SEARCH-INDEX), G-PERF and
+G-SHIP are the founder's. Don't start M19 before G-SCALE is decided. 1.0 scope is fixed (D122). Open decisions: Q-SEARCH-INDEX, Q-VERIFY.
 
 Checks per iteration:
 - HALO_SIM="iPhone Air" scripts/prepush.sh
 - scripts/contract-test.sh (adapter, sync, timeline, read state); it fails if a run leaves rooms or devices
 - Simulator check in light, dark and AX5 for UI changes
+- infra/test/run.sh faults|interop when sending, sync or timeline mapping changes
 - Never scale-test on stickertester or contractpeer; use the M17-3 accounts
 - Update HANDOFF.md, ROADMAP.md and the owning spec in the last commit of every push (AGENTS.md §18).
 ```

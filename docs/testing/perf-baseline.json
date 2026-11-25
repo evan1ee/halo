@@ -1,0 +1,24 @@
+{
+ "simulator iPhone 17": {
+  "scale1000": {
+   "NFR-1 launch → first frame": 3.9125,
+   "NFR-1 launch → rows": 2.3534,
+   "NFR-13 launches with a hang ≥ 250 ms (of 5)": 5,
+   "NFR-15 CPU in an idle minute": 1.4923
+  },
+  "scale300": {
+   "NFR-1 launch → first frame": 4.3229,
+   "NFR-1 launch → rows": 2.3357,
+   "NFR-11 room open, p95": 0.3267,
+   "NFR-13 launches with a hang ≥ 250 ms (of 5)": 5,
+   "NFR-15 CPU in an idle minute": 0.6098
+  },
+  "scalebig": {
+   "NFR-12 growth over 50 cycles": 3.9322,
+   "NFR-12 peak memory, 50 cycles": 104.8439,
+   "NFR-12 peak memory, media scrolling": 207.8668,
+   "NFR-13 hangs ≥ 250 ms over 50 cycles": 0,
+   "NFR-13 scrolls with a hang ≥ 250 ms (of 5)": 0
+  }
+ }
+}

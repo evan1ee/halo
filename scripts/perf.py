@@ -7,8 +7,8 @@
     scripts/perf.py --save-baseline         # accept these values as the baseline of this device
 
 Optimised code in the Debug app (its Info.plist may reach local servers): -O, whole module, no DEBUG flag. Exit status 1 when a value is more
-than 20 % (and the noise floor) worse than the baseline of the same device, or, on a physical device, over its budget. A simulator shows trends only, so a
-missed budget there is printed but doesn't fail. Baselines: docs/testing/perf-baseline.json.
+than 20 % (and the noise floor) worse than the baseline of the same device, or, on a physical device, over its budget. A simulator shows trends only: two runs on
+the same code differed by up to 28 %, so there the limit is 50 %, and a missed budget is printed but doesn't fail. Baselines: docs/testing/perf-baseline.json.
 The scale fixture must be up (`infra/dev/scale-fixtures.py up`) unless --device is given.
 """
 import argparse, glob, json, os, re, shutil, statistics, subprocess, sys, tempfile
@@ -19,7 +19,7 @@ SCALE = os.environ.get("HALO_SCALE_DIR", os.path.expanduser("~/.config/halo-dev/
 SIMULATOR, SIMULATOR_TYPE = "Halo Perf", "iPhone 17"
 SETTLE = {"scale300": 60, "scale1000": 150, "scalebig": 45}
 # Which tests each account is for; a physical device runs all of them on its own account.
-TESTS = {"scale300": ["test1ColdStart", "test2RoomOpen", "test5Idle"], "scale1000": ["test1ColdStart", "test5Idle"],
+TESTS = {"scale300": ["test1Launch", "test1ColdStart", "test2RoomOpen", "test5Idle"], "scale1000": ["test1Launch", "test1ColdStart", "test5Idle"],
          "scalebig": ["test3Scroll", "test4Cycles"]}
 
 
@@ -28,16 +28,17 @@ def p95(values): return sorted(values)[max(0, -(-95 * len(values) // 100) - 1)]
 
 # name, test, pattern of the metric's identifier, how to reduce its values, unit, budget, differences below this are noise
 MEASURES = [
-    ("NFR-1 launch → responsive", "test1ColdStart", r"applicationlaunch|ApplicationLaunch", statistics.median, "s", 1.0, 0.1),
-    ("NFR-1 cold-start signpost", "test1ColdStart", r"cold-start", statistics.median, "s", 1.0, 0.1),
+    ("NFR-1 launch → first frame", "test1Launch", r"ApplicationLaunch", statistics.median, "s", 1.0, 0.1),
+    ("NFR-1 launch → rows", "test1ColdStart", r"cold-start", statistics.median, "s", 1.0, 0.1),
     ("NFR-11 room open, p95", "test2RoomOpen", r"room-open", p95, "s", 0.25, 0.05),
     ("NFR-2 scroll hitch time ratio", "test3Scroll", r"(?i)hitch.*ratio|hitchTimeRatio", statistics.median, "ms/s", 5.0, 1.0),
     ("NFR-12 peak memory, media scrolling", "test3Scroll", r"(?i)memory.*peak", max, "MB", 200.0, 10.0),
     ("NFR-12 peak memory, 50 cycles", "test4Cycles", r"(?i)memory.*peak", max, "MB", 300.0, 10.0),
-    ("NFR-12 growth over 50 cycles", "test4Cycles", r"(?i)memory\.physical(?!.*(peak|absolute))", sum, "MB", None, 5.0),
-    ("NFR-13 hangs ≥ 250 ms, scrolling", "test3Scroll", r"main-thread-hang", len, "", 0, 1),
-    ("NFR-13 hangs ≥ 250 ms, 50 cycles", "test4Cycles", r"main-thread-hang", len, "", 0, 1),
-    ("NFR-15 CPU in an idle minute", "test5Idle", r"(?i)cpu\.time", statistics.median, "s", None, 0.3),
+    ("NFR-12 growth over 50 cycles", "test4Cycles", r"Memory-.*\.physical$", sum, "MB", None, 5.0),
+    ("NFR-13 launches with a hang ≥ 250 ms (of 5)", "test1ColdStart", r"main-thread-hang", len, "", 0, 1),
+    ("NFR-13 scrolls with a hang ≥ 250 ms (of 5)", "test3Scroll", r"main-thread-hang", len, "", 0, 1),
+    ("NFR-13 hangs ≥ 250 ms over 50 cycles", "test4Cycles", r"main-thread-hang", len, "", 0, 1),
+    ("NFR-15 CPU in an idle minute", "test5Idle", r"CPU-.*\.time$", statistics.median, "s", None, 0.3),
 ]
 
 
@@ -131,9 +132,10 @@ def main():
             value, before = found.get(name), known.get(account, {}).get(name)
             show = lambda v: "—" if v is None else f"{v:.3g} {unit}".strip()
             if value is None:
-                verdict = "**not measured**"
-                ok = ok and not options.device
-            elif before is not None and value > before * 1.2 and value - before > noise:
+                simulator_cannot = not options.device and "hitch" in name  # hitches come from the device's display
+                verdict = "device only" if simulator_cannot else "**not measured**"
+                ok = ok and simulator_cannot
+            elif before is not None and value > before * (1.2 if options.device else 1.5) and value - before > noise:
                 verdict, ok = "**worse**", False
             elif budget is not None and value > budget:
                 verdict = "**over**" if options.device else "over (simulator)"

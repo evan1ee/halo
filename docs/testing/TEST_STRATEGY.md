@@ -100,7 +100,9 @@ the history sweep changes nothing (`HALO_SCALE_SEARCH=live`: 42.1 s, 12.6 s). Q-
 room (344 requests at 1,000 rooms, GA-28), and the room list is rebuilt per response (GA-17).
 
 **Performance suite (M17-5).** `scripts/perf.py` signs a simulator of its own in to the scale accounts (or uses a device's account, `--device`), runs `HaloPerformanceTests` with optimised code, reads the result bundle and prints
-budget / measured / baseline / pass; over 20 % (and the noise floor) worse than `perf-baseline.json` for the same device fails, and a missed budget fails on a device. Numbers are compared only with the same device and OS.
+budget / measured / baseline / pass; over 20 % (a simulator: 50 %, its runs differ by up to 28 %) and the noise floor worse than `perf-baseline.json` for the same device fails, and a missed budget fails on a device. Numbers are compared only with the same device and OS.
+First simulator run (2026-11-25, iPhone 17 simulator, not evidence for a budget): launch → rows 2.3 s at 300 and 1,000 rooms with a main-thread hang (0.7–1.1 s) in each of 5 launches; room open p95 0.33 s (median 0.23 s; 0.71 s p95 in a run
+right after the first sync); media scrolling peaks at 208–266 MB (budget 200, GA-15); 50 room cycles peak at 105 MB and grow by 4 MB (4 %); 0.6 s and 1.5 s CPU per idle minute once settled. Hitches need a device.
 
 Rules: same device and OS for baseline and gate; median of 5 unless p95 is named; over 20 % worse than the last release blocks. Simulator numbers show trends only.
 
