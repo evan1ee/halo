@@ -11,7 +11,7 @@ Capacity: solo, part-time (D24). Sizes **[ASSUMPTION]**: S ≤ 1 day · M 2–4 
 | Mark | Meaning |
 |---|---|
 | **R** | Release requirement: 1.0 doesn't ship without it |
-| **C** | Candidate: ships in 1.0 only if finished before the Beta 2 cut; never delays it (Q-SCOPE) |
+| **C** | Candidate: ships in 1.0 only if finished before the Beta 2 cut; never delays it (D122) |
 | **P** | Post-launch (§10) |
 | 👤 / 📱 / 📤 | Needs the founder / a physical device / an upstream SDK change. Doesn't block the rest of the queue |
 
@@ -114,7 +114,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 **Exit:** **G-PERF** — all budgets of TEST_STRATEGY §7 met on the reference device with a Release build.
 
 ### M20 — Messaging completeness
-**Goal:** everyday use without reaching for another client. **Depends on:** M19-1, M19-2, M19-5. **Risk:** scope (Q-SCOPE).
+**Goal:** everyday use without reaching for another client. **Depends on:** M19-1, M19-2, M19-5. **Risk:** scope (D122, PROJ-8).
 
 | Task | Class · size | Done when |
 |---|---|---|
@@ -255,7 +255,7 @@ Not scheduled; each needs a spec and, where noted, a decision.
 **Where the previous M17–M19 items went:** room-open and thumbnails → M19-4, M19-5 · crash safety and silent errors → M18-8 · accessibility and motion → M21-3, M21-5 ·
 state coverage → M21-1 · file sizes → M21-10 · localisation → M21-6 · forward → M20-6 · in-room search and jump → M20-1, M20-11 · rendering and previews → M20-10, M20-17 ·
 voice and video → M20-2, M20-3 · multi-select → M20-16 · message details → M20-9 · Spaces, roles editor, QR → §10 · moderation → M20-12 · links → M18-9 · App Lock → M20-15 ·
-storage → M20-13 · keywords → M20-14. Splitting 1.0 from post-launch is Q-SCOPE.
+storage → M20-13 · keywords → M20-14. The 1.0/post-launch split is D122.
 
 ## 11. Done (M0–M16)
 Detailed history in `git log`, [CODEBASE_REVIEW.md](CODEBASE_REVIEW.md), [development/TECH_DEBT.md](development/TECH_DEBT.md), and [testing/GATE_EVALUATION_M3.md](testing/GATE_EVALUATION_M3.md).

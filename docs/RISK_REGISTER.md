@@ -61,4 +61,4 @@ don't collide with milestones (M0–M22), priorities (P0–P2), test properties 
 | PROJ-5 | The app is correct but feels unfinished or non-native, so testers fall back to their old client (UX_AUDIT) | High | High | D84 north star; M21; moderated first-run test (AC-UX-5); Beta 2 gate |
 | PROJ-6 | App Store review rejects the build (privacy manifest, user-generated content rules: report/block, account deletion path) | Med | High | M20-7 report (missing today, GA-22); ignore user exists; M22-3 privacy; review server (Q-REVIEW); no account creation in the app (Q-SIGNUP) |
 | PROJ-7 | The push gateway becomes a service others depend on (uptime, certificates, abuse, cost) | High at 1.0 | High | M22-1: monitoring, key-rotation drill, capacity, on-call rule; push health shown in Settings |
-| PROJ-8 | Scope grows again and quality work slips | Med | High | R/C/P classes, C never delays; Q-SCOPE |
+| PROJ-8 | Scope grows again and quality work slips | Med | High | R/C/P classes, C never delays (D122) |

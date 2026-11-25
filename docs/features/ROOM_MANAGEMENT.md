@@ -21,7 +21,7 @@ See and manage a room's details, members and notification behaviour; start new c
 - FR-7 Edit name/topic/avatar if allowed by power levels (`get_power_levels`).
 - FR-8 Mark as unread / read (READ_RECEIPTS explicit actions).
 - FR-9 Report a message or room to the homeserver, with ignore offered in the same place (`report_content`, `report_room`, F-FFI-24). *Not built; App Review 1.2 needs it* (ROADMAP M20-7, Q-REPORT).
-- FR-10 Remove, ban and unban members, gated by live power levels. *Not built* (ROADMAP M20-12). Role editor, join rules, history visibility and aliases are post-launch (Q-SCOPE).
+- FR-10 Remove, ban and unban members, gated by live power levels. *Not built* (ROADMAP M20-12). Role editor, join rules, history visibility and aliases are post-launch (D122).
 - FR-11 Upgraded rooms link to their successor; knock-only, banned and invite-only rooms explain themselves. *Not built* (ROADMAP M20-8).
 
 ## 4. Non-functional requirements
@@ -52,4 +52,4 @@ Rooms with no name (compute from heroes) · tombstoned rooms · public rooms joi
 Unit: view models with a fake port. Integration: S-ROOM-1..3.
 
 ## 13. Open questions
-Q-REPORT, Q-SCOPE.
+Q-REPORT.

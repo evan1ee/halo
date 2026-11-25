@@ -29,8 +29,9 @@ Summary only; older history lives in `git log`.
   - Made `jump-to-bottom` interrupt ongoing deceleration synchronously on the tap frame before converging; added and passed `HaloUITests.testTimelineImageScrollAndJumpToBottomWhileScrolling` on physical iPhone 16 (`00008140-000222592ED0801C`).
 
 ## 3. Key decisions
-Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D121), [docs/adr/README.md](docs/adr/README.md).
-- **D121:** roadmap re-planned; R/C/P classes; G-SCALE before M19; scope and sync path wait for Q-SCOPE and Q-SYNC-SCALE.
+Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D122), [docs/adr/README.md](docs/adr/README.md).
+- **D121:** roadmap re-planned; R/C/P classes; G-SCALE before M19; the sync path waits for Q-SYNC-SCALE.
+- **D122:** 1.0 ships the smaller scope (founder; resolves Q-SCOPE).
 - **D118:** one unread count for icon, widgets and list (E6, recomputed NSE badge, ordered writes, background refresh).
 - **D73 / D74 / D78–D80 (ADR-0020):** classic sync unread evidence, encrypted-room SDK counts decide, identity/timeline-index read ordering.
 - **D82 (ADR-0021):** app icon badge sums `RoomReadState.badgeCount` for `attention == true`.
@@ -51,7 +52,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D121), [docs/adr/R
 
 ## 4. Modified files (this push)
 Documents only, no code.
-- **Plan:** `ROADMAP`, `REQUIREMENTS`, `OPEN_QUESTIONS`, `DECISION_LOG` (D121), `RISK_REGISTER`, `SOURCES` (F-FFI-24), `PRODUCT_VISION`, `README`, `docs/README`, `AUTONOMOUS_LOOP`.
+- **Plan:** `ROADMAP`, `REQUIREMENTS`, `OPEN_QUESTIONS`, `DECISION_LOG` (D121, D122), `RISK_REGISTER`, `SOURCES` (F-FFI-24), `PRODUCT_VISION`, `README`, `docs/README`, `AUTONOMOUS_LOOP`.
 - **Specs:** every `features/` document except stickers, bots and composer panels; `MEDIA`, `SYNC_ENGINE`, `NAVIGATION`, `SCREEN_SPECIFICATIONS`, `DESIGN_SYSTEM`, `UX_AUDIT`, architecture documents, `MIGRATIONS`.
 - **Quality and release:** `TEST_STRATEGY`, `UNREAD_REGRESSION_TESTS`, `INTEGRATION_TESTS`, `TECH_DEBT`, `CI_CD`, `BUILD_AND_RELEASE`, `DEVELOPMENT_SETUP`, `SECURITY`, `PRIVACY`, `docs/release/*`.
 
@@ -59,7 +60,7 @@ Documents only, no code.
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
 
 **Waiting for the founder before work can pass a point**
-- 👤 **Q-SCOPE** (what 1.0 contains; the plan assumes the smaller scope) before M20 · **G-SCALE / Q-SYNC-SCALE** after M17-4, before M19 · **Q-VERIFY** before M18 ends · **Q-REPORT**, **Q-SIGNUP**, **Q-REVIEW** later.
+- 👤 **G-SCALE / Q-SYNC-SCALE** after M17-4, before M19 · **Q-VERIFY** before M18 ends · **Q-REPORT**, **Q-SIGNUP**, **Q-REVIEW** later.
 
 **Engineering (not blocking)** — the 26 audited gaps are in ROADMAP §2, not repeated here.
 - **Accessibility audit (watch):** `testLaunchRootScreenPassesAccessibilityAudit` failed at times until 2026-11-24 (also on `main`), "Potentially inaccessible text" without an element; 12 of 12 runs passed on 2026-11-25 with the cleaned-up account. Cause unknown, no exemption added.
@@ -91,7 +92,7 @@ Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §3.
 1. M17-1 and M17-2 (signposts, MetricKit): small, and every later number depends on them.
 2. M17-3 → M17-4: scale fixture and measurement; report the numbers for G-SCALE.
 3. M17-5…M17-7, then M18 top to bottom (M18 may start before G-SCALE is decided; M19 may not).
-4. Founder, long lead times: push gateway (M22-1), legal (M22-4), KLIPY production key, filtering entitlement, artwork; answer Q-SCOPE.
+4. Founder, long lead times: push gateway (M22-1), legal (M22-4), KLIPY production key, filtering entitlement, artwork.
 5. Founder/device checks in §5 📱.
 
 ## 7. Next Session Prompt
@@ -101,7 +102,7 @@ Work the ROADMAP §3 queue from M17-1: Plan → Implement → Verify → Review 
 
 A task is done only when its "Done when" holds by a test that failed before, its GA row is removed, its spec no longer says
 "not built", and the rules of ROADMAP §1 hold. Measure M17-4 and record the table in TEST_STRATEGY §7; G-SCALE, G-PERF and
-G-SHIP are the founder's. Don't start M19 before G-SCALE is decided. Open decisions: Q-SCOPE, Q-SYNC-SCALE, Q-VERIFY.
+G-SHIP are the founder's. Don't start M19 before G-SCALE is decided. 1.0 scope is fixed (D122). Open decisions: Q-SYNC-SCALE, Q-VERIFY.
 
 Checks per iteration:
 - HALO_SIM="iPhone Air" scripts/prepush.sh

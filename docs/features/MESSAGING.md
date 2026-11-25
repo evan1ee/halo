@@ -22,7 +22,7 @@ Send, reply, edit, delete and react reliably, online or offline.
 - FR-8 Forward text, media, files, stickers and locations to one or more chats, re-encrypted for the target; warns when the target isn't encrypted and the source is (*not built*, ROADMAP M20-6).
 - FR-9 A failed send carries the SDK's reason (`QueueWedgeError`, F-FFI-24): network, refused by the server, or an encryption refusal naming the people or devices (*not built: the reason is dropped in `TimelineMapper`*, ROADMAP M18-2).
 - FR-10 Polls: vote, change the vote, end an own poll (*not built; creating and showing are*, ROADMAP M20-4).
-- FR-11 Multi-select for copy, forward and delete (candidate, ROADMAP M20-16).
+- FR-11 Multi-select for copy, forward and delete (candidate, D122, ROADMAP M20-16).
 
 ## 4. Non-functional requirements
 Local echo appears in < 100 ms; no message lost across app kill (V-SYNC-2).
@@ -57,4 +57,4 @@ Editing while the original is still sending · deleting a failed local echo · a
 Unit: composer formatting (Markdown → HTML subset), mention extraction, typing throttle. Integration: S-MSG-1..5. UI: send + reply smoke.
 
 ## 13. Open questions
-Q-SCOPE (FR-11).
+—

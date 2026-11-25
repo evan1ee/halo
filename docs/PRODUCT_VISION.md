@@ -25,7 +25,7 @@ Discord's and native, structured rendering of personal assistant bots.
 - Homeservers that offer neither password nor OIDC sign-in (D81; native sliding sync is no longer needed, D74).
 - Voice/video calls: never (D94; was "not in the MVP", D43).
 - An in-app LLM or AI backend (D18).
-- Feature parity with Element X in every corner (e.g. spaces management, room widgets) for 1.0 (Q-SCOPE).
+- Feature parity with Element X in every corner (e.g. spaces management, room widgets) for 1.0 (D122).
 - Android and macOS (the iPad split view is built, D91).
 
 ## Core principles
