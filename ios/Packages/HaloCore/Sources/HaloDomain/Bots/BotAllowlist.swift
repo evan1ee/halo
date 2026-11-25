@@ -28,10 +28,29 @@ public struct BotAllowlist: Sendable, Equatable {
     /// Parses account-data JSON. Malformed entries are skipped; unparsable content or a newer `version` returns `nil`
     /// so an older Halo leaves data written by a newer version untouched.
     public static func fromAccountData(_ data: Data) -> BotAllowlist? {
-        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              (object["version"] as? Int ?? 1) <= version
-        else { return nil }
-        let raw = object["bots"] as? [String] ?? []
+        (try? JSONSerialization.jsonObject(with: data) as? [String: Any]).flatMap { fromContent($0) }
+    }
+
+    /// Same, for the parsed content.
+    public static func fromContent(_ content: [String: Any]) -> BotAllowlist? {
+        guard (content["version"] as? Int ?? 1) <= version else { return nil }
+        let raw = content["bots"] as? [String] ?? []
         return BotAllowlist(bots: raw.compactMap { try? UserID($0) })
+    }
+
+    /// `content` holding this list; unknown keys stay (D54).
+    public func content(replacing content: [String: Any]?) -> [String: Any] {
+        var content = content ?? [:]
+        content["version"] = Self.version
+        content["bots"] = bots.map(\.rawValue)
+        return content
+    }
+
+    /// This list with the edit `old` → `new` applied: what `new` dropped is removed, what it gained is appended, and entries
+    /// the editor didn't know (another device's, or not loaded yet) stay.
+    public func applying(from old: BotAllowlist, to new: BotAllowlist) -> BotAllowlist {
+        if bots == old.bots { return new }
+        let removed = Set(old.bots).subtracting(new.bots), known = Set(old.bots)
+        return BotAllowlist(bots: bots.filter { !removed.contains($0) } + new.bots.filter { !known.contains($0) })
     }
 }

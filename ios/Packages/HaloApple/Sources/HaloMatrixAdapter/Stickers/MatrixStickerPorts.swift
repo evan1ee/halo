@@ -13,7 +13,7 @@ public final class MatrixStickerPrefsPort: StickerPrefsPort {
     public func load() async throws(HaloError) -> StickerPrefs? {
         let client = try await session.signedInClient()
         do {
-            guard let data = try await Self.current(client) else { return nil }
+            guard let data = try await ServerAccountData(client).storedOrServer(Self.eventType, client) else { return nil }
             return StickerPrefs.fromAccountData(data)
         } catch { throw ErrorMapper.map(error) }
     }
@@ -22,18 +22,12 @@ public final class MatrixStickerPrefsPort: StickerPrefsPort {
         let client = try await session.signedInClient()
         do {
             // Never overwrite data this version can't read (a newer Halo wrote it).
-            if let existing = try await Self.current(client), StickerPrefs.fromAccountData(existing) == nil,
+            if let existing = try await ServerAccountData(client).storedOrServer(Self.eventType, client), StickerPrefs.fromAccountData(existing) == nil,
                (try? JSONSerialization.jsonObject(with: existing)) != nil {
                 throw HaloError.unsupported("STICKER_PREFS_NEWER_VERSION")
             }
             try await client.setAccountData(eventType: Self.eventType, content: String(decoding: prefs.accountData(), as: UTF8.self))
         } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
-    }
-
-    /// The SDK's copy, or the server's while the store has none (the first sync isn't stored yet): "none" would be saved over it.
-    private static func current(_ client: Client) async throws -> Data? {
-        if let json = try await client.accountData(eventType: eventType) { return Data(json.utf8) }
-        return try await ServerAccountData(client).read(eventType)
     }
 }
 

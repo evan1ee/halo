@@ -240,6 +240,14 @@ final class HaloUITests: XCTestCase {
         try openFirstChat(app)
         let composer = app.descendants(matching: .any)["composer"].firstMatch
         XCTAssertTrue(composer.waitForExistence(timeout: 5))
+        // The photo is looked for below a message of its own: the images on screen can't be counted, because older ones (every
+        // run sends one) scroll off as the new one comes in.
+        let marker = "photo check \(UUID().uuidString.prefix(8))"
+        composer.tap()
+        composer.typeText(marker)
+        app.buttons["send-button"].tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", marker)).firstMatch.waitForExistence(timeout: 10))
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 900, height: 600))
         UIPasteboard.general.image = renderer.image { context in
             UIColor.systemTeal.setFill(); context.fill(CGRect(x: 0, y: 0, width: 900, height: 600))
@@ -252,15 +260,12 @@ final class HaloUITests: XCTestCase {
         XCTAssertTrue(paste.waitForExistence(timeout: 3))
         paste.tap()
         XCTAssertTrue(app.buttons["remove-photo"].waitForExistence(timeout: 5))
-        let photos = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Image'"))
-        let before = photos.count
         app.buttons["send-button"].tap()
-        // Sample for up to 10 s: once the photo is in the list, the count of photos never drops below it.
+        // Sample for up to 10 s: once the photo is in the list, it never leaves it.
         var appeared = false, dropped = false, sawConfirmed = false, shots = 0, samples = 0
         let start = Date()
         while Date().timeIntervalSince(start) < 10 {
-            let count = photos.count
-            if count > before { appeared = true } else if appeared { dropped = true }
+            if try hasPhoto(below: marker, in: app) { appeared = true } else if appeared { dropped = true }
             if app.descendants(matching: .any)["delivery-sent"].exists || app.descendants(matching: .any)["delivery-read"].exists { sawConfirmed = true }
             samples += 1
             if shots < 16, samples % 2 == 0 {  // a picture of the send flow for the contact sheet
@@ -272,6 +277,20 @@ final class HaloUITests: XCTestCase {
         XCTAssertFalse(dropped, "The photo never leaves the list between the local echo and the confirmed message")
         XCTAssertTrue(sawConfirmed, "A sent message ends on the sent check (or readers' avatars)")
         UIPasteboard.general.items = []
+    }
+
+    /// Whether an image is on screen below the message `text`, from one snapshot (rows may change between two queries).
+    @MainActor
+    private func hasPhoto(below text: String, in app: XCUIApplication) throws -> Bool {
+        var markerBottom: CGFloat?, images: [CGRect] = []
+        func visit(_ element: any XCUIElementSnapshot) {
+            if element.label == "Image" { images.append(element.frame) }
+            if element.label.contains(text), element.children.isEmpty || markerBottom == nil { markerBottom = element.frame.maxY }
+            element.children.forEach(visit)
+        }
+        visit(try app.snapshot())
+        guard let markerBottom else { return false }
+        return images.contains { $0.minY >= markerBottom - 1 }
     }
 
     @MainActor

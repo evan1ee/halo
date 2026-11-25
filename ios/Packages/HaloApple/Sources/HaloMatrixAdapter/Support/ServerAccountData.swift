@@ -89,4 +89,10 @@ struct ServerAccountData: Sendable {
         guard let updated = try change(try await content(type)) else { return }
         try await write(type, String(decoding: try JSONSerialization.data(withJSONObject: updated, options: [.sortedKeys]), as: UTF8.self))
     }
+
+    /// For reading only: the SDK's copy (works offline), or the server's while the store has none. Throws when neither is known.
+    func storedOrServer(_ type: String, _ client: Client) async throws -> Data? {
+        if let json = try await client.accountData(eventType: type) { return Data(json.utf8) }
+        return try await read(type)
+    }
 }

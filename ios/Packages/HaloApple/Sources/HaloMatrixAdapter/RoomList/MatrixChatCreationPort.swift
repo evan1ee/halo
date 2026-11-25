@@ -46,21 +46,40 @@ public final class MatrixChatCreationPort: ChatCreationPort {
     public func openOrCreateSavedRoom() async throws(HaloError) -> RoomID {
         let client = try await session.signedInClient()
         do {
+            func roomID(_ content: [String: Any]?) -> RoomID? { (content?["room_id"] as? String).flatMap { try? RoomID($0) } }
+            // What this device knows; works offline.
             if let raw = try await client.accountData(eventType: Self.savedRoomAccountDataType),
-               let obj = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any],
-               let existingID = obj["room_id"] as? String,
-               let room = try? client.getRoom(roomId: existingID),
-               room.membership() == .joined {
-                return try RoomID(existingID)
+               let known = roomID((try? JSONSerialization.jsonObject(with: Data(raw.utf8))) as? [String: Any]),
+               (try? client.getRoom(roomId: known.rawValue))?.membership() == .joined {
+                return known
+            }
+            // Before making a room: the one the account has recorded, if it is still in it (D120). Without an answer from the
+            // server nothing is made; it could be a second one.
+            let accountData = ServerAccountData(client)
+            if let recorded = roomID(try await accountData.content(Self.savedRoomAccountDataType)), try await isJoined(recorded, client) {
+                for _ in 0..<30 {  // sync may not have delivered the room yet
+                    if (try? client.getRoom(roomId: recorded.rawValue))?.membership() == .joined { return recorded }
+                    try await Task.sleep(for: .seconds(1))
+                }
+                throw HaloError.network(retryable: true)
             }
             let created = try await client.createRoom(request: CreateRoomParameters(
                 name: "Saved Messages", isEncrypted: true, visibility: .private, preset: .privateChat, invite: []))
-            let payload = try JSONSerialization.data(withJSONObject: ["room_id": created, "version": 1], options: [.sortedKeys])
-            try await client.setAccountData(
-                eventType: Self.savedRoomAccountDataType,
-                content: String(decoding: payload, as: UTF8.self))
+            try await accountData.update(Self.savedRoomAccountDataType) { current in
+                var content = current ?? [:]
+                content["room_id"] = created
+                content["version"] = 1
+                return content
+            }
             return try RoomID(created)
         } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
+    }
+
+    /// Whether the account is in the room, asked from the server.
+    private func isJoined(_ room: RoomID, _ client: Client) async throws -> Bool {
+        struct Joined: Decodable { let joined_rooms: [String] }
+        guard let data = try await ClientServerGET(fetch: ClientServerGET.urlSessionFetch).get(client, "joined_rooms") else { return false }
+        return try JSONDecoder().decode(Joined.self, from: data).joined_rooms.contains(room.rawValue)
     }
 
     public func joinRoom(_ idOrAlias: String) async throws(HaloError) -> RoomID {

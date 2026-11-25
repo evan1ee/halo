@@ -647,6 +647,29 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
+    @Test("Ignoring before the first sync is stored keeps the users already ignored; unignoring right after takes effect (restored)",
+          .enabled(if: env["HALO_DEV_PEER_USER"] != nil))
+    func ignoreKeepsOthers() async throws {
+        try await withCleanup { try await ignoreKeepsOthers($0) }
+    }
+
+    private func ignoreKeepsOthers(_ cleanup: Cleanup) async throws {
+        let (session, client) = try await freshSignIn(cleanup)
+        _ = try await restoring(["m.ignored_user_list"], of: client, cleanup)
+        let other = "@ignored-elsewhere:halo.localhost", peer = "@\(env["HALO_DEV_PEER_USER"] ?? ""):halo.localhost"
+        try await Self.accountData(client, "m.ignored_user_list", put: Data(#"{"ignored_users":{"\#(other)":{}}}"#.utf8))
+        func ignored() async throws -> Set<String> {
+            let content = try await Self.accountData(client, "m.ignored_user_list").flatMap { try JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            return Set((content?["ignored_users"] as? [String: Any])?.keys.map { $0 } ?? [])
+        }
+        try await MatrixSyncPort(session: session).start()
+        let profiles = MatrixProfilePort(session: session)
+        try await profiles.ignore(try UserID(peer))
+        #expect(try await ignored() == [other, peer])
+        try await profiles.unignore(try UserID(peer))
+        #expect(try await ignored() == [other])
+    }
+
     @Test("An enabled pack whose room the user has left is reported as unavailable, not as a failed load (creates a room and cleans up after itself)")
     func unavailablePack() async throws {
         try await withCleanup { try await unavailablePack($0) }
@@ -817,27 +840,81 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
-    @Test("Bot allowlist syncs via one.mbm.halo.bot_allowlist account data and restores original", .enabled(if: env["HALO_DEV_SERVER"] != nil))
-    func botAllowlist() async throws {
+    /// A new sign-in whose first sync has just started: the SDK's store has no account data yet (large account).
+    private func freshSignIn(_ cleanup: Cleanup) async throws -> (session: MatrixSessionPort, client: Client) {
         let session = port()
         let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
         _ = try await session.loginPassword(
             PasswordCredentials(username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
             on: details)
-        try await MatrixSyncPort(session: session).start()
+        cleanup.add { try? await session.logout() }
+        return (session, try await session.signedInClient())
+    }
+
+    @Test("Bot allowlist: the server's list is loaded before the first sync is stored, and an edit then keeps it and unknown keys (restored)")
+    func botAllowlist() async throws {
+        try await withCleanup { try await botAllowlist($0) }
+    }
+
+    private func botAllowlist(_ cleanup: Cleanup) async throws {
+        let (session, client) = try await freshSignIn(cleanup)
+        _ = try await restoring([BotAllowlist.eventType], of: client, cleanup)
+        let kept = try UserID("@kept-bot:halo.localhost"), added = try UserID("@contract-bot:halo.localhost")
+        try await Self.accountData(client, BotAllowlist.eventType, put: Data(#"{"bots":["@kept-bot:halo.localhost"],"other":1,"version":1}"#.utf8))
         let allowlist = MatrixBotAllowlistPort(session: session)
-        let original = (try? await allowlist.load()) ?? BotAllowlist()
-        let testBot = try UserID("@contract-bot:halo.localhost")
-        let updated = BotAllowlist(bots: [testBot])
-        try await allowlist.save(updated)
-        var seen = try? await allowlist.load()
-        for _ in 0..<30 where seen != updated {
-            try await Task.sleep(for: .seconds(1))
-            seen = try? await allowlist.load()
+        #expect(try await allowlist.load() == BotAllowlist(bots: [kept]))
+        // The editor of a new device starts empty: adding one must not drop the others, removing takes only that one.
+        #expect(try await allowlist.change(from: BotAllowlist(), to: BotAllowlist(bots: [added])) == BotAllowlist(bots: [kept, added]))
+        func server() async throws -> [String: Any]? {
+            try await Self.accountData(client, BotAllowlist.eventType).flatMap { try JSONSerialization.jsonObject(with: $0) as? [String: Any] }
         }
-        #expect(seen == updated)
-        try await allowlist.save(original)
-        try await session.logout()
+        #expect(try await server()?["bots"] as? [String] == [kept.rawValue, added.rawValue])
+        #expect(try await server()?["other"] as? Int == 1)
+        #expect(try await allowlist.change(from: BotAllowlist(bots: [added]), to: BotAllowlist()) == BotAllowlist(bots: [kept]))
+        #expect(try await server()?["bots"] as? [String] == [kept.rawValue])
+        // A newer Halo's data is left alone.
+        try await Self.accountData(client, BotAllowlist.eventType, put: Data(#"{"version":2}"#.utf8))
+        await #expect(throws: HaloError.unsupported("BOT_ALLOWLIST_NEWER_VERSION")) {
+            _ = try await allowlist.change(from: BotAllowlist(), to: BotAllowlist(bots: [added]))
+        }
+        #expect(try await server()?["version"] as? Int == 2)
+    }
+
+    @Test("Saved Messages: the recorded room is opened, not created again, before the first sync is stored; a room that was left is replaced (restored)",
+          .enabled(if: env["HALO_DEV_TIMELINE_ROOM"] != nil))
+    func savedRoom() async throws {
+        try await withCleanup { try await savedRoom($0) }
+    }
+
+    private func savedRoom(_ cleanup: Cleanup) async throws {
+        let (session, client) = try await freshSignIn(cleanup)
+        let type = MatrixChatCreationPort.savedRoomAccountDataType
+        _ = try await restoring([type], of: client, cleanup)
+        let recorded = try RoomID(env["HALO_DEV_TIMELINE_ROOM"] ?? "")
+        try await Self.accountData(client, type, put: Data(#"{"other":1,"room_id":"\#(recorded.rawValue)","version":1}"#.utf8))
+        try await MatrixSyncPort(session: session).start()
+        let chats = MatrixChatCreationPort(session: session)
+        func open() async throws -> RoomID {
+            let room = try await within(seconds: 90) { try await chats.openOrCreateSavedRoom() }
+            if room != recorded {
+                cleanup.add { if let created = try? await session.room(room) { try? await created.leave(); try? await created.forget() } }
+            }
+            return room
+        }
+        #expect(try await open() == recorded)
+        #expect(try client.getRoom(roomId: recorded.rawValue) != nil)  // usable, not just named
+
+        // Left elsewhere: a new one is made, recorded with the other keys kept, and found again at once.
+        try await Self.accountData(client, type, put: Data(##"{"other":1,"room_id":"!gone:halo.localhost","version":1}"##.utf8))
+        for _ in 0..<30 {
+            if let json = try await client.accountData(eventType: type), json.contains("!gone:") { break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        let created = try await open()
+        #expect(created != recorded)
+        let stored = try #require(try await Self.accountData(client, type).flatMap { try JSONSerialization.jsonObject(with: $0) as? [String: Any] })
+        #expect(stored["room_id"] as? String == created.rawValue && stored["other"] as? Int == 1)
+        #expect(try await open() == created)
     }
 
     @Test("Mentions, members and unknown local echoes (uses HALO_DEV_STICKER_ROOM as a scratch room)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))

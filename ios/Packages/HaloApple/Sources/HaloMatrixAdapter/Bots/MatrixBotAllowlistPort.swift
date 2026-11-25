@@ -12,22 +12,22 @@ public final class MatrixBotAllowlistPort: BotAllowlistPort {
     public func load() async throws(HaloError) -> BotAllowlist? {
         let client = try await session.signedInClient()
         do {
-            guard let json = try await client.accountData(eventType: BotAllowlist.eventType) else { return nil }
-            return BotAllowlist.fromAccountData(Data(json.utf8))
+            return try await ServerAccountData(client).storedOrServer(BotAllowlist.eventType, client).flatMap(BotAllowlist.fromAccountData)
         } catch { throw ErrorMapper.map(error) }
     }
 
-    public func save(_ allowlist: BotAllowlist) async throws(HaloError) {
+    public func change(from old: BotAllowlist, to new: BotAllowlist) async throws(HaloError) -> BotAllowlist {
         let client = try await session.signedInClient()
+        var result = new
         do {
-            // Never overwrite data this version can't read (a newer Halo wrote it).
-            if let existing = try await client.accountData(eventType: BotAllowlist.eventType),
-               BotAllowlist.fromAccountData(Data(existing.utf8)) == nil,
-               (try? JSONSerialization.jsonObject(with: Data(existing.utf8))) != nil {
-                throw HaloError.unsupported("BOT_ALLOWLIST_NEWER_VERSION")
+            try await ServerAccountData(client).update(BotAllowlist.eventType) { content in
+                guard let content else { return new.content(replacing: nil) }
+                // Never overwrite data this version can't read (a newer Halo wrote it).
+                guard let current = BotAllowlist.fromContent(content) else { throw HaloError.unsupported("BOT_ALLOWLIST_NEWER_VERSION") }
+                result = current.applying(from: old, to: new)
+                return result == current ? nil : result.content(replacing: content)
             }
-            let content = String(decoding: allowlist.accountData(), as: UTF8.self)
-            try await client.setAccountData(eventType: BotAllowlist.eventType, content: content)
-        } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
+            return result
+        } catch { throw ErrorMapper.map(error) }
     }
 }
