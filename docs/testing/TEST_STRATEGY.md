@@ -78,7 +78,7 @@ Targets in [../REQUIREMENTS.md](../REQUIREMENTS.md) NFR-1..3; measured with sign
 | NFR-13 main thread | no hang ≥ 250 ms | `main-thread-hang` signpost in the scripted sessions (`scripts/perf.py`); MetricKit in the field | see `perf-baseline.json` |
 | NFR-14 sync at scale | ≤ 60 s first, ≤ 10 s after 24 h | `scripts/scale-measure.py` | table below (simulator) |
 | NFR-15 energy | ≤ 4 %/h idle foreground | Xcode energy log, 1 h | none |
-| Message search (MESSAGE_SEARCH §4, M19-11): first results p95 at 300,000 messages; sync budgets with the index on | ≤ 200 ms **[ASSUMPTION V-SEARCH-2]**; NFR-14/15 | store test with generated messages; `scripts/scale-measure.py` | 0.2–49 ms per query, 145 MB for 300,000 messages (Python on the dev Mac, 2026-11-25; not GRDB, not a phone) |
+| Message search (MESSAGE_SEARCH §4, M19-11): first results p95 at 300,000 messages; sync budgets with the index on | ≤ 200 ms; NFR-14/15 | store test with generated messages; `scripts/scale-measure.py` | ≤ 52 ms, 152 MB for 300,000 messages (simulator, spike table below) |
 
 **Scale (M17-4, V-SCALE-1), 2026-11-25.** `scripts/scale-measure.py` on the M17-3 fixture server; adapter and SDK as the app uses them, iPhone Air simulator on the dev Mac, no network latency: the work is
 real, the seconds are a Mac's. Fixture messages are short and members have no profile, so real accounts send more bytes. Not yet: an iPhone, energy, a real public-server account (📱👤).
@@ -99,6 +99,27 @@ real, the seconds are a Mac's. Fixture messages are short and members have no pr
 What it says: classic sync itself carries 1,000 rooms well inside NFR-14. **The SDK's search index is what misses it**: one index per room, committed with a full disk sync, on a pool of threads each; leaving out only
 the history sweep changes nothing (`HALO_SCALE_SEARCH=live`: 42.1 s, 12.6 s). Decided: Halo's own index (D123, ADR-0024), if the spike passes (M17-8, V-SEARCH-2). With the index off the SDK still indexes new events in memory (F-FFI-25), so that column includes it. Two smaller findings: every launch fetches the event behind the read receipt of each unread
 room (344 requests at 1,000 rooms, GA-28), and the room list is rebuilt per response (GA-17).
+
+**Search index spike (M17-8, V-SEARCH-2/3), 2026-11-25.** `scripts/scale-measure.py --search` (`HALO_SCALE_HISTORY=app|own|memory|listen|bulk`), `infra/test/run.sh search`, `SearchIndexMeasurements`; iPhone Air simulator on the dev Mac, Debug, no network latency, SDK search index off. Reading times include waits of the
+test itself (10 ms per read, up to 300 ms after an empty page), so CPU and requests say more than seconds.
+
+| Measurement | Result | Limit |
+|---|---|---|
+| 1,000 rooms, SDK index off, automatic back-pagination **on**: first sync / catch-up / idle CPU / threads | 16.3 s / 1.6 s / 0.6 s per min / 18 | 60 s / 10 s / 1 s / — |
+| The same, back-pagination **off** | 12.4 s / 0.9 s / 0.6 s per min / 18 | |
+| Unread suite with the SDK index off, back-pagination on and off (S01–S29 real-server scenarios, encrypted evidence, read markers, policy) | 7 of 7 tests green in both | green |
+| Live lane on listeners (3,000 of them): registering / memory / catch-up / idle CPU | 0.03 s CPU / +22 MB (with drift) / 1.6 s / 0.5 s per min | +20 MB; 10 s; 1 s |
+| … catch-up of 205 rooms, 5 of them with a gap: missing messages / gap reads | 0 of 1,300 / 0.9 s, 25 requests | 0 |
+| History, 20,000-event room in slices of 500: time / CPU / requests / repeated | 11.9 s / 4.7 s / 245 / 40 (one per slice) | complete |
+| … memory in the app's client / in a client of its own (80,000 events) | +10.6 MB and growing / flat at 34 MB | +20 MB |
+| First indexing, 300 of 1,000 rooms to their start (23,278 messages), one client per 20 rooms: CPU / requests / memory | 30 s / 1,422 / +4 MB, peak +12 | +20 MB |
+| Rejected: timeline reads in the app's client, every room once / each further time | +77 / +21 to +26 MB | +20 MB |
+| Rejected: paging live timelines in a client of its own, per room | 0.4 s CPU, 104 threads | |
+| Encrypted history on a new device, 400 messages under 40 keys: before / after recovery / key requests | 0 / 400 readable / 41 | all |
+| FTS5 through GRDB, 300,000 messages: size / writing / slowest batch of 100 | 152 MB / 0.13 ms each / 87 ms | |
+| … query p95: rare word, common word, one letter, one CJK character, in one room | 8, 24, 38, 52, 19 ms | 200 ms |
+
+Not measured: an iPhone, energy, a real account, months of mixed encrypted history, the same numbers with network latency.
 
 **Performance suite (M17-5).** `scripts/perf.py` signs a simulator of its own in to the scale accounts (or uses a device's account, `--device`), runs `HaloPerformanceTests` with optimised code, reads the result bundle and prints
 budget / measured / baseline / pass; over 20 % (a simulator: 50 %, its runs differ by up to 28 %) and the noise floor worse than `perf-baseline.json` for the same device fails, and a missed budget fails on a device. Numbers are compared only with the same device and OS.

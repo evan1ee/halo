@@ -6,7 +6,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 1. Current status
 - **Roadmap:** M0–M16 are built and merged. Re-planned 2026-11-25 to a production release (D121): M17 measure → M18 security and reliability → M19 performance → M20 messaging → M21 experience → M22 beta and launch, with gates G-SCALE, G-PERF, G-SHIP ([docs/ROADMAP.md](docs/ROADMAP.md)). The audit behind it found 26 gaps (ROADMAP §2); Halo isn't a release candidate yet.
-- **Milestones:** M0–M16 built, partly for M14–M15 (GA-24…GA-26). **M17 in progress:** M17-1, 2, 3, 6 done; M17-4, M17-5 and M17-7 done except what needs a device or the founder (§5). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1).
+- **Milestones:** M0–M16 built, partly for M14–M15 (GA-24…GA-26). **M17 in progress:** M17-1, 2, 3, 6, 8 done; M17-4, M17-5 and M17-7 done except what needs a device or the founder (§5). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1).
 - **Last checks:** `prepush.sh` passed on the pushed commit (package tests, app build, UI tests, docs, boundaries, gitleaks, swiftlint); `infra/test/run.sh scenarios`, `faults` (9 cases) and `interop` (2 known issues) green; fault cases red for a client broken on purpose; full contract suite 38 tests green, but see the `timeline` flake in §5. Simulator and dev Mac only; nothing was run on an iPhone.
 - **CI:** PRs #1–#89 merged. New `scenarios.yml` (Synapse behind the fault proxy). Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
@@ -19,6 +19,7 @@ Summary only; older history lives in `git log`.
   - **M17-5** `scripts/perf.py` + `HaloPerformanceTests` with `docs/testing/perf-baseline.json`. **M17-7** `InteropTests` (wire level) and the signed checklist (INTEGRATION_TESTS §4).
   - Also fixed: `SessionCoordinator.start()` could return while a revoked session was still being deleted (state "restoring"); found by a flaking unit test, regression test added.
   - Found: GA-27 (search index), GA-28 (one request per unread room per launch), GA-29 (39 s to recover from a half-open connection), GA-30 (mention's plain text), GA-31 (unknown types hidden).
+- **M17-8 search spike (2026-11-25): passed on the simulator**, after two design changes: live lane on the SDK's per-room listeners, history in an SDK client of its own (the app's client never frees what is read, F-FFI-26). Encrypted history: 400 of 400 messages after recovery. Unread suite green with the SDK index off. Numbers in TEST_STRATEGY §7; `scripts/scale-measure.py --search`, `infra/test/run.sh search`. Production code: only the measurement switch `backPaginates`. Not measured: an iPhone, energy.
 - **Message search decided (D123, ADR-0024, 2026-11-25, documents only, nothing built):** Halo's own FTS5 index, **encrypted rooms searchable**, full history, on the device only; spec `docs/features/MESSAGE_SEARCH.md` (AC-SRCH-1…9). Checked in the SDK source: the history sweep needs automatic back-pagination, the SDK indexes in memory even without a folder, keys come from the backup after a failed decryption (F-FFI-25). New M17-8 (spike), larger M19-11, M20-1 taken with it, GA-32 (bugs in today's search), V-SEARCH-2/3; index protection D124.
 - **Production roadmap (D121, 2026-11-25, `docs/production-roadmap`):** audited code against every product, design, security, testing and release document at `155f745`; rewrote ROADMAP (gap table, R/C/P tasks with "Done when", gates, release plan), added AC-REL/AC-SEC/AC-MOT and NFR-11–15, V-SCALE-1, V-OIDC-1, V-INTEROP-1, Q-SCOPE, Q-SYNC-SCALE, Q-REPORT, Q-SIGNUP, Q-VERIFY, Q-REVIEW; corrected specs that promised unbuilt behaviour or described sliding sync.
 - **Unread badge, widgets and background sync (D118, 2026-11-24, PR #88):**
@@ -61,7 +62,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D124), [docs/adr/R
 
 ## 4. Modified files (this push)
 - **App:** `HaloSignpost`, `MetricPayloadStore`, `MetricKitRecorder`, `MainThreadHangs`; call sites in `HaloApp`, `AppRoot`, assemblies, `TimelineView`, `StickerImage`, `AsyncAnimatedImage`, `MatrixSessionPort` (also the measurement switches), NSE.
-- **Tests:** `HaloSignpostTests`, `ImageDecodeSignpostTests`, `MetricPayloadStoreTests`, `MainThreadHangsTests`, `ScaleMeasurements`, `FaultTests`, `InteropTests`, `TestServerStage`, `HaloPerformanceTests` (the two perf tests moved out of `HaloUITests`).
+- **Tests (M17-8):** `SearchSpikeReader`, `SearchSpikeMeasurements`, `SearchSpikeEncryptionTests`, `SearchIndexMeasurements`. **Tests (M17):** `HaloSignpostTests`, `ImageDecodeSignpostTests`, `MetricPayloadStoreTests`, `MainThreadHangsTests`, `ScaleMeasurements`, `FaultTests`, `InteropTests`, `TestServerStage`, `HaloPerformanceTests` (the two perf tests moved out of `HaloUITests`).
 - **Infrastructure:** `infra/test/`, `infra/dev/scale-fixtures.py` + compose/config, `tools/scenario-driver`, `scripts/{scale-measure,perf}.py`, `scenarios.yml`.
 - **Docs (search, D123):** ADR-0024, MESSAGE_SEARCH and the documents it touches. **Docs (M17):** ROADMAP, OPEN_QUESTIONS, RISK_REGISTER, TEST_STRATEGY, INTEGRATION_TESTS, LOGGING, CI_CD, SYNC_ENGINE, PRIVACY, SECURITY, PRIVACY_POLICY, TECH_DEBT, DEVELOPMENT_SETUP, `infra/dev/README`.
 
@@ -69,7 +70,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D124), [docs/adr/R
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
 
 **Waiting for the founder before work can pass a point**
-- 👤 **G-SCALE** after M17-8, before M19 · **Q-VERIFY** before M18 ends · **Q-REPORT**, **Q-SIGNUP**, **Q-REVIEW** later.
+- 👤 **G-SCALE** (M17-8 passed on the simulator; numbers in TEST_STRATEGY §7), before M19 · **Q-VERIFY** before M18 ends · **Q-REPORT**, **Q-SIGNUP**, **Q-REVIEW** later.
 
 **Engineering (not blocking)** — the gaps are in ROADMAP §2, not repeated here.
 - **`timeline` contract flake:** `verifyInteractions` timed out (90 s) in the first 3 of 12 completed full runs on the branch, then in none (one more run was stopped at 290 s, unfinished); 0 of 2 on `main` the same hour, 0 of 4 alone. The same test also timed out on earlier branches. The step is unknown; the tests now name it in the failure ("timed out …: never saw …").
@@ -103,17 +104,17 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 
 ## 6. Next steps
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §3.
-1. M17-8 (search index spike), then the founder: G-SCALE; the device and hand checks of §5.
+1. Founder: G-SCALE; the device and hand checks of §5. Then M19-11 (search), with M20-1.
 2. M18 top to bottom (may start now; M19 may not before G-SCALE). Re-run `infra/test/run.sh faults` for send and sync changes.
 3. Founder, long lead times: push gateway (M22-1), legal (M22-4), KLIPY production key, filtering entitlement, artwork.
 
 ## 7. Next Session Prompt
 ```text
 /loop Read AGENTS.md, HANDOFF.md, docs/development/AUTONOMOUS_LOOP.md and docs/ROADMAP.md (§1–§3, §7).
-Work the ROADMAP §3 queue from M17-8 (search spike, ADR-0024), then M18-1: Plan → Implement → Verify → Review → Land, R tasks first.
+Work the ROADMAP §3 queue from M18-1: Plan → Implement → Verify → Review → Land, R tasks first.
 
 A task is done only when its "Done when" holds by a test that failed before, its GA row is removed, its spec no longer says
-"not built", and the rules of ROADMAP §1 hold. G-SCALE (numbers in TEST_STRATEGY §7, M17-8), G-PERF and
+"not built", and the rules of ROADMAP §1 hold. G-SCALE (numbers in TEST_STRATEGY §7), G-PERF and
 G-SHIP are the founder's. Don't start M19 before G-SCALE is decided. 1.0 scope is fixed (D122). Open decision: Q-VERIFY.
 
 Checks per iteration:

@@ -24,16 +24,16 @@ Find any message this device can read, **in encrypted and unencrypted rooms, bac
 - FR-6 **Query safety:** user text never reaches FTS5 as syntax; tokens are quoted; a query without any token returns no results and no error.
 - FR-7 **Order and paging:** newest first, paged by (time, row). No relevance ranking.
 - FR-8 **Filters:** room (used by M20-11) and kind: messages, media, files, links.
-- FR-9 **Live lane:** after a sync, the touched rooms are read back to the first known event; a gap is recorded and closed by the history lane.
-- FR-10 **History lane:** starts by itself when sync is quiet; most recent rooms first; one room at a time, in slices; stores its position after each slice; stops for Low Power Mode, thermal state serious or worse, mobile data (setting, default off), server rate limits and anything the person is doing; goes on in a processing task on the charger.
+- FR-9 **Live lane:** the SDK's per-room listeners deliver each synced message, decrypted; undecryptable ones are kept by ID and fetched again when keys arrive. Rooms with ten or more events in one response are read back to a known event (possible gap). Listeners are registered before the first sync of a run.
+- FR-10 **History lane:** starts by itself when sync is quiet; most recent rooms first; one room at a time, in slices; stores its position after each slice; runs in an SDK client of its own that is dropped about every 20 rooms or 5,000 events (ADR-0024); stops for Low Power Mode, thermal state serious or worse, mobile data (setting, default off), server rate limits and anything the person is doing; goes on in a processing task on the charger.
 - FR-11 **Re-check before showing:** each page of hits is read from the SDK; a deleted event is removed from the index and not shown, an edited one is updated, an ignored sender is hidden.
 - FR-12 **Opening a hit** goes to the event, in its thread if it is in one, through M20-1. Too old, gone or offline is said.
 - FR-13 **Coverage notice:** "Searched back to <month> · n of m chats complete", plus how many messages can't be decrypted, with a way to verification when the device isn't verified.
 - FR-14 **Settings → Storage:** index size, progress, pause, delete and rebuild.
 
 ## 4. Non-functional requirements
-NFR-14 and NFR-15 hold with the index on: at 1,000 rooms first sync ≤ 60 s, catch-up ≤ 10 s, ≤ 1 s CPU per idle minute once the history lane is done or paused, ≤ 20 MB extra memory (V-SEARCH-2).
-First results ≤ 200 ms p95 at 300,000 messages **[ASSUMPTION V-SEARCH-2; 0.2–49 ms per query measured on the dev Mac]**. NFR-4: no message text, file name, address or query in logs. Protection at rest: [../security/SECURITY.md](../security/SECURITY.md) §4.
+NFR-14 and NFR-15 hold with the index on: at 1,000 rooms first sync ≤ 60 s, catch-up ≤ 10 s, ≤ 1 s CPU per idle minute once the history lane is done or paused, ≤ 20 MB extra memory (met on the simulator, TEST_STRATEGY §7; the listeners' 22 MB is at the limit).
+First results ≤ 200 ms p95 at 300,000 messages (simulator: ≤ 52 ms). NFR-4: no message text, file name, address or query in logs. Protection at rest: [../security/SECURITY.md](../security/SECURITY.md) §4.
 
 ## 5. User flows
 Pull down on the chat list → type → chat names and "Messages" → tap a hit → the room or thread at that message.
@@ -72,4 +72,4 @@ Unit (Linux): tokeniser and query builder (AC-SRCH-5, 7), policy and coverage (o
 Contract (dev Synapse): encrypted room live, after recovery (throwaway account, recovery key), late key, kill and resume, deletion and edit while not loaded, thread hit. Scale: `scale1000` and the 20,000-event room. UI: coverage notice, CJK query, AX5, VoiceOver. 📱: locked phone, processing task, first sync of `scale1000`.
 
 ## 13. Open questions
-V-SEARCH-2, V-SEARCH-3 in [../OPEN_QUESTIONS.md](../OPEN_QUESTIONS.md).
+None on design; V-SEARCH-2 still needs an iPhone ([../OPEN_QUESTIONS.md](../OPEN_QUESTIONS.md)).

@@ -12,7 +12,7 @@ iOS gives no persistent background connection. Halo relies on four mechanisms:
 
 ## Rules
 1. Background work is **idempotent** and safe to interrupt at any point (every step committed transactionally).
-2. Background work never starts UI-only subscriptions (timelines). One exception (ADR-0024, not built): the search history lane opens an event-focused timeline for one slice and drops it.
+2. Background work never starts UI-only subscriptions (timelines). One exception (ADR-0024, not built): the search history lane opens an event-focused timeline in its own SDK client for one slice and drops it.
 3. The NSE never sends receipts or messages (it may be killed at any moment; the app owns outbound state).
 4. On every foreground: full reconcile (see [DATA_FLOW.md](DATA_FLOW.md) §5) — the guarantee that catches up whatever best-effort background work missed.
 

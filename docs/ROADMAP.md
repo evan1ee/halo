@@ -73,7 +73,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 | [ ] **M17-5 Repeatable performance suite** with the budgets of TEST_STRATEGY §7 (*`scripts/perf.py` built, simulator baseline recorded; open: the device baseline 📱*) | R · M · 📱 | One command prints budget / measured / pass; same device, Release build; over 20 % worse fails |
 | [x] **M17-6 Fault injection and scenarios in CI**: `infra/test` with a proxy (drop, latency, 5xx, 429, half-open) and `scenarios.yml` | R · M | The scenario driver runs on Linux CI; offline, reconnect and rate-limit cases red/green on demand |
 | [ ] **M17-7 Interoperability matrix** (V-INTEROP-1; *wire level automated and green but for GA-30/GA-31; open: the signed checklist in Element Web and Element X 👤, INTEGRATION_TESTS §4*): every message kind, both directions, Element Web + Element X | R · M | Second-client checks automated where possible, the rest a signed checklist; gaps become tasks |
-| [ ] **M17-8 Search index spike** (V-SEARCH-2, V-SEARCH-3; no product code): what Halo's own index costs at 1,000 rooms, and whether encrypted history decrypts while paging | R · M | Numbers in TEST_STRATEGY §7; pass or fail against MESSAGE_SEARCH §4 recorded in OPEN_QUESTIONS; feeds G-SCALE |
+| [x] **M17-8 Search index spike** (V-SEARCH-2, V-SEARCH-3; *passed on the simulator 2026-11-25, design corrected in ADR-0024; the iPhone run belongs to M19-11*): what Halo's own index costs at 1,000 rooms, and whether encrypted history decrypts while paging | R · M | Numbers in TEST_STRATEGY §7; pass or fail against MESSAGE_SEARCH §4 recorded in OPEN_QUESTIONS; feeds G-SCALE |
 
 **Exit:** G-SCALE recorded; every NFR has a measured baseline.
 
@@ -226,7 +226,7 @@ wrong. P2: workaround exists. P3: polish. A P0 stops a rollout; fixed forward (B
 | **G-FFI** | M3 | **PASS (D109)** | Stay on upstream `MatrixRustSDK` binary (ADR-0003). |
 | **G-NSE** | M1 | **PASS (D109)** | 100/100 live iPhone 16 soak (ADR-0016). Re-run after M18-6/M18-7 change the NSE. |
 | **G-UNREAD** | M3 | **PASS (D109)** | S01–S29 over classic sync; 7-day AC-U8 soak in Beta 1. |
-| **G-SCALE** | M17 | **measured on fixtures (2026-11-25), not decided** | Sync passes NFR-14 only without the SDK's search index; Halo's own replaces it (D123) if M17-8 passes. Classic sync meets NFR-14 on the 1,000-room fixture and one real account, or Q-SYNC-SCALE picks another path **before** M19. The agent measures; the founder decides. |
+| **G-SCALE** | M17 | **measured on fixtures (2026-11-25), not decided** | Sync passes NFR-14 only without the SDK's search index; Halo's own replaces it (D123); its spike passed on the simulator (M17-8). Classic sync meets NFR-14 on the 1,000-room fixture and one real account, or Q-SYNC-SCALE picks another path **before** M19. The agent measures; the founder decides. |
 | **G-PERF** | M19 | open | All budgets on the reference device, Release build, two runs on different days. |
 | **G-SHIP** | M22 | open | §4 complete, zero P0/P1, upgrade path tested, rollback rehearsed, founder sign-off. |
 

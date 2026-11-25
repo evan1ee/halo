@@ -10,6 +10,7 @@ Decisions: D46, ADR-0006.
 | SDK event cache + media store | matrix-rust-sdk | App Group `accounts/<hash>/cache/` | Cached events, media | Yes (from server) |
 | `halo.sqlite` | HaloPersistence (GRDB) | App Group `accounts/<hash>/halo/halo.sqlite` | Intents, notification records, audit, caches, bot index | Yes, except unsent intents |
 | `search-index.sqlite` (*not built*, D123) | HaloPersistence (GRDB, FTS5) | App's private Application Support `search/<hash>/`, excluded from backups | Text of decrypted messages, per-room coverage | Yes (from the SDK and the server; slow for full history) |
+| Search history client's event cache (*not built*) | matrix-rust-sdk | App's private folder, passphrase-encrypted like the app's | Scratch; deleted with the client | Yes |
 | Search holding file (*not built*) | HaloPersistence | App's private folder | History fetched while locked, AES-GCM, until it moves into the index | Yes |
 | Keychain (shared access group) | HaloPlatform | — | Session tokens, SDK store passphrase, Halo DB field key | No |
 | UserDefaults (App Group suite) | Features | — | UI preferences | Yes (defaults) |
