@@ -19,7 +19,7 @@ One place for account, notifications, privacy, appearance, storage, diagnostics 
 | Privacy | Read receipts: public / private (D7); typing notices on/off; media previews; URL previews |
 | Appearance | System / light / dark, text size follows Dynamic Type, timeline density |
 | Stickers | Manage packs (built: list + remove enabled packs), favourites (links to the sticker manager; not built) |
-| Bots | Allowlisted bot user IDs for template cards (synced as `one.mbm.halo.bot_allowlist`, see BOT_MESSAGES §3) |
+| Bots | Allowlisted bot user IDs for template cards (synced as `one.mbm.halo.bot_allowlist`, an edit changes only what the user changed, D120; see BOT_MESSAGES §3) |
 | Storage | SDK store sizes, clear media cache (built: clears in-memory thumbnails and per-session `caches/` directories) |
 | Diagnostics | Auditor summary (debug/TestFlight), "Reconcile now", "Export diagnostics (.zip)" (`DiagnosticsZipArchive`, built) |
 | Privacy (app switcher) | "Hide content in app switcher" (D61, built) |

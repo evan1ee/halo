@@ -24,7 +24,7 @@ struct NotificationProcessorTests {
             title: "Alice", body: "Hello 2", timestamp: eventTs.addingTimeInterval(1), isMention: false, mode: .allMessages))), for: ev2)
         let records = FakeNotificationRecords()
         let processor = NotificationProcessor(
-            fetcher: fetcher, records: records, lastAttention: { [roomB: 3] }, isAppForeground: { false }, now: { now })
+            fetcher: fetcher, records: records, attention: { AttentionBaseline(counts: [roomB: 3]) }, isAppForeground: { false }, now: { now })
 
         // Room B had 3 unread; first push in room A gives badge 4, second push in room A gives badge 5.
         let first = await processor.process(room: roomA, event: ev1)
@@ -43,14 +43,14 @@ struct NotificationProcessorTests {
         fetcher.setResult(.success(.display(NotificationDisplay(
             title: "Alice", body: "Hi", timestamp: eventTs, isMention: false, mode: .allMessages))), for: ev1)
         let fg = NotificationProcessor(
-            fetcher: fetcher, records: records, lastAttention: { [roomB: 1] }, isAppForeground: { true }, now: { now })
+            fetcher: fetcher, records: records, attention: { AttentionBaseline(counts: [roomB: 1]) }, isAppForeground: { true }, now: { now })
         #expect(await fg.process(room: roomA, event: ev1) == .deliver(title: "Alice", body: "Hi", threadID: roomA.rawValue, badge: nil, outcome: "display"))
 
         // 2. App is background, room is mentions-only, push is NOT a mention: badge stays nil (room not added).
         fetcher.setResult(.success(.display(NotificationDisplay(
             title: "Team", body: "Bob: chatter", timestamp: eventTs, isMention: false, mode: .mentionsAndKeywords))), for: ev2)
         let bg = NotificationProcessor(
-            fetcher: fetcher, records: records, lastAttention: { [roomB: 1] }, isAppForeground: { false }, now: { now })
+            fetcher: fetcher, records: records, attention: { AttentionBaseline(counts: [roomB: 1]) }, isAppForeground: { false }, now: { now })
         #expect(await bg.process(room: roomA, event: ev2) == .deliver(title: "Team", body: "Bob: chatter", threadID: roomA.rawValue, badge: nil, outcome: "display"))
 
         // 3. Mentions-only room WITH mention in background: room gains attention, badge becomes 2.
@@ -73,7 +73,7 @@ struct NotificationProcessorTests {
         fetcher.setResult(.success(.encrypted(roomName: "Secret", timestamp: eventTs, mode: .allMessages)), for: ev1)
         fetcher.setResult(.success(.encrypted(roomName: "Group", timestamp: eventTs, mode: .mentionsAndKeywords)), for: ev2)
         let processor = NotificationProcessor(
-            fetcher: fetcher, records: records, lastAttention: { [:] }, isAppForeground: { false }, now: { now })
+            fetcher: fetcher, records: records, attention: { AttentionBaseline(counts: [:]) }, isAppForeground: { false }, now: { now })
 
         #expect(await processor.process(room: roomA, event: ev1) == .deliver(title: "Secret", body: "Encrypted message", threadID: roomA.rawValue, badge: 1, outcome: "encrypted", attentionCounts: [roomA: 1]))
         #expect(await processor.process(room: roomB, event: ev2) == .deliver(title: "Group", body: "Encrypted message", threadID: roomB.rawValue, badge: nil, outcome: "encrypted"))
@@ -90,7 +90,7 @@ struct NotificationProcessorTests {
         fetcher.setResult(.failure(.network(retryable: true)), for: ev3)
 
         let processor = NotificationProcessor(
-            fetcher: fetcher, records: records, lastAttention: { [:] }, isAppForeground: { false }, now: { now })
+            fetcher: fetcher, records: records, attention: { AttentionBaseline(counts: [:]) }, isAppForeground: { false }, now: { now })
 
         #expect(await processor.process(room: roomA, event: ev1) == .deliver(title: "A", body: "1", threadID: roomA.rawValue, badge: 1, outcome: "display", attentionCounts: [roomA: 1]))
         #expect(await processor.process(room: roomA, event: ev1) == .suppressed(outcome: "duplicate"))
@@ -172,9 +172,11 @@ struct NotificationProcessorTests {
             title: "Bob", body: "In B", timestamp: eventTs.addingTimeInterval(1), isMention: false, mode: .allMessages))), for: ev2)
         let records = FakeNotificationRecords()
         let cutoff = now.addingTimeInterval(-60)
+        let shown = Mutex<[RoomID: Int]>([:])
         let processor = NotificationProcessor(
             fetcher: fetcher, records: records,
-            lastAttention: { ([:], cutoff) }, isAppForeground: { false }, now: { now })
+            attention: { AttentionBaseline(counts: [:], displayed: shown.withLock { $0 }, evaluatedAt: cutoff) },
+            storeDisplayed: { counts in shown.withLock { $0 = counts } }, isAppForeground: { false }, now: { now })
 
         let first = await processor.process(room: roomA, event: ev1)
         let second = await processor.process(room: roomB, event: ev2)
@@ -188,5 +190,72 @@ struct NotificationProcessorTests {
         } else {
             Issue.record("Expected deliver for second push")
         }
+    }
+
+    private func pushes(_ events: [(EventID, Date, NotificationMode, Bool)]) -> FakeNotificationFetchPort {
+        let fetcher = FakeNotificationFetchPort()
+        for (event, timestamp, mode, mention) in events {
+            fetcher.setResult(.success(.display(NotificationDisplay(
+                title: "t", body: "b", timestamp: timestamp, isMention: mention, mode: mode))), for: event)
+        }
+        return fetcher
+    }
+
+    private func badge(_ decision: NotificationDecision) -> Int? {
+        if case .deliver(_, _, _, let badge, _, _) = decision { return badge }
+        return nil
+    }
+
+    @Test("a late push for an event sync already delivered is not counted a second time (unread or read meanwhile)")
+    func latePush() async {
+        let baseline = AttentionBaseline(
+            counts: [roomA: 3], evaluatedAt: now.addingTimeInterval(-1), syncedThrough: [roomA: eventTs, roomB: eventTs])
+        let processor = NotificationProcessor(
+            fetcher: pushes([(ev1, eventTs, .allMessages, false), (ev2, eventTs, .allMessages, false)]),
+            records: FakeNotificationRecords(), attention: { baseline }, isAppForeground: { false }, now: { now })
+        #expect(badge(await processor.process(room: roomA, event: ev1)) == nil)  // already among the 3
+        #expect(badge(await processor.process(room: roomB, event: ev2)) == nil)  // already read
+    }
+
+    @Test("the badge is recomputed from the app's evaluation, so the extension's own result never becomes its next base")
+    func recomputedNotIncremented() async {
+        let shown = Mutex<[RoomID: Int]>([roomA: 7])
+        let evaluatedAt = now.addingTimeInterval(-10)
+        let ev3 = try! EventID("$e3")
+        let processor = NotificationProcessor(
+            fetcher: pushes([(ev1, eventTs, .allMessages, false), (ev2, eventTs, .allMessages, false), (ev3, eventTs, .mentionsAndKeywords, false)]),
+            records: FakeNotificationRecords(),
+            attention: { AttentionBaseline(counts: [roomA: 7], displayed: shown.withLock { $0 }, evaluatedAt: evaluatedAt) },
+            storeDisplayed: { counts in shown.withLock { $0 = counts } }, isAppForeground: { false }, now: { now })
+        #expect(badge(await processor.process(room: roomA, event: ev1)) == 8)
+        // A non-mention in a mentions-only room counts nothing, also not through a later push for another room.
+        #expect(badge(await processor.process(room: roomB, event: ev3)) == nil)
+        #expect(badge(await processor.process(room: roomA, event: ev2)) == 9)
+        #expect(shown.withLock { $0 } == [roomA: 9])
+    }
+
+    @Test("concurrent pushes in different rooms all end up in what is shown")
+    func concurrentPushes() async throws {
+        let ids = try (0..<40).map { (try RoomID("!r\($0):x.org"), try EventID("$c\($0)")) }
+        let fetcher = pushes(ids.map { ($0.1, eventTs, .allMessages, false) })
+        let records = FakeNotificationRecords()
+        let shown = Mutex<[RoomID: Int]>([:])
+        let evaluatedAt = now.addingTimeInterval(-10)
+        // Closures over the Mutex are made outside the task group: Swift 6.2 rejects capturing it in `addTask`.
+        let attention: @Sendable () -> AttentionBaseline = {
+            AttentionBaseline(counts: [:], displayed: shown.withLock { $0 }, evaluatedAt: evaluatedAt)
+        }
+        let storeDisplayed: @Sendable ([RoomID: Int]) -> Void = { counts in shown.withLock { $0 = counts } }
+        await withTaskGroup(of: Void.self) { group in
+            for (room, event) in ids {
+                group.addTask { [now] in
+                    let processor = NotificationProcessor(
+                        fetcher: fetcher, records: records, attention: attention, storeDisplayed: storeDisplayed,
+                        isAppForeground: { false }, now: { now })
+                    _ = await processor.process(room: room, event: event)
+                }
+            }
+        }
+        #expect(shown.withLock { $0.values.reduce(0, +) } == 40)
     }
 }

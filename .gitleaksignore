@@ -4,3 +4,7 @@
 
 # False positive: "Keychain, G-FFI/G-NSE/G-PUSH gates" in docs/ROADMAP.md matched generic-api-key.
 d4de6f55b0fbb93ff549360cec026cffb7c2257a:docs/ROADMAP.md:generic-api-key:91
+
+# False positive: a UserDefaults key *name* ("appForeground.v1") in a test matched generic-api-key because it followed
+# `forKey:`. The line is rewritten; the fingerprint stays because history scans still see the old commit.
+04bce9dca3d8d5756f8ccf6ce407125ba771962d:ios/Packages/HaloApple/Tests/HaloPlatformTests/AttentionCacheTests.swift:generic-api-key:68

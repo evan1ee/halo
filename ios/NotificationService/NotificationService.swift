@@ -95,7 +95,8 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
             let processor = NotificationProcessor(
                 fetcher: MatrixNotificationPort(session: runtime.session),
                 records: runtime.records,
-                lastAttention: { (attention.roomCounts(), attention.updatedAt()) },
+                attention: { attention.baseline() },
+                storeDisplayed: { attention.storeDisplayed($0) },
                 isAppForeground: { attention.isForeground() })
             let decision = await processor.process(room: room, event: event)
             metrics.step("fetch")
@@ -105,10 +106,7 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
                 content.body = body
                 content.threadIdentifier = threadID
                 content.badge = badge.map(NSNumber.init(value:))
-                if let attentionCounts {
-                    attention.store(attentionCounts)
-                    WidgetCenter.shared.reloadAllTimelines()
-                }
+                if attentionCounts != nil { WidgetCenter.shared.reloadAllTimelines() }
                 deliver(content, outcome: outcome, metrics: metrics)
             case .suppressed(let outcome):
                 // Empty, silent, passive content (R-14): suppresses delivery completely once Apple's

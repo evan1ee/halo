@@ -70,6 +70,19 @@ struct ReadStatePolicyTests {
         let own = LatestEventRef(timestamp: t0, senderIsSelf: true)
         let afterOwn = eval(inputs(encrypted: true, server: server, sdk: utd, latest: own))
         #expect(afterOwn.attention && afterOwn.reasons == [.sdkUnreadAfterRead, .sdkCounts])
+        // …unless an unconfirmed local read position is past that own event (S11: the latest event lags at the own join, the
+        // receipt can't be sent): the SDK doesn't know that position, so its count is stale and E1 holds.
+        for receipt in [nil, t0 - 1, t0] {
+            let offline = eval(inputs(server: server, sdk: utd, latest: own, intent: t0 + 1, receipt: receipt))
+            #expect(!offline.attention && offline.reasons == [.intentCovers])
+        }
+        // A read position at or before the own event says nothing about what came after it…
+        for intent in [t0, t0 - 1] {
+            #expect(eval(inputs(encrypted: true, server: server, sdk: utd, latest: own, intent: intent)).reasons == [.sdkUnreadAfterRead, .sdkCounts])
+        }
+        // …and once the server confirmed the read position, or the SDK holds it, what is still counted came after it.
+        #expect(eval(inputs(server: server, sdk: utd, latest: own, intent: t0 + 1, intentConfirmed: true)).attention)
+        #expect(eval(inputs(server: server, sdk: utd, latest: own, intent: t0 + 1, receipt: t0 + 1)).attention)
         // A local echo (sending, or failed) isn't a receipt for the SDK yet: E1b holds.
         let echo = LatestEventRef(timestamp: t0, senderIsSelf: true, isLocal: true)
         #expect(eval(inputs(encrypted: true, server: server, sdk: utd, latest: echo)).reasons == [.ownLatest])
@@ -272,5 +285,24 @@ struct ReadStatePolicyTests {
                 }
             }
         }
+    }
+
+    @Test("E6: what was shown before the first sync is a floor per mode, never a ceiling, and zero once synced")
+    func carriedUnsynced() throws {
+        let room = try RoomID("!e6:x.org")
+        func state(_ mode: NotificationMode, server: Int, carried: Int) -> RoomReadState {
+            ReadStatePolicy.evaluate(RoomReadInputs(
+                roomID: room, membership: .joined, isEncrypted: false,
+                counts: RoomReadCounts(mode: mode, server: ServerCounts(notification: server, highlight: 0), sdk: .zero, isMarkedUnread: false),
+                unsyncedCarried: carried))
+        }
+        let held = state(.allMessages, server: 3, carried: 8)
+        #expect(held.badgeCount == 8 && held.display == .count(8) && held.reasons.contains(.carriedUnsynced))
+        #expect(state(.allMessages, server: 0, carried: 8).badgeCount == 8)
+        let higher = state(.allMessages, server: 9, carried: 8)
+        #expect(higher.badgeCount == 9 && !higher.reasons.contains(.carriedUnsynced))
+        #expect(state(.allMessages, server: 0, carried: 0).badgeCount == 0)
+        #expect(state(.mentionsAndKeywords, server: 0, carried: 2).badgeCount == 2)
+        #expect(state(.mute, server: 0, carried: 2).badgeCount == 0)  // muted meanwhile
     }
 }

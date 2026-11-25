@@ -22,7 +22,7 @@ private let configured = [
     "HALO_DEV_PEER_USER", "HALO_DEV_PEER_PASSWORD",
 ].allSatisfy { env[$0] != nil }
 
-@Suite("Real-server read-state scenarios S01–S29 (G-UNREAD)", .serialized, .enabled(if: configured, "needs HALO_DEV_SERVER/USER/PASSWORD/PEER_*"))
+@Suite("Real-server read-state scenarios S01–S29 (G-UNREAD)", .serialized, .cleansUp, .enabled(if: configured, "needs HALO_DEV_SERVER/USER/PASSWORD/PEER_*"))
 struct ServerReadStateScenarioTests {
     /// Minimal Matrix Client-Server HTTP helper for the peer user (B) and the user's second device (A2).
     private struct MatrixHTTP: Sendable {
@@ -68,8 +68,13 @@ struct ServerReadStateScenarioTests {
             return (try #require(r["access_token"] as? String), try #require(r["user_id"] as? String))
         }
 
-        func logout(_ token: String) async {
-            _ = try? await call("POST", "/logout", token: token, body: [:])
+        /// What the server itself counts as unread in `room`, from a sync of its own.
+        func notificationCount(_ token: String, room: RoomID) async throws -> Int {
+            let filter = enc(#"{"room":{"rooms":["\#(room.rawValue)"],"timeline":{"limit":1}},"presence":{"types":[]}}"#)
+            let reply = try await call("GET", "/sync?timeout=0&filter=\(filter)", token: token)
+            let joined = (reply["rooms"] as? [String: Any])?["join"] as? [String: Any]
+            let unread = (joined?[room.rawValue] as? [String: Any])?["unread_notifications"] as? [String: Any]
+            return try #require(unread?["notification_count"] as? Int, "no unread count for \(room.rawValue)")
         }
 
         func createRoom(creatorToken: String, inviteUserID: String, joinToken: String? = nil, encrypted: Bool = false, name: String) async throws -> RoomID {
@@ -227,6 +232,8 @@ struct ServerReadStateScenarioTests {
             storedSession = try await session.loginPassword(
                 PasswordCredentials(username: user, password: password, deviceDisplayName: "scenario-a1"),
                 on: details)
+            let signedIn = session  // `relaunch` replaces `session`, not the device
+            Cleanup.current.add { try? await signedIn.logout() }
             account = storedSession.userID
             intentStore = ReadIntentStore(database: database, account: account)
             recordStore = NotificationRecordStore(database: database, account: account)
@@ -288,7 +295,7 @@ struct ServerReadStateScenarioTests {
             let processor = NotificationProcessor(
                 fetcher: fetcher,
                 records: recordStore,
-                lastAttention: { (badgePort.countsHistory.last ?? [:], Date(timeIntervalSince1970: 0)) },
+                attention: { AttentionBaseline(counts: badgePort.countsHistory.last ?? [:]) },
                 isAppForeground: { isForeground })
             return await processor.process(room: room, event: event)
         }
@@ -360,6 +367,7 @@ struct ServerReadStateScenarioTests {
 
     @Test("Real-server client & server scenarios S01, S02, S03, S07b, S08, S09, S10, S11, S12, S13, S14, S15, S16, S17, S18, S19, S20, S25, S26, S27, S28, S29 against infra/dev")
     func realServerScenarios() async throws {
+        let cleanup = Cleanup.current
         let server = try #require(env["HALO_DEV_SERVER"])
         let user = try #require(env["HALO_DEV_USER"])
         let password = try #require(env["HALO_DEV_PASSWORD"])
@@ -368,26 +376,20 @@ struct ServerReadStateScenarioTests {
 
         let http = MatrixHTTP(server: server)
         let a2 = try await http.login(user: user, password: password, device: "scenario-a2")
+        cleanup.logout(server: server, token: a2.token)
         let b = try await http.login(user: peerUser, password: peerPassword, device: "scenario-b")
+        cleanup.logout(server: server, token: b.token)
         let stack = try await LiveStack(server: server, user: user, password: password)
-        let createdRooms = Mutex<[RoomID]>([])
-        defer {
-            let rooms = createdRooms.withLock { $0 }
-            Task {
-                for r in rooms {
-                    await http.leaveAndForget(a2.token, room: r)
-                    await http.leaveAndForget(b.token, room: r)
-                }
-                await stack.shutdown()
-                await http.logout(a2.token)
-                await http.logout(b.token)
-            }
+        cleanup.add { await stack.shutdown() }
+
+        func leaveAtEnd(_ room: RoomID) {
+            for token in [a2.token, b.token] { cleanup.leave(room.rawValue, server: server, token: token) }
         }
 
         func makeRoom(_ name: String) async throws -> RoomID {
             let room = try await http.createRoom(
                 creatorToken: b.token, inviteUserID: a2.userID, joinToken: a2.token, name: name)
-            createdRooms.withLock { $0.append(room) }
+            leaveAtEnd(room)
             _ = try await stack.waitForRoom(room, "joined \(name)") { _ in true }
             return room
         }
@@ -600,26 +602,38 @@ struct ServerReadStateScenarioTests {
         otherStore.clearAll()
 
         // --- S18 & S29: Clock-skewed / identical-timestamp messages: viewing the first does not hide the second once confirmed; viewing the second advances the receipt (R-06, ADR-0020) ---
-        let r29 = try await makeRoom("S18-S29")
-        let ev29a = try await http.send(b.token, room: r29, text: "s29-first")
-        let ev29b = try await http.send(b.token, room: r29, text: "s29-second")
-        _ = try await stack.waitForRoom(r29, "S29 2 unread") { $0.attention && $0.badgeCount == 2 }
-        let ts29b = try await stack.eventTimestamp(room: r29, event: ev29b)
-        // Stamp the first receipt with the same timestamp as `ev29b` (simulating identical millisecond `origin_server_ts`, S29).
-        // Once the first receipt is confirmed on the server, `INTENT_STALE` prevents the equal timestamp from hiding `ev29b`.
-        await stack.receipts.reportSeen(room: r29, event: ev29a, timestamp: ts29b, advancesOrder: true)
-        await stack.receipts.flush()
-        _ = try await stack.waitForRoom(r29, "S29 second message still unread after first receipt confirmed") {
-            $0.attention && $0.badgeCount == 1 && $0.reasons.contains(.intentStale)
+        // Synapse now and then rotates its push counts just before the receipt arrives and keeps reporting the old count (its
+        // database is right). Only then, when the server itself still says so, the scenario is run once more in a new room.
+        func s29(_ attempt: Int) async throws {
+            let r29 = try await makeRoom("S18-S29")
+            let ev29a = try await http.send(b.token, room: r29, text: "s29-first")
+            let ev29b = try await http.send(b.token, room: r29, text: "s29-second")
+            _ = try await stack.waitForRoom(r29, "S29 2 unread") { $0.attention && $0.badgeCount == 2 }
+            let ts29b = try await stack.eventTimestamp(room: r29, event: ev29b)
+            // Stamp the first receipt with the same timestamp as `ev29b` (simulating identical millisecond `origin_server_ts`, S29).
+            // Once the first receipt is confirmed on the server, `INTENT_STALE` prevents the equal timestamp from hiding `ev29b`.
+            await stack.receipts.reportSeen(room: r29, event: ev29a, timestamp: ts29b, advancesOrder: true)
+            await stack.receipts.flush()
+            do {
+                _ = try await stack.waitForRoom(r29, "S29 second message still unread after first receipt confirmed") {
+                    $0.attention && $0.badgeCount == 1 && $0.reasons.contains(.intentStale)
+                }
+            } catch {
+                let server = try await http.notificationCount(a2.token, room: r29)
+                guard attempt == 0, server != 1 else { throw error }
+                print("S29 Synapse still reports \(server) after the receipt; trying once more")
+                return try await s29(1)
+            }
+            // S18: viewing `ev29b` even with a clock-skewed earlier timestamp advances the receipt by timeline order (`advancesOrder: true`).
+            let skewedEarlierTs = ts29b.addingTimeInterval(-600)
+            await stack.receipts.reportSeen(room: r29, event: ev29b, timestamp: skewedEarlierTs, advancesOrder: true)
+            await stack.receipts.flush()
+            _ = try await stack.waitForRoom(r29, "S18/S29 cleared after viewing skewed/equal-ts second message") { !$0.attention }
+            try await stack.waitUntil("S18/S29 server receipt advanced to second message") {
+                (try? await stack.ownReceiptEventID(room: r29)) == ev29b
+            }
         }
-        // S18: viewing `ev29b` even with a clock-skewed earlier timestamp advances the receipt by timeline order (`advancesOrder: true`).
-        let skewedEarlierTs = ts29b.addingTimeInterval(-600)
-        await stack.receipts.reportSeen(room: r29, event: ev29b, timestamp: skewedEarlierTs, advancesOrder: true)
-        await stack.receipts.flush()
-        _ = try await stack.waitForRoom(r29, "S18/S29 cleared after viewing skewed/equal-ts second message") { !$0.attention }
-        try await stack.waitUntil("S18/S29 server receipt advanced to second message") {
-            (try? await stack.ownReceiptEventID(room: r29)) == ev29b
-        }
+        try await s29(0)
 
         // --- S19: Concurrent multi-room mutations settle to a fresh evaluation ---
         let concRooms = [r01, r02, r08, r09, r13]
@@ -640,7 +654,7 @@ struct ServerReadStateScenarioTests {
         // --- S25: Encrypted room UTD push stamped with event ts, sync delivers & decrypts, A2 reads -> record superseded & pruned without opening (R-02) ---
         let r25 = try await http.createRoom(
             creatorToken: b.token, inviteUserID: a2.userID, joinToken: a2.token, encrypted: true, name: "S25-enc")
-        createdRooms.withLock { $0.append(r25) }
+        leaveAtEnd(r25)
         _ = try await stack.waitForRoom(r25, "joined S25-enc") { _ in true }
         await stack.sync.stop()
         let ev25 = try await http.sendOpaqueEncrypted(b.token, room: r25)

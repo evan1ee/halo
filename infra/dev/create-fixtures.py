@@ -7,7 +7,8 @@ fixtures they point to are not created again. Passwords are generated, written o
 
 Needs infra/dev running (docker compose -f infra/dev/docker-compose.yml up -d) and Docker access (docker exec into the Synapse container).
 Fixtures: the contract account; a timeline room (first, second, a notice, waves, a redacted message, blue.png 64x48); a second
-throwaway account for the Encryption contract. The sticker room (m.room.image_pack "cats") is created too.
+throwaway account for the Encryption contract; a room without messages on the peer account. The sticker room (m.room.image_pack
+"cats") is created too.
 """
 import json, os, secrets, struct, subprocess, sys, tempfile, time, urllib.parse, urllib.request, urllib.error, zlib
 
@@ -71,6 +72,26 @@ def login(name, password):
         "password": password, "initial_device_display_name": "fixtures"})
     _SESSIONS.append(r["access_token"])
     return r["access_token"]
+
+
+def retire(name, password):
+    """Deactivate the previous Encryption account, unless someone signed in to it in the app."""
+    try:
+        token = login(name, password)
+        if any(d.get("display_name") == "Halo (iPhone)" for d in call("GET", "/_matrix/client/v3/devices", token=token)["devices"]):
+            return
+        req = urllib.request.Request(SERVER + "/_matrix/client/v3/account/deactivate", data=b"{}", method="POST", headers={
+            "Authorization": "Bearer " + token, "Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(req, timeout=30)
+        except urllib.error.HTTPError as e:  # user-interactive authentication: confirm with the password
+            if e.code != 401:
+                raise SystemExit(f"deactivate failed: {e.code}")
+            auth = {"type": "m.login.password", "session": json.loads(e.read())["session"], "password": password,
+                    "identifier": {"type": "m.id.user", "user": name}}
+            call("POST", "/_matrix/client/v3/account/deactivate", {"auth": auth, "erase": True}, token)
+    except SystemExit as e:
+        print(f"kept {name}: {e}")  # an old throwaway account is no reason to stop
 
 
 def png(width, height, rgb):
@@ -145,21 +166,26 @@ def main():
         call("POST", f"/_matrix/client/v3/join/{urllib.parse.quote(room)}", {}, token)
         values.update({P + "PEER_USER": peer, P + "PEER_PASSWORD": peer_pw, P + "UNREAD_ROOM": room})
 
+    # A room without messages on the peer account (signed in on the test iPhone) for HaloUITests.testEmptyRoomStaysResponsive.
+    if not values.get(P + "EMPTY_ROOM"):
+        values[P + "EMPTY_ROOM"] = create_room(login(values[P + "PEER_USER"], values[P + "PEER_PASSWORD"]), "Empty fixture")
+
     # The Encryption contract sets recovery up, which an account can do once: --new-e2ee makes it a fresh account.
     if not values.get(P + "E2EE_USER") or "--new-e2ee" in sys.argv:
+        if values.get(P + "E2EE_USER"):
+            retire(values[P + "E2EE_USER"], values[P + "E2EE_PASSWORD"])
         e2ee_user, e2ee_pw = "e2ee" + secrets.token_hex(4), secrets.token_urlsafe(18)
         ensure_user(e2ee_user, e2ee_pw)
         values[P + "E2EE_USER"], values[P + "E2EE_PASSWORD"] = e2ee_user, e2ee_pw
 
-    # the room-list contract expects the number of rooms the account has joined
-    values[P + "ROOMS"] = str(len(call("GET", "/_matrix/client/v3/joined_rooms", token=token)["joined_rooms"]))
+    values.pop(P + "ROOMS", None)  # written by older versions; the tests ask the server
     write_env(values)
     for session in _SESSIONS:
         try:
             call("POST", "/_matrix/client/v3/logout", {}, session)
         except SystemExit:
             pass  # already gone
-    print(f"wrote {ENV_PATH}: {len(values)} settings, rooms={values[P + 'ROOMS']} (values not shown)")
+    print(f"wrote {ENV_PATH}: {len(values)} settings (values not shown)")
 
 
 if __name__ == "__main__":

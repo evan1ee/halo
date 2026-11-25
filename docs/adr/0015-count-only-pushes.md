@@ -1,6 +1,6 @@
 # ADR-0015: Count-only pushes must not set the app badge
 
-- **Status:** Accepted — **implemented** (app and NSE strip/ignore `aps.badge` and server counts; `infra/sygnal/` Halo pushkin, Dockerfile, unit tests, and `pushkin.yml` CI implemented per D112; live APNs V-PUSH-5 verification awaits Beta push gateway deployment) · **Date:** 2026-11-19 · **Decision IDs:** D5, D9, D11, D65, D112 (amends ADR-0010) · **Validation:** V-PUSH-5
+- **Status:** Accepted — **implemented** (app and NSE strip/ignore `aps.badge` and server counts; `infra/sygnal/` Halo pushkin, Dockerfile, unit tests, and `pushkin.yml` CI implemented per D112; V-PUSH-5 verified live on 2026-11-24 with the APNs sandbox and an iPhone 16: the silent push wakes or launches the app and clears the badge; production APNs awaits the Beta gateway) · **Date:** 2026-11-19 · **Decision IDs:** D5, D9, D11, D65, D112 (amends ADR-0010) · **Validation:** V-PUSH-5
 
 ## Context
 ADR-0010 sends event pushes as `event_id_only` through Sygnal to the NSE, which recomputes the badge with `BadgeCalculator` (D9).

@@ -45,12 +45,15 @@ struct ReadStatePropertyTests {
     }
 
     /// The SDK has applied the user's read position and still counts something (R-07): its receipt is at least the local
-    /// position, or the own latest event is on the server (the SDK takes it as a receipt).
+    /// position, or the own latest event is on the server (the SDK takes it as a receipt) and no unsent local position is past it.
     private func sdkCountsAfterRead(_ input: RoomReadInputs) -> Bool {
         guard input.counts.sdk != .zero else { return false }
         if let intent = input.localIntent, let receipt = input.receiptReadThrough, let latest = input.latestEvent, latest.timestamp <= intent,
            intent <= receipt { return true }
-        return input.latestEvent?.senderIsSelf == true && input.latestEvent?.isLocal == false && input.unconfirmedNotified.isEmpty
+        guard let own = input.latestEvent, own.senderIsSelf, !own.isLocal, input.unconfirmedNotified.isEmpty else { return false }
+        // An unconfirmed local position past the own event and the SDK's receipt: the SDK hasn't applied it (D119).
+        guard let intent = input.localIntent, !input.localIntentConfirmed else { return true }
+        return intent <= own.timestamp || input.receiptReadThrough.map { intent <= $0 } == true
     }
 
     @Test("P1: a covering intent with nothing newer notified leaves attention only for marked-unread rooms and invites (unless P11)")

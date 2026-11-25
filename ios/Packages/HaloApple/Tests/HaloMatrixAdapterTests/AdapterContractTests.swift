@@ -26,11 +26,71 @@ private func within<T: Sendable>(seconds: Double, _ operation: @escaping @Sendab
     }
 }
 
-@Suite("Adapter contracts against infra/dev", .serialized, .enabled(if: configured, "needs HALO_DEV_SERVER/USER/PASSWORD"))
+@Suite("Adapter contracts against infra/dev", .serialized, .cleansUp, .enabled(if: configured, "needs HALO_DEV_SERVER/USER/PASSWORD"))
 struct AdapterContractTests {
-    private func port() -> MatrixSessionPort {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("halo-contract-\(UUID().uuidString)")
-        return MatrixSessionPort(baseDirectory: dir)
+    /// A session port that signs out when the test ends, whether it passed or threw.
+    private func port(_ dir: URL = FileManager.default.temporaryDirectory.appendingPathComponent("halo-contract-\(UUID().uuidString)")) -> MatrixSessionPort {
+        let session = MatrixSessionPort(baseDirectory: dir)
+        Cleanup.current.add { try? await session.logout() }
+        return session
+    }
+
+    /// Waits until sync delivered `roomID`: the client only knows a room then. Not a room count, which any other test or
+    /// device of the shared account changes.
+    private func waitForRoom(_ roomID: String, in session: MatrixSessionPort) async throws {
+        let room = try RoomID(roomID)
+        try await within(seconds: 60) {
+            var rooms: [RoomSummary] = []
+            for await diff in MatrixRoomListPort(session: session).rooms(filter: .all) {
+                try RoomListReducer.apply(diff, to: &rooms)
+                if rooms.contains(where: { $0.id == room }) { return }
+            }
+            throw ContractViolation("the list ended without the room")
+        }
+    }
+
+    /// One account-data request straight to the server, past the SDK's store. `nil` for 404.
+    @discardableResult
+    private static func accountData(_ client: Client, _ type: String, put content: Data? = nil) async throws -> Data? {
+        let sdkSession = try client.session()
+        let base = try #require(URL(string: sdkSession.homeserverUrl))
+        var request = URLRequest(url: base.appending(path: "_matrix/client/v3/user/\(sdkSession.userId)/account_data/\(type)"))
+        request.httpMethod = content == nil ? "GET" : "PUT"
+        request.httpBody = content
+        request.setValue("Bearer \(sdkSession.accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode
+        if status == 404 { return nil }
+        guard status == 200 else { throw ContractViolation("account data \(type): HTTP \(status ?? 0)") }
+        return data
+    }
+
+    /// Puts the account data of `types` back to what the server holds now when the test ends: the account is shared.
+    private func restoring(_ types: [String], of client: Client, _ cleanup: Cleanup) async throws -> [String: Data] {
+        var before: [String: Data] = [:]
+        for type in types {
+            let data = try await Self.accountData(client, type)
+            before[type] = data
+            cleanup.add { _ = try? await Self.accountData(client, type, put: data ?? Data("{}".utf8)) }
+        }
+        return before
+    }
+
+    /// The rooms the account is in or invited to now, asked from the server directly.
+    private func serverRoomCount(details: ServerDetails, stored: StoredSession) async throws -> Int {
+        struct Sync: Decodable {
+            struct Rooms: Decodable { var join: [String: Empty]?; var invite: [String: Empty]? }
+            struct Empty: Decodable {}
+            var rooms: Rooms?
+        }
+        let payload = try JSONDecoder().decode(MatrixSessionPort.SessionPayload.self, from: stored.payload)
+        var request = URLRequest(url: details.homeserverURL.appendingPathComponent("_matrix/client/v3/sync").appending(
+            queryItems: [URLQueryItem(name: "timeout", value: "0"), URLQueryItem(name: "filter", value: #"{"room":{"timeline":{"limit":1}}}"#)]))
+        request.setValue("Bearer \(payload.accessToken)", forHTTPHeaderField: "Authorization")
+        let (data, _) = try await URLSession.shared.data(for: request)
+        let rooms = try JSONDecoder().decode(Sync.self, from: data).rooms
+        return (rooms?.join?.count ?? 0) + (rooms?.invite?.count ?? 0)
     }
 
     @Test("SessionPortContract")
@@ -78,7 +138,7 @@ struct AdapterContractTests {
           .enabled(if: env["HALO_DEV_TIMELINE_ROOM"] != nil && env["HALO_DEV_PEER_USER"] != nil && env["HALO_DEV_PEER_PASSWORD"] != nil))
     func nseNotificationFetch() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("halo-nse-contract-\(UUID().uuidString)")
-        let appSession = MatrixSessionPort(baseDirectory: dir)
+        let appSession = port(dir)
         let details = try await appSession.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
         let stored = try await appSession.loginPassword(
             PasswordCredentials(
@@ -86,8 +146,7 @@ struct AdapterContractTests {
                 deviceDisplayName: "contract-nse-app"),
             on: details)
         // Send a fresh message from the peer account so the NSE has a notifying event to fetch.
-        let peerDir = FileManager.default.temporaryDirectory.appendingPathComponent("halo-nse-peer-\(UUID().uuidString)")
-        let peerSession = MatrixSessionPort(baseDirectory: peerDir)
+        let peerSession = port()
         let peerDetails = try await peerSession.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
         let peerStored = try await peerSession.loginPassword(
             PasswordCredentials(
@@ -115,17 +174,13 @@ struct AdapterContractTests {
         }
         guard case .display(let display) = fetched else {
             Issue.record("expected .display from NSE fetch, got \(fetched)")
-            try? await peerSession.logout()
-            try? await appSession.logout()
             return
         }
         #expect(display.body.contains(marker))
         #expect(display.timestamp != nil)
-        try await peerSession.logout()
-        try await appSession.logout()
     }
 
-    @Test("RoomListPortContract (the account must be in HALO_DEV_ROOMS rooms)")
+    @Test("RoomListPortContract (the list settles to the rooms the server says the account is in)")
     func roomList() async throws {
         let session = port()
         let server = env["HALO_DEV_SERVER"] ?? ""
@@ -135,11 +190,9 @@ struct AdapterContractTests {
                 username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "",
                 deviceDisplayName: "contract"),
             on: details)
-        _ = stored
-        let expected = Int(env["HALO_DEV_ROOMS"] ?? "0") ?? 0
+        let expected = try await serverRoomCount(details: details, stored: stored)
         try await MatrixSyncPort(session: session).start()
         try await within(seconds: 60) { try await RoomListPortContract.verify(MatrixRoomListPort(session: session), expectedRoomCount: expected) }
-        try await session.logout()
     }
 
     @Test("TimelinePortContract (HALO_DEV_TIMELINE_ROOM holds first, second, a notice, waves and a redacted message)", .enabled(if: env["HALO_DEV_TIMELINE_ROOM"] != nil))
@@ -151,16 +204,14 @@ struct AdapterContractTests {
                 username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
             on: details)
         // The client only knows a room once sync has delivered it.
-        let rooms = Int(env["HALO_DEV_ROOMS"] ?? "0") ?? 0
         try await MatrixSyncPort(session: session).start()
-        try await within(seconds: 60) { try await RoomListPortContract.verify(MatrixRoomListPort(session: session), expectedRoomCount: rooms) }
+        try await waitForRoom(env["HALO_DEV_TIMELINE_ROOM"] ?? "", in: session)
         let timeline = MatrixTimelinePort(session: session)
         let room = try RoomID(env["HALO_DEV_TIMELINE_ROOM"] ?? "")
         try await within(seconds: 60) { try await TimelinePortContract.verify(timeline, room: room, expectedBodies: ["first", "second", "a notice", "waves"]) }
         try await within(seconds: 60) { try await TimelinePortContract.verifySend(timeline, room: room, text: "sent by the contract \(UUID().uuidString.prefix(8))") }
         try await within(seconds: 90) { try await TimelinePortContract.verifyInteractions(timeline, room: room, text: "interaction \(UUID().uuidString.prefix(8))") }
         try await TimelinePortContract.verifyUnknownRoom(timeline, room: try RoomID("!does-not-exist:localhost"))
-        try await session.logout()
     }
 
     @Test("Stickers (HALO_DEV_STICKER_ROOM holds m.room.image_pack \"cats\" with wave and dance, enabled in m.image_pack.rooms)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
@@ -186,8 +237,8 @@ struct AdapterContractTests {
         let cats = PackRef(room: room, stateKey: "cats")
         let pack = try #require(load.packs.first { $0.ref == cats }, "fixture pack not read, failedSources=\(load.failedSources)")
         #expect(pack.ref == PackRef(room: room, stateKey: "cats") && pack.displayName == "Cats" && pack.source == .userEnabled)
-        // `infra/dev/add-animated-sticker.py` may have added "spin" (an animated GIF): the two fixtures must be there, in order.
-        #expect(pack.stickers.map(\.shortcode).filter { $0 != "spin" } == ["dance", "wave"])
+        // Others may have been added (`infra/dev/add-animated-sticker.py`, the app): the two fixtures must be there, in order.
+        #expect(pack.stickers.map(\.shortcode).filter { ["dance", "wave"].contains($0) } == ["dance", "wave"])
         #expect(pack.stickers.allSatisfy { $0.image != nil })
         // Real sticker image bytes load from media (`MatrixMediaPort.content`).
         let stickerMedia = try await MatrixMediaPort(session: session).content(try #require(pack.stickers[0].image))
@@ -257,6 +308,7 @@ struct AdapterContractTests {
         let client = try await session.signedInClient()
         let encRoom = try RoomID(try await client.createRoom(request: CreateRoomParameters(
             name: "Encrypted sticker check", isEncrypted: true, visibility: .private, preset: .privateChat)))
+        Cleanup.current.leave(encRoom.rawValue, as: client)
         var encTimeline: (any TimelineSession)?
         for _ in 0..<30 {
             if let opened = try? await MatrixTimelinePort(session: session).open(room: encRoom) { encTimeline = opened; break }
@@ -277,9 +329,6 @@ struct AdapterContractTests {
         }
         #expect(seenEnc)
         await openedEnc.close()
-        if let r = try? await session.room(encRoom) { try? await r.leave(); try? await r.forget() }
-
-        try await session.logout()
     }
 
     @Test("warm() prepares a room's timeline with its first page; open() takes it, an open room isn't prepared again, dropWarm() lets go")
@@ -290,8 +339,7 @@ struct AdapterContractTests {
             PasswordCredentials(username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
             on: details)
         try await MatrixSyncPort(session: session).start()
-        let rooms = Int(env["HALO_DEV_ROOMS"] ?? "0") ?? 0
-        try await within(seconds: 60) { try await RoomListPortContract.verify(MatrixRoomListPort(session: session), expectedRoomCount: rooms) }
+        try await waitForRoom(env["HALO_DEV_TIMELINE_ROOM"] ?? "", in: session)
         let room = try RoomID(env["HALO_DEV_TIMELINE_ROOM"] ?? "")
         let timelines = MatrixTimelinePort(session: session)
         await timelines.warm([room])
@@ -315,7 +363,6 @@ struct AdapterContractTests {
         #expect(timelines.isWarm(room))
         await timelines.dropWarm()
         #expect(!timelines.isWarm(room))
-        try await session.logout()
     }
 
     @Test("Legacy im.ponies packs are read as read-only legacy packs (V-ST-3; creates a room and cleans up after itself)")
@@ -327,7 +374,9 @@ struct AdapterContractTests {
             on: details)
         try await MatrixSyncPort(session: session).start()
         let client = try await session.signedInClient()
+        _ = try await restoring(["im.ponies.emote_rooms"], of: client, Cleanup.current)
         let roomID = try await client.createRoom(request: CreateRoomParameters(name: "Legacy pack fixture", isEncrypted: false, visibility: .private, preset: .privateChat))
+        Cleanup.current.leave(roomID, as: client)
         let ref = PackRef(room: try RoomID(roomID), stateKey: "oldcats")
         var room: Room?
         for _ in 0..<30 {
@@ -351,11 +400,6 @@ struct AdapterContractTests {
         // As the current room's pack (whole-state path) it is found too, still once.
         let asRoom = try await packs.packs(currentRoom: ref.room)
         #expect(asRoom.packs.filter { $0.ref == ref }.count == 1)
-        // Leave no room or listing behind (the other contracts expect the account's fixed room count); before the logout.
-        try? await client.setAccountData(eventType: "im.ponies.emote_rooms", content: "{}")
-        try? await local.leave()
-        try? await local.forget()
-        try await session.logout()
     }
 
     @Test("Room details, members, notification mode and leaving (ROOM_MANAGEMENT; creates a room and cleans up after itself)")
@@ -368,6 +412,7 @@ struct AdapterContractTests {
         try await MatrixSyncPort(session: session).start()
         let client = try await session.signedInClient()
         let roomID = try RoomID(try await client.createRoom(request: CreateRoomParameters(name: "Room mgmt fixture", topic: "A topic", isEncrypted: false, visibility: .private, preset: .privateChat)))
+        Cleanup.current.leave(roomID.rawValue, as: client)
         for _ in 0..<30 {
             if (try? await session.room(roomID)) != nil { break }
             try await Task.sleep(for: .seconds(1))
@@ -407,6 +452,9 @@ struct AdapterContractTests {
         }
         #expect(edited.name == "Renamed fixture" && edited.topic == "New topic")
         if let peerName = env["HALO_DEV_PEER_USER"] {
+            let peer = PeerInviter(server: env["HALO_DEV_SERVER"] ?? "")
+            try await peer.login(peerName, env["HALO_DEV_PEER_PASSWORD"] ?? "")
+            peer.leaveAtEnd(roomID.rawValue)
             try await rooms.invite([try UserID("@\(peerName):halo.localhost")], to: roomID)
             var invited = try await rooms.members(roomID, limit: 50)
             for _ in 0..<30 where !invited.contains(where: \.isInvited) {
@@ -433,8 +481,6 @@ struct AdapterContractTests {
             #expect(seen == target, "favourite \(target) not reported")
         }
         try await rooms.leave(roomID)
-        if let left = try? await session.room(roomID) { try? await left.forget() }
-        try await session.logout()
     }
 
     @Test("Invitations: the room arrives as invited, accepting joins it, declining removes it (a peer account creates the rooms)",
@@ -450,6 +496,8 @@ struct AdapterContractTests {
         let session = port()
         let details = try await session.loginDetails(server: server)
         _ = try await session.loginPassword(PasswordCredentials(username: user, password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"), on: details)
+        let client = try await session.signedInClient()
+        for room in [toAccept, toDecline] { Cleanup.current.leave(room.rawValue, as: client) }
         try await MatrixSyncPort(session: session).start()
         let list = MatrixRoomListPort(session: session)
         let rooms = MatrixRoomPort(session: session)
@@ -492,10 +540,6 @@ struct AdapterContractTests {
         #expect(try await waitFor(toAccept, .joined) == .joined)
         try await rooms.declineInvite(toDecline)
         #expect(try await waitFor(toDecline, nil) == nil)
-        try await rooms.leave(toAccept)  // leave no room behind: the other contracts expect a fixed room count
-        if let left = try? await session.room(toAccept) { try? await left.forget() }
-        try await session.logout()
-        await peer.logout()
     }
 
     @Test("New chats: directory search, a direct chat that is reused, a private room with an invitation (creates rooms and cleans up)",
@@ -509,6 +553,11 @@ struct AdapterContractTests {
         _ = try await session.loginPassword(PasswordCredentials(username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"), on: details)
         try await MatrixSyncPort(session: session).start()
         let chats = MatrixChatCreationPort(session: session)
+        let client = try await session.signedInClient()
+        _ = try await restoring(["m.direct"], of: client, Cleanup.current)
+        // The peer is only invited: declining keeps its list of invitations from growing with every run.
+        let peerHTTP = PeerInviter(server: server)
+        try await peerHTTP.login(peerName, env["HALO_DEV_PEER_PASSWORD"] ?? "")
 
         // The directory only lists users who share a room with the searcher (Synapse default); the peer does.
         let found = try await chats.searchUsers(peerName, limit: 10)
@@ -516,6 +565,8 @@ struct AdapterContractTests {
         #expect(try await chats.searchUsers("   ", limit: 10).isEmpty)
 
         let dm = try await chats.startDirectChat(with: peer)
+        Cleanup.current.leave(dm.rawValue, as: client)
+        peerHTTP.leaveAtEnd(dm.rawValue)
         for _ in 0..<30 {
             if let known = try? await session.room(dm), await known.isDirect() { break }
             try await Task.sleep(for: .seconds(1))
@@ -528,6 +579,8 @@ struct AdapterContractTests {
         #expect(again == dm, "a second direct chat was created")
 
         let room = try await chats.createRoom(name: "New room fixture", invite: [peer])
+        Cleanup.current.leave(room.rawValue, as: client)
+        peerHTTP.leaveAtEnd(room.rawValue)
         let rooms = MatrixRoomPort(session: session)
         var info: RoomDetails?
         for _ in 0..<30 where info?.name != "New room fixture" {
@@ -535,11 +588,7 @@ struct AdapterContractTests {
             info = try? await rooms.details(room)
         }
         #expect(info?.isEncrypted == true && info?.name == "New room fixture")
-        for id in [dm, room] {
-            try? await rooms.leave(id)
-            if let left = try? await session.room(id) { try? await left.forget() }
-        }
-        try await session.logout()
+        for id in [dm, room] { try? await rooms.leave(id) }  // the SDK's leave also takes the chat out of m.direct
     }
 
     @Test("Profiles: own display name round-trips (restored), another profile, ignore and unignore (restored)",
@@ -589,11 +638,31 @@ struct AdapterContractTests {
             ignored = try await profiles.ignoredUsers()
         }
         #expect(ignored == before)
-        try await session.logout()
+    }
+
+    @Test("Ignoring before the first sync is stored keeps the users already ignored; unignoring right after takes effect (restored)",
+          .enabled(if: env["HALO_DEV_PEER_USER"] != nil))
+    func ignoreKeepsOthers() async throws {
+        let cleanup = Cleanup.current
+        let (session, client) = try await freshSignIn()
+        _ = try await restoring(["m.ignored_user_list"], of: client, cleanup)
+        let other = "@ignored-elsewhere:halo.localhost", peer = "@\(env["HALO_DEV_PEER_USER"] ?? ""):halo.localhost"
+        try await Self.accountData(client, "m.ignored_user_list", put: Data(#"{"ignored_users":{"\#(other)":{}}}"#.utf8))
+        func ignored() async throws -> Set<String> {
+            let content = try await Self.accountData(client, "m.ignored_user_list").flatMap { try JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            return Set((content?["ignored_users"] as? [String: Any])?.keys.map { $0 } ?? [])
+        }
+        try await MatrixSyncPort(session: session).start()
+        let profiles = MatrixProfilePort(session: session)
+        try await profiles.ignore(try UserID(peer))
+        #expect(try await ignored() == [other, peer])
+        try await profiles.unignore(try UserID(peer))
+        #expect(try await ignored() == [other])
     }
 
     @Test("An enabled pack whose room the user has left is reported as unavailable, not as a failed load (creates a room and cleans up after itself)")
     func unavailablePack() async throws {
+        let cleanup = Cleanup.current
         let session = port()
         let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
         _ = try await session.loginPassword(
@@ -601,7 +670,9 @@ struct AdapterContractTests {
             on: details)
         try await MatrixSyncPort(session: session).start()
         let client = try await session.signedInClient()
+        _ = try await restoring(["m.image_pack.rooms"], of: client, cleanup)
         let roomID = try await client.createRoom(request: CreateRoomParameters(name: "Unavailable pack fixture", isEncrypted: false, visibility: .private, preset: .privateChat))
+        cleanup.leave(roomID, as: client)
         let ref = PackRef(room: try RoomID(roomID), stateKey: "gone")
         var room: Room?
         for _ in 0..<30 {
@@ -611,7 +682,6 @@ struct AdapterContractTests {
         let local = try #require(room)
         let pack = #"{"pack":{"display_name":"Gone","usage":["sticker"]},"images":{"wave":{"url":"mxc://halo.localhost/gone0000000000000000"}}}"#
         _ = try await local.sendStateEventRaw(eventType: "m.room.image_pack", stateKey: ref.stateKey, content: pack, requestConfigOverride: nil)
-        let before = try await client.accountData(eventType: "m.image_pack.rooms")
         try await client.setAccountData(eventType: "m.image_pack.rooms", content: #"{"version":1,"rooms":{"\#(roomID)":{"gone":{}}}}"#)
 
         let packs = MatrixStickerPackPort(session: session)
@@ -638,9 +708,6 @@ struct AdapterContractTests {
         }
         #expect(!load.unavailable.contains(ref))
         try await packs.disable(ref)  // a second removal is harmless
-        // Restore the account data (an empty listing if there was none), so no pack stays enabled.
-        try? await client.setAccountData(eventType: "m.image_pack.rooms", content: before ?? "{}")
-        try await session.logout()
     }
 
     @Test("The media preview setting round-trips through account data and is restored (changes the account's setting while it runs)")
@@ -675,7 +742,6 @@ struct AdapterContractTests {
         #expect(await policy.previewsAllowed(in: room) == true)
         try await policy.setSetting(original)
         #expect(try await waitFor(original) == original)
-        try await session.logout()
     }
 
     @Test("Notification defaults per chat type and the mention rules round-trip through push rules and are restored (changes the account's defaults while it runs)")
@@ -720,7 +786,6 @@ struct AdapterContractTests {
             }
             #expect(seen == original)
         }
-        try await session.logout()
     }
 
     @Test("The sessions list contains this device, named as it signed in, first", .enabled(if: env["HALO_DEV_SERVER"] != nil))
@@ -734,7 +799,6 @@ struct AdapterContractTests {
         #expect(devices.first?.isCurrent == true)
         #expect(devices.first?.displayName == "contract-devices")
         #expect(devices.filter(\.isCurrent).count == 1)
-        try await session.logout()
     }
 
     @Test("Changing the password checks the current one, takes effect for new logins, and is restored (changes the peer account's password while it runs)", .enabled(if: env["HALO_DEV_SERVER"] != nil))
@@ -756,31 +820,76 @@ struct AdapterContractTests {
         let other = port()
         _ = try await other.loginPassword(PasswordCredentials(username: user, password: changed, deviceDisplayName: "contract-password"), on: details)
         try await passwords.changePassword(current: changed, new: original)
-        try await other.logout()
-        try await session.logout()
     }
 
-    @Test("Bot allowlist syncs via one.mbm.halo.bot_allowlist account data and restores original", .enabled(if: env["HALO_DEV_SERVER"] != nil))
-    func botAllowlist() async throws {
+    /// A new sign-in whose first sync has just started: the SDK's store has no account data yet (large account).
+    private func freshSignIn() async throws -> (session: MatrixSessionPort, client: Client) {
         let session = port()
         let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
         _ = try await session.loginPassword(
             PasswordCredentials(username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
             on: details)
-        try await MatrixSyncPort(session: session).start()
+        return (session, try await session.signedInClient())
+    }
+
+    @Test("Bot allowlist: the server's list is loaded before the first sync is stored, and an edit then keeps it and unknown keys (restored)")
+    func botAllowlist() async throws {
+        let cleanup = Cleanup.current
+        let (session, client) = try await freshSignIn()
+        _ = try await restoring([BotAllowlist.eventType], of: client, cleanup)
+        let kept = try UserID("@kept-bot:halo.localhost"), added = try UserID("@contract-bot:halo.localhost")
+        try await Self.accountData(client, BotAllowlist.eventType, put: Data(#"{"bots":["@kept-bot:halo.localhost"],"other":1,"version":1}"#.utf8))
         let allowlist = MatrixBotAllowlistPort(session: session)
-        let original = (try? await allowlist.load()) ?? BotAllowlist()
-        let testBot = try UserID("@contract-bot:halo.localhost")
-        let updated = BotAllowlist(bots: [testBot])
-        try await allowlist.save(updated)
-        var seen = try? await allowlist.load()
-        for _ in 0..<30 where seen != updated {
-            try await Task.sleep(for: .seconds(1))
-            seen = try? await allowlist.load()
+        #expect(try await allowlist.load() == BotAllowlist(bots: [kept]))
+        // The editor of a new device starts empty: adding one must not drop the others, removing takes only that one.
+        #expect(try await allowlist.change(from: BotAllowlist(), to: BotAllowlist(bots: [added])) == BotAllowlist(bots: [kept, added]))
+        func server() async throws -> [String: Any]? {
+            try await Self.accountData(client, BotAllowlist.eventType).flatMap { try JSONSerialization.jsonObject(with: $0) as? [String: Any] }
         }
-        #expect(seen == updated)
-        try await allowlist.save(original)
-        try await session.logout()
+        #expect(try await server()?["bots"] as? [String] == [kept.rawValue, added.rawValue])
+        #expect(try await server()?["other"] as? Int == 1)
+        #expect(try await allowlist.change(from: BotAllowlist(bots: [added]), to: BotAllowlist()) == BotAllowlist(bots: [kept]))
+        #expect(try await server()?["bots"] as? [String] == [kept.rawValue])
+        // A newer Halo's data is left alone.
+        try await Self.accountData(client, BotAllowlist.eventType, put: Data(#"{"version":2}"#.utf8))
+        await #expect(throws: HaloError.unsupported("BOT_ALLOWLIST_NEWER_VERSION")) {
+            _ = try await allowlist.change(from: BotAllowlist(), to: BotAllowlist(bots: [added]))
+        }
+        #expect(try await server()?["version"] as? Int == 2)
+    }
+
+    @Test("Saved Messages: the recorded room is opened, not created again, before the first sync is stored; a room that was left is replaced (restored)",
+          .enabled(if: env["HALO_DEV_TIMELINE_ROOM"] != nil))
+    func savedRoom() async throws {
+        let cleanup = Cleanup.current
+        let (session, client) = try await freshSignIn()
+        let type = MatrixChatCreationPort.savedRoomAccountDataType
+        _ = try await restoring([type], of: client, cleanup)
+        let recorded = try RoomID(env["HALO_DEV_TIMELINE_ROOM"] ?? "")
+        try await Self.accountData(client, type, put: Data(#"{"other":1,"room_id":"\#(recorded.rawValue)","version":1}"#.utf8))
+        try await MatrixSyncPort(session: session).start()
+        let chats = MatrixChatCreationPort(session: session)
+        func open() async throws -> RoomID {
+            let room = try await within(seconds: 90) { try await chats.openOrCreateSavedRoom() }
+            if room != recorded {
+                cleanup.leave(room.rawValue, as: client)
+            }
+            return room
+        }
+        #expect(try await open() == recorded)
+        #expect(try client.getRoom(roomId: recorded.rawValue) != nil)  // usable, not just named
+
+        // Left elsewhere: a new one is made, recorded with the other keys kept, and found again at once.
+        try await Self.accountData(client, type, put: Data(##"{"other":1,"room_id":"!gone:halo.localhost","version":1}"##.utf8))
+        for _ in 0..<30 {
+            if let json = try await client.accountData(eventType: type), json.contains("!gone:") { break }
+            try await Task.sleep(for: .seconds(1))
+        }
+        let created = try await open()
+        #expect(created != recorded)
+        let stored = try #require(try await Self.accountData(client, type).flatMap { try JSONSerialization.jsonObject(with: $0) as? [String: Any] })
+        #expect(stored["room_id"] as? String == created.rawValue && stored["other"] as? Int == 1)
+        #expect(try await open() == created)
     }
 
     @Test("Mentions, members and unknown local echoes (uses HALO_DEV_STICKER_ROOM as a scratch room)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
@@ -845,7 +954,6 @@ struct AdapterContractTests {
         await #expect(throws: HaloError.notFound) { try await opened.retrySend(localID: "no-such-echo") }
         await #expect(throws: HaloError.notFound) { try await opened.abortSend(localID: "no-such-echo") }
         await opened.close()
-        try await session.logout()
     }
 
     /// MESSAGING FR-3 offline: messages sent while the server is unreachable fail honestly (recoverable), go out exactly once when it
@@ -916,7 +1024,6 @@ struct AdapterContractTests {
         #expect(bodies.filter { $0 == retried }.count == 1, "\(retried): \(bodies.filter { $0 == retried }.count) on the server")
         #expect(!bodies.contains(aborted))
         await opened.close()
-        try await session.logout()
     }
 
     @Test("Sending an image (uses HALO_DEV_STICKER_ROOM as a scratch room)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
@@ -974,7 +1081,6 @@ struct AdapterContractTests {
             try await opened.sendImage(OutgoingImage(data: Data("x".utf8), filename: "x.txt", mimeType: "text/plain", width: nil, height: nil))
         }
         await opened.close()
-        try await session.logout()
     }
 
     @Test("A sent image keeps one row from local echo to confirmation (uses HALO_DEV_STICKER_ROOM as a scratch room)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
@@ -1022,7 +1128,6 @@ struct AdapterContractTests {
         #expect(result.ids.count == 1, "the row ID is the same from local echo to confirmed event")
         #expect(!result.missingAfterAppearing, "the photo's row is never missing from the list between the echo and the confirmation")
         await opened.close()
-        try await session.logout()
     }
 
     @Test("Sending a file, an audio clip and a video (uses HALO_DEV_STICKER_ROOM as a scratch room)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
@@ -1073,18 +1178,21 @@ struct AdapterContractTests {
             try await opened.sendFile(OutgoingFile(data: Data(), filename: "x.txt", mimeType: "text/plain"))
         }
         await opened.close()
-        try await session.logout()
     }
 
-    @Test("Creating a sticker pack (creates a room on the dev server)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
+    @Test("Creating a sticker pack keeps the packs the account already enabled, also before the first sync is stored (creates a room on the dev server)",
+          .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
     func createPack() async throws {
+        let cleanup = Cleanup.current
         let session = port()
         let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
         _ = try await session.loginPassword(
             PasswordCredentials(
                 username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
             on: details)
-        try await MatrixSyncPort(session: session).start()
+        let client = try await session.signedInClient()
+        let listings = ["m.image_pack.rooms", "one.mbm.halo.sticker_rooms"]
+        let before = try await restoring(listings, of: client, cleanup)
         let png = try #require(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="))
         let name = "Contract \(UUID().uuidString.prefix(5))"
         let images = [
@@ -1094,7 +1202,18 @@ struct AdapterContractTests {
         let creation = MatrixStickerPackCreationPort(session: session)
         let ticks = Mutex<[Int]>([])
         let ref = try await within(seconds: 90) { try await creation.createPack(name: name, images: images) { done, _ in ticks.withLock { $0.append(done) } } }
+        cleanup.leave(ref.room.rawValue, as: client)
+        try await MatrixSyncPort(session: session).start()  // only now: before it the SDK's store has no account data, however small the account
         #expect(ticks.withLock { $0 } == [1, 2])
+        // Nothing listed before may be lost.
+        for type in listings {
+            func listed(_ data: Data?) throws -> Set<String> {
+                let rooms = try data.flatMap { try JSONSerialization.jsonObject(with: $0) as? [String: Any] }?["rooms"]
+                return Set((rooms as? [String: Any]).map { Array($0.keys) } ?? rooms as? [String] ?? [])
+            }
+            let after = try listed(try await Self.accountData(client, type))
+            #expect(after == (try listed(before[type])).union([ref.room.rawValue]), "\(type) lost what the account had listed")
+        }
 
         // Read it back like the panel does.
         let reader = MatrixStickerPackPort(session: session)
@@ -1123,20 +1242,6 @@ struct AdapterContractTests {
         await #expect(throws: HaloError.invalidInput("DUPLICATE_SHORTCODE")) {
             _ = try await creation.createPack(name: "x", images: [images[0], images[0]]) { _, _ in }
         }
-        // Leave no trace: unlist the pack (otherwise every run adds one enabled pack to the account), then leave and
-        // forget the pack room; later tests expect the account to be in HALO_DEV_ROOMS rooms.
-        let client = try await session.signedInClient()
-        for type in ["m.image_pack.rooms", "one.mbm.halo.sticker_rooms"] {
-            guard let json = try await client.accountData(eventType: type),
-                  var object = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else { continue }
-            if var rooms = object["rooms"] as? [String: Any] { rooms[ref.room.rawValue] = nil; object["rooms"] = rooms }  // enabled packs
-            else if let rooms = object["rooms"] as? [String] { object["rooms"] = rooms.filter { $0 != ref.room.rawValue } }  // hidden rooms
-            try await client.setAccountData(eventType: type, content: String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self))
-        }
-        let local = try await session.room(ref.room)
-        try await local.leave()
-        try? await local.forget()
-        try await session.logout()
     }
 
     @Test("SyncPortContract")
@@ -1149,7 +1254,6 @@ struct AdapterContractTests {
             on: details)
         let sync = MatrixSyncPort(session: session)
         try await within(seconds: 60) { try await SyncPortContract.verify(sync) }
-        try await session.logout()
     }
 
     @Test("MediaPortContract (the timeline room holds one image, blue.png)", .enabled(if: env["HALO_DEV_TIMELINE_ROOM"] != nil))
@@ -1161,8 +1265,7 @@ struct AdapterContractTests {
                 username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
             on: details)
         try await MatrixSyncPort(session: session).start()
-        let rooms = Int(env["HALO_DEV_ROOMS"] ?? "0") ?? 0
-        try await within(seconds: 60) { try await RoomListPortContract.verify(MatrixRoomListPort(session: session), expectedRoomCount: rooms) }
+        try await waitForRoom(env["HALO_DEV_TIMELINE_ROOM"] ?? "", in: session)
 
         // Find the image through the timeline, like the UI does.
         let timeline = try await MatrixTimelinePort(session: session).open(room: try RoomID(env["HALO_DEV_TIMELINE_ROOM"] ?? ""))
@@ -1183,7 +1286,6 @@ struct AdapterContractTests {
         let existing = try #require(found.source)
         let missing = MediaRef(token: try MediaSource.fromUrl(url: "mxc://halo.localhost/doesNotExist00000000000").toJson())
         try await within(seconds: 60) { try await MediaPortContract.verify(MatrixMediaPort(session: session), existing: existing, missing: missing) }
-        try await session.logout()
     }
 
     @Test("ReadMarkerPort: receipts (public and private) and the fully-read marker are accepted for a confirmed event", .enabled(if: env["HALO_DEV_TIMELINE_ROOM"] != nil))
@@ -1195,8 +1297,7 @@ struct AdapterContractTests {
                 username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
             on: details)
         try await MatrixSyncPort(session: session).start()
-        let rooms = Int(env["HALO_DEV_ROOMS"] ?? "0") ?? 0
-        try await within(seconds: 60) { try await RoomListPortContract.verify(MatrixRoomListPort(session: session), expectedRoomCount: rooms) }
+        try await waitForRoom(env["HALO_DEV_TIMELINE_ROOM"] ?? "", in: session)
         let room = try RoomID(env["HALO_DEV_TIMELINE_ROOM"] ?? "")
         let timeline = try await MatrixTimelinePort(session: session).open(room: room)
         let eventID: EventID? = try await within(seconds: 60) {
@@ -1219,7 +1320,6 @@ struct AdapterContractTests {
         #expect(try await markers.markRoomRead(room: room, isPrivate: false) != nil)
         try await markers.setMarkedUnread(room: room, true)
         try await markers.setMarkedUnread(room: room, false)
-        try await session.logout()
     }
 
     @Test("EncryptionPortContract: recovery set up on one device unlocks a second one (needs a throwaway account in HALO_DEV_E2EE_USER/PASSWORD)", .enabled(if: env["HALO_DEV_E2EE_USER"] != nil && env["HALO_DEV_E2EE_PASSWORD"] != nil))
@@ -1278,11 +1378,6 @@ struct AdapterContractTests {
         var cancelledPhase: SessionVerificationPhase?
         for await phase in sasPort.verificationPhases() { cancelledPhase = phase; break }
         #expect(cancelledPhase == .idle)
-
-        try await first.logout()
-        try await second.logout()
-        try await third.logout()
-        try await fourth.logout()
     }
 
     /// The pushers the account has on the server, read with a plain HTTP login of its own (not through the adapter).
@@ -1297,6 +1392,7 @@ struct AdapterContractTests {
         ])
         let (loginData, _) = try await URLSession.shared.data(for: login)
         let token = try #require((try JSONSerialization.jsonObject(with: loginData) as? [String: Any])?["access_token"] as? String)
+        Cleanup.current.logout(server: server, token: token)
         var request = URLRequest(url: try #require(URL(string: server + "/_matrix/client/v3/pushers")))
         request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
         let (data, _) = try await URLSession.shared.data(for: request)
@@ -1320,7 +1416,6 @@ struct AdapterContractTests {
         try await push.unregister(deviceToken: token, appID: appID)
         #expect(try await !pushkeys().contains(pushkey))
         try await push.unregister(deviceToken: token, appID: appID)  // already gone: must not fail the sign-out
-        try await session.logout()
     }
 
     @Test("SearchPort (V-SEARCH-1): MatrixSearchPort over SDK SearchService finds a known message in HALO_DEV_TIMELINE_ROOM", .enabled(if: env["HALO_DEV_TIMELINE_ROOM"] != nil))
@@ -1390,7 +1485,6 @@ struct AdapterContractTests {
 
         await opened.close()
         search.reset()
-        try await session.logout()
     }
 
     @Test("OIDC/MAS discovery & authorization URL (V-AUTH-1): MatrixSessionPort discovers OIDC on Synapse + MAS and obtains an authorization URL",
@@ -1458,7 +1552,6 @@ struct AdapterContractTests {
             return log
         }
         for line in observed { print("POLICY \(line)") }
-        try await session.logout()
     }
 }
 
@@ -1480,6 +1573,7 @@ private struct PolicyHttp: Sendable {
     func login(_ name: String, _ password: String) async throws -> String {
         let r = try await call("POST", "/login", body: ["type": "m.login.password", "user": name, "password": password, "initial_device_display_name": "policy"])
         guard let token = r["access_token"] else { throw ContractViolation("login failed") }
+        Cleanup.current.logout(server: server, token: token)
         return token
     }
     func send(_ token: String, _ text: String, mention: Bool = false) async throws -> String {
@@ -1593,7 +1687,7 @@ private final class TimelineMirror: Sendable {
     }
 }
 
-/// The latest message bodies of a room as the server has them, read with a plain HTTP login of its own (logged out again).
+/// The latest message bodies of a room as the server has them, read with a plain HTTP login of its own.
 private struct ServerMessages {
     let server: String
     let room: RoomID
@@ -1604,9 +1698,9 @@ private struct ServerMessages {
             "initial_device_display_name": "offline check",
         ])
         let token = try #require(login["access_token"] as? String)
+        Cleanup.current.logout(server: server, token: token)
         let room = room.rawValue.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? room.rawValue
         let page = try await call("GET", "/rooms/\(room)/messages?dir=b&limit=100", token: token)
-        _ = try? await call("POST", "/logout", token: token, body: [:])
         let chunk = page["chunk"] as? [[String: Any]] ?? []
         return chunk.compactMap { event in
             guard event["type"] as? String == "m.room.message" else { return nil }
@@ -1636,14 +1730,17 @@ private final class PeerInviter: @unchecked Sendable {
     func login(_ user: String, _ password: String) async throws {
         let reply = try await call("POST", "/login", body: ["type": "m.login.password", "identifier": ["type": "m.id.user", "user": user], "password": password])
         token = try #require(reply["access_token"] as? String)
+        Cleanup.current.logout(server: server, token: token)
     }
 
     func createRoom(name: String, invite: String) async throws -> String {
         let reply = try await call("POST", "/createRoom", body: ["name": name, "preset": "private_chat", "invite": [invite]])
-        return try #require(reply["room_id"] as? String)
+        let room = try #require(reply["room_id"] as? String)
+        leaveAtEnd(room)
+        return room
     }
 
-    func logout() async { _ = try? await call("POST", "/logout", body: [:]) }
+    func leaveAtEnd(_ room: String) { Cleanup.current.leave(room, server: server, token: token) }
 
     private func call(_ method: String, _ path: String, body: [String: Any]) async throws -> [String: Any] {
         var request = URLRequest(url: try #require(URL(string: server + "/_matrix/client/v3" + path)))

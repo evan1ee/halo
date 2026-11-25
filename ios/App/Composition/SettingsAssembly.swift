@@ -26,9 +26,9 @@ extension AppRoot {
             onPreferencesChanged: { [weak self] in
                 self?.preferences.reload()
             },
-            saveBotSenders: { [weak self] senders in
-                guard let self else { return false }
-                return await self.saveBotSenders(senders)
+            saveBotSenders: { [weak self] old, new in
+                guard let self else { return nil }
+                return await self.saveBotSenders(from: old, to: new)
             },
             loadMediaPreviews: { [weak self] in
                 guard let self else { return .always }

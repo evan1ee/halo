@@ -48,7 +48,7 @@ that opens both]**.
 | Data | Conflict rule |
 |---|---|
 | Read intents | Monotonic (the newest event wins); the server's receipt is final |
-| Account data (`one.mbm.halo.*`, `m.image_pack.rooms`) | Read-modify-write with a merge function (favourites: union then trim; recents: merge by ts; preserve unknown keys); retry once on concurrent change |
+| Account data (`one.mbm.halo.*`, `m.image_pack.rooms`) | Read-modify-write with a merge function (favourites: union then trim; recents: merge by ts; preserve unknown keys). The base is the server's copy, read right before the write (`ServerAccountData`); if it can't be read, nothing is written (D120). Matrix has no conditional write, so two devices writing in the same moment can still lose one change |
 | Room state (packs) | Last writer wins (Matrix state semantics); the editor reloads before writing |
 | Bot tasks | The bot is the truth; the latest bot message (by `origin_server_ts`) wins |
 

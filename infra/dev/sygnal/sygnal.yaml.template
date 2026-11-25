@@ -25,7 +25,8 @@ http:
 # `topic` is the bundle id. Debug builds installed from Xcode use the APNs sandbox.
 apps:
   one.mbm.halo.dev:
-    type: apns
+    # Halo's pushkin (ADR-0015): count-only pushes become silent wake-ups; `aps.badge` never reaches the device.
+    type: halo_pushkin.HaloApnsPushkin
     keyfile: /secrets/__KEY_FILE__
     key_id: __KEY_ID__
     team_id: __TEAM_ID__

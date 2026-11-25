@@ -430,10 +430,8 @@ final class MatrixTimelineSession: TimelineSession {
             if case .unauthorized = mapped { throw mapped }
         }
         do {
-            let current = await readPersonalPins(client: client)
-            if let updated = PersonalPinnedEvents.pinning(event, in: roomID, content: current) {
-                let json = String(decoding: try JSONSerialization.data(withJSONObject: updated, options: [.sortedKeys]), as: UTF8.self)
-                try await client.setAccountData(eventType: PersonalPinnedEvents.eventType, content: json)
+            try await ServerAccountData(client).update(PersonalPinnedEvents.eventType) {
+                PersonalPinnedEvents.pinning(event, in: roomID, content: $0)
             }
             pinStore.recordPin(event, in: roomID, client: client)
         } catch { throw ErrorMapper.map(error) }
@@ -442,14 +440,13 @@ final class MatrixTimelineSession: TimelineSession {
     func unpin(event: EventID) async throws(HaloError) {
         let client = try await session.signedInClient()
         var removedPersonal = false
-        if let current = await readPersonalPins(client: client),
-           let updated = PersonalPinnedEvents.unpinning(event, in: roomID, content: current) {
-            do {
-                let json = String(decoding: try JSONSerialization.data(withJSONObject: updated, options: [.sortedKeys]), as: UTF8.self)
-                try await client.setAccountData(eventType: PersonalPinnedEvents.eventType, content: json)
-                removedPersonal = true
-            } catch { throw ErrorMapper.map(error) }
-        }
+        do {
+            try await ServerAccountData(client).update(PersonalPinnedEvents.eventType) {
+                let updated = PersonalPinnedEvents.unpinning(event, in: roomID, content: $0)
+                removedPersonal = updated != nil
+                return updated
+            }
+        } catch { throw ErrorMapper.map(error) }
         let isRoomPinned = (try? await room.roomInfo().pinnedEventIds.contains(event.rawValue)) ?? false
         if isRoomPinned || !removedPersonal {
             do {

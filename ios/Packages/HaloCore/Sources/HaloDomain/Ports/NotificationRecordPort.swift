@@ -35,6 +35,8 @@ public struct NotificationRecord: Sendable, Equatable, Codable {
 /// Implemented by `HaloPersistence` over GRDB.
 public protocol NotificationRecordPort: Sendable {
     func all() -> [NotificationRecord]
+    /// Like `all()`, but `nil` when the store can't be read right now: "unknown", not "none".
+    func load() -> [NotificationRecord]?
     /// Adds the record; returns `false` if that event already had one (a duplicate push).
     @discardableResult func add(_ record: NotificationRecord) -> Bool
     /// Removes all records for `room`.
@@ -47,4 +49,8 @@ public protocol NotificationRecordPort: Sendable {
     func clearAll()
     /// Fires after any process changes the records (the extension runs in another process).
     func changes() -> AsyncStream<Void>
+}
+
+public extension NotificationRecordPort {
+    func load() -> [NotificationRecord]? { all() }
 }

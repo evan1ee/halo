@@ -7,6 +7,8 @@ Custom APNs pushkin for Sygnal `v0.15.1` implementing [ADR-0015](../../docs/adr/
 - **Event notifications** stay alert pushes (`apns-push-type: alert`, `apns-priority: 10`) with `aps.mutable-content = 1`, `event_id`, and `room_id` so the NSE fetches the event via the SDK and recomputes the badge locally via `BadgeCalculator`.
 - **`aps.badge` and server counts** (`unread_count`, `missed_calls`, `counts`) are unconditionally stripped from every payload.
 
+- Only payloads and the per-notification push type/priority are overridden. Sending, retries and token rejection stay Sygnal's: its `_send_notification` bridges aioapns (asyncio) to Twisted, and awaiting aioapns directly fails every send.
+
 ## Running unit tests
 ```bash
 python3 -m unittest discover -s infra/sygnal -p "test_*.py" -v

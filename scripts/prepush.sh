@@ -28,6 +28,11 @@ if [[ "$(uname)" == Darwin ]] && command -v xcodebuild >/dev/null; then
   sim="${HALO_SIM:-iPhone 17}"
   step "xcodebuild test HaloApple-Package (iOS Simulator)" bash -c \
     'cd ios/Packages/HaloApple && xcodebuild -scheme HaloApple-Package -destination "platform=iOS Simulator,name=$1" test -quiet' _ "$sim"
+  # The Mac's keyboard counts as a hardware keyboard, so the simulator hides the software one and the keyboard UI tests skip.
+  udid="$(xcrun simctl list devices available | grep -F "    $sim (" | tail -1 | grep -oE '[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}')"
+  xcrun simctl bootstatus "$udid" -b >/dev/null 2>&1 &&
+    xcrun simctl spawn "$udid" defaults write com.apple.keyboard.preferences AutomaticMinimizationEnabled -bool NO ||
+    skipped+=("software keyboard on $sim (the keyboard UI tests may skip)")
   if [[ -f ios/Halo.xcodeproj/project.pbxproj ]]; then
     step "xcodebuild build Halo-Debug (iOS Simulator)" xcodebuild -project ios/Halo.xcodeproj -scheme Halo-Debug \
       -destination "platform=iOS Simulator,name=$sim" -quiet build

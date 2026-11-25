@@ -31,6 +31,8 @@ public actor MatrixSessionPort: SessionPort {
     private var client: Client?
     private var syncTask: Task<Void, Never>?
     private var stoppingTask: Task<Void, Never>?
+    /// The background pass in progress, if any: the loop and a second pass wait for it, so two syncs never overlap.
+    private var oncePass: Task<Result<Void, HaloError>, Never>?
     private var statusObservers: [UUID: @Sendable (SyncStatus) -> Void] = [:]
     private var changeObservers: [UUID: AsyncStream<SyncChange>.Continuation] = [:]
     private var storeID: String?
@@ -292,9 +294,11 @@ public actor MatrixSessionPort: SessionPort {
         guard syncTask == nil else { return }
         // A loop that was stopped may still be inside its long poll; two loops must never overlap.
         let previous = stoppingTask
+        let once = oncePass
         let generation = sessionGeneration
         syncTask = Task { [weak self] in
             await previous?.value
+            _ = await once?.value
             guard !Task.isCancelled else { return }
             await self?.runSync(client, generation: generation)
         }
@@ -304,17 +308,25 @@ public actor MatrixSessionPort: SessionPort {
     /// publishing any room changes so room list, read state, badge and widgets update in the background.
     func syncOnce() async throws(HaloError) {
         guard let client else { throw .unauthorized(soft: false) }
-        await stoppingTask?.value
-        do {
-            let response = try await client.syncOnceV2(settings: SyncSettingsV2(timeoutMs: 0, fullState: false))
-            publish(change: SyncChange(
-                joined: Set(response.rooms.joined),
-                invited: Set(response.rooms.invited),
-                left: Set(response.rooms.left)
-            ))
-        } catch {
-            throw ErrorMapper.map(error)
+        guard syncTask == nil else { return }  // the loop delivers the same changes
+        if let oncePass { return try await oncePass.value.get() }
+        let previous = stoppingTask
+        let pass = Task<Result<Void, HaloError>, Never> { [weak self] in
+            await previous?.value
+            do {
+                let response = try await client.syncOnceV2(settings: SyncSettingsV2(timeoutMs: 0, fullState: false))
+                await self?.publish(change: SyncChange(
+                    joined: Set(response.rooms.joined),
+                    invited: Set(response.rooms.invited),
+                    left: Set(response.rooms.left)
+                ))
+                return .success(())
+            } catch { return .failure(ErrorMapper.map(error)) }
         }
+        oncePass = pass
+        let result = await pass.value
+        if oncePass == pass { oncePass = nil }
+        try result.get()
     }
 
     /// Cancels the loop and returns once it has ended or after a short grace period: the SDK call in flight is a long

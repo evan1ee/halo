@@ -167,7 +167,7 @@ final class HaloUITests: XCTestCase {
     }
 
     /// Skips a test that taps keys when this simulator shows no software keyboard (a hardware keyboard is connected: its keys
-    /// exist but lie off screen). Fix: I/O → Keyboard → Connect Hardware Keyboard (⇧⌘K). A skip is not a pass.
+    /// exist but lie off screen). `scripts/prepush.sh` turns that hiding off (`AutomaticMinimizationEnabled`). A skip is not a pass.
     @MainActor
     private func requireSoftwareKeyboard(_ app: XCUIApplication) throws {
         // On a physical device, the first key element in accessibility order may be non-hittable while the keyboard
@@ -240,6 +240,14 @@ final class HaloUITests: XCTestCase {
         try openFirstChat(app)
         let composer = app.descendants(matching: .any)["composer"].firstMatch
         XCTAssertTrue(composer.waitForExistence(timeout: 5))
+        // The photo is looked for below a message of its own: the images on screen can't be counted, because older ones (every
+        // run sends one) scroll off as the new one comes in.
+        let marker = "photo check \(UUID().uuidString.prefix(8))"
+        composer.tap()
+        composer.typeText(marker)
+        app.buttons["send-button"].tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", marker)).firstMatch.waitForExistence(timeout: 10))
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 900, height: 600))
         UIPasteboard.general.image = renderer.image { context in
             UIColor.systemTeal.setFill(); context.fill(CGRect(x: 0, y: 0, width: 900, height: 600))
@@ -252,15 +260,12 @@ final class HaloUITests: XCTestCase {
         XCTAssertTrue(paste.waitForExistence(timeout: 3))
         paste.tap()
         XCTAssertTrue(app.buttons["remove-photo"].waitForExistence(timeout: 5))
-        let photos = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Image'"))
-        let before = photos.count
         app.buttons["send-button"].tap()
-        // Sample for up to 10 s: once the photo is in the list, the count of photos never drops below it.
+        // Sample for up to 10 s: once the photo is in the list, it never leaves it.
         var appeared = false, dropped = false, sawConfirmed = false, shots = 0, samples = 0
         let start = Date()
         while Date().timeIntervalSince(start) < 10 {
-            let count = photos.count
-            if count > before { appeared = true } else if appeared { dropped = true }
+            if try hasPhoto(below: marker, in: app) { appeared = true } else if appeared { dropped = true }
             if app.descendants(matching: .any)["delivery-sent"].exists || app.descendants(matching: .any)["delivery-read"].exists { sawConfirmed = true }
             samples += 1
             if shots < 16, samples % 2 == 0 {  // a picture of the send flow for the contact sheet
@@ -272,6 +277,20 @@ final class HaloUITests: XCTestCase {
         XCTAssertFalse(dropped, "The photo never leaves the list between the local echo and the confirmed message")
         XCTAssertTrue(sawConfirmed, "A sent message ends on the sent check (or readers' avatars)")
         UIPasteboard.general.items = []
+    }
+
+    /// Whether an image is on screen below the message `text`, from one snapshot (rows may change between two queries).
+    @MainActor
+    private func hasPhoto(below text: String, in app: XCUIApplication) throws -> Bool {
+        var markerBottom: CGFloat?, images: [CGRect] = []
+        func visit(_ element: any XCUIElementSnapshot) {
+            if element.label == "Image" { images.append(element.frame) }
+            if element.label.contains(text), element.children.isEmpty || markerBottom == nil { markerBottom = element.frame.maxY }
+            element.children.forEach(visit)
+        }
+        visit(try app.snapshot())
+        guard let markerBottom else { return false }
+        return images.contains { $0.minY >= markerBottom - 1 }
     }
 
     @MainActor
@@ -375,9 +394,9 @@ final class HaloUITests: XCTestCase {
         add(note)
     }
 
-    /// Founder report (2026-11-23): opening a room without messages froze the app (seen in "Invite decline fixture", whose
-    /// only event is the join). Opens the chats named "Empty…" or "Invite decline…" (rooms without messages) and checks each
-    /// shows its empty state and stays responsive.
+    /// Founder report (2026-11-23): opening a room without messages froze the app (seen in a room whose only event
+    /// is the join). Opens the chats named "Empty…" (rooms without messages; `create-fixtures.py` makes one) and checks each shows
+    /// its empty state and stays responsive.
     @MainActor
     func testEmptyRoomStaysResponsive() throws {
         let app = XCUIApplication()
@@ -388,12 +407,12 @@ final class HaloUITests: XCTestCase {
         }
         guard chatsRoot(app).waitForExistence(timeout: 10) else { throw XCTSkip("App is signed out.") }
         if app.buttons["focus-show-all"].exists { app.buttons["focus-show-all"].tap() }
-        let rows = app.collectionViews.firstMatch.cells.containing(NSPredicate(format: "label BEGINSWITH[c] 'empty' OR label BEGINSWITH[c] 'invite decline'"))
-        let emptyRow = app.collectionViews.firstMatch.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] 'empty' OR label BEGINSWITH[c] 'invite decline'"))
+        let rows = app.collectionViews.firstMatch.cells.containing(NSPredicate(format: "label BEGINSWITH[c] 'empty'"))
+        let emptyRow = app.collectionViews.firstMatch.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] 'empty'"))
         guard emptyRow.firstMatch.waitForExistence(timeout: 5) || rows.firstMatch.exists else { throw XCTSkip("No empty room on this account.") }
         // Names first: the list re-sorts while rooms are visited, so rows are found by name, not position.
         let names = emptyRow.allElementsBoundByIndex.map { String($0.label.split(separator: ",").first ?? "") }
-        let wanted = Array((names.filter { $0.localizedCaseInsensitiveContains("invite decline") } + names).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }.prefix(5))
+        let wanted = Array(names.reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }.prefix(5))
         for (index, name) in wanted.enumerated() {
             let row = app.collectionViews.firstMatch.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name + ",")).firstMatch
             guard row.waitForExistence(timeout: 5) else { XCTFail("\(name): row not found"); continue }
@@ -1063,65 +1082,66 @@ final class HaloUITests: XCTestCase {
         returnToChatList(app)
     }
 
-    /// Verifies that the SpringBoard app icon badge matches unread messages and never disappears across
-    /// repeated background/foreground and cold-relaunch cycles. Opt-in via `HALO_RUN_DEVICE_CHECKS=1`.
+    /// The unread count SpringBoard holds for Halo's icon, 0 for none. Read from the icon's accessibility value ("3 new
+    /// items"), which is there even while a Focus hides badges on the Home Screen. Halo's widget is also an "icon" labelled
+    /// "Halo" and comes first; its value is "Widget". `nil` when the icon isn't on the Home Screen.
+    @MainActor
+    private func iconBadge() -> Int? {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let icons = springboard.icons.matching(NSPredicate(format: "label == 'Halo'")).allElementsBoundByIndex
+        guard let icon = icons.first(where: { ($0.value as? String) != "Widget" }) else { return nil }
+        return Int((icon.value as? String ?? "").prefix(while: \.isNumber)) ?? 0
+    }
+
+    /// Verifies that the SpringBoard app icon badge never changes or disappears across repeated background/foreground and
+    /// cold-relaunch cycles that read nothing. Opt-in via `HALO_RUN_DEVICE_CHECKS=1`; the account needs unread messages.
     @MainActor
     func testUnreadBadgePersistsAcrossOpenCloseCycles() throws {
         guard ProcessInfo.processInfo.environment["HALO_RUN_DEVICE_CHECKS"] == "1" else {
             throw XCTSkip("Set HALO_RUN_DEVICE_CHECKS=1 to run SpringBoard badge persistence check.")
         }
         let app = XCUIApplication()
-        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         app.launch()
         dismissFirstRunSheets(app)
         if !chatsRoot(app).waitForExistence(timeout: 3) { returnToChatList(app) }
         guard chatsRoot(app).waitForExistence(timeout: 10) else { throw XCTSkip("App is signed out.") }
         if app.buttons["focus-show-all"].exists { app.buttons["focus-show-all"].tap() }
-        // Let initial sync settle on Chats root without opening any room.
         _ = app.collectionViews.firstMatch.waitForExistence(timeout: 5)
-        RunLoop.current.run(until: Date().addingTimeInterval(2.0))
+        RunLoop.current.run(until: Date().addingTimeInterval(3.0))
 
-        var trace: [String] = []
-        func readIconBadge(_ step: String) -> String {
-            let icon = springboard.icons.matching(NSPredicate(format: "label BEGINSWITH 'Halo'")).firstMatch
-            _ = icon.waitForExistence(timeout: 3)
-            let desc = "\(step): exists=\(icon.exists) label='\(icon.label)' value='\(String(describing: icon.value))'"
-            trace.append(desc)
-            return "\(icon.label)|\(String(describing: icon.value))"
+        XCUIDevice.shared.press(.home)
+        RunLoop.current.run(until: Date().addingTimeInterval(2.0))
+        guard let expected = iconBadge() else { throw XCTSkip("Halo's icon isn't on the Home Screen.") }
+        guard expected > 0 else { throw XCTSkip("The account has no unread messages.") }
+        var trace = ["start=\(expected)"]
+        func check(_ step: String) {
+            let value = iconBadge()
+            trace.append("\(step)=\(value.map(String.init) ?? "none")")
+            XCTAssertEqual(value, expected, "The badge changed at \(step): \(trace.joined(separator: " "))")
         }
 
-        // 1. Background / foreground 5 times
         for cycle in 1...5 {
-            XCUIDevice.shared.press(.home)
-            RunLoop.current.run(until: Date().addingTimeInterval(1.2))
-            _ = readIconBadge("bg-\(cycle)")
             app.activate()
             _ = chatsRoot(app).waitForExistence(timeout: 3)
             RunLoop.current.run(until: Date().addingTimeInterval(0.6))
-        }
-        XCUIDevice.shared.press(.home)
-        RunLoop.current.run(until: Date().addingTimeInterval(1.2))
-        _ = readIconBadge("after-bg-5")
-
-        // 2. Cold terminate + quick open/close 3 times (simulates force-close & quick open/close before sync finishes)
-        for cycle in 1...3 {
-            app.terminate()
-            RunLoop.current.run(until: Date().addingTimeInterval(0.8))
-            _ = readIconBadge("terminated-\(cycle)")
-            app.launch()
-            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
             XCUIDevice.shared.press(.home)
             RunLoop.current.run(until: Date().addingTimeInterval(1.2))
-            _ = readIconBadge("quick-close-\(cycle)")
+            check("background-\(cycle)")
         }
-
+        // Closed again before the first sync can finish: the replica of the last run must not overwrite the icon.
+        for cycle in 1...5 {
+            app.terminate()
+            check("terminated-\(cycle)")
+            app.launch()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1 * Double(cycle)))
+            XCUIDevice.shared.press(.home)
+            RunLoop.current.run(until: Date().addingTimeInterval(1.2))
+            check("quick-close-\(cycle)")
+        }
         let attachment = XCTAttachment(string: trace.joined(separator: "\n"))
-        attachment.name = "springboard-badge-trace"
+        attachment.name = "icon-badge-trace"
         attachment.lifetime = .keepAlways
         add(attachment)
-        print("SPRINGBOARD_BADGE_TRACE:\n" + trace.joined(separator: "\n"))
-
-        let missing = trace.filter { !$0.contains("3") }
-        XCTAssertTrue(missing.isEmpty, "Badge disappeared on steps:\n" + trace.joined(separator: "\n"))
+        print("ICON_BADGE_TRACE \(trace.joined(separator: " "))")
     }
 }

@@ -13,8 +13,8 @@ public final class MatrixStickerPrefsPort: StickerPrefsPort {
     public func load() async throws(HaloError) -> StickerPrefs? {
         let client = try await session.signedInClient()
         do {
-            guard let json = try await client.accountData(eventType: Self.eventType) else { return nil }
-            return StickerPrefs.fromAccountData(Data(json.utf8))
+            guard let data = try await ServerAccountData(client).storedOrServer(Self.eventType, client) else { return nil }
+            return StickerPrefs.fromAccountData(data)
         } catch { throw ErrorMapper.map(error) }
     }
 
@@ -22,8 +22,8 @@ public final class MatrixStickerPrefsPort: StickerPrefsPort {
         let client = try await session.signedInClient()
         do {
             // Never overwrite data this version can't read (a newer Halo wrote it).
-            if let existing = try await client.accountData(eventType: Self.eventType), StickerPrefs.fromAccountData(Data(existing.utf8)) == nil,
-               (try? JSONSerialization.jsonObject(with: Data(existing.utf8))) != nil {
+            if let existing = try await ServerAccountData(client).storedOrServer(Self.eventType, client), StickerPrefs.fromAccountData(existing) == nil,
+               (try? JSONSerialization.jsonObject(with: existing)) != nil {
                 throw HaloError.unsupported("STICKER_PREFS_NEWER_VERSION")
             }
             try await client.setAccountData(eventType: Self.eventType, content: String(decoding: prefs.accountData(), as: UTF8.self))
@@ -47,9 +47,7 @@ public final class MatrixHiddenRoomsPort: HiddenRoomsPort {
 
 /// `StickerPackPort` reading `m.room.image_pack` state over the Client-Server API (STICKERS §9, option B of V-ST-1).
 /// [VERIFIED against infra/dev] `Room.stateEvents(.roomImagePack)` returns nothing for this custom state type (option A), so
-/// the state is read with a plain authenticated GET. This is the only direct HTTP call of the app besides discovery.
-/// The access token is never logged. On a 401 the SDK is asked to refresh by making one of its own authenticated requests,
-/// then the call is repeated once (V-ST-2).
+/// the state is read with a plain authenticated GET (`ClientServerGET`).
 public final class MatrixStickerPackPort: StickerPackPort {
     public typealias Fetch = @Sendable (URLRequest) async throws -> (Data, HTTPURLResponse)
 
@@ -66,20 +64,7 @@ public final class MatrixStickerPackPort: StickerPackPort {
         self.roomPacks = RoomPackCache(now: now)
     }
 
-    /// No disk cache for authenticated responses (they hold room state), no cookies.
-    private static let urlSession: URLSession = {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        configuration.urlCache = nil
-        configuration.httpShouldSetCookies = false
-        return URLSession(configuration: configuration)
-    }()
-
-    public static let urlSessionFetch: Fetch = { request in
-        let (data, response) = try await urlSession.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
-        return (data, http)
-    }
+    public static let urlSessionFetch: Fetch = ClientServerGET.urlSessionFetch
 
     public func packs(currentRoom: RoomID?) async throws(HaloError) -> StickerPackLoad {
         let client = try await session.signedInClient()
@@ -110,7 +95,7 @@ public final class MatrixStickerPackPort: StickerPackPort {
             do {
                 if let content = try await stateContent(client, room: ref.room, key: ref.stateKey) { add(ImagePackParser.parse(content, ref: ref, source: .userEnabled)) }
                 else { unavailable.append(ref) }  // 404: the room or the pack event is gone
-            } catch is Forbidden { unavailable.append(ref)  // 403: the user is no longer in that room
+            } catch is ClientServerGET.Forbidden { unavailable.append(ref)  // 403: the user is no longer in that room
             } catch { failed += 1 }
         }
 
@@ -134,10 +119,7 @@ public final class MatrixStickerPackPort: StickerPackPort {
     public func disable(_ ref: PackRef) async throws(HaloError) {
         let client = try await session.signedInClient()
         do {
-            // Read-modify-write of the account data; unknown properties stay (PackRegistry keeps them).
-            let current = try await client.accountData(eventType: "m.image_pack.rooms").flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
-            guard let updated = PackRegistry.disabling(ref, in: current) else { return }
-            try await client.setAccountData(eventType: "m.image_pack.rooms", content: String(decoding: try JSONSerialization.data(withJSONObject: updated, options: [.sortedKeys]), as: UTF8.self))
+            try await ServerAccountData(client, fetch: fetch).update("m.image_pack.rooms") { PackRegistry.disabling(ref, in: $0) }
         } catch { throw ErrorMapper.map(error) }
     }
 
@@ -150,7 +132,7 @@ public final class MatrixStickerPackPort: StickerPackPort {
             return content
         } catch let error as HaloError {
             throw error
-        } catch is Forbidden {
+        } catch is ClientServerGET.Forbidden {
             throw .forbidden
         } catch {
             throw ErrorMapper.map(error)
@@ -189,14 +171,14 @@ public final class MatrixStickerPackPort: StickerPackPort {
     // MARK: HTTP
 
     private func stateContent(_ client: Client, room: RoomID, key: String, type: String = "m.room.image_pack") async throws -> [String: Any]? {
-        let path = "rooms/\(Self.escape(room.rawValue))/state/\(type)/\(Self.escape(key))"
+        let path = "rooms/\(ClientServerGET.escape(room.rawValue))/state/\(type)/\(ClientServerGET.escape(key))"
         guard let data = try await get(client, path) else { return nil }
         return try JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
 
     /// `(state key, content, isLegacy)` of the room's pack events; current-format packs come first.
     private func allPacks(_ client: Client, room: RoomID) async throws -> [(String, [String: Any], Bool)] {
-        guard let data = try await get(client, "rooms/\(Self.escape(room.rawValue))/state"),
+        guard let data = try await get(client, "rooms/\(ClientServerGET.escape(room.rawValue))/state"),
               let events = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
         let found: [(String, [String: Any], Bool)] = events.compactMap { event in
             guard let type = event["type"] as? String, type == "m.room.image_pack" || type == Self.legacyType,
@@ -206,32 +188,7 @@ public final class MatrixStickerPackPort: StickerPackPort {
         return found.filter { !$0.2 } + found.filter { $0.2 }
     }
 
-    /// The response body, `nil` for 404 (no such state), an error for anything else that isn't 200.
-    private func get(_ client: Client, _ path: String, retried: Bool = false) async throws -> Data? {
-        let sdkSession = try client.session()
-        guard var components = URLComponents(string: sdkSession.homeserverUrl) else { throw URLError(.badURL) }
-        components.percentEncodedPath = components.percentEncodedPath.trimmingCharacters(in: CharacterSet(charactersIn: "/")).isEmpty
-            ? "/_matrix/client/v3/\(path)" : components.percentEncodedPath + "/_matrix/client/v3/\(path)"
-        guard let url = components.url else { throw URLError(.badURL) }
-        var request = URLRequest(url: url, timeoutInterval: 20)
-        request.setValue("Bearer \(sdkSession.accessToken)", forHTTPHeaderField: "Authorization")
-        let (data, response) = try await fetch(request)
-        switch response.statusCode {
-        case 200: return data
-        case 404: return nil
-        case 401 where !retried:
-            _ = try? await client.accountData(eventType: "m.direct")  // an SDK request refreshes an expired token
-            return try await get(client, path, retried: true)
-        case 403: throw Forbidden()
-        default: throw URLError(.badServerResponse)
-        }
-    }
-
-    private struct Forbidden: Error {}
-
-    private static func escape(_ component: String) -> String {
-        component.addingPercentEncoding(withAllowedCharacters: CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")) ?? component
-    }
+    private func get(_ client: Client, _ path: String) async throws -> Data? { try await ClientServerGET(fetch: fetch).get(client, path) }
 }
 
 /// When the sticker panel reads a room's whole state to find its packs (STICKERS §9). Pure.
@@ -299,8 +256,8 @@ public final class MatrixStickerPackCreationPort: StickerPackCreationPort {
                     eventType: "m.room.image_pack", stateKey: ref.stateKey,
                     content: String(decoding: try JSONSerialization.data(withJSONObject: content, options: [.sortedKeys]), as: UTF8.self), requestConfigOverride: nil)
 
-                try await update(client, "m.image_pack.rooms") { PackRegistry.enabling(ref, in: $0) }
-                try await update(client, "one.mbm.halo.sticker_rooms") { PackRegistry.recordingPackRoom(ref.room, in: $0) }
+                try await ServerAccountData(client).update("m.image_pack.rooms") { PackRegistry.enabling(ref, in: $0) }
+                try await ServerAccountData(client).update("one.mbm.halo.sticker_rooms") { PackRegistry.recordingPackRoom(ref.room, in: $0) }
                 return ref
             } catch {
                 var known = room
@@ -314,17 +271,10 @@ public final class MatrixStickerPackCreationPort: StickerPackCreationPort {
     /// Best effort, after a failed creation: removes the pack from the enabled list in case that write got through, then
     /// leaves and forgets the room. The uploaded media stay on the server (there is no API to delete them).
     private func abandon(_ room: Room?, registeredAs ref: PackRef, client: Client) async {
-        try? await update(client, "m.image_pack.rooms") { PackRegistry.disabling(ref, in: $0) }
+        try? await ServerAccountData(client).update("m.image_pack.rooms") { PackRegistry.disabling(ref, in: $0) }
         guard let room else { return }
         try? await room.leave()
         try? await room.forget()
-    }
-
-    /// Read-modify-write of account data; `nil` from `change` leaves it alone.
-    private func update(_ client: Client, _ type: String, _ change: ([String: Any]?) -> [String: Any]?) async throws {
-        let current = try await client.accountData(eventType: type).flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
-        guard let updated = change(current) else { return }
-        try await client.setAccountData(eventType: type, content: String(decoding: try JSONSerialization.data(withJSONObject: updated, options: [.sortedKeys]), as: UTF8.self))
     }
 }
 
@@ -388,9 +338,9 @@ public final class MatrixStickerPackManagementPort: StickerPackManagementPort {
     public func deletePack(_ ref: PackRef) async throws(HaloError) {
         let client = try await session.signedInClient()
         do {
-            try await updateAccountData(client, "m.image_pack.rooms") { PackRegistry.disabling(ref, in: $0) }
+            try await ServerAccountData(client).update("m.image_pack.rooms") { PackRegistry.disabling(ref, in: $0) }
             if await isPersonalPackRoom(ref.room, client: client) {
-                try? await updateAccountData(client, "one.mbm.halo.sticker_rooms") { PackRegistry.removingPackRoom(ref.room, in: $0) }
+                try? await ServerAccountData(client).update("one.mbm.halo.sticker_rooms") { PackRegistry.removingPackRoom(ref.room, in: $0) }
                 if let room = try? await session.room(ref.room) {
                     try? await room.leave()
                     try? await room.forget()
@@ -409,11 +359,5 @@ public final class MatrixStickerPackManagementPort: StickerPackManagementPort {
         guard let json = try? await client.accountData(eventType: "one.mbm.halo.sticker_rooms"),
               let object = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else { return false }
         return PackRegistry.packRooms(in: object).contains(room)
-    }
-
-    private func updateAccountData(_ client: Client, _ type: String, _ change: ([String: Any]?) -> [String: Any]?) async throws {
-        let current = try await client.accountData(eventType: type).flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
-        guard let updated = change(current) else { return }
-        try await client.setAccountData(eventType: type, content: String(decoding: try JSONSerialization.data(withJSONObject: updated, options: [.sortedKeys]), as: UTF8.self))
     }
 }

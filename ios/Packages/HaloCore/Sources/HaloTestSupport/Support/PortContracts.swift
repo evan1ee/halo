@@ -83,7 +83,7 @@ public enum TimelinePortContract {
 
         // A freshly synced room may hold only its newest event: back-paginate, as a real client does, until the start.
         let pagination = Task { () -> HaloError? in
-            for _ in 0..<10 {
+            for _ in 0..<100 {  // the room grows with every run; the caller's time limit ends a timeline that never reaches its start
                 do { if try await session.paginateBackwards(count: 20) { return nil } } catch { return (error as? HaloError) ?? .internal(code: "CONTRACT_PAGINATE") }
             }
             return nil

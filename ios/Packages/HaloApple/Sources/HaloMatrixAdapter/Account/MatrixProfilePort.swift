@@ -3,7 +3,7 @@ import HaloDomain
 import HaloFoundation
 import MatrixRustSDK
 
-/// `ProfilePort` over `Client.displayName/setDisplayName/getProfile/ignoreUser/unignoreUser/ignoredUsers` (USER_PROFILES, F-FFI-4).
+/// `ProfilePort` over `Client.displayName/setDisplayName/getProfile/ignoredUsers` and account data (USER_PROFILES, F-FFI-4).
 public final class MatrixProfilePort: ProfilePort {
     private let session: MatrixSessionPort
 
@@ -47,21 +47,31 @@ public final class MatrixProfilePort: ProfilePort {
         do { return try await client.ignoredUsers().compactMap { try? UserID($0) } } catch { throw ErrorMapper.map(error) }
     }
 
+    /// Ignoring and unignoring change the server's `m.ignored_user_list` (D120). The SDK's `ignoreUser`/`unignoreUser` work from
+    /// its local copy: before the first sync is stored that drops the users already ignored, and an unignore right after an
+    /// ignore changes nothing (both found against infra/dev).
     public func ignore(_ user: UserID) async throws(HaloError) {
-        let client = try await session.signedInClient()
-        do { try await client.ignoreUser(userId: user.rawValue) } catch { throw ErrorMapper.map(error) }
+        try await changeIgnored { users in
+            guard users[user.rawValue] == nil else { return false }
+            users[user.rawValue] = [String: Any]()
+            return true
+        }
     }
 
-    /// Unignores `user`. Found against infra/dev: right after `ignoreUser` the SDK's `unignoreUser` can succeed without changing the
-    /// server's list (it works from its local copy, which the sync echo of the first call hasn't updated yet), so the result is read
-    /// back and the call repeated after a short wait, up to four times.
     public func unignore(_ user: UserID) async throws(HaloError) {
+        try await changeIgnored { $0.removeValue(forKey: user.rawValue) != nil }
+    }
+
+    /// `change` returns whether it changed anything.
+    private func changeIgnored(_ change: (inout [String: Any]) -> Bool) async throws(HaloError) {
         let client = try await session.signedInClient()
         do {
-            for attempt in 0..<4 {
-                try await client.unignoreUser(userId: user.rawValue)
-                guard try await client.ignoredUsers().contains(user.rawValue) else { return }
-                if attempt < 3 { try await Task.sleep(for: .seconds(2)) }
+            try await ServerAccountData(client).update("m.ignored_user_list") { current in
+                var content = current ?? [:]
+                var users = content["ignored_users"] as? [String: Any] ?? [:]
+                guard change(&users) else { return nil }
+                content["ignored_users"] = users
+                return content
             }
         } catch { throw ErrorMapper.map(error) }
     }

@@ -14,19 +14,25 @@ extension AppRoot {
                 await roomList.refresh()
             } else {
                 let local = preferences.botSenders.compactMap { try? UserID($0) }
-                if !local.isEmpty { try? await botAllowlistPort.save(BotAllowlist(bots: local)) }
+                if !local.isEmpty { _ = try? await botAllowlistPort.change(from: BotAllowlist(), to: BotAllowlist(bots: local)) }
             }
         } catch {
             // Keep the local cache until the next launch or edit.
         }
     }
 
-    /// Syncs an updated bot allowlist to `one.mbm.halo.bot_allowlist` account data and refreshes room previews.
-    func saveBotSenders(_ rawIDs: [String]) async -> Bool {
-        preferences.botSenders = rawIDs
-        let allowlist = BotAllowlist(bots: rawIDs.compactMap { try? UserID($0) })
+    /// Applies an edit of the bot allowlist to `one.mbm.halo.bot_allowlist` account data and refreshes room previews. Returns the
+    /// account's list, or `nil` when it couldn't be synced (the edit then stays on this device).
+    func saveBotSenders(from old: [String], to new: [String]) async -> [String]? {
+        func list(_ rawIDs: [String]) -> BotAllowlist { BotAllowlist(bots: rawIDs.compactMap { try? UserID($0) }) }
+        preferences.botSenders = new
         await roomList.refresh()
-        do { try await botAllowlistPort.save(allowlist); return true } catch { return false }
+        guard let merged = try? await botAllowlistPort.change(from: list(old), to: list(new)).bots.map(\.rawValue) else { return nil }
+        if merged != new, preferences.botSenders == new {
+            preferences.botSenders = merged
+            await roomList.refresh()
+        }
+        return merged
     }
 
     /// Reads rooms whose newest message is from an allowlisted bot and that changed since the last scan.

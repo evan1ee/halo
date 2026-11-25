@@ -143,6 +143,7 @@ public final class RoomListViewModel {
         return try? await media.thumbnail(ref, width: 96, height: 96)
     }
     private var tasks: [Task<Void, Never>] = []
+    private var hasStarted = false
     private var roomStates: [RoomID: RoomReadState] = [:]
     private var lastStatus: RoomListCoordinator.Status = .idle
 
@@ -235,7 +236,8 @@ public final class RoomListViewModel {
 
     /// Starts following the session, the list, and the single read-state stream (R-05). Call once when the screen appears.
     public func start() async {
-        guard tasks.isEmpty else { return }
+        guard !hasStarted else { return }  // the app root and the view both call it
+        hasStarted = true
         let sessionStates = await session.states()
         let listStatuses = await rooms.statuses()
         let readStates = await readState.states()

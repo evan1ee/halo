@@ -35,5 +35,20 @@ curl -fsS -X POST -H "Authorization: Bearer $token" -H "Content-Type: applicatio
   "$base/_matrix/client/unstable/org.matrix.simplified_msc3575/sync" | python3 -c '
 import json,sys; r=json.load(sys.stdin); assert "pos" in r, r; print("   ok: pos", r["pos"], "rooms", len(r.get("rooms",{})))'
 
-curl -fsS -X POST -H "Authorization: Bearer $token" "$base/_matrix/client/v3/logout" >/dev/null
+python3 - "$base" "$pw_file" "$user" 3<<<"$token" <<'PY'
+import json, os, sys, urllib.error, urllib.request
+base, pw_file, user = sys.argv[1], sys.argv[2], sys.argv[3]
+token = os.fdopen(3).read().strip()
+def deactivate(body):
+    req = urllib.request.Request(base + "/_matrix/client/v3/account/deactivate", json.dumps(body).encode(),
+                                 {"Content-Type": "application/json", "Authorization": "Bearer " + token})
+    return urllib.request.urlopen(req)
+try:
+    deactivate({"erase": True})
+except urllib.error.HTTPError as e:  # user-interactive authentication: confirm with the password
+    if e.code != 401: raise
+    deactivate({"erase": True, "auth": {"type": "m.login.password", "session": json.load(e)["session"],
+                "identifier": {"type": "m.id.user", "user": user}, "password": open(pw_file).read()}})
+print("4. the throwaway user is deactivated")
+PY
 echo "smoke: all checks passed"

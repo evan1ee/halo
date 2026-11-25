@@ -66,10 +66,12 @@ public actor SyncCoordinator {
     }
 
     /// Runs a single bounded sync pass in the background (e.g. when woken by a silent push, ADR-0015 / D112)
-    /// without starting the foreground long-poll loop. Returns `true` when the sync succeeded.
+    /// without starting the foreground long-poll loop. Returns `true` when the sync succeeded; does nothing while the
+    /// foreground loop runs (it delivers the same changes).
     @discardableResult
     public func syncOnceInBackground() async -> Bool {
-        guard isSessionReady else { return false }
+        // Asked directly: after a cold background launch the session can be ready before this actor has heard about it.
+        guard case .ready = await session.state, !applied else { return false }
         do {
             try await port.syncOnce()
             return true

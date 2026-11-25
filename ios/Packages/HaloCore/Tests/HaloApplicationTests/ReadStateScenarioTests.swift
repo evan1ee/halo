@@ -491,6 +491,40 @@ struct ReadStateScenarioTests {
         #expect(await eventually { store.intents.first?.isSent == true })
     }
 
+    @Test("S11b: read while offline, with the SDK's latest event still A1's own event (a join) before the read message")
+    func s11OwnLatestLags() async throws {
+        // Seen on a real server: the counts of B's message arrive with the latest event still at A1's own join. Nothing more
+        // syncs while offline, so what the policy says then is what stays on screen.
+        var rig = Rig(hangingBackoff: true)
+        let r = rig.addRoom()
+        rig.send(r, .a)
+        let message = rig.send(r)
+        rig.sync(undecrypted: [message])  // left out of the latest event, but counted
+        #expect(rig.world.input(r).latestEvent?.senderIsSelf == true)
+        #expect(await rig.state(r).attention)  // A1 didn't read it yet: the own event doesn't hide it (R-07)
+        rig.port.failNextReceipts(with: Array(repeating: .network(retryable: true), count: 100))
+        await rig.view(r, message)
+        await rig.receipts.flush()
+        #expect(rig.port.receipts.isEmpty)
+        var state = await rig.state(r)
+        #expect(!state.attention && state.reasons == [.intentCovers])
+
+        await rig.relaunch()  // still offline
+        await rig.receipts.flush()
+        #expect(await rig.attention().isEmpty)
+
+        rig.port.failNextReceipts(with: [])  // the network returns
+        await rig.settle()
+        #expect(rig.port.receipts == [.init(room: r, event: message, isPrivate: false)])
+        rig.sync()
+        #expect(await rig.attention().isEmpty)
+
+        rig.send(r)  // read through `message` only: the next one needs attention
+        rig.sync()
+        state = await rig.state(r)
+        #expect(state.attention && state.display == .count(1))
+    }
+
     @Test("S12: the receipt fails three times: the intent stays pending, there is no attention, retries back off")
     func s12() async throws {
         var rig = Rig(hangingBackoff: true)

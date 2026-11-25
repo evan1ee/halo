@@ -19,9 +19,11 @@ struct UnreadEntry: TimelineEntry {
 }
 
 struct UnreadProvider: TimelineProvider {
-    private func current(at date: Date = Date()) -> UnreadEntry {
+    private func current(at date: Date = Date(), renderedAs kind: String? = nil) -> UnreadEntry {
         let cache = AttentionCache(suiteName: "group.\(HaloShared.namespace())")
-        return UnreadEntry(date: date, snapshot: UnreadWidgetSnapshot(counts: cache.counts(), updatedAt: cache.updatedAt()))
+        let counts = cache.counts()
+        if let kind { cache.markRendered(counts, widget: kind) }
+        return UnreadEntry(date: date, snapshot: UnreadWidgetSnapshot(counts: counts, updatedAt: cache.updatedAt()))
     }
 
     func placeholder(in context: Context) -> UnreadEntry {
@@ -34,17 +36,17 @@ struct UnreadProvider: TimelineProvider {
 
     /// The app reloads the timeline whenever it writes new counts; the fallback keeps "possibly out of date" honest.
     func getTimeline(in context: Context, completion: @escaping (Timeline<UnreadEntry>) -> Void) {
-        let entry = current()
+        let entry = current(renderedAs: UnreadWidget.kind)
         let next = entry.date.addingTimeInterval(UnreadWidgetSnapshot.staleAfter + 60)
         completion(Timeline(entries: [entry], policy: .after(next)))
     }
 }
 
 struct UnreadWidget: Widget {
-    let kind = "one.mbm.halo.widget.unread"
+    nonisolated static let kind = "one.mbm.halo.widget.unread"
 
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: UnreadProvider()) { entry in
+        StaticConfiguration(kind: Self.kind, provider: UnreadProvider()) { entry in
             UnreadWidgetView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
         }
@@ -106,12 +108,14 @@ struct UnreadChatsEntry: TimelineEntry {
 
 /// Names come from the opt-in chat list (D88, D93); with the setting off the widget only says how to turn them on.
 struct UnreadChatsProvider: TimelineProvider {
-    private func current(at date: Date = Date()) -> UnreadChatsEntry {
+    private func current(at date: Date = Date(), renderedAs kind: String? = nil) -> UnreadChatsEntry {
         let cache = AttentionCache(suiteName: "group.\(HaloShared.namespace())")
+        let counts = cache.counts()
+        if let kind { cache.markRendered(counts, widget: kind) }
         let names = Dictionary(
             SystemChatShortcutStore(file: SystemChatShortcutStore.defaultFile()).load().map { ($0.id, $0.name) },
             uniquingKeysWith: { first, _ in first })
-        return UnreadChatsEntry(date: date, snapshot: UnreadChatsSnapshot(counts: cache.counts(), names: names, updatedAt: cache.updatedAt()))
+        return UnreadChatsEntry(date: date, snapshot: UnreadChatsSnapshot(counts: counts, names: names, updatedAt: cache.updatedAt()))
     }
 
     func placeholder(in context: Context) -> UnreadChatsEntry {
@@ -124,16 +128,16 @@ struct UnreadChatsProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<UnreadChatsEntry>) -> Void) {
-        let entry = current()
+        let entry = current(renderedAs: UnreadChatsWidget.kind)
         completion(Timeline(entries: [entry], policy: .after(entry.date.addingTimeInterval(UnreadWidgetSnapshot.staleAfter + 60))))
     }
 }
 
 struct UnreadChatsWidget: Widget {
-    let kind = "one.mbm.halo.widget.unread-chats"
+    nonisolated static let kind = "one.mbm.halo.widget.unread-chats"
 
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: UnreadChatsProvider()) { entry in
+        StaticConfiguration(kind: Self.kind, provider: UnreadChatsProvider()) { entry in
             UnreadChatsWidgetView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
         }

@@ -1,6 +1,7 @@
 import Foundation
 import HaloDomain
 import HaloFoundation
+import Synchronization
 
 /// What the notification service extension should deliver to Notification Center (PUSH_NOTIFICATIONS §3, R-08).
 public enum NotificationDecision: Sendable, Equatable {
@@ -16,41 +17,36 @@ public enum NotificationDecision: Sendable, Equatable {
 /// Pure application logic for the notification service extension (Phase 1.1, R-08).
 ///
 /// Fetches the event through `NotificationFetchPort` (never trusting push payload fields, D65), de-duplicates via
-/// `NotificationRecordPort` (AC-U7), and evaluates the badge fallback through `ReadStatePolicy` using the app's
-/// last authoritative attention set plus this room only if the policy gives it attention (mode-aware, R-08).
-/// When the app is in the foreground, leaves `badge = nil` so the extension never overwrites a newer app write.
+/// `NotificationRecordPort` (AC-U7), and evaluates the badge fallback through `ReadStatePolicy`: the app's last evaluation
+/// plus the events recorded since, recomputed from the records for every push (never counted up), so a repeated, late or
+/// concurrent push can't drift it. When the app is in the foreground, leaves `badge = nil` so the extension never
+/// overwrites a newer app write.
 public struct NotificationProcessor: Sendable {
     private let fetcher: any NotificationFetchPort
     private let records: any NotificationRecordPort
-    private let lastAttention: @Sendable () -> (counts: [RoomID: Int], updatedAt: Date?)
+    private let attention: @Sendable () -> AttentionBaseline
+    private let storeDisplayed: @Sendable ([RoomID: Int]) -> Void
     private let isAppForeground: @Sendable () -> Bool
     private let now: @Sendable () -> Date
+
+    /// iOS runs concurrent pushes in one extension process, each with its own processor: recording an event, recomputing and
+    /// storing the result must not interleave, or the later store loses the other room's push.
+    private static let commit = Mutex(())
 
     public init(
         fetcher: any NotificationFetchPort,
         records: any NotificationRecordPort,
-        lastAttention: @escaping @Sendable () -> (counts: [RoomID: Int], updatedAt: Date?),
+        attention: @escaping @Sendable () -> AttentionBaseline,
+        storeDisplayed: @escaping @Sendable ([RoomID: Int]) -> Void = { _ in },
         isAppForeground: @escaping @Sendable () -> Bool,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.fetcher = fetcher
         self.records = records
-        self.lastAttention = lastAttention
+        self.attention = attention
+        self.storeDisplayed = storeDisplayed
         self.isAppForeground = isAppForeground
         self.now = now
-    }
-
-    public init(
-        fetcher: any NotificationFetchPort,
-        records: any NotificationRecordPort,
-        lastAttention: @escaping @Sendable () -> [RoomID: Int],
-        isAppForeground: @escaping @Sendable () -> Bool,
-        now: @escaping @Sendable () -> Date = { Date() }
-    ) {
-        self.init(
-            fetcher: fetcher, records: records,
-            lastAttention: { (lastAttention(), nil) },
-            isAppForeground: isAppForeground, now: now)
     }
 
     public func process(room: RoomID, event: EventID) async -> NotificationDecision {
@@ -68,10 +64,8 @@ public struct NotificationProcessor: Sendable {
             let record = NotificationRecord(
                 roomID: room, eventID: event, timestamp: timestamp,
                 isMention: display.isMention, deliveredAt: deliveredAt, source: .nse)
-            guard records.add(record) else { return .suppressed(outcome: "duplicate") }
-            let fallback = fallbackBadge(
-                room: room, membership: display.isInvite ? .invited : .joined,
-                isEncrypted: false, mode: display.mode, timestamp: timestamp, isMention: display.isMention)
+            let committed = commit(record, membership: display.isInvite ? .invited : .joined, isEncrypted: false, mode: display.mode)
+            guard case .recorded(let fallback) = committed else { return .suppressed(outcome: "duplicate") }
             return .deliver(
                 title: display.title, body: display.body, threadID: room.rawValue,
                 badge: fallback?.badge, outcome: "display", attentionCounts: fallback?.attentionCounts)
@@ -81,10 +75,8 @@ public struct NotificationProcessor: Sendable {
             let record = NotificationRecord(
                 roomID: room, eventID: event, timestamp: eventTimestamp,
                 isMention: false, deliveredAt: deliveredAt, source: .nse)
-            guard records.add(record) else { return .suppressed(outcome: "duplicate") }
-            let fallback = fallbackBadge(
-                room: room, membership: .joined,
-                isEncrypted: true, mode: mode, timestamp: eventTimestamp, isMention: false)
+            let committed = commit(record, membership: .joined, isEncrypted: true, mode: mode)
+            guard case .recorded(let fallback) = committed else { return .suppressed(outcome: "duplicate") }
             return .deliver(
                 title: roomName ?? "Halo", body: "Encrypted message", threadID: room.rawValue,
                 badge: fallback?.badge, outcome: "encrypted", attentionCounts: fallback?.attentionCounts)
@@ -94,50 +86,52 @@ public struct NotificationProcessor: Sendable {
         }
     }
 
-    /// Mode-aware unread-message badge recomputation over the app's last authoritative per-room counts plus
-    /// unconfirmed `notification_record` entries delivered since that write across all rooms (R-08, D82).
-    /// Returns `nil` while the app is foregrounded (the app handles the badge via Darwin signal) or when the event
-    /// does not give this room attention under `ReadStatePolicy` (e.g. non-mention in mentions-only or muted room).
-    private func fallbackBadge(
-        room: RoomID, membership: Membership, isEncrypted: Bool, mode: NotificationMode,
-        timestamp: Date, isMention: Bool
-    ) -> (badge: Int, attentionCounts: [RoomID: Int])? {
-        guard !isAppForeground() else { return nil }
-        let single = ReadStatePolicy.evaluate(RoomReadInputs(
-            roomID: room, membership: membership, isEncrypted: isEncrypted,
-            counts: RoomReadCounts(mode: mode, server: .zero, sdk: .zero, isMarkedUnread: false),
-            unconfirmedNotified: [NotifiedRef(timestamp: timestamp, isMention: isMention)]))
-        guard single.attention else { return nil }
+    private struct Fallback {
+        let badge: Int
+        let attentionCounts: [RoomID: Int]
+    }
 
-        let snapshot = lastAttention()
-        let recentAll = records.all().filter { record in
-            if let cutoff = snapshot.updatedAt { return record.deliveredAt >= cutoff }
+    private enum Commit {
+        case duplicate
+        case recorded(Fallback?)
+    }
+
+    private func commit(_ record: NotificationRecord, membership: Membership, isEncrypted: Bool, mode: NotificationMode) -> Commit {
+        Self.commit.withLock { _ in
+            guard records.add(record) else { return .duplicate }
+            let fallback = fallbackBadge(record, membership: membership, isEncrypted: isEncrypted, mode: mode)
+            if let fallback { storeDisplayed(fallback.attentionCounts) }
+            return .recorded(fallback)
+        }
+    }
+
+    /// Mode-aware unread-message badge recomputation (R-08, D82): this room is the app's last evaluation plus its records
+    /// since then; every other room stays as displayed (its own pushes were evaluated with its own mode).
+    /// Returns `nil` while the app is foregrounded (the app handles the badge via Darwin signal), when the event
+    /// does not give this room attention under `ReadStatePolicy` (e.g. non-mention in mentions-only or muted room), or
+    /// when sync had already delivered the event to the app (a late push: the app has counted it, or the user has read it).
+    private func fallbackBadge(_ record: NotificationRecord, membership: Membership, isEncrypted: Bool, mode: NotificationMode) -> Fallback? {
+        guard !isAppForeground() else { return nil }
+        let room = record.roomID
+        let baseline = attention()
+        func isNew(_ candidate: NotificationRecord) -> Bool {
+            if let through = baseline.syncedThrough[room], candidate.timestamp <= through { return false }
+            if let evaluatedAt = baseline.evaluatedAt, candidate.deliveredAt < evaluatedAt { return false }
             return true
         }
-        let byRoom = Dictionary(grouping: recentAll, by: \.roomID)
-        let currentRoomRecords = byRoom[room] ?? []
-        let unconfirmed = currentRoomRecords.isEmpty
-            ? [NotifiedRef(timestamp: timestamp, isMention: isMention)]
-            : currentRoomRecords.map { NotifiedRef(timestamp: $0.timestamp, isMention: $0.isMention) }
-        let roomDelta = ReadStatePolicy.evaluate(RoomReadInputs(
-            roomID: room, membership: membership, isEncrypted: isEncrypted,
-            counts: RoomReadCounts(mode: mode, server: .zero, sdk: .zero, isMarkedUnread: false),
-            unconfirmedNotified: unconfirmed))
-        guard roomDelta.attention else { return nil }
-
-        var effective = snapshot.counts
-        effective[room] = (effective[room] ?? 0) + max(roomDelta.badgeCount, 1)
-        // Preserve unconfirmed background pushes that arrived in other rooms since the app's last authoritative write.
-        for (otherRoom, otherRecords) in byRoom where otherRoom != room && !otherRecords.isEmpty {
-            let otherDelta = ReadStatePolicy.evaluate(RoomReadInputs(
-                roomID: otherRoom, membership: .joined, isEncrypted: false,
-                counts: RoomReadCounts(mode: .allMessages, server: .zero, sdk: .zero, isMarkedUnread: false),
-                unconfirmedNotified: otherRecords.map { NotifiedRef(timestamp: $0.timestamp, isMention: $0.isMention) }))
-            if otherDelta.attention {
-                effective[otherRoom] = (effective[otherRoom] ?? 0) + max(otherDelta.badgeCount, 1)
-            }
+        guard isNew(record) else { return nil }
+        func evaluate(_ events: [NotificationRecord]) -> RoomReadState {
+            ReadStatePolicy.evaluate(RoomReadInputs(
+                roomID: room, membership: membership, isEncrypted: isEncrypted,
+                counts: RoomReadCounts(mode: mode, server: .zero, sdk: .zero, isMarkedUnread: false),
+                unconfirmedNotified: events.map { NotifiedRef(timestamp: $0.timestamp, isMention: $0.isMention) }))
         }
-        return (effective.values.reduce(0, +), effective)
+        guard evaluate([record]).attention else { return nil }
+        var since = records.all().filter { $0.roomID == room && isNew($0) }
+        if !since.contains(where: { $0.eventID == record.eventID }) { since.append(record) }
+        var counts = baseline.displayed
+        counts[room] = (baseline.counts[room] ?? 0) + max(evaluate(since).badgeCount, 1)
+        return Fallback(badge: counts.values.reduce(0, +), attentionCounts: counts)
     }
 }
 

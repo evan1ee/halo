@@ -21,7 +21,7 @@ Plus: badge counting, display formatting (99+), reason codes for the auditor.
 | P8 | The intent store never moves a room's intent backwards under concurrent upserts |
 | P9 | `serverZero` never advances `readPosTs`: changing only the server counts never changes `readPosTs` (it may change `notifiedThroughTs`) |
 | P10 | `hasUnread` under E2 follows UNREAD_STATE §5: `false` in all-messages mode; `sdk.unreadMessages > 0` in mentions/keywords or mute mode |
-| P11 | If the SDK has applied the read position (its receipt ≥ the local intent covering the latest event, or the own latest event is on the server) and counts a notification, an all-messages room without a countable server zero has attention (R-07, D79) |
+| P11 | If the SDK has applied the read position (its receipt ≥ the local intent covering the latest event, or the own latest event is on the server and no unconfirmed local position is past it, D119) and counts a notification, an all-messages room without a countable server zero has attention (R-07, D79) |
 
 ## 3. Integration scenarios (Synapse in Docker; scenario driver)
 
@@ -42,7 +42,7 @@ Actors: **A** = the Halo user on device A1 (under test); **A2** = the same user'
 | S08 | The only unread message is redacted | No attention |
 | S09 | A2 marks the room unread | A1: attention (`MARKED_UNREAD`) → A1 opens the room → flag cleared on the server |
 | S10 | A2 mutes a room that has unread messages | A1: attention gone |
-| S11 | A1 views the latest event while the network is down; then restarts the app; then the network returns | Attention cleared immediately, stays cleared across the restart (intent), receipt sent after reconnect |
+| S11 | A1 views the latest event while the network is down; then restarts the app; then the network returns | Attention cleared immediately, stays cleared across the restart (intent), receipt sent after reconnect. Also (S11b) when the SDK's latest event still is A's own join before the read message: the own event doesn't bring the count back (D119); a later message needs attention again |
 | S12 | Receipt send fails 3 times (proxy blackhole) | Intent stays `pending`; retries with backoff; no attention meanwhile |
 | S13 | A1 sends a message in a room with unread messages | Attention cleared (E1b) |
 | S14 | Thread replies by B in a room A1 has read up to the root | Attention (thread events count); viewing them (inline) clears it via an unthreaded receipt |

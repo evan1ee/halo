@@ -27,7 +27,7 @@ public struct SettingsConfiguration {
     public let preferences: AppPreferences
     public let onPrivateReceiptsChange: (Bool) -> Void
     public let onPreferencesChanged: (@MainActor () -> Void)?
-    public let saveBotSenders: (@Sendable ([String]) async -> Bool)?
+    public let saveBotSenders: (@Sendable (_ old: [String], _ new: [String]) async -> [String]?)?
     public let loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)?
     public let saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)?
     public let makeProfileView: (@MainActor () -> AnyView)?
@@ -56,7 +56,7 @@ public struct SettingsConfiguration {
         preferences: AppPreferences = AppPreferences(),
         onPrivateReceiptsChange: @escaping (Bool) -> Void = { _ in },
         onPreferencesChanged: (@MainActor () -> Void)? = nil,
-        saveBotSenders: (@Sendable ([String]) async -> Bool)? = nil,
+        saveBotSenders: (@Sendable (_ old: [String], _ new: [String]) async -> [String]?)? = nil,
         loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)? = nil,
         saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)? = nil,
         makeProfileView: (@MainActor () -> AnyView)? = nil,
@@ -116,7 +116,7 @@ public struct SettingsView: View {
     private var onSignOut: () -> Void { config.onSignOut }
     private var preferences: AppPreferences { config.preferences }
     private var onPrivateReceiptsChange: (Bool) -> Void { config.onPrivateReceiptsChange }
-    private var saveBotSenders: (@Sendable ([String]) async -> Bool)? { config.saveBotSenders }
+    private var saveBotSenders: (@Sendable (_ old: [String], _ new: [String]) async -> [String]?)? { config.saveBotSenders }
     private var loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)? { config.loadMediaPreviews }
     private var saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)? { config.saveMediaPreviews }
     private var diagnostics: (@Sendable () async -> String)? { config.diagnostics }
@@ -476,16 +476,11 @@ public struct SettingsView: View {
 
 /// Settings → Bots: the accounts whose recognised messages show as cards (synced via `one.mbm.halo.bot_allowlist`).
 private struct BotsSection: View {
-    let preferences: AppPreferences
-    let sync: (@Sendable ([String]) async -> Bool)?
-    @State private var senders: [String]
+    @State private var editor: BotListEditor
     @State private var newBot = ""
-    @State private var syncFailed = false
 
-    init(preferences: AppPreferences, sync: (@Sendable ([String]) async -> Bool)? = nil) {
-        self.preferences = preferences
-        self.sync = sync
-        _senders = State(initialValue: preferences.botSenders)
+    init(preferences: AppPreferences, sync: (@Sendable (_ old: [String], _ new: [String]) async -> [String]?)? = nil) {
+        _editor = State(initialValue: BotListEditor(senders: preferences.botSenders, store: { preferences.botSenders = $0 }, sync: sync))
     }
 
     static func looksLikeUserID(_ text: String) -> Bool {
@@ -494,11 +489,8 @@ private struct BotsSection: View {
 
     var body: some View {
         Section {
-            ForEach(senders, id: \.self) { Text($0).font(.callout) }
-                .onDelete { offsets in
-                    senders.remove(atOffsets: offsets)
-                    persist(senders)
-                }
+            ForEach(editor.senders, id: \.self) { Text($0).font(.callout) }
+                .onDelete { editor.remove(atOffsets: $0) }
             HStack {
                 field
                 Button("Add", action: add).buttonStyle(.borderless).disabled(!canAdd)
@@ -506,14 +498,14 @@ private struct BotsSection: View {
         } header: {
             Text("Bots")
         } footer: {
-            Text(syncFailed
+            Text(editor.syncFailed
                 ? "Saved on this device, but couldn't sync to your account. Check your connection and try again."
                 : "Messages from these accounts that Halo recognises are shown as cards, with the original one tap away. Synced across your Halo devices.")
         }
     }
 
     private var trimmed: String { newBot.trimmingCharacters(in: .whitespacesAndNewlines) }
-    private var canAdd: Bool { Self.looksLikeUserID(trimmed) && !senders.contains(trimmed) }
+    private var canAdd: Bool { Self.looksLikeUserID(trimmed) && !editor.senders.contains(trimmed) }
 
     @ViewBuilder private var field: some View {
         #if os(iOS)
@@ -529,15 +521,8 @@ private struct BotsSection: View {
 
     private func add() {
         guard canAdd else { return }
-        senders.append(trimmed)
-        persist(senders)
+        editor.add(trimmed)
         newBot = ""
-    }
-
-    private func persist(_ list: [String]) {
-        preferences.botSenders = list
-        guard let sync else { return }
-        Task { syncFailed = !(await sync(list)) }
     }
 }
 
