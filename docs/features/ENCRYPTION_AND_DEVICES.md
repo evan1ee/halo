@@ -22,6 +22,8 @@ Read and send encrypted messages from a verified device and recover history on a
 - FR-8 Lost recovery key: reset the identity (`reset_identity`, F-FFI-24) with a plain list of what is lost. *Not built* (ROADMAP M18-3).
 - FR-9 Key-backup state (on, uploading n of m, off) shown in Security. *Not built* (ROADMAP M18-3).
 
+- FR-10 Message search covers encrypted rooms on the device (D123, [MESSAGE_SEARCH.md](MESSAGE_SEARCH.md) FR-1, FR-2): messages become searchable when they decrypt, also later, so verifying or entering the recovery key also opens older history to search. The SDK fetches missing keys from the backup by itself after a failed decryption **[VERIFIED F-FFI-25]**; that this works for long history is V-SEARCH-3. *Not built* on the own index.
+
 ## 4. Non-functional requirements
 Crypto material never leaves the SDK stores; the store passphrase is generated (32 random bytes, base64) and kept in the Keychain.
 

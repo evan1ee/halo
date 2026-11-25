@@ -78,6 +78,7 @@ Targets in [../REQUIREMENTS.md](../REQUIREMENTS.md) NFR-1..3; measured with sign
 | NFR-13 main thread | no hang ≥ 250 ms | `main-thread-hang` signpost in the scripted sessions (`scripts/perf.py`); MetricKit in the field | see `perf-baseline.json` |
 | NFR-14 sync at scale | ≤ 60 s first, ≤ 10 s after 24 h | `scripts/scale-measure.py` | table below (simulator) |
 | NFR-15 energy | ≤ 4 %/h idle foreground | Xcode energy log, 1 h | none |
+| Message search (MESSAGE_SEARCH §4, M19-11): first results p95 at 300,000 messages; sync budgets with the index on | ≤ 200 ms **[ASSUMPTION V-SEARCH-2]**; NFR-14/15 | store test with generated messages; `scripts/scale-measure.py` | 0.2–49 ms per query, 145 MB for 300,000 messages (Python on the dev Mac, 2026-11-25; not GRDB, not a phone) |
 
 **Scale (M17-4, V-SCALE-1), 2026-11-25.** `scripts/scale-measure.py` on the M17-3 fixture server; adapter and SDK as the app uses them, iPhone Air simulator on the dev Mac, no network latency: the work is
 real, the seconds are a Mac's. Fixture messages are short and members have no profile, so real accounts send more bytes. Not yet: an iPhone, energy, a real public-server account (📱👤).
@@ -96,7 +97,7 @@ real, the seconds are a Mac's. Fixture messages are short and members have no pr
 | Catch-up, 200 rooms × 5 messages (NFR-14 ≤ 10 s) | 3.8–10.2 s | **12.6–19.2 s** | **0.9 s** | — |
 
 What it says: classic sync itself carries 1,000 rooms well inside NFR-14. **The SDK's search index is what misses it**: one index per room, committed with a full disk sync, on a pool of threads each; leaving out only
-the history sweep changes nothing (`HALO_SCALE_SEARCH=live`: 42.1 s, 12.6 s). Q-SEARCH-INDEX decides what to do. Two smaller findings: every launch fetches the event behind the read receipt of each unread
+the history sweep changes nothing (`HALO_SCALE_SEARCH=live`: 42.1 s, 12.6 s). Decided: Halo's own index (D123, ADR-0024), if the spike passes (M17-8, V-SEARCH-2). With the index off the SDK still indexes new events in memory (F-FFI-25), so that column includes it. Two smaller findings: every launch fetches the event behind the read receipt of each unread
 room (344 requests at 1,000 rooms, GA-28), and the room list is rebuilt per response (GA-17).
 
 **Performance suite (M17-5).** `scripts/perf.py` signs a simulator of its own in to the scale accounts (or uses a device's account, `--device`), runs `HaloPerformanceTests` with optimised code, reads the result bundle and prints

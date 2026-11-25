@@ -25,6 +25,7 @@ Users are created per test run with random suffixes; every test starts from a fr
 | Stickers | S-ST-1 pack create + read back; S-ST-2 `m.sticker` seen by another client; S-ST-3 prefs sync | Driver + local Mac |
 | Bots | S-BOT-1 scripted fake bot (replays the real bot's formats and reaction behaviour F-BOT-2/4) | Driver + local Mac |
 | Activity | S-ACT-1 index from a list + confirmations | Driver |
+| Message search (*planned*, M19-11) | S-SRCH-1 encrypted room, live · S-SRCH-2 encrypted history after recovery on a new device · S-SRCH-3 late key · S-SRCH-4 kill and resume in the history lane · S-SRCH-5 edit and deletion while not loaded · S-SRCH-6 sign-out leaves nothing · S-SRCH-7 no request carries the query | Local Mac |
 
 ## 3. Adapter contract tests
 For every port: a shared test suite (`PortContractTests<P>`) run against the fake and the real adapter. A change to a port starts with a failing contract test.

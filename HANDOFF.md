@@ -15,10 +15,11 @@ Summary only; older history lives in `git log`.
 - **M17 measure and prove (2026-11-25, `feat/m17-measure`):**
   - **M17-1** `HaloSignpost` (cold start, room open, sync, image decode, NSE, hangs) read by XCTest in the running app. **M17-2** MetricKit payloads on the device, redacted and bounded, in the diagnostics export.
   - **M17-3** `infra/dev/scale-fixtures.py`: a server of its own (`halo-scale`, port 8108) with 300 and 1,000 rooms, a 10,000-member and a 20,000-event room. **M17-6** `infra/test` with the fault proxy, F01–F06, `FaultTests`, `scenarios.yml`.
-  - **M17-4** measured (TEST_STRATEGY §7): classic sync is fine at 1,000 rooms (11.8 s first sync, 0.9 s catch-up) **without the SDK's message search index**; with it 32–43 s and 13–19 s, 25 s CPU per idle minute, up to 925 threads. New Q-SEARCH-INDEX.
+  - **M17-4** measured (TEST_STRATEGY §7): classic sync is fine at 1,000 rooms (11.8 s first sync, 0.9 s catch-up) **without the SDK's message search index**; with it 32–43 s and 13–19 s, 25 s CPU per idle minute, up to 925 threads. Q-SEARCH-INDEX → D123 (below).
   - **M17-5** `scripts/perf.py` + `HaloPerformanceTests` with `docs/testing/perf-baseline.json`. **M17-7** `InteropTests` (wire level) and the signed checklist (INTEGRATION_TESTS §4).
   - Also fixed: `SessionCoordinator.start()` could return while a revoked session was still being deleted (state "restoring"); found by a flaking unit test, regression test added.
   - Found: GA-27 (search index), GA-28 (one request per unread room per launch), GA-29 (39 s to recover from a half-open connection), GA-30 (mention's plain text), GA-31 (unknown types hidden).
+- **Message search decided (D123, ADR-0024, 2026-11-25, documents only, nothing built):** Halo's own FTS5 index, **encrypted rooms searchable**, full history, on the device only; spec `docs/features/MESSAGE_SEARCH.md` (AC-SRCH-1…9). Checked in the SDK source: the history sweep needs automatic back-pagination, the SDK indexes in memory even without a folder, keys come from the backup after a failed decryption (F-FFI-25). New M17-8 (spike), larger M19-11, M20-1 taken with it, GA-32 (bugs in today's search), V-SEARCH-2/3; index protection D124.
 - **Production roadmap (D121, 2026-11-25, `docs/production-roadmap`):** audited code against every product, design, security, testing and release document at `155f745`; rewrote ROADMAP (gap table, R/C/P tasks with "Done when", gates, release plan), added AC-REL/AC-SEC/AC-MOT and NFR-11–15, V-SCALE-1, V-OIDC-1, V-INTEROP-1, Q-SCOPE, Q-SYNC-SCALE, Q-REPORT, Q-SIGNUP, Q-VERIFY, Q-REVIEW; corrected specs that promised unbuilt behaviour or described sliding sync.
 - **Unread badge, widgets and background sync (D118, 2026-11-24, PR #88):**
   - Root causes: gateway down and Halo's pushkin never able to send (asyncio awaited on Twisted); dev ran the stock pushkin; background launches did nothing (handlers set in a view) and reported done before the badge was written; pre-sync evaluations overwrote what the NSE had counted; unordered badge writes; the NSE counted late pushes twice and raced itself; a sticky foreground flag; no refresh fallback; a widget reload on every open/close spent iOS's budget.
@@ -36,8 +37,9 @@ Summary only; older history lives in `git log`.
   - Made `jump-to-bottom` interrupt ongoing deceleration synchronously on the tap frame before converging; added and passed `HaloUITests.testTimelineImageScrollAndJumpToBottomWhileScrolling` on physical iPhone 16 (`00008140-000222592ED0801C`).
 
 ## 3. Key decisions
-Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D122), [docs/adr/README.md](docs/adr/README.md).
+Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D124), [docs/adr/README.md](docs/adr/README.md).
 - **D121:** roadmap re-planned; R/C/P classes; G-SCALE before M19; the sync path waits for Q-SYNC-SCALE.
+- **D123 (ADR-0024):** message search over Halo's own index: encrypted rooms, full history (founder; resolves Q-SEARCH-INDEX). **D124:** its file is unreadable while locked; an encrypted holding file takes overnight history.
 - **D122:** 1.0 ships the smaller scope (founder; resolves Q-SCOPE).
 - **D118:** one unread count for icon, widgets and list (E6, recomputed NSE badge, ordered writes, background refresh).
 - **D73 / D74 / D78–D80 (ADR-0020):** classic sync unread evidence, encrypted-room SDK counts decide, identity/timeline-index read ordering.
@@ -61,13 +63,13 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D122), [docs/adr/R
 - **App:** `HaloSignpost`, `MetricPayloadStore`, `MetricKitRecorder`, `MainThreadHangs`; call sites in `HaloApp`, `AppRoot`, assemblies, `TimelineView`, `StickerImage`, `AsyncAnimatedImage`, `MatrixSessionPort` (also the measurement switches), NSE.
 - **Tests:** `HaloSignpostTests`, `ImageDecodeSignpostTests`, `MetricPayloadStoreTests`, `MainThreadHangsTests`, `ScaleMeasurements`, `FaultTests`, `InteropTests`, `TestServerStage`, `HaloPerformanceTests` (the two perf tests moved out of `HaloUITests`).
 - **Infrastructure:** `infra/test/`, `infra/dev/scale-fixtures.py` + compose/config, `tools/scenario-driver`, `scripts/{scale-measure,perf}.py`, `scenarios.yml`.
-- **Docs:** ROADMAP, OPEN_QUESTIONS, RISK_REGISTER, TEST_STRATEGY, INTEGRATION_TESTS, LOGGING, CI_CD, SYNC_ENGINE, PRIVACY, SECURITY, PRIVACY_POLICY, TECH_DEBT, DEVELOPMENT_SETUP, `infra/dev/README`.
+- **Docs (search, D123):** ADR-0024, MESSAGE_SEARCH and the documents it touches. **Docs (M17):** ROADMAP, OPEN_QUESTIONS, RISK_REGISTER, TEST_STRATEGY, INTEGRATION_TESTS, LOGGING, CI_CD, SYNC_ENGINE, PRIVACY, SECURITY, PRIVACY_POLICY, TECH_DEBT, DEVELOPMENT_SETUP, `infra/dev/README`.
 
 ## 5. Outstanding issues
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
 
 **Waiting for the founder before work can pass a point**
-- 👤 **Q-SEARCH-INDEX, then G-SCALE** (numbers in TEST_STRATEGY §7; recommendation: index only when the person turns message search on, plus an upstream fix), before M19 · **Q-VERIFY** before M18 ends · **Q-REPORT**, **Q-SIGNUP**, **Q-REVIEW** later.
+- 👤 **G-SCALE** after M17-8, before M19 · **Q-VERIFY** before M18 ends · **Q-REPORT**, **Q-SIGNUP**, **Q-REVIEW** later.
 
 **Engineering (not blocking)** — the gaps are in ROADMAP §2, not repeated here.
 - **`timeline` contract flake:** `verifyInteractions` timed out (90 s) in the first 3 of 12 completed full runs on the branch, then in none (one more run was stopped at 290 s, unfinished); 0 of 2 on `main` the same hour, 0 of 4 alone. The same test also timed out on earlier branches. The step is unknown; the tests now name it in the failure ("timed out …: never saw …").
@@ -101,18 +103,18 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 
 ## 6. Next steps
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §3.
-1. Founder: Q-SEARCH-INDEX and G-SCALE; the device and hand checks of §5.
+1. M17-8 (search index spike), then the founder: G-SCALE; the device and hand checks of §5.
 2. M18 top to bottom (may start now; M19 may not before G-SCALE). Re-run `infra/test/run.sh faults` for send and sync changes.
 3. Founder, long lead times: push gateway (M22-1), legal (M22-4), KLIPY production key, filtering entitlement, artwork.
 
 ## 7. Next Session Prompt
 ```text
 /loop Read AGENTS.md, HANDOFF.md, docs/development/AUTONOMOUS_LOOP.md and docs/ROADMAP.md (§1–§3, §7).
-Work the ROADMAP §3 queue from M18-1: Plan → Implement → Verify → Review → Land, R tasks first.
+Work the ROADMAP §3 queue from M17-8 (search spike, ADR-0024), then M18-1: Plan → Implement → Verify → Review → Land, R tasks first.
 
 A task is done only when its "Done when" holds by a test that failed before, its GA row is removed, its spec no longer says
-"not built", and the rules of ROADMAP §1 hold. G-SCALE (numbers in TEST_STRATEGY §7, Q-SEARCH-INDEX), G-PERF and
-G-SHIP are the founder's. Don't start M19 before G-SCALE is decided. 1.0 scope is fixed (D122). Open decisions: Q-SEARCH-INDEX, Q-VERIFY.
+"not built", and the rules of ROADMAP §1 hold. G-SCALE (numbers in TEST_STRATEGY §7, M17-8), G-PERF and
+G-SHIP are the founder's. Don't start M19 before G-SCALE is decided. 1.0 scope is fixed (D122). Open decision: Q-VERIFY.
 
 Checks per iteration:
 - HALO_SIM="iPhone Air" scripts/prepush.sh

@@ -4,7 +4,7 @@
 
 | Asset | Threats | Main controls |
 |---|---|---|
-| Message content (E2EE) | Server operator, network attacker, device thief, logs/backups leaking | Megolm/Olm via the SDK; device verification; file protection; no content in logs; iCloud backup exclusion of caches |
+| Message content (E2EE) | Server operator, network attacker, device thief, logs/backups leaking | Megolm/Olm via the SDK; device verification; file protection; no content in logs; iCloud backup exclusion of caches; the search index as in §4 |
 | Crypto keys and sessions | Theft from the device, the Keychain or backups | SDK crypto store encrypted with a passphrase from the Keychain (`afterFirstUnlockThisDeviceOnly`, not synced) |
 | Access tokens | Theft → account takeover | Keychain only; never logged; OIDC refresh rotation |
 | Metadata (who, when) | Server operator, push gateway, Apple | Minimise: `event_id_only` pushes; no third-party analytics |
@@ -30,6 +30,12 @@
 ## 4. Secure local persistence
 File protection `completeUntilFirstUserAuthentication` for all Halo/SDK files; caches excluded from iCloud backups
 (`isExcludedFromBackup`; **set only for the MetricKit payloads yet**, ROADMAP M18-4); field encryption in `halo.sqlite` ([../data/PERSISTENCE.md](../data/PERSISTENCE.md) §3).
+
+**Message search index (D123, ADR-0024, not built).** To search encrypted rooms, the text of decrypted messages must be readable by SQLite on the device. This is the one place where Halo stores E2EE content without its own encryption:
+- The text never leaves the device and is never sent to the server to search; end-to-end encryption between people is unchanged.
+- Protection (D124): `complete` (unreadable while the phone is locked), in the app's private folder (not the App Group: no extension needs it), excluded from backups. History fetched while locked waits in a holding file encrypted with a Keychain key, under `completeUntilFirstUserAuthentication` like drafts.
+- Residual risk: someone with the unlocked phone or code running as Halo can read it, as they can read the chats themselves. Today's SDK index is encrypted with the store passphrase, whose key is readable after the first unlock.
+- Removed on sign-out and revocation, and per room on leaving or forgetting it (AC-SRCH-6, AC-SRCH-8).
 Screenshots in the app switcher: a privacy blur when backgrounding (setting, default on) **[DECISION D61]**. It covers the screen only while the app is leaving (active → inactive → background), so the snapshot is blurred, and is lifted as soon as the app comes back; it is never shown during a cold launch and carries no icon (D105).
 
 ## 5. Network security
