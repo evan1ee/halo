@@ -79,7 +79,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 
 | Task | Class · size | Done when |
 |---|---|---|
-| [ ] **M18-1 Identity changes**: timeline notice and composer banner when a contact's identity changes; accept or verify (ENCRYPTION FR-7) | R · M | Contract test: a second account resets its identity, the notice appears; VoiceOver; AC-SEC-1 |
+| [x] **M18-1 Identity changes** (*built 2026-11-26; open: VoiceOver, an iPhone look; verifying a contact has no flow yet*): composer banner when a contact's identity changes; accept (ENCRYPTION FR-7) | R · M | Contract test: a second account resets its identity, the notice appears; VoiceOver; AC-SEC-1 |
 | [ ] **M18-2 Honest send failures**: carry the SDK's reason; "Send anyway / Review devices / Retry" where the SDK allows it | R · M | Unit per reason; no encryption refusal shown as offline; AC-SEC-2 |
 | [ ] **M18-3 Lost recovery key**: reset the identity with a plain warning; show key-backup state | R · M | Contract test on a throwaway account; AC-SEC-3 |
 | [ ] **M18-4 Backups and sign-out**: exclude stores and caches; detect stores restored without their keys; sign-out leaves nothing | R · M | Test lists App Group, Keychain, Spotlight, widget and pusher after sign-out (AC-AUTH-4); restore-to-new-device check 📱; AC-SEC-4 |

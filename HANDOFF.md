@@ -1,17 +1,18 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-25 · Branch: `feat/m19-message-search` (from `main` at `6e69c45`) · PRs #1–#90 merged before it
+Last updated: 2026-11-26 · Branch: `feat/m18-identity-changes` (from `main` at `a339019`) · PRs #1–#91 merged before it
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
 - **Roadmap:** M0–M16 are built and merged. Re-planned 2026-11-25 to a production release (D121): M17 measure → M18 security and reliability → M19 performance → M20 messaging → M21 experience → M22 beta and launch, with gates G-SCALE, G-PERF, G-SHIP ([docs/ROADMAP.md](docs/ROADMAP.md)). The audit behind it found 26 gaps (ROADMAP §2); Halo isn't a release candidate yet.
-- **Milestones:** M0–M16 built, partly for M14–M15 (GA-24…GA-26). **M17 in progress:** M17-1, 2, 3, 6, 8 done; M17-4, M17-5 and M17-7 done except what needs a device or the founder (§5). **M19 started early (D125): M19-11 message search and M20-1 jump to any message are built**; M18 not started. Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1).
+- **Milestones:** M0–M16 built, partly for M14–M15 (GA-24…GA-26). **M17 in progress:** M17-1, 2, 3, 6, 8 done; M17-4, M17-5 and M17-7 done except what needs a device or the founder (§5). **M19 started early (D125): M19-11 message search and M20-1 jump to any message are built and merged (PR #91; the iPhone checks are still open)**. **M18 started: M18-1 identity changes built**, M18-2 next. Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1).
 - **Last checks:** `prepush.sh` on the pushed commit (package tests, app build, UI tests with the new `testMessageSearchOpensAHit`, docs, boundaries, gitleaks, swiftlint); `infra/test/run.sh search` 5 of 5; full contract suite 37 of 37 (with S01–S29 over the server and the unread evidence); scale numbers in TEST_STRATEGY §7; by hand in the simulator: search, filters, opening an old message, Newest, dark mode at AX5. `faults` and `interop` (2 known issues) green. **Not run:** an iPhone, the scenario driver, light AX5 of Settings → Message search, VoiceOver.
 - **CI:** PRs #1–#90 merged. New `scenarios.yml` (Synapse behind the fault proxy). Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
+- **M18-1 identity changes (2026-11-26, `feat/m18-identity-changes`):** a contact whose identity changed shows a banner above the composer until accepted (AC-SEC-1). `IdentityAlert` (domain); `TimelineSession.identityAlerts()` and `acceptIdentity(of:)`; the adapter subscribes to the SDK's identity status changes and keeps the set of members in `pinViolation` / `verificationViolation`; accepting pins the identity and, for a verified contact, first withdraws verification. Test: `infra/test/run.sh identity` (a second account resets its identity; alert, accept, alert again), coordinator and view-model unit tests. **Not built:** verifying a contact (no flow exists), a timeline row (the banner is the notice), VoiceOver and iPhone checks.
 - **M19-11 message search on Halo's own index, with M20-1 (2026-11-25, `feat/m19-message-search`):** encrypted rooms, full history, CJK, files and links, filters, coverage notice, Settings → Message search. The SDK's index is off and its folder deleted.
   - `SearchTokeniser`, `SearchContent`, `SearchIndexPolicy` (domain) · `SearchIndexer`, `SearchCoordinator`, `LocalMessageSearch`, `SearchStartGate` (application) · `SearchIndexStore`, `SearchHoldingFile` (GRDB FTS5, D124) · `MatrixMessageIndexSource`, `SearchMapper`, a second SDK client in `MatrixSessionPort` (adapter) · `DeviceConditions`, `ProtectedData`, `SearchProcessingTask` (platform) · `MessageSearchEngine` (app).
   - Two corrections of ADR-0024: gaps are found by comparing message IDs with the server (reactions can fill a sync response), and shown hits are checked against the server's `/event` (the SDK's cache misses deletions inside a sync gap).
@@ -61,6 +62,8 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D125), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
+- **M18-1:** `HaloDomain/Encryption/IdentityAlert`, `TimelinePort`, `TimelineCoordinator`, `FakeTimelinePort`, `MatrixTimelinePort` (`IdentityListener`), `MatrixSessionPort.userIdentity`, `FeatureTimeline` (`identityNotices`, composer banner), `IdentityContractTests`, `infra/test/run.sh identity`, docs (ENCRYPTION_AND_DEVICES FR-7, SECURITY, ROADMAP, INTEGRATION_TESTS, PORTS_CONTRACT).
+- Older, from M19-11 (merged):
 - **HaloCore:** `HaloDomain/Search/*`, `Ports/{SearchPort,TimelinePort,PreferencesPort}`, `HaloApplication/Search/*`, `SyncCoordinator` (`beforeStart`), `TimelineCoordinator` (focus), `ChatsRoute` (thread focus), fakes and tests.
 - **HaloApple:** `HaloPersistence/Search*`, `HaloMatrixAdapter/Search/*`, `MatrixSessionPort`, `MatrixTimelinePort`, `MatrixRoomPort`, `ErrorMapper`, `HaloPlatform/{DeviceConditions,SearchProcessingTask}`, `FeatureSearch`, `FeatureSettings/SearchIndexSettings`, `FeatureTimeline` (focus). Removed: `MatrixSearchPort`, the M17-8 spike tests.
 - **App:** `Composition/SearchAssembly`, `AppRoot`, `HaloApp`, `SessionAssembly`, `SettingsAssembly`, Info plists (`processing`, `one.mbm.halo.search`), project file.
@@ -107,8 +110,8 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 
 ## 6. Next steps
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §3.
-1. Founder: review and merge the M19-11 pull request; the device and hand checks of §5.
-2. M18 top to bottom, then the rest of M19. M20-11 (search inside a room) only needs its interface now (`SearchQuery.room`).
+1. Founder: review and merge the M18-1 pull request; the device and hand checks of §5 (message search on the iPhone, the identity banner).
+2. M18-2 onward, then the rest of M19. M20-11 (search inside a room) only needs its interface now (`SearchQuery.room`).
 3. Founder, long lead times: push gateway (M22-1), legal (M22-4), KLIPY production key, filtering entitlement, artwork.
 
 ## 7. Next Session Prompt

@@ -297,6 +297,25 @@ final class MatrixTimelineSession: TimelineSession {
         do { try await room.typingNotice(isTyping: isTyping) } catch { throw ErrorMapper.map(error) }
     }
 
+    func identityAlerts() -> AsyncStream<[IdentityAlert]> {
+        let (output, continuation) = AsyncStream<[IdentityAlert]>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        let listener = IdentityListener(own: ownUserID, continuation: continuation)
+        // The SDK reports the state of the members it knows when the subscription starts, then changes.
+        let room = self.room
+        let subscription = Task { try? await room.subscribeToIdentityStatusChanges(listener: listener) }
+        continuation.onTermination = { _ in Task { await subscription.value?.cancel() } }
+        return output
+    }
+
+    func acceptIdentity(of user: UserID) async throws(HaloError) {
+        do {
+            guard let identity = try await session.userIdentity(user.rawValue) else { throw HaloError.notFound }
+            // A verified contact whose identity changed stays "in violation" until verification is withdrawn or redone.
+            if identity.wasPreviouslyVerified() { try await identity.withdrawVerification() }
+            try await identity.pin()
+        } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
+    }
+
     func reply(to event: EventID, text: String, mentions: [Mention]) async throws(HaloError) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw .invalidInput("EMPTY_MESSAGE") }
         do { _ = try await timeline.sendReply(msg: Self.content(text, mentions), eventId: event.rawValue) } catch { throw ErrorMapper.map(error) }
@@ -542,5 +561,32 @@ private final class TypingListener: TypingNotificationsListener {
 
     func call(typingUserIds: [String]) {
         continuation.yield(typingUserIds.filter { $0 != own }.compactMap { try? UserID($0) })
+    }
+}
+
+/// Keeps who is in a changed state and forwards the whole set on every change (the SDK reports differences only).
+private final class IdentityListener: IdentityStatusChangeListener {
+    private let own: String
+    private let continuation: AsyncStream<[IdentityAlert]>.Continuation
+    private let states = Mutex<[String: IdentityAlert.Kind]>([:])
+
+    init(own: String, continuation: AsyncStream<[IdentityAlert]>.Continuation) {
+        self.own = own
+        self.continuation = continuation
+    }
+
+    func call(identityStatusChange: [IdentityStatusChange]) {
+        let alerts = states.withLock { states -> [IdentityAlert] in
+            for change in identityStatusChange where change.userId != own {
+                switch change.changedTo {
+                case .pinViolation: states[change.userId] = .changed
+                case .verificationViolation: states[change.userId] = .verifiedBefore
+                case .verified, .pinned: states[change.userId] = nil
+                }
+            }
+            return states.compactMap { id, kind in (try? UserID(id)).map { IdentityAlert(user: $0, kind: kind) } }
+                .sorted { $0.user.rawValue < $1.user.rawValue }
+        }
+        continuation.yield(alerts)
     }
 }

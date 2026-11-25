@@ -507,6 +507,12 @@ public actor MatrixSessionPort: SessionPort {
     }
 
     /// The SDK's encryption object for the signed-in client.
+    /// The SDK's end-to-end identity of `userID`, asking the server when the device doesn't know it yet.
+    func userIdentity(_ userID: String) async throws -> UserIdentity? {
+        guard let client else { throw HaloError.unauthorized(soft: false) }
+        return try await client.encryption().userIdentity(userId: userID, fallbackToServer: true)
+    }
+
     func encryption() throws(HaloError) -> Encryption {
         guard let client else { throw .unauthorized(soft: false) }
         return client.encryption()

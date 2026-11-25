@@ -5,6 +5,7 @@
 #   infra/test/run.sh faults [test …]         # the adapter's fault tests in a simulator (Mac)
 #   infra/test/run.sh interop [test …]        # the wire-level interoperability matrix in a simulator (Mac)
 #   infra/test/run.sh search [test …]         # message search against a real server (S-SRCH, Mac)
+#   infra/test/run.sh identity [test …]       # a contact's changed identity against a real server (FR-7, Mac)
 #   HALO_TEST_KEEP=1 …                        # leave it running; `infra/test/run.sh down` removes it
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -16,8 +17,8 @@ command="${1:-}"; shift || true
 
 case "$command" in
   down) exec "${compose[@]}" down -v ;;
-  scenarios|faults|interop|search) ;;
-  *) sed -n '2,9p' "$0"; exit 2 ;;
+  scenarios|faults|interop|search|identity) ;;
+  *) sed -n '2,10p' "$0"; exit 2 ;;
 esac
 
 cleanup() { [[ "${HALO_TEST_KEEP:-}" == 1 ]] || "${compose[@]}" down -v >/dev/null 2>&1; }
@@ -38,7 +39,7 @@ for name in "$user" "${user}peer"; do
 done
 export TEST_RUNNER_HALO_FAULT_SERVER="$HALO_TEST_PROXY" TEST_RUNNER_HALO_FAULT_DIRECT="$HALO_TEST_SERVER" TEST_RUNNER_HALO_FAULT_CONTROL="$HALO_TEST_CONTROL"
 export TEST_RUNNER_HALO_FAULT_USER="$user" TEST_RUNNER_HALO_FAULT_PASSWORD="$password"
-suite=FaultTests; [[ "$command" == interop ]] && suite=InteropTests; [[ "$command" == search ]] && suite=SearchContractTests
+suite=FaultTests; [[ "$command" == interop ]] && suite=InteropTests; [[ "$command" == search ]] && suite=SearchContractTests; [[ "$command" == identity ]] && suite=IdentityContractTests
 only=("-only-testing:HaloMatrixAdapterTests/$suite")
 if (( $# )); then only=(); for name in "$@"; do only+=("-only-testing:HaloMatrixAdapterTests/$suite/${name%()}()"); done; fi
 log="$(mktemp -t halo-faults)"

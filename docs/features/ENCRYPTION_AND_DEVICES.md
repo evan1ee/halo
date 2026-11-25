@@ -18,7 +18,7 @@ Read and send encrypted messages from a verified device and recover history on a
 - FR-4 Show the verification state (verified / unverified / no recovery set up) in Settings, with a banner until verified.
 - FR-5 UTD placeholder with a reason from the timeline item (unknown keys, unverified sender, withheld) and an automatic retry when keys arrive (`retry_decryption`) **[VERIFIED F-FFI-8]**.
 - FR-6 Session list: MAS account management URL (`account_url`) for OIDC accounts; native list for password accounts (D117; built read-only, signing others out: ROADMAP M18-13).
-- FR-7 Identity changes of contacts (`subscribe_to_identity_status_changes`) shown as a timeline notice and a composer banner until accepted or verified. *Not built* (ROADMAP M18-1).
+- FR-7 Identity changes of contacts (`subscribe_to_identity_status_changes`) are shown in a banner above the composer in every room, one per contact, until accepted. A contact who was verified before gets the warning colour and "Trust the new identity" (which drops the verification requirement and remembers the new identity); anyone else gets "Accept". The signed-in user's own identity is left out. **Built** (M18-1, 2026-11-26; `infra/test/run.sh identity` with a second account resetting its identity). *Not built:* verifying a contact (Halo has no user-verification flow; it needs its own task), and a row in the timeline itself: the banner is the notice. The send itself is refused for a verified contact whose identity changed (SDK) and is explained by M18-2.
 - FR-8 Lost recovery key: reset the identity (`reset_identity`, F-FFI-24) with a plain list of what is lost. *Not built* (ROADMAP M18-3).
 - FR-9 Key-backup state (on, uploading n of m, off) shown in Security. *Not built* (ROADMAP M18-3).
 

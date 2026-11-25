@@ -65,6 +65,7 @@ extension TimelineViewModel {
             if !isFocused { reportOwnMessage(snapshot.items) }
             reevaluateSeen()
             typingText = Self.typingText(snapshot.typing, items: snapshot.items)
+            identityNotices = Self.identityNotices(snapshot.identityAlerts, items: snapshot.items)
             content = .live(
                 rows: rows,
                 isPaginating: snapshot.isPaginating,
@@ -109,6 +110,24 @@ extension TimelineViewModel {
         guard let newest, newest.id != reportedOwn else { return }
         reportedOwn = newest.id
         Task { await receipts.reportSeen(room: room, event: newest.id, timestamp: newest.time, advancesOrder: true) }
+    }
+
+    /// One notice per contact, named from the timeline's senders (a user without one is shown by user ID).
+    static func identityNotices(_ alerts: [IdentityAlert], items: [TimelineItem]) -> [IdentityNotice] {
+        guard !alerts.isEmpty else { return [] }
+        var names: [UserID: String] = [:]
+        for item in items {
+            if case .event(let event) = item.content, let sender = event.sender, let name = event.senderName { names[sender] = name }
+        }
+        return alerts.map { alert in
+            let name = names[alert.user] ?? alert.user.rawValue
+            switch alert.kind {
+            case .changed:
+                return IdentityNotice(user: alert.user, isSerious: false, text: "\(name)'s security identity changed. They may have a new device, or someone else may be pretending to be them. Messages you send now go to the new identity.", actionTitle: "Accept")
+            case .verifiedBefore:
+                return IdentityNotice(user: alert.user, isSerious: true, text: "\(name) was verified, and now has a different identity. Check with them another way before you send anything private.", actionTitle: "Trust the new identity")
+            }
+        }
     }
 
     /// Names come from the timeline's senders; a user without one is shown by user ID (never invented).
@@ -444,4 +463,14 @@ extension TimelineViewModel {
         case .other: "changed their membership"
         }
     }
+}
+
+/// A contact's changed identity as the composer shows it (ENCRYPTION_AND_DEVICES FR-7).
+public struct IdentityNotice: Identifiable, Equatable, Sendable {
+    public var id: UserID { user }
+    public let user: UserID
+    /// A contact who had been verified: shown in the warning colour.
+    public let isSerious: Bool
+    public let text: String
+    public let actionTitle: String
 }
