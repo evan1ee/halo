@@ -19,6 +19,10 @@ Send, reply, edit, delete and react reliably, online or offline.
 - FR-5 Drafts per room kept locally (P2: synced via `ComposerDraft` API).
 - FR-6 After sending → read intent at the own event (E1b).
 - FR-7 Emoji reactions: quick bar (6 recents) + full picker; custom emoticons from image packs (P2).
+- FR-8 Forward text, media, files, stickers and locations to one or more chats, re-encrypted for the target; warns when the target isn't encrypted and the source is (*not built*, ROADMAP M20-6).
+- FR-9 A failed send carries the SDK's reason (`QueueWedgeError`, F-FFI-24): network, refused by the server, or an encryption refusal naming the people or devices (*not built: the reason is dropped in `TimelineMapper`*, ROADMAP M18-2).
+- FR-10 Polls: vote, change the vote, end an own poll (*not built; creating and showing are*, ROADMAP M20-4).
+- FR-11 Multi-select for copy, forward and delete (candidate, D122, ROADMAP M20-16).
 
 ## 4. Non-functional requirements
 Local echo appears in < 100 ms; no message lost across app kill (V-SYNC-2).
@@ -36,7 +40,7 @@ Type → send → local echo → server echo replaces it. Long-press → reply /
 `TimelinePort` session methods; `RoomPort.members` for mentions.
 
 ## 9. Error scenarios
-Rate limited (auto-retry after `retry_after`) · unknown/unverified devices in an E2EE room (`withdraw_verification_and_resend`, `ignore_device_trust_and_resend` exist — UI prompt) · forbidden (power levels).
+Rate limited (auto-retry after `retry_after`) · unknown/unverified devices in an E2EE room (`withdraw_verification_and_resend`, `ignore_device_trust_and_resend` exist — UI prompt *not built*, FR-9) · forbidden (power levels).
 
 ## 10. Edge cases
 Editing while the original is still sending · deleting a failed local echo · a reaction toggled twice quickly · a very long message · pasted rich text.
@@ -45,6 +49,9 @@ Editing while the original is still sending · deleting a failed local echo · a
 - AC-M1 Text/reply/edit/reaction/delete show as a local echo immediately and survive an app kill (sent on relaunch).
 - AC-M2 Mentions produce `m.mentions` and pills that render in Element Web.
 - AC-M3 Typing indicator appears within 2 s on the other side.
+- AC-M4 A forwarded encrypted photo opens for the new recipients and isn't readable by the server.
+- AC-M5 A vote shows as pending until the server has it; changing it leaves one vote per person.
+- AC-M6 A send refused because an identity changed names the person, and sending works after the user accepts.
 
 ## 12. Test requirements
 Unit: composer formatting (Markdown → HTML subset), mention extraction, typing throttle. Integration: S-MSG-1..5. UI: send + reply smoke.

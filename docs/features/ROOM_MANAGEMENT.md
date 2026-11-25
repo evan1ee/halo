@@ -20,6 +20,9 @@ See and manage a room's details, members and notification behaviour; start new c
 - FR-6 Invites: accept (`join_room_by_id`), decline (leave), preview (`get_room_preview_from_room_id`).
 - FR-7 Edit name/topic/avatar if allowed by power levels (`get_power_levels`).
 - FR-8 Mark as unread / read (READ_RECEIPTS explicit actions).
+- FR-9 Report a message or room to the homeserver, with ignore offered in the same place (`report_content`, `report_room`, F-FFI-24). *Not built; App Review 1.2 needs it* (ROADMAP M20-7, Q-REPORT).
+- FR-10 Remove, ban and unban members, gated by live power levels. *Not built* (ROADMAP M20-12). Role editor, join rules, history visibility and aliases are post-launch (D122).
+- FR-11 Upgraded rooms link to their successor; knock-only, banned and invite-only rooms explain themselves. *Not built* (ROADMAP M20-8).
 
 ## 4. Non-functional requirements
 Member lists of 10k members page smoothly.
@@ -42,9 +45,11 @@ Rooms with no name (compute from heroes) · tombstoned rooms · public rooms joi
 ## 11. Acceptance criteria
 - AC-ROOM-1 Mode changes are reflected in push rules (visible in Element Web).
 - AC-ROOM-2 A created DM is recognised as a DM in Element Web.
+- AC-ROOM-3 A report reaches the homeserver's admin API and the app says who receives it.
+- AC-ROOM-4 Actions the power levels don't allow aren't offered; one refused by the server is explained and nothing changes.
 
 ## 12. Test requirements
 Unit: view models with a fake port. Integration: S-ROOM-1..3.
 
 ## 13. Open questions
-—
+Q-REPORT.

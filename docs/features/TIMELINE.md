@@ -12,20 +12,22 @@ Show a room's history correctly and smoothly, and report what the user has actua
 
 ## 3. Functional requirements
 - FR-1 Items from `Timeline.add_listener` diffs **[VERIFIED F-FFI-8]**, applied to an identity-stable array.
-- FR-2 Item types: text (HTML subset rendered), notice, emote, image, video, audio, file, sticker, location (static: description + Maps link, built), poll (read-only, built: counts per answer), redacted, UTD, state events (grouped, collapsible), call events (display only, D43; built), unknown (fallback "Unsupported event").
+- FR-2 Item types: text (HTML subset rendered), notice, emote, image, video, audio, file, sticker, location (static: description + Maps link, built), poll (read-only, built: counts per answer; voting: MESSAGING FR-10), redacted, UTD, state events (grouped, collapsible), call events (display only, D43; built), unknown (fallback "Unsupported event").
 - FR-3 Back pagination on reaching the top (`paginate_backwards(20)`), with a status indicator.
 - FR-4 Read-marker line at `m.fully_read`; "Jump to unread" pill when the line is above the viewport.
 - FR-5 **Visibility tracking** → `ReadStateCoordinator.markRead` per D6 ([../matrix/READ_RECEIPTS.md](../matrix/READ_RECEIPTS.md) §1).
 - FR-6a Delivery state of own messages, one model for every kind (text, photo, video, file, audio, sticker, location): sending = small spinner, sent (server confirmed) = circle with a check, read = the readers' avatars replace the check (tap for the list), failed = warning + "Not sent" with retry/delete. *Built (D107): `TimelineRow.Delivery`, `DeliveryIndicator`.*
 - FR-6 Read receipts: up to 3 avatars + count under the newest message each user has read. *Built: up to 3 avatars + count under own sent messages (name/picture from the timeline's own senders, else the ID's name part); tap the avatars for the full list of readers (built, not seen on screen); not built: receipts under others' messages.*
 - FR-7 Reactions row; tap toggles (`toggle_reaction`).
-- FR-8 Reply preview (`load_reply_details`), tap to jump (built for loaded rows only) (paginate around the event if needed — `timeline_with_configuration` with `TimelineFocus.Event` **[VERIFIED F-FFI-22]**).
+- FR-8 Reply preview (`load_reply_details`), tap to jump (built: pages back up to 10 times, then gives up without a message). An event-focused timeline (`timeline_with_configuration`, `TimelineFocus.Event` **[VERIFIED F-FFI-22]**) for replies, search hits, links, pins and notifications is *not built* (ROADMAP M20-1).
 - FR-9 Edits show "(edited)"; long-press → "View edit history" (`edit_revisions`, F-FFI-22) (P2; built).
 - FR-10 Bot messages from allowlisted senders go through `BotMessageRenderer` ([BOT_MESSAGES.md](BOT_MESSAGES.md)); all messages get "View source".
-- FR-11 Threads: thread replies inline as replies (D17).
+- FR-11 Threads: thread replies inline as replies (D17); a thread screen opens from its root (M10, built).
+- FR-12 A changed identity of a contact shows as a notice (ENCRYPTION_AND_DEVICES FR-7, *not built*, ROADMAP M18-1).
+- FR-13 Code blocks with copy, spoilers (`data-mx-spoiler`), and safe rendering of tables and lists (*not built*, ROADMAP M20-10).
 
 ## 4. Non-functional requirements
-60 fps scrolling (NFR-2); a diff batch is applied within one frame; image decoding off the main thread; animated stickers pause off-screen.
+60 fps scrolling (NFR-2); a diff batch is applied within one frame; image decoding off the main thread; animated stickers pause off-screen. *Not met today:* a change rebuilds every row on the main actor, and photos are decoded in view bodies (ROADMAP M19-1, M19-2).
 Opening a room shows no spinner (one appears only if opening takes over 1 s) and no frame of the room's top before it lands at the newest message (D95). A row keeps its height once laid out: a photo's box has the size the event announces (4:3 when it announces none) and the picture fills it, because a lazy list that re-measures a row while scrolling to the newest message loses its place (seen in S10). While the list follows the newest message, history arriving above, a row that grows (a reaction) and the list settling its estimated row heights after the opening scroll keep the newest row fully in view above the composer ("at the bottom" counts the inset under the composer; seen in S10 scroll test, where the landing stopped with the newest message half hidden); any scroll movement (a drag, a fling, jumping to unread or to a reply) stops the following, so nothing pulls the reader back down. When scrolled up and earlier history pages prepend above the reader's position (and the user is not actively dragging), the list re-anchors at the previous top row (`PrependedAnchor`) instead of jumping to the start of the newly inserted page. A short room that fits on screen with no earlier history to load is anchored just above the composer via top scroll content margins (`ShortRoomAlignment`). The "Jump to unread" pill counts the first unread message as off screen until its row reports itself visible, because a room that lands 40 messages below it never lays that row out.
 
 ## 5. User flows
@@ -47,10 +49,12 @@ Pagination failure (retry button) · media download failure (retry tile) · time
 A photo without a size (4:3 box, cropped) · a short room (fits on screen: pushed down to sit just above the composer by a top content margin computed as a fixed point — a List's scroll-geometry content height includes that margin and its top inset does not, measured 2026-11-23; a wrong assumption here made the margin flip on every layout pass and froze rooms holding only a few events at 100 % CPU; at most 8 margin changes a second as a guard) · a room without messages (only setup events: "No messages yet"; earlier pages are loaded by themselves until a message or the room's start is found) · gaps in history · an event-focused jump to a very old event · own message from another device · a redaction of an item in view · a room with only state events · rapid diffs during scrolling.
 
 ## 11. Acceptance criteria
-- AC-TL-1 Opening a room with unread messages positions at the read-marker line.
+- AC-TL-1 Opening a room with unread messages lands at the newest message and keeps the first unread one marked, with a "Jump to unread" button (D95).
 - AC-TL-2 Viewing the newest message clears the room's attention (AC-U1).
 - AC-TL-3 The timeline and the list agree (R-P0-3): if the list shows attention, the room is an invite, is marked unread, or the timeline has at least one event newer than `readPosTs` that notifies under the room's mode; conversely, if the timeline has such a notifying event, the list shows attention. Events that don't notify under the mode affect only `hasUnread` ([../matrix/UNREAD_STATE.md](../matrix/UNREAD_STATE.md) §5).
 - AC-TL-4 No dropped frames in the scroll performance test (≥ 95 % frames on time).
+- AC-TL-5 Jumping to an event 5,000 messages back shows it within 2 s online; offline or deleted, it says so, and "back to newest" returns to the live timeline.
+- AC-TL-6 With 2,000 rows loaded, one new message rebuilds at most two rows.
 
 ## 12. Test requirements
 Unit: diff application (randomised diff sequences vs a reference model), visibility tracker (dwell time, scene phase, partial visibility). Snapshot: every item type. Integration: S-TL-1..3.

@@ -5,7 +5,7 @@
 |---|---|---|
 | Debug | Automatic (development) | Simulator / own devices |
 | Beta | Distribution (App Store Connect) | TestFlight internal → external |
-| Release | Distribution | App Store (only after M10 + legal review) |
+| Release | Distribution | App Store (only after G-SHIP, ROADMAP §7) |
 
 Archive from Xcode or `xcodebuild archive` on the founder's Mac; upload with Xcode Organizer or `xcrun altool`/Transporter (Xcode Cloud is a possible later option, not decided).
 
@@ -32,12 +32,19 @@ Archive from Xcode or `xcodebuild archive` on the founder's Mac; upload with Xco
 5. Device checklist ([../testing/TEST_STRATEGY.md](../testing/TEST_STRATEGY.md) §8).
 6. Archive → upload → release notes (features, SDK version, known issues).
 7. Auditor reports from the previous Beta reviewed (AC-U8).
-8. Privacy report of the archive checked: app and NSE privacy manifests present (AC-UX-12).
+8. Privacy report of the archive checked: privacy manifests of the app and all three extensions present and true (AC-UX-12).
 9. For an external TestFlight build: the "Ship-ready definition" in [../ROADMAP.md](../ROADMAP.md) is met and the release plan
    stage (Beta 1 → Beta 2 → 1.0) is named in the release notes.
 
 ## 5. Crash reporting and observability
-TestFlight/App Store crash reports + MetricKit + the diagnostics export ([../architecture/LOGGING_AND_DIAGNOSTICS.md](../architecture/LOGGING_AND_DIAGNOSTICS.md)). No third-party crash SDK (Q-CRASH before public release).
+TestFlight/App Store crash reports + MetricKit + the diagnostics export ([../architecture/LOGGING_AND_DIAGNOSTICS.md](../architecture/LOGGING_AND_DIAGNOSTICS.md)). No third-party crash SDK (D114). MetricKit isn't wired yet (ROADMAP M17-2).
+
+## 5b. 1.0 release
+1. Feature freeze at the Beta 2 cut: only P0/P1 fixes; unfinished C tasks move to 1.x (ROADMAP §1).
+2. Release candidate: everything in §4, plus the upgrade path from each Beta build, two G-PERF runs, the full device checklist on the oldest supported device and an iPad, and the interop matrix.
+3. Submit with review notes (D113 Sentry note, review server and account per Q-REVIEW, how to report content), phased release on.
+4. Watch daily for 14 days: crash-free sessions, hangs, push delivery and gateway health, support mail. **Stop rule:** pause the rollout on any P0, or crash-free sessions under 99.5 %.
+5. A hotfix branch from the release tag is rehearsed before submission.
 
 ## 6. Rollback
 Expire the bad TestFlight build. Re-promote the previous build **only if it ships the same SDK version** — SDK stores can't be downgraded ([../data/MIGRATIONS.md](../data/MIGRATIONS.md) §3). Otherwise ship a fix-forward build: the previous app code with the current (or newer) SDK, under a new build number. Database migrations are forward-only; a rollback build must accept the newer schema (read-only degrade) or rebuild `halo.sqlite` (derived data) — never drop intents silently.

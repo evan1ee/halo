@@ -27,7 +27,7 @@ stateDiagram-v2
 1. `scenePhase == .active` → `start()`; `.background` → flush receipt outbox → `stop()`.
 2. Entering `.running` → each sync response publishes changed room IDs (`SyncChange`) and post-sync present room IDs (`RoomListUpdate.synced`, in order with the list, R-04) so `ReadStateCoordinator` drops stale carry-over and reconciles; `ReadReceiptCoordinator` flushes queued receipts.
 3. Expose `SyncStatus` (`.idle`, `.running`, `.offline`, `.failed`, `.stopped`) to the UI.
-4. BG refresh (planned): start → wait for one sync response or 20 s → reconcile → stop.
+4. BG refresh and silent pushes (`BackgroundRefresh`, D118): one bounded `/sync` pass, then the evaluation is written ([../architecture/BACKGROUND_EXECUTION.md](../architecture/BACKGROUND_EXECUTION.md)).
 5. The NSE never starts sync.
 
 **In code:** `MatrixSessionPort.runSync` + `MatrixSyncPort` implement the classic sync loop; `SyncCoordinator` (HaloApplication) enforces rules 1–2 and restart backoff while `SessionCoordinator` is `.ready`.
@@ -48,4 +48,4 @@ stateDiagram-v2
 | Remote sign-out | `ClientDelegate.didReceiveAuthError` + `runSync` stop sync and transition session out of `.ready` (R-10) |
 
 ## 5. Sync filter limitation
-The pinned SDK FFI `SyncSettingsV2` exposes only `timeoutMs` and `fullState` (no filter / `lazy_load_members` parameter; tracked as R-18 in [../CODEBASE_REVIEW.md](../CODEBASE_REVIEW.md)). Because classic sync delivers full room state without sliding-sync `required_state` limits, `m.room.image_pack` state is readable through the SDK (verified by `AdapterContractTests.stickers`).
+The pinned SDK FFI `SyncSettingsV2` exposes only `timeoutMs` and `fullState` (no filter / `lazy_load_members` parameter; tracked as R-18 in [../CODEBASE_REVIEW.md](../CODEBASE_REVIEW.md)). Because classic sync delivers full room state without sliding-sync `required_state` limits, `m.room.image_pack` state is readable through the SDK (verified by `AdapterContractTests.stickers`). The cost on large accounts has never been measured: V-SCALE-1, gate G-SCALE (ROADMAP M17-4, Q-SYNC-SCALE).

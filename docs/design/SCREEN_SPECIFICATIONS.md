@@ -6,7 +6,7 @@ Behaviour details are in the feature specs; this document covers layout and stat
 ## S1 Onboarding / Login
 - **Responsibility:** server entry and login method choice (AUTHENTICATION).
 - **Content:** Halo logo (original artwork, Q-BRAND), one-line value statement, server field (prefilled with the last-used server) with an inline "What's a homeserver?" explanation and the suggestion of Q-ONBOARD-SERVER, "Continue".
-- **States:** loading (discovering) → method buttons; error inline under the field ("This server doesn't support Halo (sliding sync missing)").
+- **States:** loading (discovering) → method buttons; error inline under the field ("This server doesn't offer a sign-in Halo supports.").
 - **A11y:** the field labelled "Homeserver or Matrix ID".
 
 ## S2 Verify this device

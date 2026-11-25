@@ -12,7 +12,7 @@ Manage your own profile; see and act on other people's.
 ## 3. Functional requirements
 - FR-1 Own profile: `display_name`, `set_display_name`, `avatar_url`, `upload_avatar`, `remove_avatar`, `subscribe_to_own_profile` **[VERIFIED F-FFI-4 names]**.
 - FR-2 Other profiles: `get_profile(userId)`; room-specific display names from membership.
-- FR-3 Actions: message (DM), ignore/unignore (`ignore_user`, `unignore_user`), verify identity (P2), copy user ID / share link (`matrix.to`).
+- FR-3 Actions: message (DM), ignore/unignore (the server's `m.ignored_user_list`, D120), report (ROADMAP M20-7), verify identity (post-launch, Q-VERIFY), copy user ID / share link (`matrix.to`).
 - FR-4 Ignored users list in Settings (`ignored_users`).
 
 ## 4. Non-functional requirements

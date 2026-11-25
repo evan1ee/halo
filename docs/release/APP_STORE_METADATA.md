@@ -13,6 +13,7 @@ Draft metadata for App Store Connect (`Q-APPSTORE`, D115). Replace bracketed `[.
 - **Privacy Policy URL:** `[https://YOUR_DOMAIN/privacy]` (source: [PRIVACY_POLICY.md](PRIVACY_POLICY.md))
 
 ## 2. Store Copy
+Check every claim against the build before submission: voting in polls (ROADMAP M20-4) and in-app voice playback (M20-2) don't exist yet.
 - **Promotional Text (≤ 170 chars):**
   > End-to-end encrypted Matrix messaging for iPhone and iPad — built natively for iOS 26 with rock-solid unread counts, custom sticker packs, and zero tracking.
 - **Description:**
@@ -29,17 +30,18 @@ Draft metadata for App Store Connect (`Q-APPSTORE`, D115). Replace bracketed `[.
   > matrix,chat,messaging,encrypted,e2ee,stickers,privacy,messenger,synapse,federated
 
 ## 3. Age Rating & Export Compliance
-- **Age Rating:** Complete Apple's User-Generated Content questionnaire (Matrix is a federated messaging protocol; users choose their own homeserver and rooms; Halo includes user-ignore / room-leave controls).
+- **Age Rating:** Complete Apple's User-Generated Content questionnaire (Matrix is a federated messaging protocol; users choose their own homeserver and rooms; Halo includes user-ignore / room-leave controls; reporting is required before submission, ROADMAP M20-7). **Review access:** server, account and sample rooms per Q-REVIEW.
 - **Export Compliance (`V-LEGAL`):** Uses standard HTTPS/TLS and Matrix E2EE (`matrix-rust-sdk` Olm/Megolm) + iOS `CryptoKit` AES-256-GCM for local field encryption. Complete Apple's encryption compliance questionnaire and legal review (D38) before external TestFlight.
 
 ## 4. Privacy Nutrition Labels (grounded in [../security/PRIVACY.md](../security/PRIVACY.md))
 - **Tracking:** None (`NSPrivacyTracking = false` in all `PrivacyInfo.xcprivacy` manifests).
 - **Analytics / Advertising:** Data Not Collected.
 - **Data Linked to You:** Only what the user voluntarily transmits to their chosen Matrix homeserver (User ID, messages, media, optional location/voice messages when explicitly sent).
+- **KLIPY search:** decide whether the search text, region and per-install ID count as collected (PRIVACY §5, ROADMAP M22-3).
 - **App Review Note (dormant Sentry crates, `PRIVACY.md` §2b):**
   > Halo consumes the upstream prebuilt `MatrixRustSDK` binary (`26.11.17`, D113), which links dormant `sentry` crates. Halo passes `sentry_config = nil` at startup and never initializes or transmits data to Sentry.
 
-## 5. Screenshot Matrix (M15)
+## 5. Screenshot Matrix (ROADMAP M22-8)
 Generate in Light & Dark modes on **6.9"** and **6.3"** iPhone displays (and 13" iPad if publishing iPad screenshots):
 1. Chats list with unread badges and clean Liquid Glass header
 2. Conversation timeline with photos, reactions, and pinned message pill

@@ -5,7 +5,7 @@ Halo is an independent, proprietary Matrix client for iOS built with SwiftUI on 
 and engineering process. Code that contradicts these documents is a bug in either the code or
 the document: fix one of them in the same change.
 
-**Phase:** M0–M10 implemented (2026-11-22); next is the Apple-native UX and ship-readiness phase M11–M15 (D84, [ROADMAP.md](ROADMAP.md)). Phase 0 record: [PHASE0_REPORT.md](PHASE0_REPORT.md).
+**Phase:** M0–M16 implemented (2026-11-25); M17–M22 take Halo to a production release (D121, [ROADMAP.md](ROADMAP.md)). Phase 0 record: [PHASE0_REPORT.md](PHASE0_REPORT.md).
 
 ## Statement labels
 
@@ -39,7 +39,8 @@ Documents mark important statements with one of these labels:
 | Data | [DATA_MODELS](data/DATA_MODELS.md) · [PERSISTENCE](data/PERSISTENCE.md) · [MIGRATIONS](data/MIGRATIONS.md) |
 | Security | [SECURITY](security/SECURITY.md) · [PRIVACY](security/PRIVACY.md) · [LICENSE_COMPLIANCE](security/LICENSE_COMPLIANCE.md) · [DEPENDENCY_INVENTORY](security/DEPENDENCY_INVENTORY.md) |
 | Testing | [TEST_STRATEGY](testing/TEST_STRATEGY.md) · [UNREAD_REGRESSION_TESTS](testing/UNREAD_REGRESSION_TESTS.md) · [INTEGRATION_TESTS](testing/INTEGRATION_TESTS.md) |
-| Development | [DEVELOPMENT_SETUP](development/DEVELOPMENT_SETUP.md) · [CODE_CONVENTIONS](development/CODE_CONVENTIONS.md) · [TECH_DEBT](development/TECH_DEBT.md) · [BUILD_AND_RELEASE](development/BUILD_AND_RELEASE.md) · [CI_CD](development/CI_CD.md) |
+| Development | [DEVELOPMENT_SETUP](development/DEVELOPMENT_SETUP.md) · [CODE_CONVENTIONS](development/CODE_CONVENTIONS.md) · [TECH_DEBT](development/TECH_DEBT.md) · [BUILD_AND_RELEASE](development/BUILD_AND_RELEASE.md) · [CI_CD](development/CI_CD.md) · [AUTONOMOUS_LOOP](development/AUTONOMOUS_LOOP.md) · [OUTSTANDING_ISSUES](development/OUTSTANDING_ISSUES.md) |
+| Release | [APP_STORE_METADATA](release/APP_STORE_METADATA.md) · [PRIVACY_POLICY](release/PRIVACY_POLICY.md) · [SUPPORT](release/SUPPORT.md) |
 
 ## Maintenance rules
 

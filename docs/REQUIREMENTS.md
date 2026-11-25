@@ -20,7 +20,7 @@ Full design: [matrix/UNREAD_STATE.md](matrix/UNREAD_STATE.md). Must be prevented
 ### Acceptance criteria (automated unless noted)
 - **AC-U1** Viewing the latest notifying event for ≥ 0.5 s in the foreground clears the room's attention and updates the badge within 1 s; a receipt is sent or queued.
 - **AC-U2** Reading on another device clears attention within 5 s while Halo is in the foreground (one sync round trip), and on the next foreground or background refresh otherwise; covered delivered notifications are removed.
-- **AC-U3** `badge == count(rooms needing attention)`, the same in the app and NSE paths for the same inputs.
+- **AC-U3** The badge is `BadgeCalculator.badge` over all rooms (the unread messages of rooms needing attention, D82), the same in the app, the NSE, the widgets and the list for the same inputs (D118).
 - **AC-U4** After app kill during sync, 24 h offline, reconnect, gaps, out-of-order receipts or a redacted unread event, the state converges with no user action.
 - **AC-U5** Server counts = 0 where the server can count the room (unencrypted, or encrypted in all-messages mode), not marked unread and no unconfirmed newer event ⇒ no attention (no "phantom unread").
 - **AC-U6** A new notifying event the device has seen (sync or push) ⇒ attention until a receipt at or beyond it exists (no "missed unread").
@@ -32,13 +32,13 @@ Full design: [matrix/UNREAD_STATE.md](matrix/UNREAD_STATE.md). Must be prevented
 | ID | Requirement | Spec |
 |---|---|---|
 | R-P1-AUTH | OIDC (MAS) and password login, session restore, logout, soft-logout re-auth | [features/AUTHENTICATION.md](features/AUTHENTICATION.md) |
-| R-P1-E2EE | Cross-signing, QR/emoji verification, recovery key, key backup, UTD display | [features/ENCRYPTION_AND_DEVICES.md](features/ENCRYPTION_AND_DEVICES.md) |
+| R-P1-E2EE | Cross-signing, emoji verification of own devices (QR: Q-VERIFY), recovery key, identity reset, key backup, identity-change notices, UTD display | [features/ENCRYPTION_AND_DEVICES.md](features/ENCRYPTION_AND_DEVICES.md) |
 | R-P1-LIST | Room list with attention indicators, filters, invites | [features/ROOM_LIST.md](features/ROOM_LIST.md) |
 | R-P1-TL | Timeline: all common event types, pagination, read-marker line, jump to unread | [features/TIMELINE.md](features/TIMELINE.md) |
-| R-P1-MSG | Send/receive text, replies, edits, deletes, reactions, typing, receipts display, offline send queue | [features/MESSAGING.md](features/MESSAGING.md) |
-| R-P1-MEDIA | Display all incoming media; send images | [features/MEDIA_ATTACHMENTS.md](features/MEDIA_ATTACHMENTS.md) |
-| R-P1-PUSH | APNs push with E2EE decryption in the NSE, clearing, badge | [features/NOTIFICATIONS.md](features/NOTIFICATIONS.md) |
-| R-P1-ROOM | Room details, members, leave, notification mode, mark unread, create DM/room, invite | [features/ROOM_MANAGEMENT.md](features/ROOM_MANAGEMENT.md) |
+| R-P1-MSG | Send/receive text, replies, edits, deletes, reactions, polls (create, vote, end), forward, typing, receipts display, offline send queue | [features/MESSAGING.md](features/MESSAGING.md) |
+| R-P1-MEDIA | Display and play all incoming media in the app; send photos, videos, files, voice and camera shots | [features/MEDIA_ATTACHMENTS.md](features/MEDIA_ATTACHMENTS.md) |
+| R-P1-PUSH | APNs push with E2EE decryption in the NSE, clearing, badge, Reply and Mark as read actions | [features/NOTIFICATIONS.md](features/NOTIFICATIONS.md) |
+| R-P1-ROOM | Room details, members, leave, notification mode, mark unread, create DM/room, invite, basic moderation, report, upgraded rooms | [features/ROOM_MANAGEMENT.md](features/ROOM_MANAGEMENT.md) |
 | R-P1-PROF | Own profile (name, avatar), other users' profiles, ignore user | [features/USER_PROFILES.md](features/USER_PROFILES.md) |
 | R-P1-SET | Settings, privacy (receipt mode), acknowledgements, diagnostics export | [features/SETTINGS.md](features/SETTINGS.md) |
 | R-P1-BOTGEN | Generic HTML-subset rendering for all messages + view source (D29) | [features/BOT_MESSAGES.md](features/BOT_MESSAGES.md) §Layer 1 |
@@ -63,12 +63,12 @@ Full design: [matrix/UNREAD_STATE.md](matrix/UNREAD_STATE.md). Must be prevented
 | R-P2-GALLERY | Global media gallery via a preset non-Matrix room entry in the room list (D34, D83) | [design/NAVIGATION.md](design/NAVIGATION.md), [features/ROOM_LIST.md](features/ROOM_LIST.md), ROADMAP M9 |
 | R-P2-EXPORT | Encrypted room export (D32) | ROADMAP M9 |
 | R-P2-THREADS | Threads with per-thread receipts | ROADMAP M10 |
-| R-P2-CALLS | MatrixRTC calls | ROADMAP (later) |
+| R-P2-CALLS | ~~MatrixRTC calls~~ out of scope (D94) | — |
 
 ## UX quality and ship readiness (D84)
 
 Halo must feel like an Apple-native app while keeping its own identity. Findings and evidence: [design/UX_AUDIT.md](design/UX_AUDIT.md);
-work: [ROADMAP.md](ROADMAP.md) M11–M15.
+work: [ROADMAP.md](ROADMAP.md) M21 (M11–M15 built the base).
 
 | ID | Requirement | Spec |
 |---|---|---|
@@ -95,6 +95,30 @@ work: [ROADMAP.md](ROADMAP.md) M11–M15.
 - **AC-UX-11** NFR-1 and NFR-2 measured on an iPhone 15-class device with XCTest metrics and recorded in TEST_STRATEGY.
 - **AC-UX-12** The archive's privacy report lists the app's and NSE's privacy manifests, and App Store Connect accepts the build without warnings.
 
+## Release quality (1.0)
+
+Production release requirements beyond features ([ROADMAP.md](ROADMAP.md) M17–M22, "Ship-ready definition"). Implementing a feature without these isn't done.
+
+### Acceptance criteria — reliability
+- **AC-REL-1** Icon, widgets, room list and open room agree after every row of the device matrix (foreground, suspended, terminated, rebooted and locked, airplane mode, clock change, second device). Widgets may lag only by iOS's reload budget and say when they're old.
+- **AC-REL-2** Every push that arrives ends in exactly one correct notification or none; no stale notification survives 5 s of foreground.
+- **AC-REL-3** An own message is never lost, duplicated or reordered across kill, reconnect, rate limit and token expiry; its shown state is never ahead of the server's.
+- **AC-REL-4** Every user action that can fail says so within 10 s or shows that it is still trying; none fails silently; none runs twice from a double tap.
+- **AC-REL-5** A damaged, locked or unreadable store never loops or loses the account silently: it recovers or offers a reset that says what is lost.
+- **AC-REL-6** An OIDC session survives token rotation in the app and the NSE, including when both refresh at once.
+- **AC-REL-7** Reply and Mark as read from a notification work with the app terminated, or report the failure.
+
+### Acceptance criteria — security
+- **AC-SEC-1** A contact's identity change is visible before the next message to them is sent, and stays visible until handled.
+- **AC-SEC-2** A send refused for encryption reasons says which person or device and offers only choices the SDK supports; nothing is sent unencrypted into an encrypted room.
+- **AC-SEC-3** A user without their recovery key and other devices can get back to a working, verified account, knowing what is lost.
+- **AC-SEC-4** Nothing Halo stores is readable from a device backup or after sign-out; a restored device starts cleanly.
+- **AC-SEC-5** A log and diagnostics scan of a full session finds no content, token, key or raw Matrix ID.
+
+### Acceptance criteria — motion and stability of the picture
+- **AC-MOT-1** In the audited transitions (ROADMAP M19-9) there is no frame with a blank, wrong or placeholder state when the content is already on the device, and no row moves except by the user's action or an insertion at the edge.
+- **AC-MOT-2** All motion uses `HaloMotion`; with Reduce Motion nothing slides, scales or springs; no interaction waits for an animation.
+
 ## Non-functional requirements
 
 | ID | Requirement |
@@ -108,4 +132,9 @@ work: [ROADMAP.md](ROADMAP.md) M11–M15.
 | NFR-7 | Data at rest protected by iOS Data Protection; content columns in Halo's DB encrypted |
 | NFR-8 | Licence gate passes on every build; acknowledgements complete |
 | NFR-9 | Localisation-ready: every user-facing string in a String Catalog; plurals, dates and numbers locale-aware; layouts survive +100 % string length and right-to-left |
-| NFR-10 | App Store compliance: privacy manifests for every target, no tracking, privacy labels match [security/PRIVACY.md](security/PRIVACY.md) |
+| NFR-10 | App Store compliance: privacy manifests for every target, no tracking, privacy labels match [security/PRIVACY.md](security/PRIVACY.md); report and ignore available where others' content is shown |
+| NFR-11 | Opening a cached room: newest message drawn p95 ≤ 250 ms after the tap, no spinner, no jump **[ASSUMPTION: baseline in M17-5]** |
+| NFR-12 | Memory: ≤ 200 MB in a media timeline, ≤ 300 MB peak in the gallery and viewer, ≤ 10 % growth over 50 room open/close cycles **[ASSUMPTION: baseline in M17-5]** |
+| NFR-13 | Main thread: no hang ≥ 250 ms in the scripted session; no image decoding, database or JSON work on it |
+| NFR-14 | Sync at 1,000 rooms: first sync to a usable list ≤ 60 s on Wi-Fi, catch-up after 24 h ≤ 10 s, no memory kill **[ASSUMPTION: V-SCALE-1; decides G-SCALE]** |
+| NFR-15 | Energy: idle in the foreground ≤ 4 % battery per hour, no background work beyond iOS's grants **[ASSUMPTION: baseline in M17-4]** |

@@ -13,7 +13,7 @@ public enum HaloError: Error, Sendable, Equatable {
   case notFound                          // room/event/user gone
   case crypto(CryptoFailure)             // UTD reasons, verification failure, missing backup
   case invalidInput(String)              // validation (e.g. shortcode grammar)
-  case unsupported(String)               // server lacks a capability (e.g. sliding sync)
+  case unsupported(String)               // server lacks a capability Halo needs
   case storage(StorageFailure)           // DB open/migration/corruption
   case cancelled
   case `internal`(code: String)          // bug: never shown raw to users
@@ -27,7 +27,7 @@ Each case gets a stable `code` string for logs and diagnostics (e.g. `NET_TIMEOU
 2. Mapping happens in one place in the adapter (`ErrorMapper`), with unit tests per upstream error kind.
 3. Views never show `error.localizedDescription` of an internal error; they show a user message chosen by case.
 4. Retryable errors in background work → retry with exponential backoff and jitter (base 1 s, max 5 min); non-retryable → surface and stop.
-5. No silent `try?` for operations that change state. `try?` is allowed only for best-effort cleanup, with a comment.
+5. No silent `try?` for operations that change state. `try?` is allowed only for best-effort cleanup, with a comment. *Not enforced yet: about 120 sites outside sleeps and fakes are unreviewed (ROADMAP M18-8).*
 6. Every caught error in a coordinator is logged once, at the boundary where it is handled (no double logging).
 
 ## 3. User-visible states
@@ -39,13 +39,13 @@ Each case gets a stable `code` string for logs and diagnostics (e.g. `NET_TIMEOU
 | Send failed (forbidden/unsupported) | Bubble with an explanation, "Delete" |
 | Soft logout | Full-screen re-auth sheet; local data is kept |
 | UTD | Placeholder explaining why (key not yet received / device not verified / no backup) |
-| Storage failure | Recovery screen: "Rebuild local data" (keeps the session) |
+| Storage failure | Recovery screen: "Rebuild local data" (keeps the session). *Not built* (ROADMAP M18-5) |
 
 ## 4. Recovery strategies
 
 | Failure | Recovery |
 |---|---|
 | `SyncService` error state | Restart with backoff; after 3 failures show the banner; keep retrying |
-| `halo.sqlite` corruption / failed migration | Move the file aside (`halo.sqlite.corrupt-<ts>`) and create a new DB; derived data is rebuilt; log + auditor event |
-| SDK store corruption | Offer "Clear cache" (`Client.clear_caches` **[VERIFIED F-FFI-14]**), then a full re-sync |
+| `halo.sqlite` corruption / failed migration | Move the file aside (`halo.sqlite.corrupt-<ts>`) and create a new DB; derived data is rebuilt; log + auditor event. *Not built* (ROADMAP M18-5) |
+| SDK store corruption | Offer "Clear cache" (`Client.clear_caches` **[VERIFIED F-FFI-14]**), then a full re-sync. *Not built* (ROADMAP M18-5) |
 | Push registration failure | Retry on the next foreground; the settings screen shows push status |

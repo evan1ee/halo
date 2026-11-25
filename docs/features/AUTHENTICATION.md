@@ -45,7 +45,7 @@ flowchart LR
 `SessionPort` (adapter), `KeychainPort` (platform). FeatureAuth uses `SessionCoordinator` only.
 
 ## 9. Error scenarios
-Unknown server · no sliding sync (`unsupported`) · wrong password (`unauthorized`) · OIDC cancelled (`cancelled`) ·
+Unknown server · a server without password or OIDC sign-in (`unsupported`) · wrong password (`unauthorized`) · OIDC cancelled (`cancelled`) ·
 network down (`network`) · Keychain unavailable before the first unlock (`storage`) → each with a specific message.
 
 ## 10. Edge cases
@@ -56,11 +56,12 @@ app killed during OIDC (the callback arrives on relaunch — discard it if there
 - AC-AUTH-1 Password login on the dev Synapse reaches the room list.
 - AC-AUTH-2 Killing and relaunching the app restores without the network (D103: the stored homeserver URL is used as is; before 2026-11-23 the restore ran server discovery first, which needed the network). `HaloUITests.testSignedInLaunchOpensOnChats` times a cold launch to the first chat row.
 - AC-AUTH-3 Revoking the token on the server → soft-logout sheet; after re-auth, cached rooms are still there.
-- AC-AUTH-4 Logout removes every per-account file and Keychain item (checked by a test that lists the container).
+- AC-AUTH-4 Logout removes every per-account file and Keychain item (checked by a test that lists the container) — and the Spotlight entries, widget data and pusher. *The test doesn't exist yet* (ROADMAP M18-4).
+- AC-AUTH-5 A complete OIDC sign-in, refresh in the app and the NSE, soft logout and sign-out work against MAS (V-OIDC-1; only discovery and the authorization URL are verified today, ROADMAP M18-6).
 
 ## 12. Test requirements
 Unit: `SessionCoordinator` state machine with a fake `SessionPort`. Integration: S-AUTH-1..4 against the dev
 Synapse + MAS ([../testing/INTEGRATION_TESTS.md](../testing/INTEGRATION_TESTS.md)). UI: the login smoke test.
 
 ## 13. Open questions
-Q-MAS-ACCOUNT (device management via the MAS account URL `account_url`).
+Q-SIGNUP. (Q-MAS-ACCOUNT decided: web account page, D117.)

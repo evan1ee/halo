@@ -1,91 +1,263 @@
 # Roadmap
 
-**Where we are (2026-11-24):** autonomous work across **M0–M16** (including ADR-0022 and Tech Debt A–D/TD-12) is complete. Next up: **M17–M19** (polish, messaging completeness, power-user depth). External (`👤`) and physical-device (`📱`) items live in `HANDOFF.md` §5. Evidence: [design/UX_AUDIT.md](design/UX_AUDIT.md); bar: "Ship-ready definition" below.
+**Where we are (2026-11-25):** M0–M16 are built and merged (PRs #1–#88). Halo is a working client, **not yet a release candidate**: an audit of
+the code against the documents (§2) found promised behaviour that doesn't exist, two App Store blockers, and no evidence yet for the
+scale and performance targets. **M17–M22 below take it from here to the App Store** (re-planned 2026-11-25, D121). Decisions the plan is
+waiting for are in [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md); device and founder items in `HANDOFF.md` §5.
 
-Capacity: solo, part-time (D24); estimates are **[ASSUMPTION]**s. Each milestone exits with its ACs **verified by tests** (AGENTS.md §0, §12).
+Capacity: solo, part-time (D24). Sizes **[ASSUMPTION]**: S ≤ 1 day · M 2–4 days · L 1–2 weeks of focused work. No calendar dates are promised.
 
-## Remaining work (the loop's queue)
-Ordered queue for the autonomous loop ([development/AUTONOMOUS_LOOP.md](development/AUTONOMOUS_LOOP.md), D70). Take the first unchecked autonomous item; `👤` (founder), `📱` (device), and `📤` (upstream) items don't block the queue. Completed M0–M16 history is in "Done (M0–M16)" below.
+## 1. How to read this plan
+| Mark | Meaning |
+|---|---|
+| **R** | Release requirement: 1.0 doesn't ship without it |
+| **C** | Candidate: ships in 1.0 only if finished before the Beta 2 cut; never delays it (D122) |
+| **P** | Post-launch (§10) |
+| 👤 / 📱 / 📤 | Needs the founder / a physical device / an upstream SDK change. Doesn't block the rest of the queue |
 
-**M17 Ship-readiness polish & hardening** (Autonomous refinement loop; raises quality to 1.0 ship bar)
-- [ ] **Room-open smoothness & thumbnail cache (HANDOFF §5):** minimize the ~150 ms push delay without regressing D95 (newest message, zero flash of top, no spinner); avoid redundant own-thumbnail re-downloads after restart.
-- [ ] **Crash safety & Honest UI audit:** replace `preconditionFailure` in `HaloPlatform/WebAuthSessionPresenter.swift` with typed `HaloError` + test; audit all `try? await` sites across `HaloCore`, `HaloApple`, `ios/App`, and extensions so zero user-initiated or state-changing actions fail silently (`HaloLog` + `HaloErrorCopy`).
-- [ ] **System accessibility & motion polish (D84):** respect `accessibilityReduceMotion`, `colorSchemeContrast`, Reduce Transparency, and Bold Text across timeline transitions, composer panel swaps, jump pills, banners, and animated stickers; verify Light/Dark/AX5 on iPhone + iPad simulators.
-- [ ] **Complete state coverage (AC-UX-6):** audit every screen for `LoadingState`, `EmptyState`, `ErrorState`, and `ActionState` double-tap protection.
-- [ ] **Code health & file-size discipline:** split oversized files (`FeatureSettings/SettingsView.swift`, `ios/App/HaloApp.swift`, `FeatureTimeline/TimelineMessageRowView.swift`) below ~500 lines; expand `HaloUITests` accessibility audits and offline/reconnect coverage.
-- [ ] **Copy & localization readiness (`Q-L10N` prep):** Apple-native copy pass and extract remaining user-facing strings into `ios/App/Resources/Localizable.xcstrings`.
+**Order and why.** M17 measures first, because its result (G-SCALE) can change the sync engine and everything built on it. M18 fixes what can lose
+data, leak or lie. M19 makes it fast before M20 adds media features on the same image and timeline code. M21 polishes once, after the features
+exist. M22 proves it with people and ships it. Within a milestone, take tasks top to bottom.
 
-**M18 Everyday messaging completeness** (Standard Matrix/SDK APIs)
-- [ ] **Forward messages & media:** forward text, images, files, audio, and stickers to one or more chats via `ShareTargetPickerView`, preserving captions/formatting and E2EE boundaries.
-- [ ] **In-room search & jump-to-message:** room-scoped `SearchPort` search jumping to events via `TimelineFocus.Event`, with match navigation and highlight-on-jump.
-- [ ] **Rich message rendering polish:** monospace code blocks with one-tap "Copy code", inline spoilers (`data-mx-spoiler`) with tap-to-reveal, and opt-in link previews (off by default in E2EE rooms, D57).
-- [ ] **Voice & media playback polish:** audio scrubbing bar, `1×`/`1.5×`/`2×` speed toggle, sequential voice playback, inline video (`AVPlayerViewController`), and Save-to-Photos with permission priming.
-- [ ] **Multi-select messages in timeline:** bulk forward, copy, or redact/delete (respecting power levels).
-- [ ] **Message details & read-receipt inspector:** sheet showing delivery state, encryption status, and readers with timestamps.
+**A task is done** when its "Done when" holds *by a test that failed before*, the owning spec is updated, `scripts/prepush.sh` and the touched
+contract tests pass, and it's merged. Implementing the feature isn't enough: it must also have loading, empty, error and offline states, VoiceOver
+labels, Dynamic Type up to AX5, strings in the catalog, and no regression in the M19 budgets once they exist.
 
-**M19 Power-user organization, trust & ecosystem** (Apple-native Matrix depth)
-- [ ] **Matrix Spaces & room-list organization:** read-only `m.space` hierarchy as room-list filters (keeping D85 single-stack shell, no tab bar), plus Low Priority filtering.
-- [ ] **Room moderation & management:** kick, ban/unban, banned list, power levels (Admin/Moderator/Default), edit topic/avatar/canonical alias, join rules (Invite/Knock/Public), and history visibility — gated by live power levels.
-- [ ] **Join by alias / `matrix.to` & QR codes:** join rooms or start DMs from `#alias:server`, `!roomId`, or `matrix.to` links; shareable profile/room QR codes and QR scanner.
-- [ ] **App Lock (Face ID / Touch ID / Passcode):** opt-in biometric lock in Settings → Privacy with configurable timeout, integrated with D61 privacy blur.
-- [ ] **Storage & cache management:** Settings → Storage showing SDK media cache, database, and log footprint, with "Clear media cache" and retention controls (D55).
-- [ ] **Notification keywords & push rules:** manage Matrix keyword push rules in Settings → Notifications for `ReadStatePolicy` mention/keyword mode.
+**A milestone is done** when every R task is done (or listed in HANDOFF §5 as waiting for 👤/📱 with the exact check) and its exit gate is recorded in §7.
 
-**External, device & upstream leftovers (M4–M16; details in `HANDOFF.md` §5)**
-- [ ] 👤 Push gateway deploy (`infra/sygnal/`), APNs keys, `Q-KLIPY-PROD`, Beta 1 → Beta 2 → 1.0 TestFlight/App Store, `Q-BRAND` Beta 2 artwork, `Q-APPSTORE` live URLs/screenshots, legal/export review (`D38`, `V-LEGAL`).
-- [ ] 📱 Device checks: 7-day AC-U8 soak, interactive NFR-2 scroll hitch / 300-room / MetricKit run, `V-SHARE-1` + Share extension, iPad split/inspector/drag-and-drop, Focus filter, widgets, Siri/Spotlight, composer panels, voice/location/poll/article sends.
-- [ ] 📤 TD-15: upstream SDK `SyncSettingsV2` filter (R-18) and queued `sendRaw`/`sendSticker` (R-21).
-- [ ] (deferred, D71, not blocking) CI: always-on macOS job (`Q-CI-MAC`; manual workflow in place).
+## 2. Gap audit (2026-11-25, commit `155f745`)
+What the documents claimed and the code doesn't have. Evidence is a search or file at that commit. Remove a row when its task is merged.
 
-## Ship-ready definition (D84)
-Halo is ready for external testers when **all** of these hold:
-
-| Area | Bar | Check |
-|---|---|---|
-| Correctness | AC-U1–U7 green; AC-U8 soak with zero unexplained auditor findings | Scenario suite, auditor |
-| Native feel | No raw colours or fixed font sizes outside `HaloDesignSystem`; system nav/bars/sheets | AC-UX-1, `check-design-tokens.sh` |
-| First five minutes | Install → signed in → verified → first message sent in ≤ 3 min, no dead ends | AC-UX-5, moderated test (3 people) |
-| States | Every screen has loading, empty and error states (DESIGN_SYSTEM §8) | AC-UX-6 |
-| Accessibility | Zero `performAccessibilityAudit()` issues on root screens; AX5 + VoiceOver golden path | AC-UX-8, AC-UX-9 |
-| Performance | NFR-1, NFR-2 met on an iPhone 15-class device | AC-UX-11 |
-| Stability | Crash-free sessions ≥ 99.5 % in internal beta; no hang > 2 s in MetricKit | TestFlight + MetricKit |
-| Compliance | Privacy manifest, privacy labels, export compliance, licence gate, legal review | AC-UX-12, BUILD_AND_RELEASE §4 |
-
-## Release plan
-| Release | Contents | Audience | Entry |
+| ID | Gap | Evidence | Task |
 |---|---|---|---|
-| **Beta 1** (internal TestFlight) | M0–M16 + push gateway (R-24) | Founder + 1–3 people | Push gateway live |
-| **Beta 2** (external TestFlight) | + M17 polish, M15 compliance items | ≤ 25 trusted testers | Ship-ready definition met except 1.0-only lines |
-| **1.0** (App Store) | + M18–M19, Beta 2 fixes, final icon/screenshots, legal sign-off | Public (Matrix power users) | 2 weeks of Beta 2 with no P0/P1 bug open |
+| GA-01 | MetricKit isn't collected, though D59/D114 and the privacy policy name it and the stability bar depends on it | no `MXMetricManager` | M17-2 |
+| GA-02 | No signposts, so NFR-1/2 can't be broken down | no `OSSignposter` | M17-1 |
+| GA-03 | Large accounts never measured; classic sync has no filter or lazy-loaded members (R-18) | `SyncSettingsV2` (F-FFI-23) | M17-4 |
+| GA-04 | `infra/test`, the fault proxy and `scenarios.yml` don't exist | only `infra/dev`, `infra/sygnal`; no such workflow | M17-6 |
+| GA-05 | Contacts' identity changes are never shown (security) | no `IdentityStatus` use | M18-1 |
+| GA-06 | The reason a send failed is dropped, so an encryption refusal looks like a network error and can't be resolved | `TimelineMapper.swift:153` | M18-2 |
+| GA-07 | A lost recovery key is a dead end | no `resetIdentity` | M18-3 |
+| GA-08 | Nothing is excluded from iCloud/device backups | no `isExcludedFromBackup` | M18-4 |
+| GA-09 | No recovery when a database can't be opened; no migration fixtures | `HaloDatabase`, no `Fixtures/` | M18-5 |
+| GA-10 | OIDC checked only up to the authorization URL | `AdapterContractTests.oidcDiscovery` | M18-6 |
+| GA-11 | Notification Reply / Mark as read not built | no `UNNotificationCategory` | M18-7 |
+| GA-12 | State changes that fail silently; 122 `try? await` sites unreviewed (sleeps and fakes excluded) | e.g. `ChatsAssembly.swift` links | M18-8 |
+| GA-13 | Double-tap protection exists but nothing uses it | `ActionState` has no caller | M18-8 |
+| GA-14 | Matrix links: scheme not registered, taps in messages open Safari, and the resolver would join a room or start a chat without asking | no `CFBundleURLTypes`; `resolveMatrixLink` | M18-9 |
+| GA-15 | Photos are decoded on the main thread, some on every redraw; no decoded cache or memory-warning handling (MEDIA §1) | `UIImage(data:)` in view bodies | M19-1 |
+| GA-16 | Every timeline change rebuilds every row on the main actor | `TimelineViewModel+Mapping.apply` | M19-2 |
+| GA-17 | The room list is replaced as a whole on every change (ROOM_LIST §4 forbids it) | `.diff(.reset(list))` | M19-3 |
+| GA-18 | Video and voice play only in Quick Look | no `AVPlayer` | M20-2, M20-3 |
+| GA-19 | Polls can be created but not voted in or ended | no `sendPollResponse` | M20-4 |
+| GA-20 | No camera: only existing photos can be sent | no capture code or usage string | M20-5 |
+| GA-21 | Jumping to an old message gives up silently after 10 pages | `maxJumpPages` | M20-1 |
+| GA-22 | No way to report a message or room (App Review 1.2) | no `reportContent` | M20-7 |
+| GA-23 | Upgraded rooms: no link to the successor | only the share extension checks it | M20-8 |
+| GA-24 | Localisation isn't ready: 12 catalog keys, about 376 literals in views (AC-UX-10 was ticked) | `Localizable.xcstrings` | M21-6 |
+| GA-25 | Shared loading/error states used on 2 screens; system motion and contrast settings barely read | `ErrorState`, `accessibilityReduceMotion` ×2, `HaloMotion` ×2 | M21-1, M21-3 |
+| GA-26 | Release builds have no push gateway; the privacy manifests and labels don't mention KLIPY search | `Base`/Release config, `PrivacyInfo.xcprivacy` | M22-1, M22-3 |
 
-## Milestones
-| # | Milestone | Scope | Exit criteria | Gates |
+## 3. Queue
+
+### M17 — Measure and prove
+**Goal:** know, with numbers, whether the foundation holds for real accounts. **Depends on:** nothing. **Risk:** T-SCALE, PERF-1.
+
+| Task | Class · size | Done when |
+|---|---|---|
+| [ ] **M17-1 Signposts** for cold start → list, room open → first frame, sync round trip, image decode, NSE | R · S | XCTest reads each interval; LOGGING §5 lists them |
+| [ ] **M17-2 MetricKit** payloads (crash, hang, CPU, memory, disk) kept on the device and included in the diagnostics export | R · S | Unit test round-trips a payload; export reviewed: no content or raw IDs; limited in size and age |
+| [ ] **M17-3 Scale fixture**: own accounts with 300 and 1,000 rooms, one 10,000-member room, one 20,000-event media room | R · M | Script in `infra/dev`, idempotent, never touches the shared contract accounts, removable |
+| [ ] **M17-4 Measure classic sync at scale** (V-SCALE-1): first sync time, bytes, memory, store size; incremental sync; idle energy | R · M · 📱👤 | Table in TEST_STRATEGY §7 for both fixtures and one real public-server account; **G-SCALE** decided (Q-SYNC-SCALE) |
+| [ ] **M17-5 Repeatable performance suite** with the budgets of TEST_STRATEGY §7 | R · M · 📱 | One command prints budget / measured / pass; same device, Release build; over 20 % worse fails |
+| [ ] **M17-6 Fault injection and scenarios in CI**: `infra/test` with a proxy (drop, latency, 5xx, 429, half-open) and `scenarios.yml` | R · M | The scenario driver runs on Linux CI; offline, reconnect and rate-limit cases red/green on demand |
+| [ ] **M17-7 Interoperability matrix** (V-INTEROP-1): every message kind, both directions, Element Web + Element X | R · M | Second-client checks automated where possible, the rest a signed checklist; gaps become tasks |
+
+**Exit:** G-SCALE recorded; every NFR has a measured baseline.
+
+### M18 — Security, data safety and reliability
+**Goal:** nothing is lost, leaked, sent to the wrong device, or shown as true when it isn't. **Depends on:** M17-6. **Risk:** T-IDENTITY, T-RECOVER, T-XPROC.
+
+| Task | Class · size | Done when |
+|---|---|---|
+| [ ] **M18-1 Identity changes**: timeline notice and composer banner when a contact's identity changes; accept or verify (ENCRYPTION FR-7) | R · M | Contract test: a second account resets its identity, the notice appears; VoiceOver; AC-SEC-1 |
+| [ ] **M18-2 Honest send failures**: carry the SDK's reason; "Send anyway / Review devices / Retry" where the SDK allows it | R · M | Unit per reason; no encryption refusal shown as offline; AC-SEC-2 |
+| [ ] **M18-3 Lost recovery key**: reset the identity with a plain warning; show key-backup state | R · M | Contract test on a throwaway account; AC-SEC-3 |
+| [ ] **M18-4 Backups and sign-out**: exclude stores and caches; detect stores restored without their keys; sign-out leaves nothing | R · M | Test lists App Group, Keychain, Spotlight, widget and pusher after sign-out (AC-AUTH-4); restore-to-new-device check 📱; AC-SEC-4 |
+| [ ] **M18-5 Store recovery**: damaged or unopenable `halo.sqlite` or SDK store → keep a copy, rebuild, or a clear reset path; migration fixtures | R · M | Corruption tests for both stores; upgrade test from every released schema; AC-REL-5 |
+| [ ] **M18-6 OIDC end to end** (V-OIDC-1): sign-in, rotation in app and NSE, soft logout, sign-out | R · M · 👤 | Contract on the MAS stack incl. forced token expiry during a push; one public server by hand; AC-REL-6 |
+| [ ] **M18-7 Notification actions**: Reply and Mark as read from the lock screen (V-PUSH-4) | R · M · 📱 | Reply reaches the server from a terminated app or says it didn't; nothing sent twice; AC-REL-7 |
+| [ ] **M18-8 No silent failures**: review every `try?` on a state change, route through `HaloErrorCopy`; `ActionState` on every mutating control; remove the `preconditionFailure` | R · L | Custom lint rule with a written allow-list, 0 findings; a failure and a double-tap test per action; AC-REL-4 |
+| [ ] **M18-9 Matrix links**: handle `matrix.to` taps in messages and the `matrix:` scheme; always ask before joining or starting a chat | R · S | UI test: no join without confirmation, errors are said; NAVIGATION §3 |
+| [ ] **M18-10 Read-state and push matrix**: foreground, suspended, terminated, rebooted-locked, airplane, clock change, two devices | R · M · 📱 | Table in UNREAD_REGRESSION_TESTS green on a device; widgets and icon agree; AC-REL-1, AC-REL-2 |
+| [ ] **M18-11 Delivery under faults**: no lost, duplicated or reordered own messages across kill, reconnect, 429 and token expiry | R · M | M17-6 cases green for text, photo, file, sticker, reply, edit, reaction; AC-REL-3 |
+| [ ] **M18-12 Security review**: threat model walk-through, log scan of a full session, lint for sensitive logging, build check for TLS bypass, advisory check, disclosure policy | R · M · 👤 | Report with zero open high findings; SECURITY §6/§9 true; legal parts stay with M22-4 |
+| [ ] **M18-13 Sign out other sessions** (password UIA; OIDC uses the account page, D117) | C · S | Contract test on a throwaway account |
+
+**Exit:** AC-SEC-1–5 and AC-REL-1–7 met; `G-UNREAD` re-run green.
+
+### M19 — Performance and seamless rendering
+**Goal:** immediate and still: no freeze, flash or jump. **Depends on:** M17 baselines, G-SCALE. **Risk:** T-PERF, T-SCALE.
+
+| Task | Class · size | Done when |
+|---|---|---|
+| [ ] **M19-1 One image pipeline**: decode and downsample off the main thread to display size, decoded cache with a cap, eviction on memory warnings; used by every image view | R · L | No `UIImage(data:)` in a view (lint); NFR-12/13; pictures paint on the first frame when cached |
+| [ ] **M19-2 Incremental timeline**: map only changed rows, off the main actor | R · M | Counter test: one new message maps ≤ 2 rows at 2,000 loaded; randomised diffs equal a full rebuild |
+| [ ] **M19-3 Incremental room list**: real insert/move/update diffs | R · M | 1,000 rooms: one room's change updates one row; order still matches the SDK (AC-RL-2) |
+| [ ] **M19-4 Room opening**: shorten the ~150 ms after the push without losing D95 | R · M | NFR-11; `testRoomOpeningLandsAtNewestTenTimes` green |
+| [ ] **M19-5 Media by file, not memory**: full-size photos, videos and files stream to disk; no repeat download of own thumbnails after a restart; gallery pages | R · M | Opening a 100 MB video stays under NFR-12; network test: cached media makes no request |
+| [ ] **M19-6 Launch at scale** | R · M · 📱 | NFR-1 with 300 and 1,000 rooms, Release build, after an update and after a reboot |
+| [ ] **M19-7 Sync and energy**: apply the G-SCALE outcome; fewer wake-ups; respect Low Power Mode and thermal state | R · L · 📤? | NFR-14/15 met; no regression in S01–S29 |
+| [ ] **M19-8 Scrolling**: mixed media, animated stickers, long formatted messages | R · M · 📱 | NFR-2 measured interactively, hitch ratio recorded |
+| [ ] **M19-9 Zero flash and jump audit**: launch, room open/close, keyboard, send → confirm, edit, reaction, reconnect, history prepend, appearance change, return from background | R · M | Frame-by-frame capture of each; every defect fixed or filed; UI tests for the ones that can be measured; AC-MOT-1 |
+| [ ] **M19-10 Leaks and soak**: 50 room open/close cycles, 30 min scroll, background/foreground | R · S · 📱 | No growth over 10 %; no task or subscription left after close |
+
+**Exit:** **G-PERF** — all budgets of TEST_STRATEGY §7 met on the reference device with a Release build.
+
+### M20 — Messaging completeness
+**Goal:** everyday use without reaching for another client. **Depends on:** M19-1, M19-2, M19-5. **Risk:** scope (D122, PROJ-8).
+
+| Task | Class · size | Done when |
+|---|---|---|
+| [ ] **M20-1 Jump to any message**: event-focused timeline for replies, search, links, pins and notifications; back to newest | R · L | Event 5,000 messages back opens in ≤ 2 s online; offline or gone says so; read state unaffected |
+| [ ] **M20-2 Voice and audio in the bubble**: waveform, scrub, 1×/1.5×/2×, route and interruption handling, keeps playing while scrolling | R · M | Unit on the player; interop with Element voice notes; VoiceOver adjustable |
+| [ ] **M20-3 Video**: poster inline, full-screen player, captions on send, save and share | R · M | Streams from file (M19-5); portrait and landscape |
+| [ ] **M20-4 Polls**: vote, change vote, end own poll, live results | R · M | Contract test with two accounts; pending vote looks pending |
+| [ ] **M20-5 Camera**: take a photo or short video from the composer | R · M · 📱 | Permission asked in context; denied state; location stripped (D56) |
+| [ ] **M20-6 Forward** text, media, files, stickers, locations | R · M | Re-encrypted for the target; warns when leaving an encrypted room; several targets |
+| [ ] **M20-7 Report and block**: report a message or room to the homeserver, ignore from the same place | R · M | Contract test; confirms and says who receives it (Q-REPORT); App Review 1.2 |
+| [ ] **M20-8 Room lifecycle**: successor of an upgraded room, knock/invite-only/banned previews, left and forgotten rooms | R · M | Each state has a screen and an action; no stuck row |
+| [ ] **M20-9 Who read it, what happened**: receipts under others' messages (TIMELINE FR-6), message info sheet | R · M | Same readers as Element Web; no layout jump when receipts move |
+| [ ] **M20-10 Text rendering**: code blocks with copy, spoilers, tables and lists safe | R · M | Interop fixtures; hostile HTML can't break layout or fetch anything |
+| [ ] **M20-11 Search inside a room** with next/previous | R · M | Uses `SearchPort`; jumps via M20-1; empty and indexing states |
+| [ ] **M20-12 Basic moderation**: remove, ban, unban, roles shown, gated by live power levels | R · M | Contract test; refused actions explained |
+| [ ] **M20-13 Storage**: sizes, clear media cache, retention (D55) | R · S | Frees what it says; never touches keys or unsent messages |
+| [ ] **M20-14 Notification keywords** | C · S | Round-trip push-rule contract test |
+| [ ] **M20-15 App Lock** (Face ID/passcode, delay) | C · M | Covers app switcher, Share, widgets; extension behaviour decided first |
+| [ ] **M20-16 Multi-select** (copy, forward, delete) | C · M | Power levels respected; partial failure reported |
+| [ ] **M20-17 Link previews**, off by default, never in encrypted rooms by default (D57) | C · M | No request before opt-in |
+| [ ] **M20-18 Unread tools**: mark all read, low-priority section | C · S | Goes through `ReadStatePolicy`; badge test |
+
+**Exit:** R tasks done; interop matrix (M17-7) re-run green.
+
+### M21 — Experience, accessibility and language
+**Goal:** feels like one finished Apple-native app (D84). **Depends on:** M20. **Risk:** PROJ-5.
+
+| Task | Class · size | Done when |
+|---|---|---|
+| [ ] **M21-1 State matrix**: every screen × loading, empty, error, offline, no-permission, recovering | R · M | Matrix in SCREEN_SPECIFICATIONS, each cell a `#Preview` or test; AC-UX-6 |
+| [ ] **M21-2 Flow walk-through**: install → first message; notification → reply; send photo; find an old message; recover from offline; new device | R · M | Steps counted and reduced; no dead end; AC-UX-5 with three people 👤 |
+| [ ] **M21-3 Motion and system settings**: all animation through `HaloMotion`; Reduce Motion, Reduce Transparency, Increase Contrast, Bold Text | R · M | Lint for raw `withAnimation`; AC-MOT-2; screenshots per setting |
+| [ ] **M21-4 Visual regression tests** for components and key screens (light, dark, contrast, AX5, RTL, iPad) | R · M | Run in `prepush.sh`; approach without a new dependency or justified (AGENTS §11) |
+| [ ] **M21-5 VoiceOver, Voice Control, full keyboard** on the golden path; audit every root screen | R · M · 📱 | AC-UX-8, AC-UX-9 |
+| [ ] **M21-6 Localisation**: a catalog per package, all strings, plurals; pseudo-language UI run; Beta 2 languages (Q-L10N) | R · L | AC-UX-10; lint: no new literal outside a catalog |
+| [ ] **M21-7 Copy**: one voice; one error map instead of the three private ones | R · S | DESIGN_SYSTEM §12 review; `HaloErrorCopy` the only source |
+| [ ] **M21-8 iPad and large screens**: split, inspector, drag and drop, keyboard; landscape media on iPhone | R · M · 📱 | HANDOFF §5 iPad checks passed |
+| [ ] **M21-9 First run without an account**: explain, and where to get one (Q-SIGNUP) | R · S | No dead end on the sign-in screen |
+| [ ] **M21-10 Structure**: the nine source files over 500 lines split; TECH_DEBT re-scored | C · M | No feature file over 500 lines |
+
+**Exit:** AC-UX-1–11 and AC-MOT-1–2 met; UX_AUDIT has no open High.
+
+### M22 — Beta, compliance and launch
+**Goal:** proven by people, accepted by Apple, launched calmly. **Depends on:** see §5 entry conditions.
+
+| Task | Class · size | Done when |
+|---|---|---|
+| [ ] **M22-1 Production push** 👤: `infra/sygnal` deployed with monitoring, APNs keys, capacity and an on-call rule | R · M | V-PUSH-5 on the Beta build; restart and key-rotation drill; PUSH_NOTIFICATIONS §6 checked |
+| [ ] **M22-2 Build pipeline**: versions, signing, dSYMs, reproducible archive, macOS workflow on the release commit | R · M · 👤 | A second person could cut a build from BUILD_AND_RELEASE alone |
+| [ ] **M22-3 Privacy**: manifests for every target, labels, policy text equal to behaviour (KLIPY, MetricKit, APNs) | R · S · 👤 | Archive privacy report clean (AC-UX-12); policy reviewed against PRIVACY §2 |
+| [ ] **M22-4 Legal** 👤: licences, export compliance, trademark, notices (D38, V-LEGAL) | R | Written sign-off |
+| [ ] **M22-5 Beta 1** (§5) and fixes | R · 👤📱 | AC-U8 7-day soak clean; exit bar met |
+| [ ] **M22-6 Final icon, sign-in artwork and published support and privacy pages** 👤 (Q-BRAND, Q-APPSTORE; before Beta 2, D115) | R | Links in Settings and the metadata agree and load |
+| [ ] **M22-7 Beta 2** (§5), feedback triage weekly | R · 👤 | Exit bar met |
+| [ ] **M22-8 Store presence** 👤: screenshots, metadata, review server and account (Q-REVIEW) | R | App Store Connect complete; a fresh reviewer can sign in and see messages |
+| [ ] **M22-9 Release candidate**: feature freeze, full device checklist, upgrade from every Beta build, App Review submission | R · 👤 | **G-SHIP** |
+| [ ] **M22-10 Launch**: phased release, daily watch for 14 days, stop rule, hotfix rehearsed | R · 👤 | 100 % rollout with no P0/P1 open |
+
+## 4. Ship-ready definition (D84)
+Halo is ready for external testers (Beta 2) when all rows hold except those marked 1.0; 1.0 needs all.
+
+| Area | Bar | Check | Today |
+|---|---|---|---|
+| Correctness | AC-U1–U7 green; AC-U8 soak with zero unexplained findings | Scenario suite, auditor | U1–U7 ✅ · soak open |
+| Reliability | AC-REL-1–7 | M18, M17-6 | open |
+| Security | AC-SEC-1–5; no high finding open | M18-12 | open |
+| Performance | All budgets (NFR-1, 2, 11–15) on an iPhone 15-class device, Release build | G-PERF | 2 of 7 measured, on a small account and a Debug build |
+| Scale | G-SCALE decided and met | V-SCALE-1 | open |
+| Seamless | AC-MOT-1, AC-MOT-2 | M19-9, M21-3 | open |
+| Messaging | Every R task of M20; interop matrix green | M17-7 | open |
+| Native feel | No raw colours or fixed font sizes outside `HaloDesignSystem` | AC-UX-1 | ✅ |
+| First five minutes | First message in ≤ 3 min, no dead ends | AC-UX-5 (3 people) | open |
+| States | Every screen × every state | AC-UX-6 | open (GA-25) |
+| Accessibility | Zero audit issues on root screens; VoiceOver + AX5 golden path | AC-UX-8, AC-UX-9 | partly |
+| Language | AC-UX-10 | M21-6 | open (GA-24) |
+| Stability | Beta: crash-free sessions ≥ 99.5 %, no hang > 2 s. **1.0: ≥ 99.8 %, no hang > 1 s in the last 14 days** | TestFlight + MetricKit | not measured (GA-01) |
+| Compliance | Manifests, labels, export, licences, legal, report/block | AC-UX-12, M22 | open |
+
+## 5. Release plan
+| Release | Contents | Audience | Entry | Exit |
 |---|---|---|---|---|
-| M0–M5 | MVP (done) | Foundation, read-only client, messaging, read-state engine, stickers v1, MAS/hardening | AC-U1–U7, AC-M*, AC-S*, AC-U8 (soak 📱) | G-NSE, G-UNREAD, G-FFI (PASS, D109) |
-| M6–M10 | P2 (done) | Bot cards, Bot Activity, Search + Saved, Gallery + Export, Threads | AC-B*, AC-A*, V-SEARCH-1, thread unread | — |
-| M11–M15 | Ship UX (done except 👤/📱) | Design system, single-stack nav (D85), core-flow polish, AX/L10n, ship readiness | AC-UX-1–AC-UX-12, Ship-ready definition | Q-BRAND, Q-APPSTORE, V-LEGAL |
-| M16 | System & iPad (done except 📱) | Share extension, Siri/Spotlight, widgets, Focus filter, iPad 3-col, composer panels, drag & drop | Unit/UI tests green (calls dropped, D94) | V-SHARE-1, Q-KLIPY-PROD |
-| M17 | Ship-readiness polish | Room-open smoothness, crash/silent-error sweep, Reduce Motion/Contrast, AC-UX-6, file splits, L10n | Zero silent mutation failures, AX/motion green | — |
-| M18 | Messaging completeness | Forward, in-room search & jump, code/spoilers/previews, voice/video polish, multi-select, message info | Unit/contract/UI tests green; E2EE/Honest UI intact | — |
-| M19 | Power-user depth | Spaces filter, moderation/room settings, `matrix.to`/QR, biometric App Lock, Storage UI, keywords | D85 shell & security invariants intact | — |
+| **Beta 1** (internal TestFlight) | M0–M16 + M17; M18 lands during it | Founder + 1–3 people | Push gateway live (M22-1); MetricKit in the build (M17-2); KLIPY production key or GIF search off (Q-KLIPY-PROD) | AC-U8 clean; no P0; M18 done |
+| **Beta 2** (external TestFlight) | + M18–M21 R tasks; finished C tasks | ≤ 25 trusted testers | Ship-ready rows met except 1.0-only; legal and privacy done (M22-3, M22-4); final artwork and pages (M22-6) | 14 days with no P0/P1; ≥ 10 active testers; stability bar |
+| **1.0** (App Store) | + Beta 2 fixes, store listing | Public (Matrix power users) | G-SHIP | Phased release complete |
+| **1.x** | §10 | — | Re-plan after 30 days of real feedback | — |
 
-## Gates
+**Severity.** P0: data loss, wrong recipient, key or token exposure, wrong unread that doesn't heal, crash loop. P1: a core flow fails or a visible state is
+wrong. P2: workaround exists. P3: polish. A P0 stops a rollout; fixed forward (BUILD_AND_RELEASE §6).
+
+## 6. Milestones
+| # | Milestone | Exit criteria | Gates |
+|---|---|---|---|
+| M0–M16 | Built (§11) | Device/founder leftovers in HANDOFF §5 | G-NSE, G-UNREAD, G-FFI (PASS, D109) |
+| M17 | Measure and prove | Baselines for every NFR | **G-SCALE** |
+| M18 | Security, data safety, reliability | AC-SEC-1–5, AC-REL-1–7 | G-UNREAD re-run |
+| M19 | Performance and seamless rendering | NFR-1, 2, 11–15; AC-MOT-1 | **G-PERF** |
+| M20 | Messaging completeness | R tasks; interop matrix | — |
+| M21 | Experience, accessibility, language | AC-UX-1–11; AC-MOT-2 | — |
+| M22 | Beta, compliance, launch | Release plan exits | **G-SHIP** |
+
+## 7. Gates
 | Gate | When | Status | Summary |
 |---|---|---|---|
 | **G-FFI** | M3 | **PASS (D109)** | Stay on upstream `MatrixRustSDK` binary (ADR-0003). |
-| **G-NSE** | M1 | **PASS (D109)** | 100/100 live iPhone 16 soak (`F-DEV-1`/`F-DEV-2`, 6.2 MB peak; ADR-0016). |
-| **G-UNREAD** | M3 | **PASS (D109)** | `ReadStatePolicy` over classic sync passes AC-U1–U7 (S01–S29); 7-day AC-U8 soak in Beta 1. |
+| **G-NSE** | M1 | **PASS (D109)** | 100/100 live iPhone 16 soak (ADR-0016). Re-run after M18-6/M18-7 change the NSE. |
+| **G-UNREAD** | M3 | **PASS (D109)** | S01–S29 over classic sync; 7-day AC-U8 soak in Beta 1. |
+| **G-SCALE** | M17 | open | Classic sync meets NFR-14 on the 1,000-room fixture and one real account, or Q-SYNC-SCALE picks another path **before** M19. The agent measures; the founder decides. |
+| **G-PERF** | M19 | open | All budgets on the reference device, Release build, two runs on different days. |
+| **G-SHIP** | M22 | open | §4 complete, zero P0/P1, upgrade path tested, rollback rehearsed, founder sign-off. |
 
-## Dependencies
+## 8. Dependencies
 ```mermaid
 flowchart LR
-  M0["M0–M5 MVP"] --> M6["M6–M10 P2"] --> M11["M11–M15 Ship UX"] --> M16["M16 System & iPad"] --> M17 --> M18 --> M19
+  M17["M17 Measure"] --> GS{G-SCALE}
+  GS --> M19["M19 Performance"]
+  M17 --> M18["M18 Security & reliability"] --> M19 --> GP{G-PERF} --> M20["M20 Messaging"] --> M21["M21 Experience"] --> B2["Beta 2"] --> RC["RC"] --> GO{G-SHIP} --> V1["1.0"]
+  M17 --> B1["Beta 1"] --> B2
+  PUSH["M22-1 Push gateway 👤"] --> B1
+  LEGAL["M22-3/4 Privacy & legal 👤"] --> B2
+  ART["M22-6 Artwork and pages 👤"] --> B2
+  STORE["M22-8 Store presence 👤"] --> RC
 ```
 
-## Technical risks per milestone
-See [RISK_REGISTER.md](RISK_REGISTER.md). Highest: T-NSE, T-RECEIPTS, T-STATE, PROJ-1.
+Founder items with long lead times, worth starting now: legal review, push gateway, KLIPY production key (Q-KLIPY-PROD), filtering entitlement (R-14), final artwork.
 
-## Done (M0–M16)
+## 9. Risks
+[RISK_REGISTER.md](RISK_REGISTER.md). Highest for the release: T-SCALE (classic sync on large accounts), T-IDENTITY, PROJ-1 (capacity), PROJ-6 (App Review).
+If capacity runs short, cut C tasks first, then move M20-9/10/11 to 1.1 by a founder decision — never M17–M19.
+
+## 10. Post-launch (P)
+Not scheduled; each needs a spec and, where noted, a decision.
+- **Spaces** as room-list filters (D85 shell kept); **room settings** (roles editor, aliases, join rules, history visibility); **QR codes** for people and rooms.
+- **QR sign-in and verifying contacts** (Q-VERIFY); **several accounts** (no decision; touches every store and the NSE).
+- **Sticker v2** (STICKERS §14), custom emoticons, sticker packs in spaces; **sequential voice playback**; live location; threads list.
+- **More languages**, accent colours, Live Activity for uploads, Apple Watch. Calls stay out (D94).
+- 📤 TD-15: filter in `SyncSettingsV2` (R-18, may become R through G-SCALE) and queued `sendRaw`/`sendSticker` (R-21). Always-on macOS CI (Q-CI-MAC, D71).
+
+**Where the previous M17–M19 items went:** room-open and thumbnails → M19-4, M19-5 · crash safety and silent errors → M18-8 · accessibility and motion → M21-3, M21-5 ·
+state coverage → M21-1 · file sizes → M21-10 · localisation → M21-6 · forward → M20-6 · in-room search and jump → M20-1, M20-11 · rendering and previews → M20-10, M20-17 ·
+voice and video → M20-2, M20-3 · multi-select → M20-16 · message details → M20-9 · Spaces, roles editor, QR → §10 · moderation → M20-12 · links → M18-9 · App Lock → M20-15 ·
+storage → M20-13 · keywords → M20-14. The 1.0/post-launch split is D122.
+
+## 11. Done (M0–M16)
 Detailed history in `git log`, [CODEBASE_REVIEW.md](CODEBASE_REVIEW.md), [development/TECH_DEBT.md](development/TECH_DEBT.md), and [testing/GATE_EVALUATION_M3.md](testing/GATE_EVALUATION_M3.md).
 
 - **M0 Foundation:** `infra/dev` Synapse, Swift packages, `project.yml`, pinned `MatrixRustSDK`, Keychain, CI/licence/boundary gates, login & restore.
@@ -98,7 +270,8 @@ Detailed history in `git log`, [CODEBASE_REVIEW.md](CODEBASE_REVIEW.md), [develo
 - **M8–M10 P2 features:** E2EE `SearchService`, Saved Messages, per-room & Global Media Gallery (D83), encrypted export (D32), Threads.
 - **M11 Design system:** `HaloDesignSystem` tokens/components/haptics, WCAG AA contrast tests, `check-design-tokens.sh`.
 - **M12 Navigation (D85):** single `NavigationStack`, `ChatsRouter` + `@SceneStorage`, `.searchable` messages, unified routing.
-- **M13 Core-flow polish:** first-run priming/checklist, skeleton rows, swipe-to-reply, double-tap 👍, `HaloErrorCopy`, `ActionState`.
-- **M14–M15 AX, L10n & ship prep:** VoiceOver/AX5, `HaloUITests`, `Localizable.xcstrings`, `PrivacyInfo.xcprivacy`, feedback/What's New, `docs/release/` drafts (D115).
+- **M13 Core-flow polish:** first-run priming/checklist, skeleton rows, swipe-to-reply, double-tap 👍, `HaloErrorCopy`; `ActionState` was added but isn't used (GA-13).
+- **M14–M15 AX, L10n & ship prep (partly: GA-24, GA-25, GA-26):** VoiceOver/AX5, `HaloUITests`, first `Localizable.xcstrings` keys, `PrivacyInfo.xcprivacy`, feedback/What's New, `docs/release/` drafts (D115).
 - **M16 System & iPad:** Share extension + direct send (D87/D92), Siri/Spotlight + Send-by-Siri (D88), unread widgets (D89/D93), Focus filter (D90), iPad 3-column layout + shortcuts + drag & drop (D91), composer panels + KLIPY + voice/location/poll/article (D97–D106).
 - **Architecture & Tech Debt (ADR-0022, Phases A–D, TD-12):** two-manifest consolidation (`HaloCore` + `HaloApple`), swift-format/SwiftLint, `PreferencesPort`, `bot_action` table, AES-256-GCM `halo.sqlite` field encryption (D108).
+- **After M16:** one unread count for icon, widgets and list, background refresh, offline reads, account data changed from the server's copy, clean contract runs (D118–D120, PR #88).

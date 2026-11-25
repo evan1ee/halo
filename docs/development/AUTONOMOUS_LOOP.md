@@ -2,7 +2,7 @@
 
 How an AI agent works through the roadmap without asking after every step (founder decision D70, 2026-11-20). It is started
 with the `/loop` prompt in §1 and follows AGENTS.md like any other contributor; this file only adds the loop and the merge rules.
-State between iterations lives in [HANDOFF.md](../../HANDOFF.md); the work queue is [ROADMAP.md](../ROADMAP.md) §"Remaining work".
+State between iterations lives in [HANDOFF.md](../../HANDOFF.md); the work queue is [ROADMAP.md](../ROADMAP.md) §3 (M17–M22, D121).
 
 ## 1. Starting the loop
 ```text
@@ -11,7 +11,7 @@ State between iterations lives in [HANDOFF.md](../../HANDOFF.md); the work queue
 The agent first reads AGENTS.md, HANDOFF.md and this file (AGENTS.md §0).
 
 ## 2. One iteration
-1. **Pick** the first unchecked item of ROADMAP §"Remaining work" that the agent can do on this machine (§5 lists what it can't).
+1. **Pick** the first unchecked R task of ROADMAP §3 (then C tasks of the same milestone) that the agent can do on this machine (§5 lists what it can't).
    HANDOFF §6 may name a more specific next step; it wins if it belongs to the same item.
 2. **Plan**: read the owning spec section and the ACs it must meet; check the item against DECISION_LOG and OPEN_QUESTIONS
    (AGENTS.md §0 steps 3–4). Verify every SDK API in the pinned source (ios/SDKVERSION.md).
@@ -49,12 +49,13 @@ The agent first reads AGENTS.md, HANDOFF.md and this file (AGENTS.md §0).
 - Never force-push `main`, never rewrite merged history, never skip hooks (`--no-verify`).
 
 ## 4. Definition of done
-- **Item:** behaviour implemented as specified, tests at the lowest sensible layer, docs updated, checks of §2 step 4 green,
-  merged.
+- **Item:** its "Done when" in ROADMAP §3 holds by a test that failed before, with the states, accessibility, strings and budgets of ROADMAP §1; docs
+  updated, the GA row removed, checks of §2 step 4 green, merged.
 - **Milestone:** its exit criteria in ROADMAP §Milestones and the ACs of its specs are met *by tests*, or, where a check needs
   hardware or the founder (§5), the item is listed under "Needs the founder" in HANDOFF §5 with the exact check to run. The
   milestone is then marked "done except: …" in ROADMAP and the loop goes on to the next one.
-- **Roadmap:** M0–M5 is the MVP ("the app meets the spec"); M6–M10 follow. The loop ends when every item is done or listed as
+- **Gate:** the agent measures and records; only the founder decides G-SCALE, G-PERF and G-SHIP. At G-SCALE the loop may go on with M18 but not M19.
+- **Roadmap:** M0–M16 are built; M17–M22 lead to 1.0. The loop ends when every item is done or listed as
   needing the founder, and says so in HANDOFF §1.
 
 ## 5. What the agent doesn't do alone
