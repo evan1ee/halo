@@ -1648,7 +1648,7 @@ private final class ServerControl: Sendable {
 }
 
 /// The timeline kept up to date in the background, so a test can wait for several states of one stream in turn.
-private final class TimelineMirror: Sendable {
+final class TimelineMirror: Sendable {
     private let items = Mutex<[HaloDomain.TimelineItem]>([])
     private let task = Mutex<Task<Void, Never>?>(nil)
 
@@ -1665,6 +1665,16 @@ private final class TimelineMirror: Sendable {
     }
 
     deinit { task.withLock { $0?.cancel() } }
+
+    /// Whether the timeline holds a text message with this body, from anyone.
+    func shows(_ body: String) -> Bool {
+        items.withLock { items in
+            items.contains { item in
+                if case .event(let event) = item.content, case .text(let text, _) = event.kind { return text == body }
+                return false
+            }
+        }
+    }
 
     /// The own text message with this body, if the timeline holds it.
     func own(_ body: String) -> HaloDomain.TimelineEvent? {
@@ -1688,7 +1698,7 @@ private final class TimelineMirror: Sendable {
 }
 
 /// The latest message bodies of a room as the server has them, read with a plain HTTP login of its own.
-private struct ServerMessages {
+struct ServerMessages {
     let server: String
     let room: RoomID
 

@@ -5,9 +5,12 @@ What it checks: with real devices (own sync token each, own receipts), what the 
 limited timelines, a second device's receipts, marked-unread and mute. Those are the inputs the client-side model in
 HaloApplicationTests/ReadStateScenarioTests.swift assumes. Client behaviour (policy, outbox, restarts) is not run here.
 Needs infra/dev up and Docker (users via register_new_matrix_user). Creates throwaway users per run.
-Usage: tools/scenario-driver/run_scenarios.py [S04 …]    (HALO_DEV_SERVER overrides http://localhost:8008)
+Fault cases F01–F06 (ROADMAP M17-6) need the fault proxy between the devices and the server, so they run only through
+`infra/test/run.sh scenarios`, which also starts a throwaway server; otherwise they are listed as skipped. A device that misbehaves on
+purpose (HALO_SCENARIO_BREAK=retry|txn) must make them fail: that is how they are checked to be able to.
+Usage: tools/scenario-driver/run_scenarios.py [S04 F02 …]    (HALO_DEV_SERVER overrides http://localhost:8008)
 Exit status 1 if the server disagrees with the model; the report names each scenario and what it observed."""
-import json, os, secrets, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
+import http.client, json, os, secrets, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, uuid
 
 B = os.environ.get("HALO_DEV_SERVER", "http://localhost:8008") + "/_matrix/client/v3"
 PW = secrets.token_hex(12)  # throwaway, local dev server only
@@ -36,9 +39,9 @@ def login(name):
 
 
 def register(name):
-    subprocess.run(["docker", "exec", "-i", "halo-dev-synapse-1", "register_new_matrix_user", "-c", "/data/homeserver.yaml", "-u", name,
+    subprocess.run(["docker", "exec", "-i", os.environ.get("HALO_DEV_SYNAPSE_CONTAINER", "halo-dev-synapse-1"), "register_new_matrix_user", "-c", "/data/homeserver.yaml", "-u", name,
                     "--password-file", "/dev/stdin", "--no-admin", "--exists-ok", "http://localhost:8008"],
-                   input=PW.encode(), capture_output=True)
+                   input=PW.encode(), capture_output=True, check=True)
 
 
 class Device:
@@ -225,8 +228,119 @@ def s21():
     check("S21", "encrypted mentions-only, a (hidden) mention: the server counts 0 (SERVER_BLIND)", A1.counts(r), (0, 0))
 
 
-ALL = {k.upper(): v for k, v in globals().items() if k.startswith("s") and k[1:3].isdigit() and callable(v)}
+# MARK: Fault cases (through infra/test's proxy)
+
+CONTROL, BREAK = os.environ.get("HALO_TEST_CONTROL"), os.environ.get("HALO_SCENARIO_BREAK", "")
+
+
+def fault(**rule):
+    r = urllib.request.Request(CONTROL + "/rules", method="POST", data=json.dumps(rule).encode())
+    with urllib.request.urlopen(r, timeout=5) as f:
+        return json.load(f)["id"]
+
+
+def heal():
+    urllib.request.urlopen(urllib.request.Request(CONTROL + "/rules", method="DELETE"), timeout=5).close()
+
+
+def raw(method, path, token, body=None, timeout=20):
+    """One attempt, no retries: (status or None when no answer came, answer)."""
+    r = urllib.request.Request(B + path, method=method, data=json.dumps(body).encode() if body is not None else None,
+                               headers={"content-type": "application/json", "Authorization": "Bearer " + token})
+    try:
+        with urllib.request.urlopen(r, timeout=timeout) as f:
+            return f.status, json.load(f)
+    except urllib.error.HTTPError as e:
+        return e.code, json.load(e)
+    except (OSError, http.client.HTTPException, ValueError):
+        return None, {}
+
+
+def persist(method, path, token, body=None, timeout=20, seconds=20):
+    """What a correct client does: the same request again until it is answered, waiting as told after 429."""
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        code, answer = raw(method, path, token, body, timeout)
+        if code == 200 or BREAK == "retry":
+            return code, answer
+        time.sleep(answer.get("retry_after_ms", 250) / 1000)
+    return None, {}
+
+
+def send_persistently(dev, r, text, timeout=20):
+    first = path = f"/rooms/{q(r)}/send/m.room.message/{uuid.uuid4().hex}"
+    body = {"msgtype": "m.text", "body": text}
+    code, answer = raw("PUT", first, dev.tok, body, timeout)
+    if code == 200:
+        return answer["event_id"]
+    if BREAK == "retry":
+        return None
+    time.sleep(answer.get("retry_after_ms", 250) / 1000)
+    if BREAK == "txn":  # a client that makes up a new transaction ID for every attempt
+        path = f"/rooms/{q(r)}/send/m.room.message/{uuid.uuid4().hex}"
+    return persist("PUT", path, dev.tok, body, timeout)[1].get("event_id")
+
+
+def bodies(r):
+    d = req("GET", f"/rooms/{q(r)}/messages?dir=b&limit=100", A2.tok)
+    return [e["content"].get("body") for e in reversed(d["chunk"]) if e["type"] == "m.room.message"]
+
+
+def f01():
+    r = room(); A1.sync()
+    number = fault(action="refuse")
+    code, _ = raw("GET", "/sync?timeout=0", A1.tok)
+    check("F01", "the server is down: no answer", code, None)
+    heal(); Bx.send(r, "while away"); check("F01", "back: the same sync position brings what was missed", A1.counts(r), (1, 0))
+
+
+def f02():
+    r = room()
+    fault(action="lose", path="/send/", times=1)
+    event = send_persistently(A1, r, "lost answer"); heal()
+    check("F02", "the answer was lost, the retry has the same transaction: one message, the same event", (bodies(r), event is not None), (["lost answer"], True))
+
+
+def f03():
+    r = room()
+    fault(action="status", status=429, retry_after_ms=400, path="/send/", times=2)
+    started = time.monotonic(); send_persistently(A1, r, "limited"); waited = time.monotonic() - started; heal()
+    check("F03", "rate limited twice: sent once, after the waits it was told", (bodies(r), waited >= 0.8), (["limited"], True))
+
+
+def f04():
+    r = room(); A1.sync(); Bx.send(r, "x")
+    fault(action="cut", bytes=20, path="/sync", times=1)
+    path = f"/sync?timeout=0&since={A1.since}"
+    code, answer = raw("GET", path, A1.tok)
+    check("F04", "the sync response breaks off: nothing usable", code, None)
+    fault(action="cut", bytes=20, path="/sync", times=1)
+    code, answer = persist("GET", path, A1.tok); heal()
+    check("F04", "the same position again delivers the whole response", r in answer.get("rooms", {}).get("join", {}), True)
+
+
+def f05():
+    r = room(); A1.sync(); Bx.send(r, "y")
+    fault(action="hang", path="/sync", times=1)
+    started = time.monotonic(); code, answer = persist("GET", f"/sync?timeout=0&since={A1.since}", A1.tok, timeout=2); took = time.monotonic() - started; heal()
+    check("F05", "half-open connection: given up after its timeout, then delivered", (r in answer.get("rooms", {}).get("join", {}), took < 6), (True, True))
+
+
+def f06():
+    r = room()
+    fault(action="status", status=503, path="/send/", times=1)
+    for number in range(3):
+        send_persistently(A1, r, f"m{number}")
+    heal()
+    check("F06", "a server error on the first of three: all once and in order", bodies(r), ["m0", "m1", "m2"])
+
+
+ALL = {k.upper(): v for k, v in globals().items() if k[0] in "sf" and k[1:3].isdigit() and callable(v)}
 want = [a.upper() for a in sys.argv[1:]] or sorted(ALL)
+if not CONTROL:
+    skipped = [s for s in want if s.startswith("F")]
+    want = [s for s in want if s not in skipped]
+    if skipped: print("skip " + " ".join(skipped) + " (need the fault proxy: infra/test/run.sh scenarios)")
 for sid in want:
     ALL[sid]()
 bad = [x for x in results if x[2] != x[3]]
