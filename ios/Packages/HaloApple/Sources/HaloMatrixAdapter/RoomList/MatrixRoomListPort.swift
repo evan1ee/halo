@@ -243,7 +243,7 @@ public final class MatrixRoomListPort: RoomListPort {
         _ room: Room, _ settings: NotificationSettings, hasRecords: Bool = false, eventTimes: EventTimeCache? = nil
     ) async throws(HaloError) -> RoomSummary {
         // Fetch RoomInfo once per room and reuse it across direct/encryption/counts/favourite/inviter (R-19).
-        let info = try? await room.roomInfo()
+        let info = try? await room.roomInfo()  // best-effort: a read; the caller falls back to a default and nothing changes
         let isDirect: Bool = if let info { info.isDirect } else { await room.isDirect() }
         let isEncrypted: Bool = if let info, info.encryptionState != .unknown {
             info.encryptionState == .encrypted
@@ -276,7 +276,7 @@ public final class MatrixRoomListPort: RoomListPort {
     static func inviterInfo(_ room: Room, cached: MatrixRustSDK.RoomMember? = nil) async -> (name: String, id: UserID?)? {
         guard room.membership() == .invited else { return nil }
         let member: MatrixRustSDK.RoomMember?
-        if let cached { member = cached } else { member = try? await room.inviter() }
+        if let cached { member = cached } else { member = try? await room.inviter() }  // best-effort: a read; the caller falls back to a default and nothing changes
         guard let member else { return nil }
         let name = member.displayName.flatMap { $0.isEmpty ? nil : $0 } ?? member.userId
         return (name, try? UserID(member.userId))
@@ -300,7 +300,7 @@ public final class MatrixRoomListPort: RoomListPort {
         let me = room.ownUserId()
         var newest: (eventId: String, receipt: UInt64)?
         for type in [ReceiptType.read, .readPrivate] {
-            guard let found = try? await room.loadUserReceipt(receiptType: type, thread: .unthreaded, userId: me) else { continue }
+            guard let found = try? await room.loadUserReceipt(receiptType: type, thread: .unthreaded, userId: me) else { continue }  // best-effort: a read; the caller falls back to a default and nothing changes
             let at = found.receipt.timestamp ?? 0
             if let current = newest {
                 if at >= current.receipt { newest = (found.eventId, at) }
@@ -310,7 +310,7 @@ public final class MatrixRoomListPort: RoomListPort {
         }
         guard let rawEventId = newest?.eventId, let eventID = try? EventID(rawEventId) else { return nil }
         if let known = eventTimes?.get(rawEventId) { return (eventID, known) }
-        guard let event = try? await room.loadOrFetchEvent(eventId: rawEventId) else { return nil }
+        guard let event = try? await room.loadOrFetchEvent(eventId: rawEventId) else { return nil }  // best-effort: a read; the caller falls back to a default and nothing changes
         let time = Date(timeIntervalSince1970: Double(event.timestamp()) / 1000)
         eventTimes?.set(rawEventId, time)
         return (eventID, time)
@@ -320,9 +320,9 @@ public final class MatrixRoomListPort: RoomListPort {
     /// showing too much attention is the safe error (a missed message is worse than an extra dot).
     static func readCounts(of room: Room, info: RoomInfo? = nil, settings: NotificationSettings, isEncrypted: Bool, isOneToOne: Bool) async -> RoomReadCounts {
         let resolvedInfo: RoomInfo?
-        if let info { resolvedInfo = info } else { resolvedInfo = try? await room.roomInfo() }
+        if let info { resolvedInfo = info } else { resolvedInfo = try? await room.roomInfo() }  // best-effort: a read; the caller falls back to a default and nothing changes
         var mode = NotificationMode.allMessages
-        if let effective = try? await settings.getRoomNotificationSettings(roomId: room.id(), isEncrypted: isEncrypted, isOneToOne: isOneToOne) {
+        if let effective = try? await settings.getRoomNotificationSettings(roomId: room.id(), isEncrypted: isEncrypted, isOneToOne: isOneToOne) {  // best-effort: a read; the caller falls back to a default and nothing changes
             mode = Self.mode(effective.mode)
         }
         guard let resolvedInfo else { return RoomReadCounts(mode: mode, server: .zero, sdk: .zero, isMarkedUnread: false) }

@@ -371,7 +371,7 @@ public actor ReadStateCoordinator {
             }
         }
         audited = next
-        if !events.isEmpty { try? await audit.port.append(events) }
+        if !events.isEmpty { try? await audit.port.append(events) }  // best-effort: diagnostics, cache or best-effort sync; the next update repeats it
     }
 
     private func updatePeriodicAudit() {

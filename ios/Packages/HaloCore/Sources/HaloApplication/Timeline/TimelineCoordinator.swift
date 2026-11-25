@@ -108,7 +108,7 @@ public actor TimelineCoordinator {
         typingSubscription = nil
         identitySubscription?.cancel()
         identitySubscription = nil
-        if typingSentAt != nil { try? await session?.setTyping(false) }
+        if typingSentAt != nil { try? await session?.setTyping(false) }  // best-effort: typing notices and paging are not worth an error; the next one retries
         typingSentAt = nil
         let closing = session, live = liveSession
         session = nil
@@ -153,7 +153,7 @@ public actor TimelineCoordinator {
         isPaginatingForwards = true
         defer { isPaginatingForwards = false }
         let current = generation
-        guard let reachedEnd = try? await session.paginateForwards(count: 20), current == generation else { return }
+        guard let reachedEnd = try? await session.paginateForwards(count: 20), current == generation else { return }  // best-effort: typing notices and paging are not worth an error; the next one retries
         snapshot.reachedEnd = reachedEnd
         publish()
     }
@@ -210,7 +210,7 @@ public actor TimelineCoordinator {
             guard typingSentAt != nil else { return }
             typingSentAt = nil
         }
-        try? await session.setTyping(isTyping)
+        try? await session.setTyping(isTyping)  // best-effort: typing notices and paging are not worth an error; the next one retries
     }
 
     /// Sends a sticker into the open timeline (no local echo: it shows when the server confirms).

@@ -207,6 +207,11 @@ struct RoomListInviteTests {
         #expect(port.acceptedInvites == [id] && model.actionError == nil)
         await model.declineInvite(id)
         #expect(port.declinedInvites == [id])
+        // A double tap on the same action does it once (AC-REL-4).
+        async let one: Void = model.acceptInvite(id)
+        async let two: Void = model.acceptInvite(id)
+        _ = await (one, two)
+        #expect(port.acceptedInvites == [id, id], "two taps, one more accept")
         port.fail(with: .notFound)
         await model.acceptInvite(id)
         #expect(model.actionError != nil)

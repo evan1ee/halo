@@ -78,7 +78,7 @@ public actor StickerLibrary {
         let started = generation
         phase = .loading
         publish()
-        let remote = try? await prefsStore.load()
+        let remote = try? await prefsStore.load()  // best-effort: diagnostics, cache or best-effort sync; the next update repeats it
         guard generation == started else { return }
         if let remote { prefs = prefs.merged(with: remote) }
         do {

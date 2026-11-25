@@ -48,7 +48,7 @@ public enum AccountDataEraser {
         for url in locations.all { try? FileManager.default.removeItem(at: url) }
         await shortcuts?.clear()
         if let account {
-            try? await keychain.delete(.haloDatabaseKey(account))
+            try? await keychain.delete(.haloDatabaseKey(account))  // best-effort: a key that is already gone is the goal; the rest of the erase must still run
             KlipyShelfStore(account: account, defaults: defaults).erase()
         }
     }

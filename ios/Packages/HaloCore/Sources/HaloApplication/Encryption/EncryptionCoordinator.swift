@@ -147,7 +147,7 @@ public actor EncryptionCoordinator {
 
     /// Cancels an active SAS verification flow and resets to `.idle` (FR-2).
     public func cancelVerification() async {
-        try? await port.cancelVerification()
+        try? await port.cancelVerification()  // best-effort: a cancelled or acknowledged verification step; the flow reports its own state
         snapshot.verificationPhase = .idle
     }
 

@@ -57,7 +57,7 @@ public final class MatrixEncryptionPort: EncryptionPort {
         continuation.onTermination = { [weak self] _ in self?.state.withLock { _ = $0.phaseContinuations.removeValue(forKey: id) } }
         Task { [weak self] in
             guard let self else { return }
-            _ = try? await self.ensureVerificationController()
+            _ = try? await self.ensureVerificationController()  // best-effort: a cancelled or acknowledged verification step; the flow reports its own state
         }
         return stream
     }
@@ -230,7 +230,7 @@ public final class MatrixEncryptionPort: EncryptionPort {
                 // Acknowledge the incoming request off the callback thread (AGENTS.md §8), then publish `.incomingRequest`.
                 Task { [weak self] in
                     guard let self else { return }
-                    try? await controller.acknowledgeVerificationRequest(
+                    try? await controller.acknowledgeVerificationRequest(  // best-effort: a cancelled or acknowledged verification step; the flow reports its own state
                         senderId: details.senderProfile.userId, flowId: details.flowId)
                     self.updatePhase(.incomingRequest(VerificationRequest(
                         senderID: details.senderProfile.userId,
@@ -243,7 +243,7 @@ public final class MatrixEncryptionPort: EncryptionPort {
                 Task { [weak self] in
                     guard let self else { return }
                     self.updatePhase(.startingSAS)
-                    try? await controller.startSasVerification()
+                    try? await controller.startSasVerification()  // best-effort: a cancelled or acknowledged verification step; the flow reports its own state
                 }
             },
             onStartSAS: { [weak self] in
@@ -263,7 +263,7 @@ public final class MatrixEncryptionPort: EncryptionPort {
                 guard let self else { return }
                 self.updatePhase(.verified)
                 Task { [weak self] in
-                    guard let self, let encryption = try? await self.session.encryption() else { return }
+                    guard let self, let encryption = try? await self.session.encryption() else { return }  // best-effort: a cancelled or acknowledged verification step; the flow reports its own state
                     self.refresh(encryption)
                 }
             }

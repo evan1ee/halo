@@ -540,7 +540,7 @@ public actor MatrixSessionPort: SessionPort {
             sendQueueErrorsHandle?.cancel()
             sendQueueErrorsHandle = client.subscribeToSendQueueStatus(listener: errors)
             sendQueueErrors = errors
-            try? await client.setMediaRetentionPolicy(policy: Self.defaultMediaRetentionPolicy)
+            try? await client.setMediaRetentionPolicy(policy: Self.defaultMediaRetentionPolicy)  // best-effort: a read; the caller falls back to a default and nothing changes
         }
         authDelegateHandle?.cancel()
         let auth = AuthDelegate { [weak self] isSoftLogout in

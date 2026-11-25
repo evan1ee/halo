@@ -51,16 +51,16 @@ public final class MatrixTimelinePort: TimelinePort {
     }
 
     private func warmOnce(_ wanted: [RoomID]) async {
-        guard let client = try? await session.signedInClient() else { return }
+        guard let client = try? await session.signedInClient() else { return }  // best-effort: a read; the caller falls back to a default and nothing changes
         warmState.withLock { state in
             if state.client !== client { state.client = client; state.timelines = [:] }
             state.timelines = state.timelines.filter { wanted.contains($0.key) }  // rooms that left the top are let go
         }
         for id in wanted {
             let needed = warmState.withLock { state in state.client === client && state.timelines[id] == nil && state.open[id, default: 0] == 0 }
-            guard needed, let room = try? await session.room(id), let timeline = try? await room.timeline() else { continue }
+            guard needed, let room = try? await session.room(id), let timeline = try? await room.timeline() else { continue }  // best-effort: a read; the caller falls back to a default and nothing changes
             // Kept only with its first page: a failed load would otherwise be served later as an empty room.
-            guard (try? await timeline.paginateBackwards(numEvents: 20)) != nil else { continue }
+            guard (try? await timeline.paginateBackwards(numEvents: 20)) != nil else { continue }  // best-effort: a read; the caller falls back to a default and nothing changes
             warmState.withLock { state in
                 if state.client === client, state.open[id, default: 0] == 0 { state.timelines[id] = timeline }
             }
@@ -88,7 +88,7 @@ public final class MatrixTimelinePort: TimelinePort {
 
     /// Requests the first page of history and waits for it for at most 400 ms (it keeps loading afterwards).
     private static func firstPage(of timeline: Timeline) async {
-        let page = Task { _ = try? await timeline.paginateBackwards(numEvents: 20) }
+        let page = Task { _ = try? await timeline.paginateBackwards(numEvents: 20) }  // best-effort: a read; the caller falls back to a default and nothing changes
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await page.value }
             group.addTask { try? await Task.sleep(for: .milliseconds(400)) }
@@ -100,7 +100,7 @@ public final class MatrixTimelinePort: TimelinePort {
     public func open(room id: RoomID) async throws(HaloError) -> any TimelineSession {
         let room = try await session.room(id)
         let own = try await session.ownUserID()
-        let client = try? await session.signedInClient()
+        let client = try? await session.signedInClient()  // best-effort: a read; the caller falls back to a default and nothing changes
         let ready = warmState.withLock { state -> Timeline? in
             state.open[id, default: 0] += 1
             guard let client, state.client === client else { return nil }
@@ -317,7 +317,7 @@ final class MatrixTimelineSession: TimelineSession {
         let listener = IdentityListener(own: ownUserID, continuation: continuation)
         // The SDK reports the state of the members it knows when the subscription starts, then changes.
         let room = self.room
-        let subscription = Task { try? await room.subscribeToIdentityStatusChanges(listener: listener) }
+        let subscription = Task { try? await room.subscribeToIdentityStatusChanges(listener: listener) }  // best-effort: a read; the caller falls back to a default and nothing changes
         continuation.onTermination = { _ in Task { await subscription.value?.cancel() } }
         return output
     }
@@ -453,12 +453,12 @@ final class MatrixTimelineSession: TimelineSession {
     func pinnedEventIDs() async -> [EventID] {
         var result: [EventID] = []
         var seen: Set<EventID> = []
-        if let info = try? await room.roomInfo() {
+        if let info = try? await room.roomInfo() {  // best-effort: a read; the caller falls back to a default and nothing changes
             for raw in info.pinnedEventIds {
                 if let id = try? EventID(raw), seen.insert(id).inserted { result.append(id) }
             }
         }
-        guard let client = try? await session.signedInClient() else { return result }
+        guard let client = try? await session.signedInClient() else { return result }  // best-effort: a read; the caller falls back to a default and nothing changes
         if let content = await readPersonalPins(client: client) {
             for id in PersonalPinnedEvents.pinned(in: roomID, from: content) where seen.insert(id).inserted {
                 result.append(id)
@@ -498,7 +498,7 @@ final class MatrixTimelineSession: TimelineSession {
                 return updated
             }
         } catch { throw ErrorMapper.map(error) }
-        let isRoomPinned = (try? await room.roomInfo().pinnedEventIds.contains(event.rawValue)) ?? false
+        let isRoomPinned = (try? await room.roomInfo().pinnedEventIds.contains(event.rawValue)) ?? false  // best-effort: a read; the caller falls back to a default and nothing changes
         if isRoomPinned || !removedPersonal {
             do {
                 _ = try await timeline.unpinEvent(eventId: event.rawValue)
@@ -513,7 +513,7 @@ final class MatrixTimelineSession: TimelineSession {
     }
 
     private func readPersonalPins(client: Client) async -> [String: Any]? {
-        guard let json = try? await client.accountData(eventType: PersonalPinnedEvents.eventType) else { return nil }
+        guard let json = try? await client.accountData(eventType: PersonalPinnedEvents.eventType) else { return nil }  // best-effort: a read; the caller falls back to a default and nothing changes
         return try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
     }
 

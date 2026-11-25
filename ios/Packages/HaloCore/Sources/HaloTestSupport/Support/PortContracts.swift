@@ -127,7 +127,7 @@ public enum TimelinePortContract {
     /// Sending shows a local echo of the text as the user's own message and ends `.sent`; blank text is rejected.
     public static func verifySend(_ port: any TimelinePort, room: RoomID, text: String, maxDiffs: Int = 1_000) async throws {
         let session = try await port.open(room: room)
-        let pagination = Task { for _ in 0..<5 { if (try? await session.paginateBackwards(count: 20)) == true { break } } }
+        let pagination = Task { for _ in 0..<5 { if (try? await session.paginateBackwards(count: 20)) == true { break } } }  // best-effort: test harness
         defer { pagination.cancel() }
         do {
             try await session.send(text: "   ")
@@ -159,7 +159,7 @@ public enum TimelinePortContract {
     /// React, un-react, edit and delete on the user's own just-sent message (MESSAGING FR-2, TIMELINE FR-7).
     public static func verifyInteractions(_ port: any TimelinePort, room: RoomID, text: String, maxDiffs: Int = 2_000) async throws {
         let session = try await port.open(room: room)
-        let pagination = Task { for _ in 0..<5 { if (try? await session.paginateBackwards(count: 20)) == true { break } } }
+        let pagination = Task { for _ in 0..<5 { if (try? await session.paginateBackwards(count: 20)) == true { break } } }  // best-effort: test harness
         defer { pagination.cancel() }
         let stream = session.items()
         try await session.send(text: text)

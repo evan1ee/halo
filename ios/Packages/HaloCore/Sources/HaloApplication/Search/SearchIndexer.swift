@@ -123,7 +123,7 @@ public actor SearchIndexer {
 
     /// A key backup was connected or keys were imported: messages without a key are asked for again at once (AC-SRCH-1).
     public func keysArrived() async {
-        try? await index.retryUndecryptableNow()
+        try? await index.retryUndecryptableNow()  // best-effort: the index repairs itself: the next pass redoes what is missing
         nudge()
     }
 
@@ -176,9 +176,9 @@ public actor SearchIndexer {
 
     /// Rooms left while the app wasn't listening.
     private func removeStaleRooms() async {
-        guard let joined = await source.joinedRooms(), !joined.isEmpty, let indexed = try? await index.indexedRooms() else { return }
+        guard let joined = await source.joinedRooms(), !joined.isEmpty, let indexed = try? await index.indexedRooms() else { return }  // best-effort: the index repairs itself: the next pass redoes what is missing
         let stale = indexed.subtracting(joined)
-        if !stale.isEmpty { try? await index.apply([.removeRooms(stale.sorted { $0.rawValue < $1.rawValue })]) }
+        if !stale.isEmpty { try? await index.apply([.removeRooms(stale.sorted { $0.rawValue < $1.rawValue })]) }  // best-effort: the index repairs itself: the next pass redoes what is missing
     }
 
     // MARK: History lane
@@ -210,7 +210,7 @@ public actor SearchIndexer {
     private func rest(_ duration: Duration) async {
         guard duration > .zero, !Task.isCancelled, !isNudged else { return }
         let wait = sleep
-        let task = Task { _ = try? await wait(duration) }
+        let task = Task { _ = try? await wait(duration) }  // best-effort: the index repairs itself: the next pass redoes what is missing
         nap = task
         await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
         nap = nil
@@ -228,7 +228,7 @@ public actor SearchIndexer {
             await refreshStatus(phase: .paused(pause))
             return .idle
         }
-        if !missed.isEmpty, (try? await index.apply([.check(missed.sorted { $0.rawValue < $1.rawValue })])) != nil { missed = [] }
+        if !missed.isEmpty, (try? await index.apply([.check(missed.sorted { $0.rawValue < $1.rawValue })])) != nil { missed = [] }  // best-effort: the index repairs itself: the next pass redoes what is missing
         let joined = await rooms()
         let work: SearchHistoryWork?
         do { work = try await index.nextWork(rooms: joined, limit: 1).first } catch {
@@ -310,7 +310,7 @@ public actor SearchIndexer {
             case .check(let room): .checked(room, gapFrom: nil)
             case .start(let room), .history(let room, _): .blocked(room)
             }
-            guard (try? await index.apply([operation])) != nil else { break }
+            guard (try? await index.apply([operation])) != nil else { break }  // best-effort: the index repairs itself: the next pass redoes what is missing
             log?.info("search: part of a room isn't readable", error: error)
             return .worked
         default: break
@@ -332,7 +332,7 @@ public actor SearchIndexer {
         var new = status
         new.phase = phase
         let joined = await rooms()
-        if let coverage = try? await index.coverage(), let statistics = try? await index.statistics() {
+        if let coverage = try? await index.coverage(), let statistics = try? await index.statistics() {  // best-effort: the index repairs itself: the next pass redoes what is missing
             new.totalRooms = joined.count
             new.completeRooms = joined.reduce(0) { count, room in count + (coverage[room].map { $0.state != .partial } ?? false ? 1 : 0) }
             new.searchedBackTo = SearchIndexPolicy.searchedBackTo(joined, coverage: coverage)

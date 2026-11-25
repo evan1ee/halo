@@ -37,3 +37,24 @@ public final class ActionState {
         isRunning = false
     }
 }
+
+/// Double-tap protection for actions that are many and keyed, such as "delete this message" or "mute that room" (AC-REL-4):
+/// a second request for a key that is still running is ignored; a different key runs alongside it.
+@MainActor
+public final class ActionGuard {
+    private var running: Set<String> = []
+
+    public init() {}
+
+    /// Whether `key` is running right now.
+    public func isRunning(_ key: String) -> Bool { running.contains(key) }
+
+    /// Runs `operation` unless `key` is already running; returns whether it ran. The key is free again when it ends, however it ends.
+    @discardableResult
+    public func run(_ key: String, _ operation: () async -> Void) async -> Bool {
+        guard running.insert(key).inserted else { return false }
+        defer { running.remove(key) }
+        await operation()
+        return true
+    }
+}

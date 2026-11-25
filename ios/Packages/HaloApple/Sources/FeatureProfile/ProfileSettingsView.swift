@@ -60,7 +60,7 @@ public struct ProfileSettingsView: View {
             guard let item else { return }
             picked = nil
             Task {
-                guard let data = try? await item.loadTransferable(type: Data.self) else { return }
+                guard let data = try? await item.loadTransferable(type: Data.self) else { return }  // best-effort: an item the picker can't read is skipped
                 await model.choosePhoto(data)
             }
         }

@@ -158,7 +158,7 @@ public actor SessionCoordinator {
             // Without a persisted session the app couldn't restore this device after a relaunch,
             // so sign it out again instead of leaving an orphaned device on the server. Best-effort:
             // the user already sees the persistence failure, a logout failure adds nothing.
-            try? await port.logout()
+            try? await port.logout()  // best-effort: cleanup of a session nobody uses; the local data is removed regardless
             state = .choosingMethod(details, failure: error)
             return
         }
@@ -196,7 +196,7 @@ public actor SessionCoordinator {
         do {
             try await persist(session)
         } catch {
-            try? await port.logout()
+            try? await port.logout()  // best-effort: cleanup of a session nobody uses; the local data is removed regardless
             state = .choosingMethod(details, failure: error)
             return
         }
@@ -278,7 +278,7 @@ public actor SessionCoordinator {
         inFlightRestore = nil
         guard sessionGeneration == generation else {
             // The user signed out (or started another session) while the restore was still in flight.
-            if case .success = result { try? await port.logout() }
+            if case .success = result { try? await port.logout() }  // best-effort: cleanup of a session nobody uses; the local data is removed regardless
             return
         }
         switch state {

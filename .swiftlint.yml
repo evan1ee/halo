@@ -37,3 +37,10 @@ custom_rules:
     regex: 'Task\.detached'
     message: "Task.detached is forbidden without written justification (AGENTS.md §9)."
     severity: error
+  no_silent_try:
+    name: "No unexplained try? await"
+    regex: 'try\? await(?! Task\.sleep)(?![^\n]*[sS]leep)(?![^\n]*//\s*best-effort:)'
+    match_kinds:
+      - keyword
+    message: "A failure that changes nothing the person sees may be dropped, but say why: end the line with `// best-effort: <reason>`. Otherwise report it (HaloErrorCopy) (AGENTS.md §10, M18-8, AC-REL-4)."
+    severity: error

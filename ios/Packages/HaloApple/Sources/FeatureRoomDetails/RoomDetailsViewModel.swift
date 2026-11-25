@@ -148,7 +148,7 @@ public final class RoomDetailsViewModel: Identifiable {
     /// An avatar's image bytes (a small thumbnail); `nil` without a loader or when the download failed, so the initial stays.
     public func avatarData(_ ref: MediaRef) async -> Data? {
         guard let media else { return nil }
-        return try? await media.thumbnail(ref, width: 96, height: 96)
+        return try? await media.thumbnail(ref, width: 96, height: 96)  // best-effort: a picture that can't load shows its placeholder; nothing changes
     }
 
     public init(

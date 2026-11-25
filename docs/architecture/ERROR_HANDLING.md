@@ -27,7 +27,7 @@ Each case gets a stable `code` string for logs and diagnostics (e.g. `NET_TIMEOU
 2. Mapping happens in one place in the adapter (`ErrorMapper`), with unit tests per upstream error kind.
 3. Views never show `error.localizedDescription` of an internal error; they show a user message chosen by case.
 4. Retryable errors in background work → retry with exponential backoff and jitter (base 1 s, max 5 min); non-retryable → surface and stop.
-5. No silent `try?` for operations that change state. `try?` is allowed only for best-effort cleanup, with a comment. *Not enforced yet: about 120 sites outside sleeps and fakes are unreviewed (ROADMAP M18-8).*
+5. No silent `try?` for operations that change state. `try?` is allowed only for best-effort cleanup, with a comment. **Enforced** (M18-8): the SwiftLint rule `no_silent_try` fails any `try? await` (sleeps excepted) that doesn't end with `// best-effort: <reason>`; the 145 sites in the code were each reviewed and carry their reason (thumbnails and reads that fall back to a default, cleanup, caches, system indexes). A change the person asked for reports its failure instead. `try?` without `await` is not covered by the rule. Double taps: `ActionGuard` (keyed) on changes to messages and rooms; other screens keep their own `isWorking` flags.
 6. Every caught error in a coordinator is logged once, at the boundary where it is handled (no double logging).
 
 ## 3. User-visible states

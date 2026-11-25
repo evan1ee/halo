@@ -19,7 +19,7 @@ public final class MatrixNotificationPort: NotificationFetchPort {
             let mode: NotificationMode
             if case .event(let item) = status {
                 let settings = await client.getNotificationSettings()
-                if let effective = try? await settings.getRoomNotificationSettings(
+                if let effective = try? await settings.getRoomNotificationSettings(  // best-effort: a read; the caller falls back to a default and nothing changes
                     roomId: room.rawValue, isEncrypted: item.roomInfo.isEncrypted ?? false, isOneToOne: item.roomInfo.isDirect
                 ) {
                     mode = MatrixRoomListPort.mode(effective.mode)
