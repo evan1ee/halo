@@ -30,7 +30,11 @@ extension AppRoot {
                     let directory = HaloShared.storeDirectory().appendingPathComponent("halo", isDirectory: true)
                     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                     let dbPath = directory.appendingPathComponent("halo.sqlite").path
-                    let database = try HaloDatabase(path: dbPath)
+                    let (database, opened) = try HaloDatabase.openRecovering(path: dbPath)
+                    if case .recovered = opened {
+                        // Kept as halo.sqlite.damaged; drafts, unsent read receipts and bot tasks were in it (AC-REL-5).
+                        log.error("halo.sqlite was damaged and was rebuilt; the old file is kept")
+                    }
                     let signal = DarwinSignal()
                     let recordStore = NotificationRecordStore(
                         database: database, account: user,

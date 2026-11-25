@@ -20,9 +20,46 @@ public struct HaloDatabase: Sendable {
             pool = try DatabasePool(path: path, configuration: configuration)
             try Self.migrator.migrate(pool)
         } catch {
-            throw .storage(.migrationFailed)
+            throw Self.failure(of: error)
         }
         try Self.protect(path: path)
+    }
+
+    /// How a database was opened by `openRecovering`.
+    public enum Opened: Sendable, Equatable {
+        case clean
+        /// The file was damaged or couldn't be migrated: it was kept at `keptCopy` and a new, empty database made (AC-REL-5).
+        /// What was only in it is lost: drafts, read receipts not yet sent, notification records, bot tasks.
+        case recovered(keptCopy: URL)
+    }
+
+    /// Opens the database; if the file is damaged (or a migration can't run on it), keeps it as `<name>.damaged` (replacing an
+    /// earlier copy) and starts a new one, so the app never loops on an unopenable file. A file that is only locked or
+    /// unreadable for now (before first unlock, disk full) is left alone and reported as `.storage(.unavailable)`.
+    public static func openRecovering(path: String, observesSuspensionNotifications: Bool = true) throws(HaloError) -> (HaloDatabase, Opened) {
+        do {
+            return (try HaloDatabase(path: path, observesSuspensionNotifications: observesSuspensionNotifications), .clean)
+        } catch {
+            guard error == .storage(.corrupted) || error == .storage(.migrationFailed) else { throw error }
+            let manager = FileManager.default
+            let kept = URL(fileURLWithPath: path + ".damaged")
+            try? manager.removeItem(at: kept)
+            do { try manager.moveItem(atPath: path, toPath: kept.path) } catch { throw .storage(.corrupted) }
+            for suffix in ["-wal", "-shm"] { try? manager.removeItem(atPath: path + suffix) }
+            return (try HaloDatabase(path: path, observesSuspensionNotifications: observesSuspensionNotifications), .recovered(keptCopy: kept))
+        }
+    }
+
+    /// Only a damaged file or a migration that can't run is `corrupted` / `migrationFailed`; a file that is busy, locked, on a
+    /// full disk or unreadable until the first unlock is `unavailable` and must not be thrown away.
+    static func failure(of error: any Error) -> HaloError {
+        guard let error = error as? DatabaseError else { return .storage(.migrationFailed) }
+        switch error.resultCode {
+        case .SQLITE_CORRUPT, .SQLITE_NOTADB: return .storage(.corrupted)
+        case .SQLITE_BUSY, .SQLITE_LOCKED, .SQLITE_IOERR, .SQLITE_CANTOPEN, .SQLITE_FULL, .SQLITE_PERM, .SQLITE_READONLY, .SQLITE_NOMEM, .SQLITE_AUTH, .SQLITE_PROTOCOL:
+            return .storage(.unavailable)
+        default: return .storage(.migrationFailed)
+        }
     }
 
     /// Suspends all open `HaloDatabase` pools in this process so SQLite acquires no new locks while iOS suspends
