@@ -11,6 +11,7 @@ public final class FakeChatCreationPort: ChatCreationPort {
         var error: HaloError?
         var created: [(name: String, invite: [UserID])] = []
         var joined: [String] = []
+        var started: [UserID] = []
         var savedRoom: RoomID?
         var counter = 0
     }
@@ -21,6 +22,8 @@ public final class FakeChatCreationPort: ChatCreationPort {
     public func fail(with error: HaloError?) { state.withLock { $0.error = error } }
     public var createdRooms: [(name: String, invite: [UserID])] { state.withLock { $0.created } }
     public var joinedAddresses: [String] { state.withLock { $0.joined } }
+    /// The people `startDirectChat` was called for, in order.
+    public var startedChats: [UserID] { state.withLock { $0.started } }
 
     public func searchUsers(_ term: String, limit: Int) async throws(HaloError) -> [UserSummary] {
         let (directory, error) = state.withLock { ($0.directory, $0.error) }
@@ -31,6 +34,7 @@ public final class FakeChatCreationPort: ChatCreationPort {
     }
 
     public func startDirectChat(with user: UserID) async throws(HaloError) -> RoomID {
+        state.withLock { $0.started.append(user) }
         let (known, error) = state.withLock { ($0.existing[user], $0.error) }
         if let error { throw error }
         if let known { return known }

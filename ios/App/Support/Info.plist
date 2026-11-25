@@ -3,6 +3,18 @@
 <plist version="1.0">
 <dict>
 	<!-- Beta and Release (project.yml). Debug uses Info-Debug.plist, which adds local-network access for infra/dev. -->
+	<!-- `matrix:` links (MSC2312) open in Halo (M18-9). -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>org.matrix.uri</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>matrix</string>
+			</array>
+		</dict>
+	</array>
 	<key>HaloNamespace</key>
 	<string>$(HALO_NAMESPACE)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

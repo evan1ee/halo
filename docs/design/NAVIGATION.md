@@ -46,7 +46,7 @@ flowchart TB
 | Source | Target |
 |---|---|
 | Notification tap | Room at event (pushed on the stack) |
-| `matrix.to` / `matrix:` links | Room (join preview if not joined) / profile. **Not reachable yet:** the scheme isn't registered, links in messages open Safari, and `resolveMatrixLink` joins or starts a chat without asking, which must be fixed first (ROADMAP M18-9) |
+| `matrix.to` / `matrix:` links | Room (already joined: opens at the named message; otherwise asks "Join this room?" first) / person (asks "Start a chat?" first). The `matrix:` scheme is registered; a tap on a `matrix.to` link in a message stays in Halo (`OpenURLAction`), other links go to the system; `https://matrix.to` links tapped outside Halo still open Safari (no associated domain). `MatrixLinkCoordinator`: nothing is joined or started before the person agrees, and a failure (gone, invite-only, offline) says so. **Built** (M18-9). Not yet: a join preview with the room's name and size (needs a lookup before joining) |
 | Activity item | Room at source event |
 | Share extension | Room picker → sends from the share sheet (D92) |
 
