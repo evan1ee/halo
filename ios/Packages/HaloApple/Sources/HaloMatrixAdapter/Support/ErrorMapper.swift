@@ -79,8 +79,17 @@ enum ErrorMapper {
         case .ServerUnreachable: .network(retryable: true)
         case .WellKnownLookupDisabled, .WellKnownLookupFailed, .WellKnownDeserializationError: .notFound
         case .SlidingSync, .SlidingSyncVersion: .unsupported("NO_SLIDING_SYNC")
-        case .Sdk, .EventCache, .Generic: .internal(code: "SDK_BUILD")
+        case .Sdk(let message), .EventCache(let message), .Generic(let message): buildFailure(message)
         }
+    }
+
+    /// A store the SDK can't open. The SDK gives the reason only as text, so the damage is recognised by what it says (found
+    /// by `StoreRecoveryContractTests`: garbage files → "disk I/O error", a wrong passphrase → "store cipher"); anything else
+    /// stays an internal error that may pass. The text is never copied into the error.
+    static func buildFailure(_ message: String) -> HaloError {
+        let text = message.lowercased()
+        let damage = ["store cipher", "aead", "not a database", "malformed", "corrupt", "disk i/o error", "disk image"]
+        return damage.contains(where: text.contains) ? .storage(.corrupted) : .internal(code: "SDK_BUILD")
     }
 
     static func map(_ error: URLError) -> HaloError {

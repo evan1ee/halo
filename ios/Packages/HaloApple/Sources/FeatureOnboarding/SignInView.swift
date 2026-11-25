@@ -84,11 +84,27 @@ public struct SignInView: View {
                 }
                 Button("Change server") { Task { await model.changeServer() } }
             case .restoreFailed:
-                Text("Your saved session couldn't be restored.")
-                    .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                Button { Task { await model.retryRestore() } } label: { Text("Try again").frame(maxWidth: .infinity) }
-                    .buttonStyle(.borderedProminent).controlSize(.large)
-                Button("Sign out", role: .destructive) { Task { await model.signOut() } }
+                if model.storeIsDamaged {
+                    // AC-REL-5: a way out that says what it costs, instead of a retry that can't work.
+                    Text("Halo's saved data on this phone is damaged.")
+                        .font(.headline).multilineTextAlignment(.center)
+                    VStack(alignment: .leading, spacing: HaloSpacing.s) {
+                        Label("Signing out and in again fixes it. Your account and your messages on the server are not touched.", systemImage: "checkmark.circle")
+                        Label("Lost on this phone: drafts and anything not yet sent.", systemImage: "square.and.pencil")
+                        Label("Older encrypted messages need your recovery key, or another signed-in device, to read again.", systemImage: "key")
+                    }
+                    .font(.subheadline).foregroundStyle(.secondary)
+                    Button(role: .destructive) { Task { await model.signOut() } } label: { Text("Sign out and start again").frame(maxWidth: .infinity) }
+                        .buttonStyle(.borderedProminent).controlSize(.large)
+                        .accessibilityIdentifier("damaged-store-sign-out")
+                    Button("Try again") { Task { await model.retryRestore() } }
+                } else {
+                    Text("Your saved session couldn't be restored.")
+                        .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    Button { Task { await model.retryRestore() } } label: { Text("Try again").frame(maxWidth: .infinity) }
+                        .buttonStyle(.borderedProminent).controlSize(.large)
+                    Button("Sign out", role: .destructive) { Task { await model.signOut() } }
+                }
             case .softLoggedOut:
                 Text("Your session expired. Sign in again to continue.")
                     .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)

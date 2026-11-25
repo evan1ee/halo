@@ -205,4 +205,17 @@ struct RecoveryViewModelTests {
         for _ in 0..<500_000 where !model.isVerified { await Task.yield() }
         #expect(model.isVerified && !model.needsRecovery && model.verificationPhase == .verified)
     }
+
+    @Test("a damaged store shows the reset path with what is lost; any other restore failure keeps the plain retry (AC-REL-5)")
+    func damagedStore() throws {
+        let model = AuthViewModel(coordinator: SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain()))
+        model.apply(.restoreFailed(.storage(.corrupted)))
+        #expect(model.screen == .restoreFailed)
+        #expect(model.storeIsDamaged)
+        #expect(model.errorMessage == nil)
+        model.apply(.restoreFailed(.network(retryable: true)))
+        #expect(model.screen == .restoreFailed)
+        #expect(!model.storeIsDamaged)
+        #expect(model.errorMessage?.contains("Can't reach the server") == true)
+    }
 }

@@ -22,6 +22,8 @@ public final class AuthViewModel {
     public private(set) var screen: Screen = .launching
     /// A short, user-facing explanation of the last failure; `nil` if there is none.
     public private(set) var errorMessage: String?
+    /// The stored session can't be restored because Halo's saved data is damaged: the screen offers a reset that says what is lost.
+    public private(set) var storeIsDamaged = false
     public private(set) var userLabel: String?
 
     public var server = ""
@@ -103,7 +105,8 @@ public final class AuthViewModel {
             errorMessage = failure.map(AuthMessages.text)
         case .restoreFailed(let failure):
             screen = .restoreFailed
-            errorMessage = AuthMessages.text(failure)
+            storeIsDamaged = failure == .storage(.corrupted)
+            errorMessage = storeIsDamaged ? nil : AuthMessages.text(failure)
         case .ready(let user):
             screen = .signedIn
             errorMessage = nil
@@ -125,6 +128,7 @@ enum AuthMessages {
         case .unsupported("NO_SLIDING_SYNC"): "This server doesn't support the sync Halo needs."
         case .unsupported: "This server doesn't offer a sign-in method Halo supports."
         case .storage(.unavailable): "Secure storage isn't available yet. Unlock the device and try again."
+        case .storage(.corrupted): "Halo's saved data on this phone can't be opened."
         default: "Something went wrong (\(error.code))."
         }
     }

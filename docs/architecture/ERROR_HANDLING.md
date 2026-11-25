@@ -46,7 +46,7 @@ Each case gets a stable `code` string for logs and diagnostics (e.g. `NET_TIMEOU
 | Failure | Recovery |
 |---|---|
 | `SyncService` error state | Restart with backoff; after 3 failures show the banner; keep retrying |
-| `halo.sqlite` corruption / failed migration | Move the file aside (`halo.sqlite.corrupt-<ts>`) and create a new DB; derived data is rebuilt; log + auditor event. *Not built* (ROADMAP M18-5) |
+| `halo.sqlite` corruption / failed migration | `HaloDatabase.openRecovering`: a damaged file (SQLITE_CORRUPT, NOTADB) or a migration that can't run is kept as `halo.sqlite.damaged` (one copy, replaced by the next) and a new DB is made; lost: drafts, unsent read receipts, notification records, bot tasks; logged. A file that is only busy, locked, on a full disk or unreadable before first unlock is left alone (`.storage(.unavailable)`). **Built** (M18-5) |
 | `search-index.sqlite` damaged or of another version (D123) | Delete and rebuild in the background; search says it is indexing |
-| SDK store corruption | Offer "Clear cache" (`Client.clear_caches` **[VERIFIED F-FFI-14]**), then a full re-sync. *Not built* (ROADMAP M18-5) |
+| SDK store corruption | The SDK says it only as text; `ErrorMapper.buildFailure` recognises garbage files ("disk I/O error") and a wrong store passphrase ("store cipher") as `.storage(.corrupted)` **[VERIFIED M18-5, `infra/test/run.sh store`]**. The launch screen then says the saved data is damaged, what is lost and what isn't, and offers "Sign out and start again" (plus "Try again", since the text can't tell damage from every transient failure). Not "Clear cache": the crypto store holds this device's keys, so a rebuilt store would be a different device under the same ID. **Built** (M18-5) |
 | Push registration failure | Retry on the next foreground; the settings screen shows push status |
