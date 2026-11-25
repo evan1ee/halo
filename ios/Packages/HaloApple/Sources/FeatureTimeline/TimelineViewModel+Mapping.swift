@@ -29,6 +29,7 @@ extension TimelineViewModel {
                 }
             }
             readerProfiles = profiles
+            senderNames = Self.senderNames(snapshot.items)
             let rows = Self.collapsingStateRuns(Self.groupingRuns(snapshot.items.map(row), items: snapshot.items), items: snapshot.items)
             // A photo you sent changes its reference when the server confirms it: the picture on screen becomes the entry
             // for the new reference, so nothing is loaded again.
@@ -222,8 +223,9 @@ extension TimelineViewModel {
             if event.isOwn, row.style == .ownMessage {
                 // Every kind of own message (text, photo, file, sticker, location, poll) reports its send state the same way.
                 row.delivery = TimelineRow.Delivery(sendState: event.sendState, readCount: event.readBy.count)
-                row.status = Self.status(of: event.sendState)
+                row.status = Self.status(of: event.sendState, failure: event.sendFailure, names: senderNames)
                 row.failedLocalID = Self.failedID(event)
+                row.canSendAnyway = event.sendFailure?.canSendAnyway == true && row.failedLocalID != nil
             }
             if event.isOwn, row.style == .ownMessage, event.sendState == .sent {
                 row.seenBy = event.readBy.count
@@ -397,6 +399,37 @@ extension TimelineViewModel {
     static func failedID(_ event: TimelineEvent) -> String? {
         if case .failed = event.sendState, event.eventID == nil { return event.localID }
         return nil
+    }
+
+    /// The status line of an own message; a refused send says why in plain words (AC-SEC-2).
+    static func status(of state: SendState, failure: SendFailure?, names known: [UserID: String]) -> String? {
+        guard case .failed = state, let failure else { return status(of: state) }
+        func names(_ users: [UserID]) -> String {
+            let labels = users.map { known[$0] ?? $0.rawValue }
+            switch labels.count {
+            case 0: return "Someone in this chat"
+            case 1: return labels[0]
+            case 2: return "\(labels[0]) and \(labels[1])"
+            default: return "\(labels[0]) and \(labels.count - 1) others"
+            }
+        }
+        switch failure {
+        case .unverifiedDevices(let users): return "Not sent: \(names(users)) has a device you haven't verified."
+        case .identityChanged(let users): return "Not sent: \(names(users)) was verified, and now has a different identity."
+        case .needsVerification: return "Not sent: verify this device first (Settings → Security)."
+        case .sessionExpired: return "Not sent: sign in again to send."
+        case .mediaGone: return "Not sent: the picture or file is no longer on this device."
+        case .other: return status(of: state)
+        }
+    }
+
+    /// Display names of the senders in the loaded timeline.
+    static func senderNames(_ items: [TimelineItem]) -> [UserID: String] {
+        var names: [UserID: String] = [:]
+        for item in items {
+            if case .event(let event) = item.content, let sender = event.sender, let name = event.senderName { names[sender] = name }
+        }
+        return names
     }
 
     static func status(of state: SendState) -> String? {

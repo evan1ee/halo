@@ -184,6 +184,8 @@ public final class TimelineViewModel {
     public internal(set) var typingText: String?
     /// Contacts whose identity changed and wasn't accepted yet, shown above the composer until handled (FR-7, AC-SEC-1).
     public internal(set) var identityNotices: [IdentityNotice] = []
+    /// Names of the loaded timeline's senders, for the reasons a send was refused.
+    var senderNames: [UserID: String] = [:]
     public internal(set) var isSending = false
     public internal(set) var sendError: String?
     /// The own message being edited, or `nil` when the composer writes a new message.

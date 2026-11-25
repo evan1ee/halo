@@ -19,6 +19,7 @@ public final class FakeTimelinePort: TimelinePort {
         var typingContinuations: [UUID: AsyncStream<[UserID]>.Continuation] = [:]
         var typingCalls: [Bool] = []
         var identityAlerts: [IdentityAlert] = []
+        var sentAnyway: [String] = []
         var identityContinuations: [UUID: AsyncStream<[IdentityAlert]>.Continuation] = [:]
         var acceptedIdentities: [UserID] = []
         var retried: [String] = []
@@ -76,6 +77,9 @@ public final class FakeTimelinePort: TimelinePort {
         }
         for continuation in continuations { continuation.yield(alerts) }
     }
+
+    /// The local IDs sent again after accepting the risk, in order.
+    public func sentAnyway(in id: RoomID) -> [String] { rooms.withLock { $0[id]?.sentAnyway ?? [] } }
 
     /// The users whose new identity was accepted, in order. Accepting ends the user's alert, as the SDK does.
     public func acceptedIdentities(in id: RoomID) -> [UserID] { rooms.withLock { $0[id]?.acceptedIdentities ?? [] } }
@@ -191,6 +195,7 @@ public final class FakeTimelinePort: TimelinePort {
         func send(text: String, mentions: [Mention]) async throws(HaloError) { try await live.send(text: text, mentions: mentions) }
         func typingUsers() -> AsyncStream<[UserID]> { live.typingUsers() }
         func identityAlerts() -> AsyncStream<[IdentityAlert]> { live.identityAlerts() }
+        func sendAnyway(localID: String) async throws(HaloError) { try await live.sendAnyway(localID: localID) }
         func acceptIdentity(of user: UserID) async throws(HaloError) { try await live.acceptIdentity(of: user) }
         func setTyping(_ isTyping: Bool) async throws(HaloError) { try await live.setTyping(isTyping) }
         func reply(to event: EventID, text: String, mentions: [Mention]) async throws(HaloError) { try await live.reply(to: event, text: text, mentions: mentions) }
@@ -260,6 +265,10 @@ public final class FakeTimelinePort: TimelinePort {
 
         func setTyping(_ isTyping: Bool) async throws(HaloError) {
             port.rooms.withLock { $0[room]?.typingCalls.append(isTyping) }
+        }
+
+        func sendAnyway(localID: String) async throws(HaloError) {
+            port.rooms.withLock { $0[room]?.sentAnyway.append(localID) }
         }
 
         func identityAlerts() -> AsyncStream<[IdentityAlert]> {

@@ -31,7 +31,6 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 | ID | Gap | Evidence | Task |
 |---|---|---|---|
 | GA-05 | Contacts' identity changes are never shown (security) | no `IdentityStatus` use | M18-1 |
-| GA-06 | The reason a send failed is dropped, so an encryption refusal looks like a network error and can't be resolved | `TimelineMapper.swift:153` | M18-2 |
 | GA-07 | A lost recovery key is a dead end | no `resetIdentity` | M18-3 |
 | GA-08 | Stores and caches are not excluded from iCloud/device backups | `isExcludedFromBackup` only on the MetricKit folder | M18-4 |
 | GA-09 | No recovery when a database can't be opened; no migration fixtures | `HaloDatabase`, no `Fixtures/` | M18-5 |
@@ -80,7 +79,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 | Task | Class · size | Done when |
 |---|---|---|
 | [x] **M18-1 Identity changes** (*built 2026-11-26; open: VoiceOver, an iPhone look; verifying a contact has no flow yet*): composer banner when a contact's identity changes; accept (ENCRYPTION FR-7) | R · M | Contract test: a second account resets its identity, the notice appears; VoiceOver; AC-SEC-1 |
-| [ ] **M18-2 Honest send failures**: carry the SDK's reason; "Send anyway / Review devices / Retry" where the SDK allows it | R · M | Unit per reason; no encryption refusal shown as offline; AC-SEC-2 |
+| [x] **M18-2 Honest send failures** (*built 2026-11-26; no real-server refusal under the default strategy, so unit-tested per reason; "Review devices" is the text's advice, not a button*): carry the SDK's reason; "Send anyway" / Retry where the SDK allows it | R · M | Unit per reason; no encryption refusal shown as offline; AC-SEC-2 |
 | [ ] **M18-3 Lost recovery key**: reset the identity with a plain warning; show key-backup state | R · M | Contract test on a throwaway account; AC-SEC-3 |
 | [ ] **M18-4 Backups and sign-out**: exclude stores and caches; detect stores restored without their keys; sign-out leaves nothing | R · M | Test lists App Group, Keychain, Spotlight, widget and pusher after sign-out (AC-AUTH-4); restore-to-new-device check 📱; AC-SEC-4 |
 | [ ] **M18-5 Store recovery**: damaged or unopenable `halo.sqlite` or SDK store → keep a copy, rebuild, or a clear reset path; migration fixtures | R · M | Corruption tests for both stores; upgrade test from every released schema; AC-REL-5 |

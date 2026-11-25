@@ -310,6 +310,12 @@ public actor TimelineCoordinator {
         try await session.retrySend(localID: localID)
     }
 
+    /// Sends a message again after the person accepted the encryption risk that stopped it (AC-SEC-2).
+    public func sendAnyway(localID: String) async throws(HaloError) {
+        guard let session, case .live = status else { throw .cancelled }
+        try await session.sendAnyway(localID: localID)
+    }
+
     /// Deletes a message that was never sent.
     public func abortSend(localID: String) async throws(HaloError) {
         guard let session, case .live = status else { throw .cancelled }

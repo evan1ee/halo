@@ -128,10 +128,16 @@ public protocol TimelineSession: Sendable {
     /// also drops the verification requirement (the person is told so first).
     func acceptIdentity(of user: UserID) async throws(HaloError)
 
+    /// Sends a message that failed for an encryption reason after the person accepted the risk: the SDK trusts the devices
+    /// (`SendFailure.unverifiedDevices`) or drops the verification requirement (`.identityChanged`) and sends again.
+    /// Throws `.notFound` when the message is gone or didn't fail for such a reason.
+    func sendAnyway(localID: String) async throws(HaloError)
+
     func close() async
 }
 
 extension TimelineSession {
+    public func sendAnyway(localID: String) async throws(HaloError) { throw .unsupported("SEND_ANYWAY_NOT_SUPPORTED") }
     public func identityAlerts() -> AsyncStream<[IdentityAlert]> { AsyncStream { $0.finish() } }
     public func acceptIdentity(of user: UserID) async throws(HaloError) { throw .unsupported("IDENTITY_NOT_SUPPORTED") }
     public func send(text: String) async throws(HaloError) { try await send(text: text, mentions: []) }

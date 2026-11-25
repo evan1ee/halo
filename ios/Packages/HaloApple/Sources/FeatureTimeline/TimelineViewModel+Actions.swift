@@ -479,6 +479,12 @@ extension TimelineViewModel {
         await perform { try await coordinator.retrySend(localID: id) }
     }
 
+    /// Sends a message again after the person accepted the encryption risk that stopped it (AC-SEC-2).
+    public func sendAnyway(_ row: TimelineRow) async {
+        guard let id = row.failedLocalID, row.canSendAnyway else { return }
+        await perform { try await coordinator.sendAnyway(localID: id) }
+    }
+
     /// Deletes a message that failed to send, so it never goes out.
     public func discard(_ row: TimelineRow) async {
         guard let id = row.failedLocalID else { return }
