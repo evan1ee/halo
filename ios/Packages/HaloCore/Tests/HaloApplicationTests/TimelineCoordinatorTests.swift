@@ -118,6 +118,39 @@ struct TimelineCoordinatorTests {
         await #expect(throws: HaloError.invalidInput("EMPTY_MESSAGE")) { try await coordinator.send("  ") }
     }
 
+
+    @Test("A contact's changed identity shows until accepted, also for one who was verified (M18-1, FR-7)")
+    func identityChanges() async throws {
+        let port = FakeTimelinePort()
+        let room = try RoomID("!r:x.org")
+        port.addRoom(room)
+        let bob = try UserID("@bob:x.org")
+        let carol = try UserID("@carol:x.org")
+        port.setIdentityAlerts([IdentityAlert(user: bob, kind: .changed)], in: room)  // already changed when the room opens
+        let coordinator = TimelineCoordinator(port: port, room: room)
+        await coordinator.open()
+        let first = await wait(coordinator) { if case .live(let s) = $0 { s.identityAlerts.map(\.user) == [bob] } else { false } }
+        #expect(first != nil)
+
+        port.setIdentityAlerts([IdentityAlert(user: bob, kind: .changed), IdentityAlert(user: carol, kind: .verifiedBefore)], in: room)
+        let both = await wait(coordinator) { if case .live(let s) = $0 { s.identityAlerts.count == 2 } else { false } }
+        #expect(both != nil)
+
+        try await coordinator.acceptIdentity(of: bob)
+        let left = await wait(coordinator) { if case .live(let s) = $0 { s.identityAlerts == [IdentityAlert(user: carol, kind: .verifiedBefore)] } else { false } }
+        #expect(left != nil)
+        #expect(port.acceptedIdentities(in: room) == [bob])
+    }
+
+    @Test("Accepting an identity before the timeline is live is refused")
+    func identityNeedsLiveTimeline() async throws {
+        let port = FakeTimelinePort()
+        let room = try RoomID("!r:x.org")
+        port.addRoom(room)
+        let coordinator = TimelineCoordinator(port: port, room: room)
+        await #expect(throws: HaloError.cancelled) { try await coordinator.acceptIdentity(of: try UserID("@bob:x.org")) }
+    }
+
     @Test("typing: others' typing shows in the snapshot; our notices are throttled and stopped on false and close")
     func typing() async throws {
         let port = FakeTimelinePort()

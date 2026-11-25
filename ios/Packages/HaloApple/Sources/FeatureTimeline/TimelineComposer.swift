@@ -22,7 +22,7 @@ struct Composer: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var hasAccessoryRows: Bool {
-        model.typingText != nil || model.sendError != nil || model.isSendingImage || model.isSendingFile || model.editing != nil
+        model.typingText != nil || !model.identityNotices.isEmpty || model.sendError != nil || model.isSendingImage || model.isSendingFile || model.editing != nil
             || model.replyingTo != nil || !model.mentionSuggestions.isEmpty || !model.emojiSuggestions.isEmpty || !model.pendingPhotos.isEmpty
     }
 
@@ -183,6 +183,20 @@ struct Composer: View {
         VStack(spacing: HaloSpacing.xs) {
             if let typing = model.typingText {
                 Text(typing).font(HaloTypography.caption).foregroundStyle(HaloColor.textSecondary).frame(maxWidth: .infinity, alignment: .leading)
+            }
+            ForEach(model.identityNotices) { notice in
+                VStack(alignment: .leading, spacing: HaloSpacing.xs) {
+                    Label(notice.text, systemImage: notice.isSerious ? "exclamationmark.shield.fill" : "exclamationmark.shield")
+                        .font(HaloTypography.caption)
+                        .foregroundStyle(notice.isSerious ? HaloColor.danger : HaloColor.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button(notice.actionTitle) { Task { await model.acceptIdentity(of: notice.user) } }
+                        .font(HaloTypography.caption)
+                        .accessibilityIdentifier("identity-accept-button")
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("identity-notice")
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             if let error = model.sendError {
                 HStack(spacing: HaloSpacing.s) {

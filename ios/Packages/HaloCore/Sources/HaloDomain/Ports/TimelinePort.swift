@@ -121,10 +121,19 @@ public protocol TimelineSession: Sendable {
     /// Unpins `event` from the room (`m.room.pinned_events`). Throws `.forbidden` when the user lacks permission.
     func unpin(event: EventID) async throws(HaloError)
 
+    /// The members of this room whose identity changed and wasn't accepted, now and as it changes (FR-7). The signed-in user is left out.
+    func identityAlerts() -> AsyncStream<[IdentityAlert]>
+
+    /// Accepts the contact's current identity: it is remembered and the alert ends. For a contact who had been verified this
+    /// also drops the verification requirement (the person is told so first).
+    func acceptIdentity(of user: UserID) async throws(HaloError)
+
     func close() async
 }
 
 extension TimelineSession {
+    public func identityAlerts() -> AsyncStream<[IdentityAlert]> { AsyncStream { $0.finish() } }
+    public func acceptIdentity(of user: UserID) async throws(HaloError) { throw .unsupported("IDENTITY_NOT_SUPPORTED") }
     public func send(text: String) async throws(HaloError) { try await send(text: text, mentions: []) }
     public func reply(to event: EventID, text: String) async throws(HaloError) { try await reply(to: event, text: text, mentions: []) }
     public func pinnedEventIDs() async -> [EventID] { [] }

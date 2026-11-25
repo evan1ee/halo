@@ -13,12 +13,15 @@ public actor TimelineCoordinator {
         public var paginationError: HaloError?
         /// Other people currently typing.
         public var typing: [UserID]
+        /// Members whose identity changed and wasn't accepted (ENCRYPTION_AND_DEVICES FR-7).
+        public var identityAlerts: [IdentityAlert] = []
         /// The event the timeline is opened around; `nil` at the newest messages (M20-1).
         public var focus: EventID?
         /// There is nothing newer than the loaded events of a focused timeline.
         public var reachedEnd = false
 
-        public init(items: [TimelineItem], isPaginating: Bool, reachedStart: Bool, paginationError: HaloError?, typing: [UserID] = []) {
+        public init(items: [TimelineItem], isPaginating: Bool, reachedStart: Bool, paginationError: HaloError?, typing: [UserID] = [], identityAlerts: [IdentityAlert] = []) {
+            self.identityAlerts = identityAlerts
             self.typing = typing
             self.items = items
             self.isPaginating = isPaginating
@@ -55,6 +58,7 @@ public actor TimelineCoordinator {
     private var diffsInSubscription = 0
     private var snapshot = Snapshot(items: [], isPaginating: false, reachedStart: false, paginationError: nil)
     private var typingSubscription: Task<Void, Never>?
+    private var identitySubscription: Task<Void, Never>?
     private var typingSentAt: ContinuousClock.Instant?
     private let now: @Sendable () -> ContinuousClock.Instant
 
@@ -71,6 +75,7 @@ public actor TimelineCoordinator {
     deinit {
         subscription?.cancel()
         typingSubscription?.cancel()
+        identitySubscription?.cancel()
     }
 
     /// The current status, then its changes; latest value wins (CONCURRENCY §3).
@@ -92,6 +97,7 @@ public actor TimelineCoordinator {
         consecutiveFailures = 0
         subscribe()
         subscribeTyping()
+        subscribeIdentity()
     }
 
     public func close() async {
@@ -100,6 +106,8 @@ public actor TimelineCoordinator {
         subscription = nil
         typingSubscription?.cancel()
         typingSubscription = nil
+        identitySubscription?.cancel()
+        identitySubscription = nil
         if typingSentAt != nil { try? await session?.setTyping(false) }
         typingSentAt = nil
         let closing = session, live = liveSession
@@ -152,7 +160,7 @@ public actor TimelineCoordinator {
 
     /// The rows on screen stay until the first items of the new session arrive.
     private func start(focus: EventID?) {
-        snapshot = Snapshot(items: [], isPaginating: false, reachedStart: false, paginationError: nil, typing: snapshot.typing)
+        snapshot = Snapshot(items: [], isPaginating: false, reachedStart: false, paginationError: nil, typing: snapshot.typing, identityAlerts: snapshot.identityAlerts)
         snapshot.focus = focus
         consecutiveFailures = 0
         subscribe()
@@ -337,6 +345,26 @@ public actor TimelineCoordinator {
         typingSubscription = Task { [weak self] in
             for await users in updates { await self?.applyTyping(users) }
         }
+    }
+
+    private func subscribeIdentity() {
+        guard let session else { return }
+        let updates = session.identityAlerts()
+        identitySubscription = Task { [weak self] in
+            for await alerts in updates { await self?.applyIdentity(alerts) }
+        }
+    }
+
+    private func applyIdentity(_ alerts: [IdentityAlert]) {
+        guard session != nil, snapshot.identityAlerts != alerts else { return }
+        snapshot.identityAlerts = alerts
+        if case .live = status { publish() }
+    }
+
+    /// Accepts `user`'s current identity (FR-7). The alert ends when the SDK reports the new state.
+    public func acceptIdentity(of user: UserID) async throws(HaloError) {
+        guard let session, case .live = status else { throw .cancelled }
+        try await session.acceptIdentity(of: user)
     }
 
     private func applyTyping(_ users: [UserID]) {

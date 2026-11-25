@@ -390,6 +390,13 @@ extension TimelineViewModel {
     public func reportFileUnreadable() { sendError = "That file couldn't be read." }
     public func dismissSendError() { sendError = nil }
 
+    /// Accepts the contact's current identity (FR-7). The notice goes when the SDK reports the new state.
+    public func acceptIdentity(of user: UserID) async {
+        do { try await coordinator.acceptIdentity(of: user) } catch {
+            sendError = "Couldn't accept the new identity. Try again."
+        }
+    }
+
     /// Decoding and re-encoding a photo is real work; it runs off the main actor.
     @concurrent private static func prepare(_ preparer: any ImagePreparing, _ data: Data, _ filename: String) async throws(HaloError) -> OutgoingImage {
         try preparer.prepare(data: data, filename: filename)

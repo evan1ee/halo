@@ -304,6 +304,21 @@ struct TimelineViewModelTests {
         #expect(TimelineViewModel.quickReactions.allSatisfy(TimelineViewModel.pickerEmoji.contains))
     }
 
+
+    @Test("Identity notices name the contact and say what to do; a verified contact is serious (M18-1)")
+    func identityNotices() throws {
+        let bob = try UserID("@bob:x.org")
+        let carol = try UserID("@carol:x.org")
+        #expect(TimelineViewModel.identityNotices([], items: []).isEmpty)
+        let notices = TimelineViewModel.identityNotices(
+            [IdentityAlert(user: bob, kind: .changed), IdentityAlert(user: carol, kind: .verifiedBefore)], items: [])
+        #expect(notices.count == 2)
+        #expect(notices[0].text.hasPrefix("@bob:x.org's security identity changed"))
+        #expect(!notices[0].isSerious && notices[0].actionTitle == "Accept")
+        #expect(notices[1].text.hasPrefix("@carol:x.org was verified"))
+        #expect(notices[1].isSerious)
+    }
+
     @Test("typing text uses known names, falls back to the user ID, and collapses for many people")
     func typingText() throws {
         let alice = try UserID("@alice:x.org")

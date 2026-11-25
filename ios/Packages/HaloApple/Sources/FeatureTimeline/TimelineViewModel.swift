@@ -182,6 +182,8 @@ public final class TimelineViewModel {
 
     /// "Alice is typing…", or `nil` when nobody else is.
     public internal(set) var typingText: String?
+    /// Contacts whose identity changed and wasn't accepted yet, shown above the composer until handled (FR-7, AC-SEC-1).
+    public internal(set) var identityNotices: [IdentityNotice] = []
     public internal(set) var isSending = false
     public internal(set) var sendError: String?
     /// The own message being edited, or `nil` when the composer writes a new message.

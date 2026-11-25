@@ -18,6 +18,9 @@ public final class FakeTimelinePort: TimelinePort {
         var typing: [UserID] = []
         var typingContinuations: [UUID: AsyncStream<[UserID]>.Continuation] = [:]
         var typingCalls: [Bool] = []
+        var identityAlerts: [IdentityAlert] = []
+        var identityContinuations: [UUID: AsyncStream<[IdentityAlert]>.Continuation] = [:]
+        var acceptedIdentities: [UserID] = []
         var retried: [String] = []
         var members: [RoomMember] = []
         var stickers: [Sticker] = []
@@ -64,6 +67,18 @@ public final class FakeTimelinePort: TimelinePort {
         }
         for continuation in continuations { continuation.yield(users) }
     }
+
+    /// Sets which members' identities changed and tells every open session.
+    public func setIdentityAlerts(_ alerts: [IdentityAlert], in id: RoomID) {
+        let continuations = rooms.withLock { rooms -> [AsyncStream<[IdentityAlert]>.Continuation] in
+            rooms[id]?.identityAlerts = alerts
+            return Array(rooms[id]?.identityContinuations.values ?? [:].values)
+        }
+        for continuation in continuations { continuation.yield(alerts) }
+    }
+
+    /// The users whose new identity was accepted, in order. Accepting ends the user's alert, as the SDK does.
+    public func acceptedIdentities(in id: RoomID) -> [UserID] { rooms.withLock { $0[id]?.acceptedIdentities ?? [] } }
 
     /// The `setTyping` values received, in order.
     public func typingCalls(in id: RoomID) -> [Bool] { rooms.withLock { $0[id]?.typingCalls ?? [] } }
@@ -175,6 +190,8 @@ public final class FakeTimelinePort: TimelinePort {
         func members() async throws(HaloError) -> [RoomMember] { try await live.members() }
         func send(text: String, mentions: [Mention]) async throws(HaloError) { try await live.send(text: text, mentions: mentions) }
         func typingUsers() -> AsyncStream<[UserID]> { live.typingUsers() }
+        func identityAlerts() -> AsyncStream<[IdentityAlert]> { live.identityAlerts() }
+        func acceptIdentity(of user: UserID) async throws(HaloError) { try await live.acceptIdentity(of: user) }
         func setTyping(_ isTyping: Bool) async throws(HaloError) { try await live.setTyping(isTyping) }
         func reply(to event: EventID, text: String, mentions: [Mention]) async throws(HaloError) { try await live.reply(to: event, text: text, mentions: mentions) }
         func toggleReaction(on event: EventID, key: String) async throws(HaloError) { try await live.toggleReaction(on: event, key: key) }
@@ -243,6 +260,28 @@ public final class FakeTimelinePort: TimelinePort {
 
         func setTyping(_ isTyping: Bool) async throws(HaloError) {
             port.rooms.withLock { $0[room]?.typingCalls.append(isTyping) }
+        }
+
+        func identityAlerts() -> AsyncStream<[IdentityAlert]> {
+            let (stream, continuation) = AsyncStream<[IdentityAlert]>.makeStream(bufferingPolicy: .bufferingNewest(1))
+            let id = UUID()
+            let room = self.room
+            let current = port.rooms.withLock { rooms -> [IdentityAlert] in
+                rooms[room]?.identityContinuations[id] = continuation
+                return rooms[room]?.identityAlerts ?? []
+            }
+            continuation.yield(current)
+            continuation.onTermination = { [port] _ in port.rooms.withLock { _ = $0[room]?.identityContinuations.removeValue(forKey: id) } }
+            return stream
+        }
+
+        func acceptIdentity(of user: UserID) async throws(HaloError) {
+            let (remaining, continuations) = port.rooms.withLock { rooms -> ([IdentityAlert], [AsyncStream<[IdentityAlert]>.Continuation]) in
+                rooms[room]?.acceptedIdentities.append(user)
+                rooms[room]?.identityAlerts.removeAll { $0.user == user }
+                return (rooms[room]?.identityAlerts ?? [], Array(rooms[room]?.identityContinuations.values ?? [:].values))
+            }
+            for continuation in continuations { continuation.yield(remaining) }
         }
 
         func sendSticker(_ sticker: Sticker) async throws(HaloError) {

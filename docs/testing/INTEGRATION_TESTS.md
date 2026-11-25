@@ -25,6 +25,7 @@ Users are created per test run with random suffixes; every test starts from a fr
 | Stickers | S-ST-1 pack create + read back; S-ST-2 `m.sticker` seen by another client; S-ST-3 prefs sync | Driver + local Mac |
 | Bots | S-BOT-1 scripted fake bot (replays the real bot's formats and reaction behaviour F-BOT-2/4) | Driver + local Mac |
 | Activity | S-ACT-1 index from a list + confirmations | Driver |
+| Identity changes (`infra/test/run.sh identity`) | a second account resets its identity: alert, accept, alert again after the next reset | Local Mac |
 | Message search (`infra/test/run.sh search`; S-SRCH-6 as a store test) | S-SRCH-1 encrypted room, live · S-SRCH-2 encrypted history after recovery on a new device · S-SRCH-3 late key · S-SRCH-4 kill and resume in the history lane · S-SRCH-5 edit and deletion while not loaded · S-SRCH-6 sign-out leaves nothing · S-SRCH-7 no request carries the query | Local Mac |
 
 ## 3. Adapter contract tests
