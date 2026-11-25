@@ -31,7 +31,6 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 | ID | Gap | Evidence | Task |
 |---|---|---|---|
 | GA-05 | Contacts' identity changes are never shown (security) | no `IdentityStatus` use | M18-1 |
-| GA-08 | Stores and caches are not excluded from iCloud/device backups | `isExcludedFromBackup` only on the MetricKit folder | M18-4 |
 | GA-09 | No recovery when a database can't be opened; no migration fixtures | `HaloDatabase`, no `Fixtures/` | M18-5 |
 | GA-10 | OIDC checked only up to the authorization URL | `AdapterContractTests.oidcDiscovery` | M18-6 |
 | GA-11 | Notification Reply / Mark as read not built | no `UNNotificationCategory` | M18-7 |
@@ -80,7 +79,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 | [x] **M18-1 Identity changes** (*built 2026-11-26; open: VoiceOver, an iPhone look; verifying a contact has no flow yet*): composer banner when a contact's identity changes; accept (ENCRYPTION FR-7) | R · M | Contract test: a second account resets its identity, the notice appears; VoiceOver; AC-SEC-1 |
 | [x] **M18-2 Honest send failures** (*built 2026-11-26; no real-server refusal under the default strategy, so unit-tested per reason; "Review devices" is the text's advice, not a button*): carry the SDK's reason; "Send anyway" / Retry where the SDK allows it | R · M | Unit per reason; no encryption refusal shown as offline; AC-SEC-2 |
 | [x] **M18-3 Lost recovery key** (*built 2026-11-26; open: the OIDC approval on the MAS stack (M18-6), VoiceOver, an iPhone look*): reset the identity with a plain warning; show key-backup state | R · M | Contract test on a throwaway account; AC-SEC-3 |
-| [ ] **M18-4 Backups and sign-out**: exclude stores and caches; detect stores restored without their keys; sign-out leaves nothing | R · M | Test lists App Group, Keychain, Spotlight, widget and pusher after sign-out (AC-AUTH-4); restore-to-new-device check 📱; AC-SEC-4 |
+| [x] **M18-4 Backups and sign-out** (*built 2026-11-26; open: the restore-to-new-device check, Spotlight and pusher on an iPhone 📱*): exclude stores and caches; detect stores restored without their keys; sign-out leaves nothing | R · M | Test lists App Group, Keychain, Spotlight, widget and pusher after sign-out (AC-AUTH-4); restore-to-new-device check 📱; AC-SEC-4 |
 | [ ] **M18-5 Store recovery**: damaged or unopenable `halo.sqlite` or SDK store → keep a copy, rebuild, or a clear reset path; migration fixtures | R · M | Corruption tests for both stores; upgrade test from every released schema; AC-REL-5 |
 | [ ] **M18-6 OIDC end to end** (V-OIDC-1): sign-in, rotation in app and NSE, soft logout, sign-out | R · M · 👤 | Contract on the MAS stack incl. forced token expiry during a push; one public server by hand; AC-REL-6 |
 | [ ] **M18-7 Notification actions**: Reply and Mark as read from the lock screen (V-PUSH-4) | R · M · 📱 | Reply reaches the server from a terminated app or says it didn't; nothing sent twice; AC-REL-7 |
