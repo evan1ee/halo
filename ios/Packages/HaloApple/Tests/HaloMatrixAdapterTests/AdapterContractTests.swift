@@ -47,6 +47,34 @@ struct AdapterContractTests {
         }
     }
 
+    /// One account-data request straight to the server, past the SDK's store. `nil` for 404.
+    @discardableResult
+    private static func accountData(_ client: Client, _ type: String, put content: Data? = nil) async throws -> Data? {
+        let sdkSession = try client.session()
+        let base = try #require(URL(string: sdkSession.homeserverUrl))
+        var request = URLRequest(url: base.appending(path: "_matrix/client/v3/user/\(sdkSession.userId)/account_data/\(type)"))
+        request.httpMethod = content == nil ? "GET" : "PUT"
+        request.httpBody = content
+        request.setValue("Bearer \(sdkSession.accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode
+        if status == 404 { return nil }
+        guard status == 200 else { throw ContractViolation("account data \(type): HTTP \(status ?? 0)") }
+        return data
+    }
+
+    /// Puts the account data of `types` back to what the server holds now when the test ends: the account is shared.
+    private func restoring(_ types: [String], of client: Client, _ cleanup: Cleanup) async throws -> [String: Data] {
+        var before: [String: Data] = [:]
+        for type in types {
+            let data = try await Self.accountData(client, type)
+            before[type] = data
+            cleanup.add { _ = try? await Self.accountData(client, type, put: data ?? Data("{}".utf8)) }
+        }
+        return before
+    }
+
     /// The rooms the account is in or invited to now, asked from the server directly.
     private func serverRoomCount(details: ServerDetails, stored: StoredSession) async throws -> Int {
         struct Sync: Decodable {
@@ -621,6 +649,10 @@ struct AdapterContractTests {
 
     @Test("An enabled pack whose room the user has left is reported as unavailable, not as a failed load (creates a room and cleans up after itself)")
     func unavailablePack() async throws {
+        try await withCleanup { try await unavailablePack($0) }
+    }
+
+    private func unavailablePack(_ cleanup: Cleanup) async throws {
         let session = port()
         let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
         _ = try await session.loginPassword(
@@ -628,6 +660,8 @@ struct AdapterContractTests {
             on: details)
         try await MatrixSyncPort(session: session).start()
         let client = try await session.signedInClient()
+        cleanup.add { try? await session.logout() }
+        _ = try await restoring(["m.image_pack.rooms"], of: client, cleanup)
         let roomID = try await client.createRoom(request: CreateRoomParameters(name: "Unavailable pack fixture", isEncrypted: false, visibility: .private, preset: .privateChat))
         let ref = PackRef(room: try RoomID(roomID), stateKey: "gone")
         var room: Room?
@@ -638,7 +672,6 @@ struct AdapterContractTests {
         let local = try #require(room)
         let pack = #"{"pack":{"display_name":"Gone","usage":["sticker"]},"images":{"wave":{"url":"mxc://halo.localhost/gone0000000000000000"}}}"#
         _ = try await local.sendStateEventRaw(eventType: "m.room.image_pack", stateKey: ref.stateKey, content: pack, requestConfigOverride: nil)
-        let before = try await client.accountData(eventType: "m.image_pack.rooms")
         try await client.setAccountData(eventType: "m.image_pack.rooms", content: #"{"version":1,"rooms":{"\#(roomID)":{"gone":{}}}}"#)
 
         let packs = MatrixStickerPackPort(session: session)
@@ -665,9 +698,6 @@ struct AdapterContractTests {
         }
         #expect(!load.unavailable.contains(ref))
         try await packs.disable(ref)  // a second removal is harmless
-        // Restore the account data (an empty listing if there was none), so no pack stays enabled.
-        try? await client.setAccountData(eventType: "m.image_pack.rooms", content: before ?? "{}")
-        try await session.logout()
     }
 
     @Test("The media preview setting round-trips through account data and is restored (changes the account's setting while it runs)")
@@ -1103,14 +1133,23 @@ struct AdapterContractTests {
         try await session.logout()
     }
 
-    @Test("Creating a sticker pack (creates a room on the dev server)", .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
+    @Test("Creating a sticker pack keeps the packs the account already enabled, also before the first sync is stored (creates a room on the dev server)",
+          .enabled(if: env["HALO_DEV_STICKER_ROOM"] != nil))
     func createPack() async throws {
+        try await withCleanup { try await createPack($0) }
+    }
+
+    private func createPack(_ cleanup: Cleanup) async throws {
         let session = port()
         let details = try await session.loginDetails(server: env["HALO_DEV_SERVER"] ?? "")
         _ = try await session.loginPassword(
             PasswordCredentials(
                 username: env["HALO_DEV_USER"] ?? "", password: env["HALO_DEV_PASSWORD"] ?? "", deviceDisplayName: "contract"),
             on: details)
+        let client = try await session.signedInClient()
+        cleanup.add { try? await session.logout() }
+        let listings = ["m.image_pack.rooms", "one.mbm.halo.sticker_rooms"]
+        let before = try await restoring(listings, of: client, cleanup)
         try await MatrixSyncPort(session: session).start()
         let png = try #require(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="))
         let name = "Contract \(UUID().uuidString.prefix(5))"
@@ -1121,7 +1160,17 @@ struct AdapterContractTests {
         let creation = MatrixStickerPackCreationPort(session: session)
         let ticks = Mutex<[Int]>([])
         let ref = try await within(seconds: 90) { try await creation.createPack(name: name, images: images) { done, _ in ticks.withLock { $0.append(done) } } }
+        cleanup.add { if let local = try? await session.room(ref.room) { try? await local.leave(); try? await local.forget() } }
         #expect(ticks.withLock { $0 } == [1, 2])
+        // The SDK's store may not have the account data yet (first sync, large account): nothing listed before may be lost.
+        for type in listings {
+            func listed(_ data: Data?) throws -> Set<String> {
+                let rooms = try data.flatMap { try JSONSerialization.jsonObject(with: $0) as? [String: Any] }?["rooms"]
+                return Set((rooms as? [String: Any]).map { Array($0.keys) } ?? rooms as? [String] ?? [])
+            }
+            let after = try listed(try await Self.accountData(client, type))
+            #expect(after == (try listed(before[type])).union([ref.room.rawValue]), "\(type) lost what the account had listed")
+        }
 
         // Read it back like the panel does.
         let reader = MatrixStickerPackPort(session: session)
@@ -1150,20 +1199,6 @@ struct AdapterContractTests {
         await #expect(throws: HaloError.invalidInput("DUPLICATE_SHORTCODE")) {
             _ = try await creation.createPack(name: "x", images: [images[0], images[0]]) { _, _ in }
         }
-        // Leave no trace: unlist the pack (otherwise every run adds one enabled pack to the account), then leave and
-        // forget the pack room.
-        let client = try await session.signedInClient()
-        for type in ["m.image_pack.rooms", "one.mbm.halo.sticker_rooms"] {
-            guard let json = try await client.accountData(eventType: type),
-                  var object = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else { continue }
-            if var rooms = object["rooms"] as? [String: Any] { rooms[ref.room.rawValue] = nil; object["rooms"] = rooms }  // enabled packs
-            else if let rooms = object["rooms"] as? [String] { object["rooms"] = rooms.filter { $0 != ref.room.rawValue } }  // hidden rooms
-            try await client.setAccountData(eventType: type, content: String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self))
-        }
-        let local = try await session.room(ref.room)
-        try await local.leave()
-        try? await local.forget()
-        try await session.logout()
     }
 
     @Test("SyncPortContract")

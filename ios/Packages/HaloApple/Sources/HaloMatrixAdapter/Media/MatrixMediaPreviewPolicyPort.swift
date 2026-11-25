@@ -27,9 +27,11 @@ public final class MatrixMediaPreviewPolicyPort: MediaPreviewPolicyPort {
         let value = switch setting { case .always: "on"; case .privateRoomsOnly: "private"; case .never: "off" }
         do {
             for type in [Self.stableType, Self.unstableType] {
-                var content = (try await client.accountData(eventType: type)).flatMap { Self.object($0) } ?? [:]
-                content["media_previews"] = value
-                try await client.setAccountData(eventType: type, content: String(decoding: try JSONSerialization.data(withJSONObject: content, options: [.sortedKeys]), as: UTF8.self))
+                try await ServerAccountData(client).update(type) { current in
+                    var content = current ?? [:]
+                    content["media_previews"] = value
+                    return content
+                }
             }
         } catch { throw ErrorMapper.map(error) }
     }

@@ -93,7 +93,7 @@ account data), the pack is removed from `m.image_pack.rooms` again and the room 
 "Sticker pack" room stays in the room list and trying again doesn't make a second one. Uploaded media stay on the server.
 
 ## 10. Error scenarios
-Upload failure (resume) · state write forbidden (not admin in that room) · account-data write conflict (read-modify-write with retry; preserve unknown keys) · referenced room not joined (spec: show "unavailable pack") · media 404.
+Upload failure (resume) · state write forbidden (not admin in that room) · account-data write (read-modify-write of the server's copy, nothing written when it can't be read, D120; preserve unknown keys) · referenced room not joined (spec: show "unavailable pack") · media 404.
 
 ## 11. Edge cases
 Duplicate shortcodes across packs (disambiguate with the pack name, spec) · a pack with 0 images · a 5 MB animated sticker (warn on import > 1 MB, refuse > 5 MB) · a removed pack still in favourites (greyed out, removable) · personal pack rooms appearing in other clients' room lists (named "Sticker pack: <name>" — accepted).
