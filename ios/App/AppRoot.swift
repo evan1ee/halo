@@ -65,6 +65,12 @@ final class AppRoot {
     let botAllowlistPort: MatrixBotAllowlistPort
     let search: MessageSearchEngine
     let roomCoordinator: RoomListCoordinator
+    /// Matrix links from taps in messages and from outside; asks before joining or starting a chat (M18-9).
+    lazy var matrixLinks = MatrixLinkCoordinator(
+        isSignedIn: { [unowned self] in if case .signedIn = auth.screen { true } else { false } },
+        joinedRooms: { [unowned self] in Set(await roomCoordinator.rooms.filter { $0.membership == .joined }.map(\.id)) },
+        chats: chatCreation
+    )
     /// The signed-in account, once the session is ready (kept out of "New chat" results).
     var signedInUser: UserID?
     /// The signed-in Matrix ID, for the avatar's initial before the display name is known.

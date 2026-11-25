@@ -35,7 +35,6 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 | GA-11 | Notification Reply / Mark as read not built | no `UNNotificationCategory` | M18-7 |
 | GA-12 | State changes that fail silently; 122 `try? await` sites unreviewed (sleeps and fakes excluded) | e.g. `ChatsAssembly.swift` links | M18-8 |
 | GA-13 | Double-tap protection exists but nothing uses it | `ActionState` has no caller | M18-8 |
-| GA-14 | Matrix links: scheme not registered, taps in messages open Safari, and the resolver would join a room or start a chat without asking | no `CFBundleURLTypes`; `resolveMatrixLink` | M18-9 |
 | GA-15 | Photos are decoded on the main thread, some on every redraw; no decoded cache or memory-warning handling (MEDIA §1) | `UIImage(data:)` in view bodies | M19-1 |
 | GA-16 | Every timeline change rebuilds every row on the main actor | `TimelineViewModel+Mapping.apply` | M19-2 |
 | GA-17 | The room list is replaced as a whole on every change (ROOM_LIST §4 forbids it) | `.diff(.reset(list))` | M19-3 |
@@ -83,7 +82,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 | [ ] **M18-6 OIDC end to end** (V-OIDC-1): sign-in, rotation in app and NSE, soft logout, sign-out | R · M · 👤 | Contract on the MAS stack incl. forced token expiry during a push; one public server by hand; AC-REL-6 |
 | [ ] **M18-7 Notification actions**: Reply and Mark as read from the lock screen (V-PUSH-4) | R · M · 📱 | Reply reaches the server from a terminated app or says it didn't; nothing sent twice; AC-REL-7 |
 | [ ] **M18-8 No silent failures**: review every `try?` on a state change, route through `HaloErrorCopy`; `ActionState` on every mutating control; remove the `preconditionFailure` | R · L | Custom lint rule with a written allow-list, 0 findings; a failure and a double-tap test per action; AC-REL-4 |
-| [ ] **M18-9 Matrix links**: handle `matrix.to` taps in messages and the `matrix:` scheme; always ask before joining or starting a chat | R · S | UI test: no join without confirmation, errors are said; NAVIGATION §3 |
+| [x] **M18-9 Matrix links** (*built 2026-11-26; open: a UI test with a link in a message, a device look 📱*): handle `matrix.to` taps in messages and the `matrix:` scheme; always ask before joining or starting a chat | R · S | UI test: no join without confirmation, errors are said; NAVIGATION §3 |
 | [ ] **M18-10 Read-state and push matrix**: foreground, suspended, terminated, rebooted-locked, airplane, clock change, two devices | R · M · 📱 | Table in UNREAD_REGRESSION_TESTS green on a device; widgets and icon agree; AC-REL-1, AC-REL-2 |
 | [ ] **M18-11 Delivery under faults**: no lost, duplicated or reordered own messages across kill, reconnect, 429 and token expiry | R · M | M17-6 cases green for text, photo, file, sticker, reply, edit, reaction; AC-REL-3 |
 | [ ] **M18-12 Security review**: threat model walk-through, log scan of a full session, lint for sensitive logging, build check for TLS bypass, advisory check, disclosure policy | R · M · 👤 | Report with zero open high findings; SECURITY §6/§9 true; legal parts stay with M22-4 |

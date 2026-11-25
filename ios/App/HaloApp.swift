@@ -83,6 +83,28 @@ private struct RootView: View {
         root.roomList.setFocus(root.preferences.followFocusFilter ? root.focus.chats : nil)
     }
 
+    private var matrixLinkTitle: String {
+        switch root.matrixLinks.prompt {
+        case .join: "Join this room?"
+        case .startChat: "Start a chat?"
+        case nil: ""
+        }
+    }
+
+    private func matrixLinkAction(_ prompt: MatrixLinkCoordinator.Prompt) -> String {
+        switch prompt {
+        case .join: "Join"
+        case .startChat: "Start chat"
+        }
+    }
+
+    private func matrixLinkMessage(_ prompt: MatrixLinkCoordinator.Prompt) -> String {
+        switch prompt {
+        case .join(let address, _): "A link wants you to join \(address). Only join rooms you trust."
+        case .startChat(let user): "A link wants you to chat with \(user.rawValue). They get an invitation if you haven't talked before."
+        }
+    }
+
     private func openRequestedChat() {
         guard case .signedIn = root.auth.screen, let room = root.openChat.pending else { return }
         root.openChat.pending = nil
@@ -306,12 +328,29 @@ private struct RootView: View {
             if case .signedIn = root.auth.screen {} else { enabled = false }
             await root.chatShortcuts.update(rooms: await root.roomCoordinator.rooms, enabled: enabled)
         }
-        .onOpenURL { url in
-            Task {
-                guard let target = await root.resolveMatrixLink(url) else { return }
-                router.openRoom(target.room, focus: target.event)
-            }
-        }
+        .onOpenURL { url in Task { await root.matrixLinks.handle(url) } }
+        // A tap on a `matrix.to` link in a message stays in Halo; a web link goes to the system (M18-9).
+        .environment(\.openURL, OpenURLAction { url in
+            guard MatrixLink.parse(url) != nil else { return .systemAction }
+            Task { await root.matrixLinks.handle(url) }
+            return .handled
+        })
+        .task { root.matrixLinks.open = { room, event in router.openRoom(room, focus: event) } }
+        .alert(
+            matrixLinkTitle,
+            isPresented: Binding(get: { root.matrixLinks.prompt != nil }, set: { if !$0 { root.matrixLinks.cancel() } }),
+            presenting: root.matrixLinks.prompt
+        ) { prompt in
+            Button(matrixLinkAction(prompt)) { Task { await root.matrixLinks.confirm() } }
+                .accessibilityIdentifier("matrix-link-confirm")
+            Button("Cancel", role: .cancel) { root.matrixLinks.cancel() }
+        } message: { prompt in Text(matrixLinkMessage(prompt)) }
+        .alert(
+            "Couldn't open the link",
+            isPresented: Binding(get: { root.matrixLinks.failure != nil }, set: { if !$0 { root.matrixLinks.dismissFailure() } })
+        ) {
+            Button("OK", role: .cancel) { root.matrixLinks.dismissFailure() }
+        } message: { Text(root.matrixLinks.failure ?? "") }
         // S14 Notifications priming (AC-UX-7, UX-07): explain why Halo needs notifications before showing the system prompt.
         .task(id: root.auth.screen) {
             guard root.push != nil, case .signedIn = root.auth.screen else { return }
