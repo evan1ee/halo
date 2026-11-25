@@ -1,17 +1,18 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-26 · Branch: `feat/m18-honest-send-failures` (from `main` at `cc4608a`) · PRs #1–#92 merged before it
+Last updated: 2026-11-26 · Branch: `feat/m18-lost-recovery-key` (from `main` after #93) · PRs #1–#93 merged before it
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
 - **Roadmap:** M0–M16 are built and merged. Re-planned 2026-11-25 to a production release (D121): M17 measure → M18 security and reliability → M19 performance → M20 messaging → M21 experience → M22 beta and launch, with gates G-SCALE, G-PERF, G-SHIP ([docs/ROADMAP.md](docs/ROADMAP.md)). The audit behind it found 26 gaps (ROADMAP §2); Halo isn't a release candidate yet.
-- **Milestones:** M0–M16 built, partly for M14–M15 (GA-24…GA-26). **M17 in progress:** M17-1, 2, 3, 6, 8 done; M17-4, M17-5 and M17-7 done except what needs a device or the founder (§5). **M19 started early (D125): M19-11 message search and M20-1 jump to any message are built and merged (PR #91; the iPhone checks are still open)**. **M18 started: M18-1 identity changes merged (PR #92), M18-2 honest send failures built**, M18-3 next. Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1).
+- **Milestones:** M0–M16 built, partly for M14–M15 (GA-24…GA-26). **M17 in progress:** M17-1, 2, 3, 6, 8 done; M17-4, M17-5 and M17-7 done except what needs a device or the founder (§5). **M19 started early (D125): M19-11 message search and M20-1 jump to any message are built and merged (PR #91; the iPhone checks are still open)**. **M18 started: M18-1 identity changes merged (PR #92), M18-2 honest send failures merged (PR #93), M18-3 lost recovery key built**, M18-4 next. Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1).
 - **Last checks:** `prepush.sh` on the pushed commit (package tests, app build, UI tests with the new `testMessageSearchOpensAHit`, docs, boundaries, gitleaks, swiftlint); `infra/test/run.sh search` 5 of 5; full contract suite 37 of 37 (with S01–S29 over the server and the unread evidence); scale numbers in TEST_STRATEGY §7; by hand in the simulator: search, filters, opening an old message, Newest, dark mode at AX5. `faults` and `interop` (2 known issues) green. **Not run:** an iPhone, the scenario driver, light AX5 of Settings → Message search, VoiceOver.
 - **CI:** PRs #1–#90 merged. New `scenarios.yml` (Synapse behind the fault proxy). Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
+- **M18-3 lost recovery key (2026-11-26, `feat/m18-lost-recovery-key`):** Settings → Security → "Lost your recovery key?" lists what is lost and what stays, asks for the password (or the account page for OIDC), resets the identity, verifies this device and shows a new recovery key once; the key backup is shown as a row. `EncryptionPort.prepareIdentityReset / resetIdentity(password:) / cancelIdentityReset`, `BackupState`, `IdentityResetSheet`. GA-07 closed. Tests: coordinator, view model, and `infra/test/run.sh identity` (verified, backup on, new key unlocks a third device, old key refused). **Not tested:** the OIDC approval (M18-6), VoiceOver, an iPhone look.
 - **M18-2 honest send failures (2026-11-26, `feat/m18-honest-send-failures`):** the SDK's reason for a failed send is kept (`SendFailure`, `TimelineEvent.sendFailure`); the status line says why and names the people; "Send anyway" is offered for unverified devices and a changed identity (`TimelineSession.sendAnyway`, a `SendHandleStore` in the adapter holds the SDK's handle and error). GA-06 closed. Tests: view-model, coordinator, per-reason mapping. **Not covered:** a real server never refuses under the default recipient strategy (D117), so no end-to-end test; no "Review devices" button (the text says what to do); VoiceOver and iPhone look.
 - **M18-1 identity changes (2026-11-26, `feat/m18-identity-changes`):** a contact whose identity changed shows a banner above the composer until accepted (AC-SEC-1). `IdentityAlert` (domain); `TimelineSession.identityAlerts()` and `acceptIdentity(of:)`; the adapter subscribes to the SDK's identity status changes and keeps the set of members in `pinViolation` / `verificationViolation`; accepting pins the identity and, for a verified contact, first withdraws verification. Test: `infra/test/run.sh identity` (a second account resets its identity; alert, accept, alert again), coordinator and view-model unit tests. **Not built:** verifying a contact (no flow exists), a timeline row (the banner is the notice), VoiceOver and iPhone checks.
 - **M19-11 message search on Halo's own index, with M20-1 (2026-11-25, `feat/m19-message-search`):** encrypted rooms, full history, CJK, files and links, filters, coverage notice, Settings → Message search. The SDK's index is off and its folder deleted.
@@ -63,6 +64,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D125), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
+- **M18-3:** `EncryptionModels` (`BackupState`, `IdentityResetRequirement`), `EncryptionPort`, `EncryptionCoordinator`, `FakeEncryptionPort`, `MatrixEncryptionPort`, `RecoveryViewModel`, `FeatureSettings/{IdentityResetSheet,SettingsView}`, `SettingsAssembly`, `IdentityContractTests`, `RecoveryViewModelResetTests`, docs (ENCRYPTION_AND_DEVICES FR-8, SETTINGS, SECURITY, ROADMAP, INTEGRATION_TESTS).
 - **M18-2:** `HaloDomain/Timeline/TimelineModels` (`SendFailure`), `TimelinePort` (`sendAnyway`), `TimelineCoordinator`, `FakeTimelinePort`, `TimelineMapper`, `MatrixTimelinePort` (`SendHandleStore`), `FeatureTimeline` (row, view model, row view), `SendFailureMappingTests`, docs (MESSAGING FR-9, SECURITY, ROADMAP, PORTS_CONTRACT).
 - Older, M18-1 (merged): see git log.
 - **M18-1:** `HaloDomain/Encryption/IdentityAlert`, `TimelinePort`, `TimelineCoordinator`, `FakeTimelinePort`, `MatrixTimelinePort` (`IdentityListener`), `MatrixSessionPort.userIdentity`, `FeatureTimeline` (`identityNotices`, composer banner), `IdentityContractTests`, `infra/test/run.sh identity`, docs (ENCRYPTION_AND_DEVICES FR-7, SECURITY, ROADMAP, INTEGRATION_TESTS, PORTS_CONTRACT).
@@ -113,8 +115,8 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 
 ## 6. Next steps
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §3.
-1. Founder: review and merge the M18-2 pull request; the device and hand checks of §5 (message search on the iPhone, the identity banner).
-2. M18-3 onward, then the rest of M19. M20-11 (search inside a room) only needs its interface now (`SearchQuery.room`).
+1. Founder: review and merge the M18-3 pull request; the device and hand checks of §5 (message search on the iPhone, the identity banner).
+2. M18-4 onward, then the rest of M19. M20-11 (search inside a room) only needs its interface now (`SearchQuery.room`).
 3. Founder, long lead times: push gateway (M22-1), legal (M22-4), KLIPY production key, filtering entitlement, artwork.
 
 ## 7. Next Session Prompt

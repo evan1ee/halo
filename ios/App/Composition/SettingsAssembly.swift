@@ -94,6 +94,7 @@ extension AppRoot {
                 return [
                     StorageSize(name: "This device", text: self.recovery.deviceStatus),
                     StorageSize(name: "Recovery key", text: self.recovery.recoveryStatus),
+                    StorageSize(name: "Message key backup", text: self.recovery.backupStatus),
                 ]
             },
             setUpRecovery: { [weak self] in
@@ -110,6 +111,27 @@ extension AppRoot {
                 case .failure(let failure): return .failure(SettingsMessage(failure.text))
                 }
             },
+            resetIdentity: IdentityResetActions(
+                prepare: { [weak self] in
+                    guard let self else { return .failure(SettingsMessage("Unavailable")) }
+                    switch await self.recovery.prepareIdentityReset() {
+                    case .success(.nothingToReset): return .success(.nothing)
+                    case .success(.password): return .success(.password)
+                    case .success(.approveInBrowser(let url)):
+                        guard let url = URL(string: url) else { return .failure(SettingsMessage("The approval page couldn't be opened.")) }
+                        return .success(.browser(url))
+                    case .failure(let failure): return .failure(SettingsMessage(failure.text))
+                    }
+                },
+                reset: { [weak self] password in
+                    guard let self else { return .failure(SettingsMessage("Unavailable")) }
+                    switch await self.recovery.resetIdentity(password: password) {
+                    case .success(let key): return .success(key)
+                    case .failure(let failure): return .failure(SettingsMessage(failure.text))
+                    }
+                },
+                cancel: { [weak self] in await self?.recovery.cancelIdentityReset() }
+            ),
             notificationDefaults: notificationDefaults(),
             notificationStatus: { [weak self] in
                 guard let self else { return "Unknown" }

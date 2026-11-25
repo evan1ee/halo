@@ -10,6 +10,8 @@ public final class MatrixEncryptionPort: EncryptionPort {
     private struct State {
         var verification: HaloDomain.VerificationState = .unknown
         var recovery: HaloDomain.RecoveryState = .unknown
+        var backup: HaloDomain.BackupState = .unknown
+        var pendingReset: IdentityResetHandle?
         var phase: SessionVerificationPhase = .idle
         var continuations: [UUID: AsyncStream<EncryptionStatus>.Continuation] = [:]
         var phaseContinuations: [UUID: AsyncStream<SessionVerificationPhase>.Continuation] = [:]
@@ -87,6 +89,55 @@ public final class MatrixEncryptionPort: EncryptionPort {
         } catch { throw ErrorMapper.map(error) }
     }
 
+    public func prepareIdentityReset() async throws(HaloError) -> IdentityResetRequirement {
+        let encryption = try await session.encryption()
+        do {
+            await encryption.waitForE2eeInitializationTasks()
+            guard let handle = try await encryption.resetIdentity() else { return .nothingToReset }
+            let previous = state.withLock { state -> IdentityResetHandle? in
+                defer { state.pendingReset = handle }
+                return state.pendingReset
+            }
+            await previous?.cancel()
+            switch handle.authType() {
+            case .uiaa: return .password
+            case .oAuth(let info): return .approveInBrowser(approvalURL: info.approvalUrl)
+            }
+        } catch { throw ErrorMapper.map(error) }
+    }
+
+    public func resetIdentity(password: String?) async throws(HaloError) -> String {
+        let encryption = try await session.encryption()
+        let pending = state.withLock { state -> IdentityResetHandle? in
+            defer { state.pendingReset = nil }
+            return state.pendingReset
+        }
+        do {
+            if let pending {
+                switch pending.authType() {
+                case .uiaa(let info):
+                    guard let password, !password.isEmpty else { throw HaloError.invalidInput("PASSWORD") }
+                    let user = try await session.signedInClient().userId()
+                    try await pending.reset(auth: .password(passwordDetails: AuthDataPasswordDetails(identifier: user, password: password, session: info.session)))
+                case .oAuth(let info):
+                    try await pending.reset(auth: .oAuth(session: info.session))
+                }
+            }
+            // The reset deleted secret storage and the recovery key: make a new one (it also covers the backup).
+            let key = try await encryption.enableRecovery(waitForBackupsToUpload: false, key: nil, progressListener: NoProgress())
+            refresh(encryption)
+            return key
+        } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
+    }
+
+    public func cancelIdentityReset() async {
+        let pending = state.withLock { state -> IdentityResetHandle? in
+            defer { state.pendingReset = nil }
+            return state.pendingReset
+        }
+        await pending?.cancel()
+    }
+
     public func requestDeviceVerification() async throws(HaloError) {
         let encryption = try await session.encryption()
         await encryption.waitForE2eeInitializationTasks()
@@ -162,6 +213,9 @@ public final class MatrixEncryptionPort: EncryptionPort {
                 encryption.recoveryStateListener(listener: RecoveryListener { [weak self] sdkState in
                     self?.update { $0.recovery = Self.map(sdkState) }
                 }),
+                encryption.backupStateListener(listener: BackupListener { [weak self] sdkState in
+                    self?.update { $0.backup = Self.map(sdkState) }
+                }),
             ]
             state.withLock { $0.handles = handles }
         }
@@ -225,16 +279,18 @@ public final class MatrixEncryptionPort: EncryptionPort {
     private func refresh(_ encryption: Encryption) {
         let verification = Self.map(encryption.verificationState())
         let recovery = Self.map(encryption.recoveryState())
+        let backup = Self.map(encryption.backupState())
         update { state in
             state.verification = verification
             state.recovery = recovery
+            state.backup = backup
         }
     }
 
     private func update(_ change: (inout State) -> Void) {
         let (status, continuations) = state.withLock { state -> (EncryptionStatus, [AsyncStream<EncryptionStatus>.Continuation]) in
             change(&state)
-            return (EncryptionStatus(verification: state.verification, recovery: state.recovery), Array(state.continuations.values))
+            return (EncryptionStatus(verification: state.verification, recovery: state.recovery, backup: state.backup), Array(state.continuations.values))
         }
         for continuation in continuations { continuation.yield(status) }
     }
@@ -269,6 +325,14 @@ public final class MatrixEncryptionPort: EncryptionPort {
         }
     }
 
+    static func map(_ state: MatrixRustSDK.BackupState) -> HaloDomain.BackupState {
+        switch state {
+        case .unknown: .off
+        case .creating, .enabling, .disabling: .working
+        case .resuming, .enabled, .downloading: .on
+        }
+    }
+
     static func map(_ state: MatrixRustSDK.RecoveryState) -> HaloDomain.RecoveryState {
         switch state {
         case .unknown: .unknown
@@ -289,6 +353,12 @@ private final class RecoveryListener: RecoveryStateListener {
     private let handler: @Sendable (MatrixRustSDK.RecoveryState) -> Void
     init(_ handler: @escaping @Sendable (MatrixRustSDK.RecoveryState) -> Void) { self.handler = handler }
     func onUpdate(status: MatrixRustSDK.RecoveryState) { handler(status) }
+}
+
+private final class BackupListener: BackupStateListener {
+    private let handler: @Sendable (MatrixRustSDK.BackupState) -> Void
+    init(_ handler: @escaping @Sendable (MatrixRustSDK.BackupState) -> Void) { self.handler = handler }
+    func onUpdate(status: MatrixRustSDK.BackupState) { handler(status) }
 }
 
 private final class NoProgress: EnableRecoveryProgressListener {

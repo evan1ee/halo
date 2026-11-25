@@ -11,6 +11,9 @@ public final class FakeEncryptionPort: EncryptionPort {
         var phase: SessionVerificationPhase = .idle
         var key: String?
         var nextError: HaloError?
+        var requirement = IdentityResetRequirement.password
+        var resetPrepared = false
+        var resets: [String?] = []
         var continuations: [UUID: AsyncStream<EncryptionStatus>.Continuation] = [:]
         var phaseContinuations: [UUID: AsyncStream<SessionVerificationPhase>.Continuation] = [:]
     }
@@ -25,6 +28,38 @@ public final class FakeEncryptionPort: EncryptionPort {
 
     public var status: EncryptionStatus { state.withLock { $0.status } }
     public var verificationPhase: SessionVerificationPhase { state.withLock { $0.phase } }
+    /// What `prepareIdentityReset` asks for.
+    public func setIdentityResetRequirement(_ requirement: IdentityResetRequirement) { state.withLock { $0.requirement = requirement } }
+    /// The passwords `resetIdentity` was called with, in order.
+    public var identityResets: [String?] { state.withLock { $0.resets } }
+
+    public func prepareIdentityReset() async throws(HaloError) -> IdentityResetRequirement {
+        let result: Result<IdentityResetRequirement, HaloError> = state.withLock { state in
+            if let error = state.nextError { state.nextError = nil; return .failure(error) }
+            state.resetPrepared = true
+            return .success(state.requirement)
+        }
+        return try result.get()
+    }
+
+    public func resetIdentity(password: String?) async throws(HaloError) -> String {
+        let key = "FAKE-RECOVERY-KEY-\(UUID().uuidString)"
+        let result: Result<EncryptionStatus, HaloError> = state.withLock { state in
+            if let error = state.nextError { state.nextError = nil; return .failure(error) }
+            guard state.resetPrepared else { return .failure(.invalidInput("RESET_NOT_PREPARED")) }
+            if state.requirement == .password, password?.isEmpty != false { return .failure(.invalidInput("PASSWORD")) }
+            state.resetPrepared = false
+            state.resets.append(password)
+            state.key = key
+            state.status = EncryptionStatus(verification: .verified, recovery: .enabled, backup: .on)
+            return .success(state.status)
+        }
+        publish(try result.get())
+        return key
+    }
+
+    public func cancelIdentityReset() async { state.withLock { $0.resetPrepared = false } }
+
     public func failNext(with error: HaloError) { state.withLock { $0.nextError = error } }
 
     /// Simulates an external SAS verification event (such as an incoming request or emoji list from a peer device).

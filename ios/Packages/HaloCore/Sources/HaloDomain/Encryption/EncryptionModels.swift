@@ -16,13 +16,36 @@ public enum RecoveryState: Sendable, Equatable {
     case incomplete
 }
 
+/// Whether this account's message keys are backed up on the server, so a new device can read old messages.
+public enum BackupState: Sendable, Equatable {
+    case unknown
+    /// No backup is running.
+    case off
+    /// Being created, resumed or switched off.
+    case working
+    /// Keys are backed up.
+    case on
+}
+
+/// What the person must give to reset their end-to-end identity (M18-3).
+public enum IdentityResetRequirement: Sendable, Equatable {
+    /// The account has no identity to reset.
+    case nothingToReset
+    /// The account's password.
+    case password
+    /// Approval on the account's web page; `approvalURL` is where to send the person.
+    case approveInBrowser(approvalURL: String)
+}
+
 public struct EncryptionStatus: Sendable, Equatable {
     public let verification: VerificationState
     public let recovery: RecoveryState
+    public let backup: BackupState
 
-    public init(verification: VerificationState, recovery: RecoveryState) {
+    public init(verification: VerificationState, recovery: RecoveryState, backup: BackupState = .unknown) {
         self.verification = verification
         self.recovery = recovery
+        self.backup = backup
     }
 
     public static let unknown = EncryptionStatus(verification: .unknown, recovery: .unknown)

@@ -20,6 +20,18 @@ public protocol EncryptionPort: Sendable {
     /// in the old backup can no longer be restored: callers confirm with the user first.
     func resetRecovery() async throws(HaloError) -> String
 
+    /// Starts resetting the account's end-to-end identity (for someone who lost the recovery key and every other device) and
+    /// says what the person has to give. Nothing changes until `resetIdentity(password:)`.
+    func prepareIdentityReset() async throws(HaloError) -> IdentityResetRequirement
+
+    /// Resets the identity (new cross-signing keys, backup and recovery key deleted), makes this device verified, and
+    /// creates a new recovery key, returned to be shown once. `password` is for `.password`; `.approveInBrowser` needs the
+    /// approval done first. Messages only the old backup held can no longer be restored: callers confirm first (FR-8).
+    func resetIdentity(password: String?) async throws(HaloError) -> String
+
+    /// Drops a prepared reset without doing it.
+    func cancelIdentityReset() async
+
     /// Interactive SAS (emoji / decimal) verification phases (`SessionVerificationController`).
     func verificationPhases() -> AsyncStream<SessionVerificationPhase>
 
@@ -40,6 +52,9 @@ public protocol EncryptionPort: Sendable {
 }
 
 extension EncryptionPort {
+    public func prepareIdentityReset() async throws(HaloError) -> IdentityResetRequirement { throw .unsupported("IDENTITY_RESET") }
+    public func resetIdentity(password: String?) async throws(HaloError) -> String { throw .unsupported("IDENTITY_RESET") }
+    public func cancelIdentityReset() async {}
     public func verificationPhases() -> AsyncStream<SessionVerificationPhase> {
         AsyncStream { continuation in
             continuation.yield(.idle)

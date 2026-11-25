@@ -46,6 +46,7 @@ public struct SettingsConfiguration {
     public let security: (@MainActor () -> [StorageSize])?
     public let setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)?
     public let replaceRecovery: (@MainActor () async -> Result<String, SettingsMessage>)?
+    public let resetIdentity: IdentityResetActions?
     public let notificationDefaults: NotificationDefaultsActions?
     public let notificationStatus: (@Sendable () async -> String)?
     public let openSystemSettings: (() -> Void)?
@@ -76,6 +77,7 @@ public struct SettingsConfiguration {
         security: (@MainActor () -> [StorageSize])? = nil,
         setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil,
         replaceRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil,
+        resetIdentity: IdentityResetActions? = nil,
         notificationDefaults: NotificationDefaultsActions? = nil,
         notificationStatus: (@Sendable () async -> String)? = nil,
         openSystemSettings: (() -> Void)? = nil,
@@ -105,6 +107,7 @@ public struct SettingsConfiguration {
         self.security = security
         self.setUpRecovery = setUpRecovery
         self.replaceRecovery = replaceRecovery
+        self.resetIdentity = resetIdentity
         self.notificationDefaults = notificationDefaults
         self.notificationStatus = notificationStatus
         self.openSystemSettings = openSystemSettings
@@ -140,6 +143,8 @@ public struct SettingsView: View {
     private var setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? { config.setUpRecovery }
     @State private var recoveryFailure: SettingsMessage?
     private var replaceRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? { config.replaceRecovery }
+    private var resetIdentity: IdentityResetActions? { config.resetIdentity }
+    @State private var resettingIdentity = false
     @State private var newRecoveryKey: String?
     @State private var settingUpRecovery = false
     private var notificationDefaults: NotificationDefaultsActions? { config.notificationDefaults }
@@ -322,6 +327,10 @@ public struct SettingsView: View {
                         .disabled(!deviceHasKey || changingRecoveryKey)
                         .accessibilityIdentifier("change-recovery-key")
                     }
+                    if resetIdentity != nil {
+                        Button("Lost your recovery key?") { resettingIdentity = true }
+                            .accessibilityIdentifier("lost-recovery-key")
+                    }
                 } header: {
                     Text("Security")
                 } footer: {
@@ -446,6 +455,14 @@ public struct SettingsView: View {
         } message: { Text(recoveryFailure?.text ?? "") }
         .sheet(item: Binding(get: { newRecoveryKey.map(RecoveryKeyItem.init) }, set: { if $0 == nil { newRecoveryKey = nil } })) { item in
             RecoveryKeySheet(key: item.key) { newRecoveryKey = nil }
+        }
+        .sheet(isPresented: $resettingIdentity) {
+            if let resetIdentity {
+                IdentityResetSheet(actions: resetIdentity) { key in
+                    resettingIdentity = false
+                    newRecoveryKey = key
+                }
+            }
         }
         .alert("Change the recovery key?", isPresented: $confirmingNewRecoveryKey) {
             Button("Create a new key", role: .destructive) {

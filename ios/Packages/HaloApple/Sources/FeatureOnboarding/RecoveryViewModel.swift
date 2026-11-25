@@ -23,6 +23,8 @@ public final class RecoveryViewModel {
     /// Plain-language state for Settings → Security.
     public private(set) var deviceStatus = "Checking…"
     public private(set) var recoveryStatus = "Checking…"
+    /// Whether message keys are backed up on the server, for Settings → Security.
+    public private(set) var backupStatus = "Checking…"
     /// Current interactive SAS (emoji / decimal) device verification phase (ENCRYPTION_AND_DEVICES FR-2).
     public private(set) var verificationPhase: SessionVerificationPhase = .idle
 
@@ -73,6 +75,31 @@ public final class RecoveryViewModel {
         }
     }
 
+    /// Lost the recovery key and every other device (FR-8): says what the person must give to reset the identity.
+    public func prepareIdentityReset() async -> Result<IdentityResetRequirement, RecoverySetupFailure> {
+        do { return .success(try await coordinator.prepareIdentityReset()) } catch {
+            return .failure(RecoverySetupFailure(text: Self.resetMessage(for: error), backupExists: false))
+        }
+    }
+
+    /// Resets the identity and returns the new recovery key, to be shown once. Call only after the person confirmed what is lost.
+    public func resetIdentity(password: String?) async -> Result<String, RecoverySetupFailure> {
+        do { return .success(try await coordinator.resetIdentity(password: password)) } catch {
+            return .failure(RecoverySetupFailure(text: Self.resetMessage(for: error), backupExists: false))
+        }
+    }
+
+    public func cancelIdentityReset() async { await coordinator.cancelIdentityReset() }
+
+    static func resetMessage(for error: HaloError) -> String {
+        switch error {
+        case .invalidInput("PASSWORD"): "Enter your account password."
+        case .unauthorized: "That password doesn't match, or the approval wasn't completed. Nothing was changed."
+        case .network: "Can't reach the server. Nothing was changed; try again."
+        default: "The identity couldn't be reset (\(error.code)). Try again."
+        }
+    }
+
     public func submit() async {
         let entered = key
         key = ""
@@ -111,6 +138,12 @@ public final class RecoveryViewModel {
         deviceStatus = switch snapshot.status.verification {
         case .verified: "Verified"
         case .unverified: verified ? "Verified" : "Not verified"
+        case .unknown: "Checking…"
+        }
+        backupStatus = switch snapshot.status.backup {
+        case .on: "On"
+        case .off: "Off"
+        case .working: "Updating…"
         case .unknown: "Checking…"
         }
         recoveryStatus = switch snapshot.status.recovery {
