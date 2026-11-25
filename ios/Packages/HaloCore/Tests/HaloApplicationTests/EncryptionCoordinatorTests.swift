@@ -57,6 +57,43 @@ struct EncryptionCoordinatorTests {
         #expect(port.status.verification == .unverified)
     }
 
+    @Test("a lost recovery key: the reset asks for the password, verifies this device and returns a new key (FR-8, AC-SEC-3)")
+    func resetsIdentity() async throws {
+        let port = FakeEncryptionPort(recoveryKey: "OLD", verified: false)
+        let (coordinator, _) = try await make(port)
+        _ = await wait(coordinator) { $0.status.recovery == .incomplete }
+
+        // Not prepared: nothing happens.
+        await #expect(throws: HaloError.invalidInput("RESET_NOT_PREPARED")) { try await coordinator.resetIdentity(password: "pw") }
+        #expect(try await coordinator.prepareIdentityReset() == .password)
+        // The password is needed, and a refusal changes nothing.
+        await #expect(throws: HaloError.invalidInput("PASSWORD")) { try await coordinator.resetIdentity(password: "") }
+        #expect(port.identityResets.isEmpty)
+
+        let key = try await coordinator.resetIdentity(password: "pw")
+        #expect(key != "OLD" && !key.isEmpty)
+        #expect(port.identityResets == ["pw"])
+        let done = await wait(coordinator) { $0.status.verification == .verified && $0.status.recovery == .enabled }
+        #expect(done?.recovery == .idle)
+        #expect(done?.status.backup == .on)
+        // The new key unlocks a device; the old one doesn't.
+        await coordinator.recover(recoveryKey: "OLD")
+        #expect(port.status.verification == .verified)  // already verified: a wrong key can't undo it
+    }
+
+    @Test("a reset can be cancelled, and the browser approval needs no password")
+    func resetVariants() async throws {
+        let port = FakeEncryptionPort(recoveryKey: "OLD", verified: false)
+        let (coordinator, _) = try await make(port)
+        #expect(try await coordinator.prepareIdentityReset() == .password)
+        await coordinator.cancelIdentityReset()
+        await #expect(throws: HaloError.invalidInput("RESET_NOT_PREPARED")) { try await coordinator.resetIdentity(password: "pw") }
+        port.setIdentityResetRequirement(.approveInBrowser(approvalURL: "https://account.example.org/reset"))
+        #expect(try await coordinator.prepareIdentityReset() == .approveInBrowser(approvalURL: "https://account.example.org/reset"))
+        _ = try await coordinator.resetIdentity(password: nil)
+        #expect(port.identityResets == [nil])
+    }
+
     @Test("signing out forgets the status")
     func signOut() async throws {
         let (coordinator, session) = try await make(FakeEncryptionPort(recoveryKey: "k"))

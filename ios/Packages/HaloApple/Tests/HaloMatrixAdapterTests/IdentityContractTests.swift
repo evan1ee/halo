@@ -55,13 +55,49 @@ struct IdentityContractTests {
         return session
     }
 
-    /// Replaces the account's cross-signing identity, as "I lost my recovery key" does (M18-3), confirmed with the password.
-    private func resetIdentity(of session: MatrixSessionPort) async throws {
-        let handle = try await session.encryption().resetIdentity()
-        let user = try await session.signedInClient().userId()
-        guard let handle, case .uiaa(let info) = handle.authType() else { throw ContractViolation("expected a password prompt for the reset") }
-        try await handle.reset(auth: .password(passwordDetails: AuthDataPasswordDetails(
-            identifier: user, password: env["HALO_FAULT_PASSWORD"] ?? "", session: info.session)))
+    /// Replaces the account's cross-signing identity as "Lost your recovery key?" does (M18-3), confirmed with the password.
+    @discardableResult
+    private func resetIdentity(of session: MatrixSessionPort) async throws -> String {
+        let port = MatrixEncryptionPort(session: session)
+        guard try await port.prepareIdentityReset() == .password else { throw ContractViolation("expected a password prompt for the reset") }
+        return try await port.resetIdentity(password: env["HALO_FAULT_PASSWORD"] ?? "")
+    }
+
+    @Test("Lost recovery key: the reset verifies the device, backs up again with a new key that unlocks a second device, and the old key stops working (M18-3, AC-E2EE-4)", .timeLimit(.minutes(4)))
+    func lostRecoveryKey() async throws {
+        let user = env["HALO_FAULT_USER"] ?? ""
+        let first = try await signIn(user, "first")
+        try await first.startSync()
+        let firstPort = MatrixEncryptionPort(session: first)
+        // The earlier test may have left a backup on this account; a new key then replaces it, as the app does.
+        let oldKey: String
+        do { oldKey = try await firstPort.enableRecovery() } catch { oldKey = try await firstPort.resetRecovery() }
+        // A second device that can't be verified from the first, as when the phone is gone.
+        let lost = try await signIn(user, "lost")
+        try await lost.startSync()
+        let status = await firstStatus(of: lost)
+        #expect(status.verification == .unverified)
+
+        let newKey = try await resetIdentity(of: lost)
+        #expect(newKey != oldKey)
+        let after = await firstStatus(of: lost, until: { $0.verification == .verified && $0.recovery == .enabled })
+        #expect(after.verification == .verified && after.recovery == .enabled)
+        let backup = await firstStatus(of: lost, until: { $0.backup != .unknown }).backup
+        #expect(backup == .on, "the key backup is on again after the reset")
+
+        // The new key unlocks a third device; the old one doesn't.
+        let third = try await signIn(user, "third")
+        try await third.startSync()
+        let thirdPort = MatrixEncryptionPort(session: third)
+        await #expect(throws: HaloError.self) { try await thirdPort.recover(recoveryKey: oldKey) }
+        try await thirdPort.recover(recoveryKey: newKey)
+        try await SearchStage.wait(60, "the third device to be verified") { await firstStatus(of: third).verification == .verified }
+    }
+
+    private func firstStatus(of session: MatrixSessionPort, until done: (EncryptionStatus) -> Bool = { _ in true }) async -> EncryptionStatus {
+        let port = MatrixEncryptionPort(session: session)  // kept alive: the stream only follows while the port exists
+        for await status in port.statuses() where status.verification != .unknown && done(status) { return status }
+        return .unknown
     }
 }
 

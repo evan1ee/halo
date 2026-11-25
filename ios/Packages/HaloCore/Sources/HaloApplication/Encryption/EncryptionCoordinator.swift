@@ -93,6 +93,22 @@ public actor EncryptionCoordinator {
         return try await port.resetRecovery()
     }
 
+    /// What a reset of the end-to-end identity needs from the person (FR-8). Nothing is changed yet.
+    public func prepareIdentityReset() async throws(HaloError) -> IdentityResetRequirement {
+        guard snapshot.recovery != .working else { throw .invalidInput("RECOVERY_BUSY") }
+        return try await port.prepareIdentityReset()
+    }
+
+    /// Resets the identity and returns the new recovery key, to be shown once and not kept (FR-8, AC-SEC-3).
+    public func resetIdentity(password: String?) async throws(HaloError) -> String {
+        guard snapshot.recovery != .working else { throw .invalidInput("RECOVERY_BUSY") }
+        snapshot.recovery = .working
+        defer { if snapshot.recovery == .working { snapshot.recovery = .idle } }
+        return try await port.resetIdentity(password: password)
+    }
+
+    public func cancelIdentityReset() async { await port.cancelIdentityReset() }
+
     /// Requests interactive SAS (emoji / decimal) verification with the user's other signed-in devices (FR-2).
     public func requestDeviceVerification() async {
         do {
