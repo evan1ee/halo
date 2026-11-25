@@ -4,7 +4,7 @@
 #   infra/test/run.sh scenarios [S04 F02 …]   # the scenario driver, with the fault cases (Linux CI and local)
 #   infra/test/run.sh faults [test …]         # the adapter's fault tests in a simulator (Mac)
 #   infra/test/run.sh interop [test …]        # the wire-level interoperability matrix in a simulator (Mac)
-#   infra/test/run.sh search                  # encrypted history for message search (M17-8, Mac)
+#   infra/test/run.sh search [test …]         # message search against a real server (S-SRCH, Mac)
 #   HALO_TEST_KEEP=1 …                        # leave it running; `infra/test/run.sh down` removes it
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -38,12 +38,12 @@ for name in "$user" "${user}peer"; do
 done
 export TEST_RUNNER_HALO_FAULT_SERVER="$HALO_TEST_PROXY" TEST_RUNNER_HALO_FAULT_DIRECT="$HALO_TEST_SERVER" TEST_RUNNER_HALO_FAULT_CONTROL="$HALO_TEST_CONTROL"
 export TEST_RUNNER_HALO_FAULT_USER="$user" TEST_RUNNER_HALO_FAULT_PASSWORD="$password"
-suite=FaultTests; [[ "$command" == interop ]] && suite=InteropTests; [[ "$command" == search ]] && suite=SearchSpikeEncryptionTests
+suite=FaultTests; [[ "$command" == interop ]] && suite=InteropTests; [[ "$command" == search ]] && suite=SearchContractTests
 only=("-only-testing:HaloMatrixAdapterTests/$suite")
 if (( $# )); then only=(); for name in "$@"; do only+=("-only-testing:HaloMatrixAdapterTests/$suite/${name%()}()"); done; fi
 log="$(mktemp -t halo-faults)"
 status=0
 (cd ios/Packages/HaloApple && xcodebuild -scheme HaloApple-Package -destination "platform=iOS Simulator,name=${HALO_SIM:-iPhone 17}" test "${only[@]}") >"$log" 2>&1 || status=$?
-grep -E '^(✔|✘) (Test|Suite)|Test run with|^FAULT |^SPIKE ' "$log" || true
+grep -E '^(✔|✘) (Test|Suite)|Test run with|^FAULT |^SEARCH ' "$log" || true
 [[ $status -eq 0 ]] || echo "faults: failed (exit $status); full log: $log" >&2
 exit "$status"

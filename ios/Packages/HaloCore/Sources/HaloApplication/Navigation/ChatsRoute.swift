@@ -8,7 +8,7 @@ import HaloFoundation
 public enum ChatsRoute: Hashable, Codable, Sendable {
     case room(RoomID, focus: EventID? = nil)
     case roomInfo(RoomID)
-    case thread(RoomID, rootEvent: EventID)
+    case thread(RoomID, rootEvent: EventID, focus: EventID? = nil)
     case settings
     case stickerLibrary
     case activity
@@ -59,9 +59,14 @@ public struct ChatsRouter: Sendable, Equatable {
     }
 
     /// Opens a thread rooted at `rootEvent` in `room`, deduplicating if already on top.
-    public mutating func openThread(room: RoomID, rootEvent: EventID) {
-        let target = ChatsRoute.thread(room, rootEvent: rootEvent)
+    /// The same thread already on top with another `focus` is replaced, so the jump runs.
+    public mutating func openThread(room: RoomID, rootEvent: EventID, focus: EventID? = nil) {
+        let target = ChatsRoute.thread(room, rootEvent: rootEvent, focus: focus)
         guard path.last != target else { return }
+        if case .thread(room, rootEvent, _) = path.last {
+            if focus != nil { path[path.count - 1] = target }
+            return
+        }
         path.append(target)
     }
 
@@ -72,8 +77,8 @@ public struct ChatsRouter: Sendable, Equatable {
             openRoom(room, focus: focus)
         case .roomInfo(let room):
             openRoomInfo(room)
-        case .thread(let room, let rootEvent):
-            openThread(room: room, rootEvent: rootEvent)
+        case .thread(let room, let rootEvent, let focus):
+            openThread(room: room, rootEvent: rootEvent, focus: focus)
         case .settings, .stickerLibrary, .activity, .globalMediaGallery:
             guard path.last != route else { return }
             // A destination opened from the sidebar replaces a room; one opened from another destination (Settings →
@@ -92,7 +97,7 @@ public struct ChatsRouter: Sendable, Equatable {
     public mutating func removeRoom(_ room: RoomID) {
         path.removeAll { route in
             switch route {
-            case .room(let id, _), .roomInfo(let id), .thread(let id, _):
+            case .room(let id, _), .roomInfo(let id), .thread(let id, _, _):
                 return id == room
             case .settings, .stickerLibrary, .activity, .globalMediaGallery:
                 return false
@@ -105,7 +110,7 @@ public struct ChatsRouter: Sendable, Equatable {
     public mutating func pruneInvalidRooms(joinedRoomIDs: Set<RoomID>) {
         path.removeAll { route in
             switch route {
-            case .room(let room, _), .roomInfo(let room), .thread(let room, _):
+            case .room(let room, _), .roomInfo(let room), .thread(let room, _, _):
                 return !joinedRoomIDs.contains(room)
             case .settings, .stickerLibrary, .activity, .globalMediaGallery:
                 return false

@@ -1,17 +1,23 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-25 · Branch: `main` (this push through `feat/m17-measure`) · PRs #1–#89 merged before it
+Last updated: 2026-11-25 · Branch: `feat/m19-message-search` (from `main` at `6e69c45`) · PRs #1–#90 merged before it
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
 - **Roadmap:** M0–M16 are built and merged. Re-planned 2026-11-25 to a production release (D121): M17 measure → M18 security and reliability → M19 performance → M20 messaging → M21 experience → M22 beta and launch, with gates G-SCALE, G-PERF, G-SHIP ([docs/ROADMAP.md](docs/ROADMAP.md)). The audit behind it found 26 gaps (ROADMAP §2); Halo isn't a release candidate yet.
-- **Milestones:** M0–M16 built, partly for M14–M15 (GA-24…GA-26). **M17 in progress:** M17-1, 2, 3, 6, 8 done; M17-4, M17-5 and M17-7 done except what needs a device or the founder (§5). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1).
-- **Last checks:** `prepush.sh` passed on the pushed commit (package tests, app build, UI tests, docs, boundaries, gitleaks, swiftlint); `infra/test/run.sh scenarios`, `faults` (9 cases) and `interop` (2 known issues) green; fault cases red for a client broken on purpose; full contract suite 38 tests green, but see the `timeline` flake in §5. Simulator and dev Mac only; nothing was run on an iPhone.
-- **CI:** PRs #1–#89 merged. New `scenarios.yml` (Synapse behind the fault proxy). Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
+- **Milestones:** M0–M16 built, partly for M14–M15 (GA-24…GA-26). **M17 in progress:** M17-1, 2, 3, 6, 8 done; M17-4, M17-5 and M17-7 done except what needs a device or the founder (§5). **M19 started early (D125): M19-11 message search and M20-1 jump to any message are built**; M18 not started. Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1).
+- **Last checks:** `prepush.sh` on the pushed commit (package tests, app build, UI tests with the new `testMessageSearchOpensAHit`, docs, boundaries, gitleaks, swiftlint); `infra/test/run.sh search` 5 of 5; full contract suite 37 of 37 (with S01–S29 over the server and the unread evidence); scale numbers in TEST_STRATEGY §7; by hand in the simulator: search, filters, opening an old message, Newest, dark mode at AX5. `faults` and `interop` (2 known issues) green. **Not run:** an iPhone, the scenario driver, light AX5 of Settings → Message search, VoiceOver.
+- **CI:** PRs #1–#90 merged. New `scenarios.yml` (Synapse behind the fault proxy). Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
+- **M19-11 message search on Halo's own index, with M20-1 (2026-11-25, `feat/m19-message-search`):** encrypted rooms, full history, CJK, files and links, filters, coverage notice, Settings → Message search. The SDK's index is off and its folder deleted.
+  - `SearchTokeniser`, `SearchContent`, `SearchIndexPolicy` (domain) · `SearchIndexer`, `SearchCoordinator`, `LocalMessageSearch`, `SearchStartGate` (application) · `SearchIndexStore`, `SearchHoldingFile` (GRDB FTS5, D124) · `MatrixMessageIndexSource`, `SearchMapper`, a second SDK client in `MatrixSessionPort` (adapter) · `DeviceConditions`, `ProtectedData`, `SearchProcessingTask` (platform) · `MessageSearchEngine` (app).
+  - Two corrections of ADR-0024: gaps are found by comparing message IDs with the server (reactions can fill a sync response), and shown hits are checked against the server's `/event` (the SDK's cache misses deletions inside a sync gap).
+  - M20-1: a message that isn't loaded opens the timeline around it (`openFocused`), newer pages load, "Newest" leads back, nothing is marked read meanwhile.
+  - Found and fixed on the way: opening a thread and exporting a room always failed (`reportUtds: true` without a hook, F-FFI-27); both now tested against a real server.
+  - Measured at 1,000 rooms (TEST_STRATEGY §7): first sync 18.9 s, catch-up 1.6 s with 1,000 of 1,000 messages found, 0.59–0.75 s CPU per idle minute, 18 threads, +20 MB; full history 13 min, 20 MB index.
 - **M17 measure and prove (2026-11-25, `feat/m17-measure`):**
   - **M17-1** `HaloSignpost` (cold start, room open, sync, image decode, NSE, hangs) read by XCTest in the running app. **M17-2** MetricKit payloads on the device, redacted and bounded, in the diagnostics export.
   - **M17-3** `infra/dev/scale-fixtures.py`: a server of its own (`halo-scale`, port 8108) with 300 and 1,000 rooms, a 10,000-member and a 20,000-event room. **M17-6** `infra/test` with the fault proxy, F01–F06, `FaultTests`, `scenarios.yml`.
@@ -20,7 +26,6 @@ Summary only; older history lives in `git log`.
   - Also fixed: `SessionCoordinator.start()` could return while a revoked session was still being deleted (state "restoring"); found by a flaking unit test, regression test added.
   - Found: GA-27 (search index), GA-28 (one request per unread room per launch), GA-29 (39 s to recover from a half-open connection), GA-30 (mention's plain text), GA-31 (unknown types hidden).
 - **M17-8 search spike (2026-11-25): passed on the simulator**, after two design changes: live lane on the SDK's per-room listeners, history in an SDK client of its own (the app's client never frees what is read, F-FFI-26). Encrypted history: 400 of 400 messages after recovery. Unread suite green with the SDK index off. Numbers in TEST_STRATEGY §7; `scripts/scale-measure.py --search`, `infra/test/run.sh search`. Production code: only the measurement switch `backPaginates`. Not measured: an iPhone, energy.
-- **Message search decided (D123, ADR-0024, 2026-11-25, documents only, nothing built):** Halo's own FTS5 index, **encrypted rooms searchable**, full history, on the device only; spec `docs/features/MESSAGE_SEARCH.md` (AC-SRCH-1…9). Checked in the SDK source: the history sweep needs automatic back-pagination, the SDK indexes in memory even without a folder, keys come from the backup after a failed decryption (F-FFI-25). New M17-8 (spike), larger M19-11, M20-1 taken with it, GA-32 (bugs in today's search), V-SEARCH-2/3; index protection D124.
 - **Production roadmap (D121, 2026-11-25, `docs/production-roadmap`):** audited code against every product, design, security, testing and release document at `155f745`; rewrote ROADMAP (gap table, R/C/P tasks with "Done when", gates, release plan), added AC-REL/AC-SEC/AC-MOT and NFR-11–15, V-SCALE-1, V-OIDC-1, V-INTEROP-1, Q-SCOPE, Q-SYNC-SCALE, Q-REPORT, Q-SIGNUP, Q-VERIFY, Q-REVIEW; corrected specs that promised unbuilt behaviour or described sliding sync.
 - **Unread badge, widgets and background sync (D118, 2026-11-24, PR #88):**
   - Root causes: gateway down and Halo's pushkin never able to send (asyncio awaited on Twisted); dev ran the stock pushkin; background launches did nothing (handlers set in a view) and reported done before the badge was written; pre-sync evaluations overwrote what the NSE had counted; unordered badge writes; the NSE counted late pushes twice and raced itself; a sticky foreground flag; no refresh fallback; a widget reload on every open/close spent iOS's budget.
@@ -30,12 +35,6 @@ Summary only; older history lives in `git log`.
 - **Account data no longer overwritten (D120, 2026-11-25, PR #88):** sticker-pack lists, personal pins, the media-preview setting and the bot allowlist are changed from the server's copy (`ServerAccountData`), bot edits as a difference (`BotListEditor`), Saved Messages asks the server before making a room, and ignore/unignore write the server's list; creating a pack right after sign-in had replaced the account's list (`createPack` in a full contract run did it to stickertester; restored). `createPack`, `botAllowlist`, `savedRoom` and `ignoreKeepsOthers` failed before and pass now; the full contract suite is green with the accounts' data unchanged. Two tests assumed fixed sizes and were corrected: the timeline contract paged at most 200 events back (the room grew past it) and `testSentPhotoStaysVisibleAndShowsDeliveryState` counted images on screen (checked with a mutation run). It and `unavailablePack` put the shared account's lists back whatever happens.
 - **Leftover test rooms and devices (2026-11-25, PR #88):** removed with the founder's OK: stickertester 269 → 9 rooms, contractpeer 320 → 6, 170 test devices, and 28 sticker-pack list entries of those or long-left rooms; backup in `~/.config/halo-dev/synapse-before-leftovers-2026-11-25.dump`. Tests now undo everything through the `.cleansUp` trait, also after a failure, and `contract-test.sh` fails a run that left something (`infra/dev/leftovers.py`, replaces `prune-sessions.py`; failed on the old tests, passes now). `createPack` only caught D120 on a large account; it now starts sync after creating the pack (mutation run).
 - **Test harness (2026-11-25, PR #88):** the two keyboard UI tests no longer skip on the simulator (`prepush.sh` turns off the software keyboard's hiding; both pass), S29 survives the Synapse flake above (a real mismatch still fails, checked by mutation), and `create-fixtures.py --new-e2ee` / `smoke.sh` deactivate their throwaway user.
-- **Room info as pushed full-bleed navigation page (2026-11-24, `main`):**
-  - Replaced Room info `.sheet` presentation (timeline avatar button and room-list context menu) with `ChatsRoute.roomInfo(RoomID)`, `ChatsRouter.openRoomInfo(_:)`, `ChatsRouter.removeRoom(_:)`, and `RoomInfoPresentation.page` (keeping `.inspector` on regular-width iPad).
-  - Removed the nested `NavigationStack` from `RoomDetailsView` and matched the conversation page's transparent, title-free header with full-bleed edge-to-edge scrolling (`.scrollEdgeEffectHidden(true, for: .top)`); verified with `HaloUITests.testRoomInfoOpensAsPushedPage` on physical iPhone 16.
-- **Scroll-safe timeline long-press & image/map tap style + iPhone 16 verification (2026-11-24, PR #87):**
-  - Removed SwiftUI `.simultaneousGesture(LongPressGesture)` + touch-down `.scaleEffect(0.96)` (which flashed a tap/press effect and interfered with scrolling over images, maps, and messages) and replaced it with a UIKit-backed `UILongPressGestureRecognizer` (`ScrollSafeLongPressModifier`, `cancelsTouchesInView = false`, `delaysTouchesBegan = false`, simultaneous with `UIScrollView`) plus no-highlight `ScrollFriendlyTapButtonStyle` on images, maps (`LocationCardView`), and reply quotes.
-  - Made `jump-to-bottom` interrupt ongoing deceleration synchronously on the tap frame before converging; added and passed `HaloUITests.testTimelineImageScrollAndJumpToBottomWhileScrolling` on physical iPhone 16 (`00008140-000222592ED0801C`).
 
 ## 3. Key decisions
 Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D125), [docs/adr/README.md](docs/adr/README.md).
@@ -62,10 +61,11 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D125), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
-- **App:** `HaloSignpost`, `MetricPayloadStore`, `MetricKitRecorder`, `MainThreadHangs`; call sites in `HaloApp`, `AppRoot`, assemblies, `TimelineView`, `StickerImage`, `AsyncAnimatedImage`, `MatrixSessionPort` (also the measurement switches), NSE.
-- **Tests (M17-8):** `SearchSpikeReader`, `SearchSpikeMeasurements`, `SearchSpikeEncryptionTests`, `SearchIndexMeasurements`. **Tests (M17):** `HaloSignpostTests`, `ImageDecodeSignpostTests`, `MetricPayloadStoreTests`, `MainThreadHangsTests`, `ScaleMeasurements`, `FaultTests`, `InteropTests`, `TestServerStage`, `HaloPerformanceTests` (the two perf tests moved out of `HaloUITests`).
-- **Infrastructure:** `infra/test/`, `infra/dev/scale-fixtures.py` + compose/config, `tools/scenario-driver`, `scripts/{scale-measure,perf}.py`, `scenarios.yml`.
-- **Docs (search, D123):** ADR-0024, MESSAGE_SEARCH and the documents it touches. **Docs (M17):** ROADMAP, OPEN_QUESTIONS, RISK_REGISTER, TEST_STRATEGY, INTEGRATION_TESTS, LOGGING, CI_CD, SYNC_ENGINE, PRIVACY, SECURITY, PRIVACY_POLICY, TECH_DEBT, DEVELOPMENT_SETUP, `infra/dev/README`.
+- **HaloCore:** `HaloDomain/Search/*`, `Ports/{SearchPort,TimelinePort,PreferencesPort}`, `HaloApplication/Search/*`, `SyncCoordinator` (`beforeStart`), `TimelineCoordinator` (focus), `ChatsRoute` (thread focus), fakes and tests.
+- **HaloApple:** `HaloPersistence/Search*`, `HaloMatrixAdapter/Search/*`, `MatrixSessionPort`, `MatrixTimelinePort`, `MatrixRoomPort`, `ErrorMapper`, `HaloPlatform/{DeviceConditions,SearchProcessingTask}`, `FeatureSearch`, `FeatureSettings/SearchIndexSettings`, `FeatureTimeline` (focus). Removed: `MatrixSearchPort`, the M17-8 spike tests.
+- **App:** `Composition/SearchAssembly`, `AppRoot`, `HaloApp`, `SessionAssembly`, `SettingsAssembly`, Info plists (`processing`, `one.mbm.halo.search`), project file.
+- **Tests and scripts:** `SearchContractTests`, `SearchStage`, `ScaleMeasurements` (search on, `fullHistory`), `infra/test/run.sh search`, `scripts/scale-measure.py`.
+- **Docs:** MESSAGE_SEARCH, ADR-0024, TIMELINE, SETTINGS, ports, data, security, privacy, testing, ROADMAP, SOURCES (F-FFI-27).
 
 ## 5. Outstanding issues
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
@@ -74,6 +74,7 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 - 👤 **Q-VERIFY** before M18 ends · **Q-REPORT**, **Q-SIGNUP**, **Q-REVIEW** later.
 
 **Engineering (not blocking)** — the gaps are in ROADMAP §2, not repeated here.
+- **Message search, known limits:** the per-room listeners cost +20 MB at 1,000 rooms (at the limit); a live poll is found at once only in the 200 most recent rooms; taking rows out is slow on purpose (`secure-delete`), so leaving a huge room takes a while in the background; a focused timeline's events stay in memory for the app's life (about 0.5 KB each, F-FFI-26).
 - **`timeline` contract flake:** `verifyInteractions` timed out (90 s) in the first 3 of 12 completed full runs on the branch, then in none (one more run was stopped at 290 s, unfinished); 0 of 2 on `main` the same hour, 0 of 4 alone. The same test also timed out on earlier branches. The step is unknown; the tests now name it in the failure ("timed out …: never saw …").
 - **Scale server:** `halo-scale` (about 1 GB) is left stopped or running on the dev Mac for M19; `infra/dev/scale-fixtures.py down` / `remove --yes`. Simulator `Halo Perf` belongs to `scripts/perf.py`.
 - **Accessibility audit (watch):** `testLaunchRootScreenPassesAccessibilityAudit` failed at times until 2026-11-24 (also on `main`), "Potentially inaccessible text" without an element; 12 of 12 runs passed on 2026-11-25 with the cleaned-up account. Cause unknown, no exemption added.
@@ -84,6 +85,7 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 - **Timeline follow-up:** the room appears ~150 ms after the push starts (the list is hidden until placed); an own thumbnail is downloaded once after an app restart (SDK caches the file under the new reference, thumbnails under their own key).
 
 **Needs the founder (`👤`) or physical device (`📱`)**
+- 📱 **Message search on the iPhone:** lock the phone while it reads (index unreadable, search and reading go on after unlock), the processing task on the charger (Xcode: `e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"one.mbm.halo.search"]`), file protection `complete`, energy, first sync of `scale1000`, no `0xdead10cc` when the app goes to the background while it reads (the second SDK client uses the stores in the App Group); VoiceOver of the results.
 - 📱 **M17-4/M17-5 on the iPhone 16:** `scripts/perf.py --device 00008140-000222592ED0801C --save-baseline` (signed-in account), one hour idle for energy (NFR-15), first sync of `scale1000` with and without the search index (needs the phone signed in to the scale server: `HALO_SCALE_BIND=0.0.0.0`).
 - 👤 **M17-4:** first sync and catch-up of one real public-server account. 👤 **M17-7:** the Element Web / Element X checklist, about an hour.
 - 📱 **M17-1/M17-2:** the NSE interval and a MetricKit payload on a device (Xcode → Debug → Simulate MetricKit Payloads, then Settings → Diagnostics → Export).
@@ -105,8 +107,8 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 
 ## 6. Next steps
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §3.
-1. Founder: merge PR #90; the device and hand checks of §5. M19-11 (search, with M20-1) may start.
-2. M18 top to bottom (M19 may start too, D125). Re-run `infra/test/run.sh faults` for send and sync changes.
+1. Founder: review and merge the M19-11 pull request; the device and hand checks of §5.
+2. M18 top to bottom, then the rest of M19. M20-11 (search inside a room) only needs its interface now (`SearchQuery.room`).
 3. Founder, long lead times: push gateway (M22-1), legal (M22-4), KLIPY production key, filtering entitlement, artwork.
 
 ## 7. Next Session Prompt
@@ -122,7 +124,7 @@ Checks per iteration:
 - HALO_SIM="iPhone Air" scripts/prepush.sh
 - scripts/contract-test.sh (adapter, sync, timeline, read state); it fails if a run leaves rooms or devices
 - Simulator check in light, dark and AX5 for UI changes
-- infra/test/run.sh faults|interop when sending, sync or timeline mapping changes
+- infra/test/run.sh faults|interop when sending, sync or timeline mapping changes; infra/test/run.sh search for message search
 - Never scale-test on stickertester or contractpeer; use the M17-3 accounts
 - Update HANDOFF.md, ROADMAP.md and the owning spec in the last commit of every push (AGENTS.md §18).
 ```

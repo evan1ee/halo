@@ -201,7 +201,7 @@ public struct TimelineView: View {
                     if landed, (!bottomFollow.jumpingToBottom || atBottom), model.isAtBottom != atBottom {
                         model.setAtBottom(atBottom)
                     }
-                    if bottomFollow.onScrollGeometryChanged(atBottom: atBottom, scrollMoving: scrollMoving),
+                    if bottomFollow.onScrollGeometryChanged(atBottom: atBottom, scrollMoving: scrollMoving), !model.isFocused,
                        let last = rows.last?.id {
                         proxy.scrollTo(last, anchor: .bottom)
                     }
@@ -276,7 +276,7 @@ public struct TimelineView: View {
                 .task(id: rows.last?.id) {
                     // A new last row scrolls into view when already at the bottom or when the user just sent it; when
                     // scrolled up reading history, stay put so the "↓ N new" pill lets the user jump down on their own (TIMELINE §6).
-                    guard landed, let last = rows.last, model.isAtBottom || last.isOwn else { return }
+                    guard landed, !model.isFocused, let last = rows.last, model.isAtBottom || last.isOwn else { return }
                     for step in 0..<3 {
                         withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
                         try? await Task.sleep(for: .milliseconds(step == 0 ? 200 : 250))
@@ -296,6 +296,13 @@ public struct TimelineView: View {
                     withAnimation { proxy.scrollTo(target, anchor: .center) }
                     model.jumpHandled()
                     Task {
+                        if model.isFocused {
+                            // A list that was just filled estimates its row heights: placed again once they are real.
+                            for _ in 0..<3 {
+                                try? await Task.sleep(for: .milliseconds(120))
+                                proxy.scrollTo(target, anchor: .center)
+                            }
+                        }
                         try? await Task.sleep(for: .seconds(1.5))
                         model.clearHighlight()
                     }
@@ -321,9 +328,17 @@ public struct TimelineView: View {
                 }
                 // TIMELINE §6: when scrolled up, offer a floating button (or "↓ N new" pill) to return to the newest row.
                 .overlay(alignment: .bottomTrailing) {
-                    if landed, (!model.isAtBottom || !bottomVisible), let last = rows.last?.id {
+                    if landed, model.isFocused || !model.isAtBottom || !bottomVisible, let last = rows.last?.id {
                         Button {
                             jumpToBottomTask?.cancel()
+                            if model.isFocused {
+                                bottomFollow.beginJumpToBottom()
+                                Task {
+                                    await model.returnToNewest()
+                                    bottomFollow.cancelJumpToBottom()
+                                }
+                                return
+                            }
                             bottomFollow.beginJumpToBottom()
                             model.setAtBottom(true)
                             let wasMoving = scrollMoving
@@ -351,7 +366,15 @@ public struct TimelineView: View {
                                 }
                             }
                         } label: {
-                            if model.newSinceDetached > 0 {
+                            if model.isFocused {
+                                Label("Newest", systemImage: "arrow.down")
+                                    .font(HaloTypography.meta.weight(.bold))
+                                    .foregroundStyle(HaloColor.textPrimary)
+                                    .padding(.horizontal, HaloSpacing.m)
+                                    .padding(.vertical, HaloSpacing.s)
+                                    .contentShape(.capsule)
+                                    .glassEffect(.regular.interactive(), in: .capsule)
+                            } else if model.newSinceDetached > 0 {
                                 Label("\(model.newSinceDetached) new", systemImage: "arrow.down")
                                     .font(HaloTypography.meta.weight(.bold))
                                     .foregroundStyle(HaloColor.textPrimary)
@@ -372,7 +395,7 @@ public struct TimelineView: View {
                         .buttonStyle(.plain)
                         .padding(.trailing, HaloSpacing.s)
                         .padding(.bottom, HaloSpacing.m)
-                        .accessibilityLabel(model.newSinceDetached > 0 ? "\(model.newSinceDetached) new messages, jump to bottom" : "Jump to bottom")
+                        .accessibilityLabel(model.isFocused ? "Back to the newest messages" : model.newSinceDetached > 0 ? "\(model.newSinceDetached) new messages, jump to bottom" : "Jump to bottom")
                         .accessibilityIdentifier("jump-to-bottom")
                     }
                 }
@@ -462,6 +485,15 @@ public struct TimelineView: View {
             photoViewer(initial: photo)
         }
         #endif
+        .overlay(alignment: .top) {
+            if model.isJumping {
+                ProgressView().padding(HaloSpacing.s).glassEffect(.regular, in: .circle).padding(.top, HaloSpacing.s)
+                    .accessibilityLabel("Looking for the message")
+            }
+        }
+        .alert("Message not found", isPresented: Binding(get: { model.jumpError != nil }, set: { if !$0 { model.dismissJumpError() } })) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(model.jumpError ?? "") }
         .alert("Can't open file", isPresented: Binding(get: { model.openFileError != nil }, set: { if !$0 { model.dismissOpenFileError() } })) {
             Button("OK", role: .cancel) {}
         } message: { Text(model.openFileError ?? "") }

@@ -27,7 +27,11 @@ public actor SyncCoordinator {
     private var observers: [Task<Void, Never>] = []
     private var restart: Task<Void, Never>?
 
-    public init(port: any SyncPort, session: SessionCoordinator, sleep: @escaping Sleep = { try await Task.sleep(for: $0) }) {
+    private let beforeStart: (@Sendable () async -> Void)?
+
+    /// - Parameter beforeStart: runs before each start of a sync (search begins to listen); it must return soon.
+    public init(port: any SyncPort, session: SessionCoordinator, beforeStart: (@Sendable () async -> Void)? = nil, sleep: @escaping Sleep = { try await Task.sleep(for: $0) }) {
+        self.beforeStart = beforeStart
         self.port = port
         self.session = session
         self.sleep = sleep
@@ -72,6 +76,7 @@ public actor SyncCoordinator {
     public func syncOnceInBackground() async -> Bool {
         // Asked directly: after a cold background launch the session can be ready before this actor has heard about it.
         guard case .ready = await session.state, !applied else { return false }
+        await beforeStart?()
         do {
             try await port.syncOnce()
             return true
@@ -109,6 +114,8 @@ public actor SyncCoordinator {
             let target = shouldRun
             if target {
                 restart?.cancel()
+                await beforeStart?()
+                guard shouldRun else { continue }
                 do { try await port.start() } catch {
                     status = .failed
                     if error.isRetryable { scheduleRestart() }

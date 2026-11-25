@@ -9,9 +9,9 @@ Decisions: D46, ADR-0006.
 | SDK state + crypto store (SQLite) | matrix-rust-sdk | App Group `accounts/<hash>/data/` | Session, room state, crypto keys | No (keys!) — needs recovery key/backup if lost |
 | SDK event cache + media store | matrix-rust-sdk | App Group `accounts/<hash>/cache/` | Cached events, media | Yes (from server) |
 | `halo.sqlite` | HaloPersistence (GRDB) | App Group `accounts/<hash>/halo/halo.sqlite` | Intents, notification records, audit, caches, bot index | Yes, except unsent intents |
-| `search-index.sqlite` (*not built*, D123) | HaloPersistence (GRDB, FTS5) | App's private Application Support `search/<hash>/`, excluded from backups | Text of decrypted messages, per-room coverage | Yes (from the SDK and the server; slow for full history) |
-| Search history client's event cache (*not built*) | matrix-rust-sdk | App's private folder, passphrase-encrypted like the app's | Scratch; deleted with the client | Yes |
-| Search holding file (*not built*) | HaloPersistence | App's private folder | History fetched while locked, AES-GCM, until it moves into the index | Yes |
+| `search-index.sqlite` (D123) | HaloPersistence (GRDB, FTS5) | App's private Application Support `search/<hash>/`, excluded from backups | Text of decrypted messages, per-room coverage | Yes (from the SDK and the server; slow for full history) |
+| Search history client's event cache | matrix-rust-sdk | App's private Caches `search-history/<store>/`, passphrase-encrypted like the app's | Scratch; a folder per client, deleted when the next one opens and on sign-out | Yes |
+| Search holding file and plan | HaloPersistence | Beside the index, `completeUntilFirstUserAuthentication` | What was read or synced while locked, and what to read next, AES-GCM (the drafts' key), at most 50 MB, until it moves into the index | Yes |
 | Keychain (shared access group) | HaloPlatform | — | Session tokens, SDK store passphrase, Halo DB field key | No |
 | UserDefaults (App Group suite) | Features | — | UI preferences | Yes (defaults) |
 
@@ -47,7 +47,7 @@ that opens both]**.
 | SDK media store (disk) | SDK retention policy (`set_media_retention_policy`), default 1 GB / 30 days **[DECISION D55; V-MEDIA-1]** |
 | `sticker_pack_cache` | Refreshed on account-data/room-state change and at most every 6 h; served stale while refreshing |
 | `bot_task` | Derived; rebuild on demand |
-| `search-index.sqlite` (*not built*) | Kept until sign-out, account removal or "Delete" in Settings; a new schema version deletes and rebuilds it; not in Caches, because iOS would delete hours of indexing |
+| `search-index.sqlite` | Kept until sign-out, account removal or "Delete" in Settings; a new schema version deletes and rebuilds it; not in Caches, because iOS would delete hours of indexing |
 
 ## 6. Offline behaviour and conflict resolution
 | Data | Conflict rule |

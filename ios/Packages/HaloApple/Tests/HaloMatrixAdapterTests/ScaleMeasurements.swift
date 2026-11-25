@@ -2,6 +2,8 @@ import Darwin
 import Foundation
 import HaloDomain
 import HaloFoundation
+import HaloApplication
+import HaloPersistence
 import HaloTestSupport
 import Testing
 @testable import HaloMatrixAdapter
@@ -14,7 +16,7 @@ private let env = ProcessInfo.processInfo.environment
 struct ScaleMeasurements {
     private let clock = ContinuousClock()
 
-    @Test("First sync, restart, idle, live message and catch-up", .timeLimit(.minutes(30)))
+    @Test("First sync, restart, idle, live message and catch-up", .timeLimit(.minutes(30)), .enabled(if: env["HALO_SCALE_HISTORY"] == nil))
     func account() async throws {
         let server = env["HALO_SCALE_SERVER"] ?? "", user = env["HALO_SCALE_USER"] ?? ""
         let expected = Int(env["HALO_SCALE_ROOMS"] ?? "") ?? 0
@@ -34,11 +36,15 @@ struct ScaleMeasurements {
         memory.reset()
         let firstStart = clock.now
         let first = follow(session)
+        // As shipped: search listens before the first sync; reading history waits (the budgets hold while it is done or paused, NFR-14).
+        let search = try searches ? SearchStage(session, paused: true, joined: { first.joined }) : nil
+        await search?.indexer.begin()
         try await session.startSync()
         result["firstListSeconds"] = try await seconds(since: firstStart) { try await first.waitForRooms(expected, seconds: 900) }
         result["firstSyncSeconds"] = try await seconds(since: firstStart) { try await first.waitForSync(1, seconds: 900) }
         result["firstPeakMB"] = memory.peakMB
         result["firstTraffic"] = await proxy("GET", "/stats")
+        await search?.indexer.roomsChanged()
 
         // 2. Idle in the foreground: the long poll and whatever the SDK does on its own.
         try await Task.sleep(for: .seconds(20))  // let the key queries of the first sync finish
@@ -66,6 +72,8 @@ struct ScaleMeasurements {
         // 4. Away for a day: 200 rooms with five messages each, then the app starts again on its stored data.
         await session.stopSync()
         first.cancel()
+        await search?.indexer.stop()
+        await search?.store.suspend(rooms: [])
         for room in shared.prefix(200) {
             for number in 0..<5 { try await probe.send("away \(number)", to: room, transaction: UUID().uuidString) }
         }
@@ -78,12 +86,23 @@ struct ScaleMeasurements {
         result["restoreSeconds"] = (clock.now - restart).seconds
         let second = follow(again)
         result["cachedListSeconds"] = try await seconds(since: restart) { try await second.waitForRooms(expected, seconds: 120) }
+        let later = try search.map { try SearchStage(again, directory: $0.directory, paused: true, rests: false, joined: { second.joined }) }
+        let listening = clock.now
+        await later?.indexer.begin()
+        result["listenSeconds"] = (clock.now - listening).seconds
         let catchUp = clock.now
         try await again.startSync()
         result["catchUpSeconds"] = try await seconds(since: catchUp) { try await second.waitForSync(1, seconds: 300) }
         result["catchUpRooms"] = min(200, shared.count)
         result["catchUpPeakMB"] = memory.peakMB
         result["catchUpTraffic"] = await proxy("GET", "/stats")
+        if let later {
+            // What the live lane wrote, then the comparison of the touched rooms with the server.
+            try await SearchStage.wait(30, "the caught-up messages in the index") { try await later.store.statistics().messages >= 5 * min(200, shared.count) }
+            result["catchUpIndexedSeconds"] = (clock.now - catchUp).seconds
+            result["catchUpFound"] = try await later.hits("away").count
+            await later.indexer.stop()
+        }
         await again.stopSync()
         second.cancel()
         memory.stop()
@@ -93,7 +112,71 @@ struct ScaleMeasurements {
         #expect(result["catchUpSeconds"] != nil)
     }
 
+    @Test("Full history for search: every room to its start, then an idle minute and queries", .timeLimit(.minutes(60)), .enabled(if: env["HALO_SCALE_HISTORY"] != nil))
+    func fullHistory() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("halo-scale-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let session = port(directory), memory = PeakMemory()
+        defer { memory.stop() }
+        let details = try await session.loginDetails(server: env["HALO_SCALE_SERVER"] ?? "")
+        _ = try await session.loginPassword(
+            PasswordCredentials(username: env["HALO_SCALE_USER"] ?? "", password: env["HALO_SCALE_PASSWORD"] ?? "", deviceDisplayName: "scale"), on: details)
+        Cleanup.current.add { try? await session.logout() }
+        let list = follow(session)
+        try await session.startSync()
+        try await list.waitForSync(1, seconds: 900)
+        var last = 0.0
+        for _ in 0..<9 where abs(memory.currentMB - last) > 0.5 {  // the list still rebuilds after the first sync
+            last = memory.currentMB
+            try await Task.sleep(for: .seconds(20))
+        }
+        let search = try SearchStage(session, paused: true, rests: false, joined: { list.joined })
+        var result: [String: Any] = ["memoryBeforeMB": memory.currentMB]
+        await search.indexer.begin()
+        try await Task.sleep(for: .seconds(10))
+        result["listeningMB"] = memory.currentMB
+        memory.reset()
+        await proxy("DELETE", "/stats")
+        let cpu = cpuSeconds(), start = clock.now
+        search.paused.value.withLock { $0 = false }
+        await search.indexer.conditionsChanged()
+        var curve: [Double] = []
+        while await search.indexer.status.phase != .done {
+            try await Task.sleep(for: .seconds(1))
+            if Int((clock.now - start).seconds) % 30 == 0 { curve.append(memory.currentMB.rounded()) }
+            if (clock.now - start).seconds > 3_000 { break }
+        }
+        let status = await search.indexer.status, traffic = await ScaleStage.traffic()
+        result.merge([
+            "seconds": (clock.now - start).seconds, "cpuSeconds": cpuSeconds() - cpu, "peakMB": memory.peakMB, "memoryCurveMB": curve, "rooms": status.totalRooms,
+            "complete": status.completeRooms, "messages": status.statistics.messages, "indexMB": Double(status.statistics.bytes) / 1e6, "requests": traffic.requests, "MB": traffic.megabytes,
+            "undecryptable": status.statistics.undecryptable,
+        ]) { $1 }
+        try await Task.sleep(for: .seconds(10))
+        result["memoryAfterMB"] = memory.currentMB
+        let idle = cpuSeconds()
+        try await Task.sleep(for: .seconds(60))
+        result["idleCPUSecondsPerMinute"] = cpuSeconds() - idle
+        result["threads"] = threads()
+        var times: [Double] = []
+        for query in ["message", "a", "e", "the", "room", "zzzz"] {
+            for _ in 0..<5 {
+                let began = clock.now
+                _ = try await search.store.hits(match: "\"\(query)\"*", room: nil, kinds: Set(SearchKind.allCases), excluding: [], after: nil, limit: 25)
+                times.append((clock.now - began).seconds * 1000)
+            }
+        }
+        result["queryP95ms"] = times.sorted()[Int(Double(times.count) * 0.95)]
+        await search.indexer.stop()
+        await session.stopSync()
+        list.cancel()
+        print("SCALE \(String(decoding: try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys]), as: UTF8.self))")
+        #expect(status.phase == .done && status.completeRooms == status.totalRooms)
+    }
+
     // MARK: Helpers
+
+    private var searches: Bool { (env["HALO_SCALE_SEARCH"] ?? "1") == "1" }
 
     private func port(_ directory: URL) -> MatrixSessionPort { ScaleStage.port(directory) }
 
@@ -124,13 +207,11 @@ struct ScaleMeasurements {
 
 /// What the measurements share.
 enum ScaleStage {
-    /// `HALO_SCALE_SEARCH`: `1` as the app ships, `live` without the index's sweep through history, `paginate` without the index but
-    /// with automatic back-pagination, `0` without both.
+    /// `HALO_SCALE_SEARCH`: `1` as the app ships (Halo's own search), `paginate` without search, `0` also without automatic back-pagination.
     static func port(_ directory: URL) -> MatrixSessionPort {
         let mode = env["HALO_SCALE_SEARCH"] ?? "1"
         return MatrixSessionPort(
-            baseDirectory: directory, indexesMessages: !["0", "paginate"].contains(mode), backPaginates: mode != "0",
-            backfillsSearch: mode != "live", initialisePlatform: MatrixBootstrap.initialise(lightweightRuntime:))
+            baseDirectory: directory, backPaginates: mode != "0", initialisePlatform: MatrixBootstrap.initialise(lightweightRuntime:))
     }
 
     static func threads() -> Int {
@@ -185,6 +266,7 @@ final class ListFollower: @unchecked Sendable {  // every field is guarded by `l
     private var task: Task<Void, Never>?
 
     var rooms: [RoomSummary] { lock.withLock { list } }
+    var joined: [RoomID] { rooms.filter { $0.membership == .joined }.map(\.id) }
     var syncs: Int { lock.withLock { synced } }
 
     func run(_ updates: AsyncStream<RoomListUpdate>) {

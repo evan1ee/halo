@@ -58,7 +58,7 @@ Full design: [matrix/UNREAD_STATE.md](matrix/UNREAD_STATE.md). Must be prevented
 | R-P2-ST | Sticker v2: pack management, sharing, import, room packs | [features/STICKERS.md](features/STICKERS.md) §P2 |
 | R-P2-BOT | Bot template cards and reaction interactions (D20–D23) | [features/BOT_MESSAGES.md](features/BOT_MESSAGES.md) |
 | R-P2-ACT | Bot Activity tab with task extraction and tracking | [features/BOT_ACTIVITY.md](features/BOT_ACTIVITY.md) |
-| R-P2-SEARCH | Message search on the device in **encrypted and unencrypted rooms**, full history (D30, D123). *Built: the SDK index, about three months back; own index not built* | [features/MESSAGE_SEARCH.md](features/MESSAGE_SEARCH.md), ROADMAP M19-11 |
+| R-P2-SEARCH | Message search on the device in **encrypted and unencrypted rooms**, full history (D30, D123). *Built on Halo's own index (M19-11); iPhone checks open* | [features/MESSAGE_SEARCH.md](features/MESSAGE_SEARCH.md), ROADMAP M19-11 |
 | R-P2-SAVED | Saved messages room (D31, D33) | ROADMAP M8 |
 | R-P2-GALLERY | Global media gallery via a preset non-Matrix room entry in the room list (D34, D83) | [design/NAVIGATION.md](design/NAVIGATION.md), [features/ROOM_LIST.md](features/ROOM_LIST.md), ROADMAP M9 |
 | R-P2-EXPORT | Encrypted room export (D32) | ROADMAP M9 |

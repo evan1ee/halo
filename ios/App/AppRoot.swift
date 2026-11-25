@@ -63,8 +63,7 @@ final class AppRoot {
     let devicesPort: MatrixDevicesPort
     let passwordPort: MatrixAccountPasswordPort
     let botAllowlistPort: MatrixBotAllowlistPort
-    let searchPort: MatrixSearchPort
-    let searchCoordinator: SearchCoordinator
+    let search: MessageSearchEngine
     let roomCoordinator: RoomListCoordinator
     /// The signed-in account, once the session is ready (kept out of "New chat" results).
     var signedInUser: UserID?
@@ -116,9 +115,6 @@ final class AppRoot {
         self.devicesPort = MatrixDevicesPort(session: session)
         self.passwordPort = MatrixAccountPasswordPort(session: session)
         botAllowlistPort = MatrixBotAllowlistPort(session: session)
-        let searchPort = MatrixSearchPort(session: session)
-        self.searchPort = searchPort
-        self.searchCoordinator = SearchCoordinator(port: searchPort)
 
         let suite = "group.\(HaloShared.namespace())"
         attentionCache = AttentionCache(suiteName: suite)
@@ -160,8 +156,13 @@ final class AppRoot {
         previewPolicy = MatrixMediaPreviewPolicyPort(session: session)
         roomPort = MatrixRoomPort(session: session)
         chatCreation = MatrixChatCreationPort(session: session)
-        recovery = RecoveryViewModel(coordinator: EncryptionCoordinator(port: MatrixEncryptionPort(session: session), session: sessionCoordinator))
-        sync = SyncCoordinator(port: MatrixSyncPort(session: session), session: sessionCoordinator)
+        let encryption = EncryptionCoordinator(port: MatrixEncryptionPort(session: session), session: sessionCoordinator)
+        recovery = RecoveryViewModel(coordinator: encryption)
+        let search = MessageSearchEngine(
+            session: session, rooms: roomCoordinator, profiles: profilePort, encryption: encryption, preferences: preferences, log: log)
+        self.search = search
+        let gate = search.gate
+        sync = SyncCoordinator(port: MatrixSyncPort(session: session), session: sessionCoordinator, beforeStart: { await gate.wait() })
         let push = Self.pushConfiguration().map {
             PushCoordinator(port: MatrixPushPort(session: session), session: sessionCoordinator, appID: $0.appID, gatewayURL: $0.gateway)
         }
@@ -171,6 +172,7 @@ final class AppRoot {
             await sessionCoordinator.setBeforeSignOut {
                 await receipts.flush()
                 await stickers.flush()
+                await search.stop()
                 await push?.unregister()
             }
         }

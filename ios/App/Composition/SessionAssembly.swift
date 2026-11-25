@@ -19,6 +19,13 @@ extension AppRoot {
                 if current != nil { await resetAccountState() }
                 current = user
                 signedInUser = user
+                let fieldCipher: FieldCipher?
+                do {
+                    fieldCipher = try await FieldCipher.loadOrCreate(keychain: HaloShared.keychain(), account: user)
+                } catch {
+                    log.error("Failed to load or create database field cipher")
+                    fieldCipher = nil
+                }
                 do {
                     let directory = HaloShared.storeDirectory().appendingPathComponent("halo", isDirectory: true)
                     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -35,13 +42,6 @@ extension AppRoot {
                     activeRecords.current = recordStore
                     await readState.attach(records: recordStore)
                     await receipts.restore(from: ReadIntentStore(database: database, account: user))
-                    let fieldCipher: FieldCipher?
-                    do {
-                        fieldCipher = try await FieldCipher.loadOrCreate(keychain: HaloShared.keychain(), account: user)
-                    } catch {
-                        log.error("Failed to load or create database field cipher")
-                        fieldCipher = nil
-                    }
                     await drafts.attach(DraftStore(database: database, account: user, cipher: fieldCipher))
                     await klipy.attach(KlipyShelfStore(account: user))
                     await botActivity.attach(BotTaskStore(database: database, account: user, cipher: fieldCipher))
@@ -61,9 +61,14 @@ extension AppRoot {
                 } catch {
                     // Without a database, receipts and drafts still work from memory; there is nothing to restore.
                 }
+                await search.attach(user, cipher: fieldCipher)
                 await syncBotAllowlist()
             case .signedOut:
-                guard current != nil else { continue }
+                guard current != nil else {
+                    // Signed out while the app wasn't running, or killed while signing out: no index may stay (AC-SRCH-8).
+                    SearchIndexStore.removeAll(in: HaloShared.searchDirectory())
+                    continue
+                }
                 current = nil
                 signedInUser = nil
                 await resetAccountState()
@@ -85,7 +90,7 @@ extension AppRoot {
         await stickers.reset()
         await klipy.reset()
         await timelinePort.dropWarm()
-        searchPort.reset()
+        await search.detach(deletingIndex: true)
         preferences.botSenders = []
     }
 
@@ -93,6 +98,7 @@ extension AppRoot {
     func setForeground(_ active: Bool) async {
         attentionCache.setForeground(active)
         await sync.setForeground(active)
+        await search.setForeground(active)
         await readState.setForeground(active)
     }
 
@@ -107,6 +113,26 @@ extension AppRoot {
         // iOS suspends the app next: hold no SQLite lock in the App Group (R-25), unless a window came to the front meanwhile.
         if UIApplication.shared.applicationState == .background { HaloDatabase.suspendAll() }
         return refreshed
+    }
+
+    /// A processing task on the charger (D123): reads more history for search. `true` when there is more to do.
+    func processSearchInBackground() async -> Bool {
+        coldStart = nil
+        HaloDatabase.resumeAll()
+        await begin()
+        guard await sessionIsReady() else { return true }
+        let more = await search.process()
+        if UIApplication.shared.applicationState == .background { HaloDatabase.suspendAll() }
+        return more
+    }
+
+    /// Whether a session is there within a few seconds of a background launch.
+    private func sessionIsReady() async -> Bool {
+        for _ in 0..<20 {
+            if case .ready = await sessionCoordinator.state { return true }
+            do { try await Task.sleep(for: .milliseconds(250)) } catch { return false }
+        }
+        return false
     }
 
     /// Keeps the shared foreground flag alive while the app is in front (it ends by itself, so a crash can't leave it set).

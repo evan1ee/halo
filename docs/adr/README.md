@@ -27,4 +27,4 @@ Format: [TEMPLATE.md](TEMPLATE.md). Numbering is sequential and never reused. An
 | [0021](0021-unread-message-count-badge.md) | App icon badge shows total unread message count across rooms needing attention | Accepted |
 | [0022](0022-module-layout-v2.md) | Module and folder layout v2 (two manifests, files in their owning layer) | Accepted |
 | [0023](0023-share-extension-sends.md) | The share extension sends through the SDK (stage first, notification fallback) | Accepted (V-SHARE-1) |
-| [0024](0024-message-search-index.md) | Own full-text index for message search (encrypted rooms, full history) | Accepted with conditions (V-SEARCH-2); not built |
+| [0024](0024-message-search-index.md) | Own full-text index for message search (encrypted rooms, full history) | Accepted; built (M19-11), iPhone open |

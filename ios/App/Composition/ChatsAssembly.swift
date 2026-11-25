@@ -2,7 +2,6 @@ import FeatureMedia
 import FeatureProfile
 import FeatureRoomDetails
 import FeatureRoomList
-import FeatureSearch
 import FeatureStickers
 import FeatureTimeline
 import Foundation
@@ -17,16 +16,6 @@ extension AppRoot {
     /// The "New chat" sheet (ROOM_MANAGEMENT FR-5); `onCreated` gets the room to open.
     func makeNewChat(onCreated: @escaping @MainActor (RoomID) -> Void) -> NewChatViewModel {
         NewChatViewModel(port: chatCreation, ownUserID: signedInUser, onCreated: onCreated)
-    }
-
-    /// Message search view model for the `.searchable` room list (D85, M8).
-    func makeMessageSearch() -> MessageSearchViewModel {
-        MessageSearchViewModel(coordinator: searchCoordinator) { [roomList] roomID in
-            if case .loaded(_, let rows) = roomList.content, let row = rows.first(where: { $0.id == roomID }) {
-                return row.name
-            }
-            return "Room"
-        }
     }
 
     /// Global media gallery opened from the preset non-Matrix room entry in the room list (D34, D83).

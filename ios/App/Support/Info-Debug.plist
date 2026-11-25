@@ -31,10 +31,12 @@
 	<array>
 		<string>remote-notification</string>
 		<string>fetch</string>
+		<string>processing</string>
 	</array>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>$(HALO_BG_REFRESH_TASK)</string>
+		<string>$(HALO_BG_SEARCH_TASK)</string>
 	</array>
 </dict>
 </plist>

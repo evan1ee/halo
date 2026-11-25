@@ -33,6 +33,9 @@ public final class FakeTimelinePort: TimelinePort {
         /// Optional override for `latestEventID()` (e.g. a trailing hidden event like an encrypted poll vote, R-01/R-06).
         var latestEventOverride: EventID?
         var openedThreads: [EventID] = []
+        /// What `openFocused` shows around an event, and what `paginateForwards` adds, one batch per call.
+        var focused: [EventID: (items: [TimelineItem], newer: [[TimelineItem]])] = [:]
+        var focusError: HaloError?
     }
 
     private let rooms = Mutex<[RoomID: Room]>([:])
@@ -119,6 +122,72 @@ public final class FakeTimelinePort: TimelinePort {
             rooms[id]?.totalOpens += 1
         }
         return Session(port: self, room: id)
+    }
+
+    /// Makes `event` reachable by `openFocused`.
+    public func addFocus(_ event: EventID, in id: RoomID, items: [TimelineItem], newer: [[TimelineItem]] = []) {
+        rooms.withLock { $0[id]?.focused[event] = (items, newer) }
+    }
+
+    /// What `openFocused` throws for events without `addFocus` (default `.unsupported`).
+    public func setFocusError(_ error: HaloError, in id: RoomID) { rooms.withLock { $0[id]?.focusError = error } }
+
+    public func openFocused(room id: RoomID, event: EventID) async throws(HaloError) -> any TimelineSession {
+        let found = try rooms.withLock { (rooms) throws(HaloError) in
+            guard let room = rooms[id] else { throw .notFound }
+            guard let found = room.focused[event] else { throw room.focusError ?? .unsupported("FOCUS") }
+            rooms[id]?.openSessions += 1
+            return found
+        }
+        return FocusedSession(live: Session(port: self, room: id), items: found.items, newer: found.newer)
+    }
+
+    /// A focused timeline: its own items, everything else as the room's.
+    private final class FocusedSession: TimelineSession {
+        private let live: Session
+        private let state: Mutex<(items: [TimelineItem], newer: [[TimelineItem]], continuation: AsyncStream<TimelineDiff>.Continuation?)>
+
+        init(live: Session, items: [TimelineItem], newer: [[TimelineItem]]) {
+            self.live = live
+            state = Mutex((items, newer, nil))
+        }
+
+        func items() -> AsyncStream<TimelineDiff> {
+            let (stream, continuation) = AsyncStream<TimelineDiff>.makeStream()
+            state.withLock { state in
+                state.continuation = continuation
+                continuation.yield(.reset(state.items))
+            }
+            return stream
+        }
+
+        func paginateForwards(count: UInt16) async throws(HaloError) -> Bool {
+            state.withLock { state in
+                guard !state.newer.isEmpty else { return true }
+                let batch = state.newer.removeFirst()
+                state.items += batch
+                state.continuation?.yield(.append(batch))
+                return state.newer.isEmpty
+            }
+        }
+
+        func paginateBackwards(count: UInt16) async throws(HaloError) -> Bool { true }
+        func members() async throws(HaloError) -> [RoomMember] { try await live.members() }
+        func send(text: String, mentions: [Mention]) async throws(HaloError) { try await live.send(text: text, mentions: mentions) }
+        func typingUsers() -> AsyncStream<[UserID]> { live.typingUsers() }
+        func setTyping(_ isTyping: Bool) async throws(HaloError) { try await live.setTyping(isTyping) }
+        func reply(to event: EventID, text: String, mentions: [Mention]) async throws(HaloError) { try await live.reply(to: event, text: text, mentions: mentions) }
+        func toggleReaction(on event: EventID, key: String) async throws(HaloError) { try await live.toggleReaction(on: event, key: key) }
+        func edit(event: EventID, newText: String) async throws(HaloError) { try await live.edit(event: event, newText: newText) }
+        func delete(event: EventID) async throws(HaloError) { try await live.delete(event: event) }
+        func sendSticker(_ sticker: Sticker) async throws(HaloError) { try await live.sendSticker(sticker) }
+        func sendImage(_ image: OutgoingImage) async throws(HaloError) { try await live.sendImage(image) }
+        func sendFile(_ file: OutgoingFile) async throws(HaloError) { try await live.sendFile(file) }
+        func sendLocation(_ location: OutgoingLocation) async throws(HaloError) { try await live.sendLocation(location) }
+        func createPoll(_ poll: OutgoingPoll) async throws(HaloError) { try await live.createPoll(poll) }
+        func retrySend(localID: String) async throws(HaloError) { try await live.retrySend(localID: localID) }
+        func abortSend(localID: String) async throws(HaloError) { try await live.abortSend(localID: localID) }
+        func close() async { await live.close() }
     }
 
     private final class Session: TimelineSession {

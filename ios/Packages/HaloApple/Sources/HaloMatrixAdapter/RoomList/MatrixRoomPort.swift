@@ -171,7 +171,7 @@ public final class MatrixRoomPort: RoomPort {
             internalIdPrefix: "export-\(UUID().uuidString)",
             dateDividerMode: .daily,
             trackReadReceipts: .disabled,
-            reportUtds: true)
+            reportUtds: false)  // `true` needs a hook on the client; without one the SDK refuses the timeline
         do {
             let timeline = try await room.timelineWithConfiguration(configuration: config)
             let (raw, continuation) = AsyncStream<[MatrixRustSDK.TimelineDiff]>.makeStream(bufferingPolicy: .unbounded)

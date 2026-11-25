@@ -326,7 +326,7 @@ public final class TimelineViewModel {
     }
 
     func reevaluateSeen() {
-        guard receipts != nil, room != nil else { return }
+        guard receipts != nil, room != nil, !isFocused, !receiptsWait else { return }
         let candidate = readTracker.candidate(isActive: isActive)
         guard candidate?.event != pendingCandidate else { return }
         pendingCandidate = candidate?.event
@@ -360,6 +360,8 @@ public final class TimelineViewModel {
         readThroughAtOpen = await readThrough?()
         if let previewsAllowed { previewsHidden = await !previewsAllowed() }
         landed = false
+        receiptsWait = initialEvent != nil
+        isFocused = false
         openingPages = 0
         landingRow = nil
         unreadMarkerID = nil
@@ -417,13 +419,17 @@ public final class TimelineViewModel {
         // Opened at a specific message (Activity → task): go there once the opening scroll is done.
         if let target = initialEvent {
             initialEvent = nil
-            Task { await jump(toEvent: target) }
+            Task {
+                await jump(toEvent: target)
+                reevaluateSeen()
+            }
         }
     }
 
     /// Reports whether the newest row is currently visible (TIMELINE §6: Detached state and "↓ N new" pill).
     public func setAtBottom(_ atBottom: Bool) {
         isAtBottom = atBottom
+        if atBottom { reachedBottomWhileFocused() }
         if atBottom {
             newSinceDetached = 0
             trackedTailID = lastRowID
@@ -457,17 +463,48 @@ public final class TimelineViewModel {
         return await jump(toEvent: target)
     }
 
-    /// Scrolls to the message with `target` and tints it, loading older pages (up to `maxJumpPages`) when it isn't loaded yet.
+    /// Scrolls to the message with `target` and tints it. When it isn't loaded, the timeline is opened around it (M20-1); where that isn't
+    /// possible (a thread, no network) older pages are loaded instead (up to `maxJumpPages`). `false`, with `jumpError`, when it isn't found.
     @discardableResult
     public func jump(toEvent target: EventID) async -> Bool {
-        for _ in 0...Self.maxJumpPages {
-            guard case .live(let rows, _, let canLoadEarlier, _) = content else { return false }
-            if let original = rows.first(where: { $0.eventID == target }) {
-                jumpRequest = original.id
-                highlightedRowID = original.id
-                return true
+        defer { receiptsWait = false }
+        if show(target) { return true }
+        guard case .live = content else { return false }
+        isJumping = true
+        defer { isJumping = false }
+        do {
+            try await coordinator.focus(on: target)
+            // Its items reach `content` a moment later.
+            for _ in 0..<200 {
+                if show(target) { return true }
+                try? await Task.sleep(for: .milliseconds(10))
             }
-            guard canLoadEarlier else { return false }
+            await coordinator.returnToLive()
+            jumpError = "That message can't be shown."
+            return false
+        } catch {
+            if error == .notFound || error == .forbidden {
+                jumpError = "That message isn't available any more."
+                return false
+            }
+            if await page(to: target) { return true }
+            if case .unsupported = error { return false }
+            jumpError = "That message isn't on this device, and the server can't be reached."
+            return false
+        }
+    }
+
+    private func show(_ target: EventID) -> Bool {
+        guard case .live(let rows, _, _, _) = content, let row = rows.first(where: { $0.eventID == target }) else { return false }
+        jumpRequest = row.id
+        highlightedRowID = row.id
+        return true
+    }
+
+    private func page(to target: EventID) async -> Bool {
+        for _ in 0...Self.maxJumpPages {
+            if show(target) { return true }
+            guard case .live(let rows, _, let canLoadEarlier, _) = content, canLoadEarlier else { return false }
             let before = rows.count
             await loadEarlier()
             // The page's diffs reach `content` a moment after the load returns.
@@ -478,6 +515,36 @@ public final class TimelineViewModel {
             }
         }
         return false
+    }
+
+    /// `true` while the timeline shows the messages around an older one; nothing is marked as read then.
+    public internal(set) var isFocused = false
+    /// A message outside the loaded ones is being looked up.
+    public internal(set) var isJumping = false
+    /// Why a jump failed, until dismissed.
+    public internal(set) var jumpError: String?
+    /// Opened at an older message: what is on screen until the jump is done was not chosen by the reader.
+    var receiptsWait = false
+    var focusReachedEnd = false
+
+    public func dismissJumpError() { jumpError = nil }
+
+    /// Back to the newest messages, landing there like a newly opened room.
+    public func returnToNewest() async {
+        guard isFocused else { return }
+        landed = false
+        landingRow = nil
+        isAtBottom = true
+        newSinceDetached = 0
+        await coordinator.returnToLive()
+    }
+
+    /// The end of the loaded messages is on screen: newer ones follow, and after the last one the live timeline.
+    func reachedBottomWhileFocused() {
+        // Not while the list is still being placed at the message that was jumped to.
+        guard isFocused, !isJumping, jumpRequest == nil, highlightedRowID == nil else { return }
+        let atEnd = focusReachedEnd
+        Task { if atEnd { await returnToNewest() } else { await coordinator.paginateForwards() } }
     }
 
     /// The message to scroll to once the timeline has landed (set by whoever opens the room at a specific event, e.g. Activity).

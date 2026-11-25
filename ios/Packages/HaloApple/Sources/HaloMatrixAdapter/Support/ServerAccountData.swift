@@ -27,11 +27,12 @@ struct ClientServerGET: Sendable {
     }
 
     /// The response body, `nil` for 404 (no such state or account data), an error for anything else that isn't 200.
-    func get(_ client: Client, _ path: String, retried: Bool = false) async throws -> Data? {
+    func get(_ client: Client, _ path: String, query: [URLQueryItem] = [], retried: Bool = false) async throws -> Data? {
         let sdkSession = try client.session()
         guard var components = URLComponents(string: sdkSession.homeserverUrl) else { throw URLError(.badURL) }
         components.percentEncodedPath = components.percentEncodedPath.trimmingCharacters(in: CharacterSet(charactersIn: "/")).isEmpty
             ? "/_matrix/client/v3/\(path)" : components.percentEncodedPath + "/_matrix/client/v3/\(path)"
+        if !query.isEmpty { components.queryItems = query }
         guard let url = components.url else { throw URLError(.badURL) }
         var request = URLRequest(url: url, timeoutInterval: 20)
         request.setValue("Bearer \(sdkSession.accessToken)", forHTTPHeaderField: "Authorization")
@@ -41,7 +42,7 @@ struct ClientServerGET: Sendable {
         case 404: return nil
         case 401 where !retried:
             _ = try? await client.getProfile(userId: sdkSession.userId)  // a network request of the SDK refreshes an expired token
-            return try await get(client, path, retried: true)
+            return try await get(client, path, query: query, retried: true)
         case 403: throw Forbidden()
         default: throw URLError(.badServerResponse)
         }

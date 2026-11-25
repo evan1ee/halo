@@ -7,7 +7,7 @@
 - `eraseDatabaseOnSchemaChange` only in debug builds.
 - Failure → recovery per [../architecture/ERROR_HANDLING.md](../architecture/ERROR_HANDLING.md) §4 (move aside, recreate; derived data rebuilds; unsent intents may be lost — logged).
 
-## 1b. `search-index.sqlite` (*not built*, D123)
+## 1b. `search-index.sqlite` (D123)
 Derived data: no migrations. A version in `PRAGMA user_version`; any other version, or a file that can't be opened, is deleted and indexing starts again. On the first start with this index the SDK's `search-index` folder is deleted.
 
 ## 2. Account data (`one.mbm.halo.*`)

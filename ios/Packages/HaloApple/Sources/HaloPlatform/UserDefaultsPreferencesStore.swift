@@ -17,6 +17,8 @@ public struct UserDefaultsPreferencesStore: PreferencesPort, Sendable {
     public static let lastSeenWhatsNewVersionKey = "halo.lastSeenWhatsNewVersion"
     public static let chatsInSystemSearchKey = "halo.chatsInSystemSearch"
     public static let followFocusFilterKey = "halo.followFocusFilter"
+    public static let searchHistoryPausedKey = "halo.search.historyPaused"
+    public static let searchHistoryOnMobileDataKey = "halo.search.onMobileData"
 
     public init(defaults: UserDefaults = .standard) {
         box = Box(defaults: defaults)
@@ -32,7 +34,9 @@ public struct UserDefaultsPreferencesStore: PreferencesPort, Sendable {
             appearance: AppAppearance(rawValue: d.string(forKey: Self.appearanceKey) ?? "") ?? .system,
             lastSeenWhatsNewVersion: d.string(forKey: Self.lastSeenWhatsNewVersionKey),
             chatsInSystemSearch: d.bool(forKey: Self.chatsInSystemSearchKey),
-            followFocusFilter: d.bool(forKey: Self.followFocusFilterKey)
+            followFocusFilter: d.bool(forKey: Self.followFocusFilterKey),
+            searchHistoryPaused: d.bool(forKey: Self.searchHistoryPausedKey),
+            searchHistoryOnMobileData: d.bool(forKey: Self.searchHistoryOnMobileDataKey)
         )
     }
 
@@ -46,5 +50,7 @@ public struct UserDefaultsPreferencesStore: PreferencesPort, Sendable {
         d.set(snapshot.lastSeenWhatsNewVersion, forKey: Self.lastSeenWhatsNewVersionKey)
         d.set(snapshot.chatsInSystemSearch, forKey: Self.chatsInSystemSearchKey)
         d.set(snapshot.followFocusFilter, forKey: Self.followFocusFilterKey)
+        d.set(snapshot.searchHistoryPaused, forKey: Self.searchHistoryPausedKey)
+        d.set(snapshot.searchHistoryOnMobileData, forKey: Self.searchHistoryOnMobileDataKey)
     }
 }
