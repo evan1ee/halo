@@ -62,6 +62,7 @@ let package = Package(
                 "HaloPlatform",
                 .product(name: "HaloDomain", package: "HaloCore"),
                 .product(name: "HaloFoundation", package: "HaloCore"),
+                .product(name: "HaloTestSupport", package: "HaloCore"),
             ]
         ),
 

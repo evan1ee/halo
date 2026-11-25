@@ -99,6 +99,7 @@ final class AppRoot {
 
         // Shared with the notification extension: the Keychain access group and the App Group container.
         let keychain = HaloShared.keychain()
+        AccountDataEraser.prepareStoreFolders(.standard())  // stores stay out of backups from the first byte
         let session = MatrixSessionPort(
             baseDirectory: HaloShared.storeDirectory(),
             readStoredSession: {

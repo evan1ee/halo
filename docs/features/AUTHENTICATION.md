@@ -56,7 +56,7 @@ app killed during OIDC (the callback arrives on relaunch — discard it if there
 - AC-AUTH-1 Password login on the dev Synapse reaches the room list.
 - AC-AUTH-2 Killing and relaunching the app restores without the network (D103: the stored homeserver URL is used as is; before 2026-11-23 the restore ran server discovery first, which needed the network). `HaloUITests.testSignedInLaunchOpensOnChats` times a cold launch to the first chat row.
 - AC-AUTH-3 Revoking the token on the server → soft-logout sheet; after re-auth, cached rooms are still there.
-- AC-AUTH-4 Logout removes every per-account file and Keychain item (checked by a test that lists the container) — and the Spotlight entries, widget data and pusher. *The test doesn't exist yet* (ROADMAP M18-4).
+- AC-AUTH-4 Logout removes every per-account file and Keychain item — and the Spotlight entries, widget data and pusher. `AccountDataEraser` removes the stores folder (SDK stores, `halo.sqlite`), the share inbox, the search folder, the chat-shortcuts file (and with it Spotlight and the widgets' chat names), the database key and the KLIPY shelf; the pusher is removed before sign-out and the badge reset by the read-state reset. `AccountDataEraserTests` list a container before and after. The same erase runs at launch when no session is stored but files are (a restore from a backup, an app killed while signing out). **Not tested:** the Spotlight index and the pusher on a device 📱, and a restore to a new device (ROADMAP M18-4).
 - AC-AUTH-5 A complete OIDC sign-in, refresh in the app and the NSE, soft logout and sign-out work against MAS (V-OIDC-1; only discovery and the authorization URL are verified today, ROADMAP M18-6).
 
 ## 12. Test requirements

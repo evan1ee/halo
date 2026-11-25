@@ -16,6 +16,9 @@ public struct KlipyShelfStore: KlipyShelfPort, @unchecked Sendable {
         key = "halo.klipy.shelf." + digest.prefix(32)
     }
 
+    /// Forgets the account's favourites and recents (sign-out).
+    public func erase() { defaults.removeObject(forKey: key) }
+
     public func load() async -> KlipyShelf {
         guard let data = defaults.data(forKey: key), let shelf = try? JSONDecoder().decode(KlipyShelf.self, from: data) else { return KlipyShelf() }
         return shelf

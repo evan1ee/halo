@@ -29,7 +29,7 @@
 
 ## 4. Secure local persistence
 File protection `completeUntilFirstUserAuthentication` for all Halo/SDK files; caches excluded from iCloud backups
-(`isExcludedFromBackup`; **set only for the MetricKit payloads yet**, ROADMAP M18-4); field encryption in `halo.sqlite` ([../data/PERSISTENCE.md](../data/PERSISTENCE.md) §3).
+(`isExcludedFromBackup`; set on the stores folder (SDK stores and `halo.sqlite`), the share inbox, the search folder, the chat-shortcuts file and the MetricKit payloads, `AccountDataEraser`, M18-4, AC-SEC-4); field encryption in `halo.sqlite` ([../data/PERSISTENCE.md](../data/PERSISTENCE.md) §3).
 
 **Message search index (D123, ADR-0024).** To search encrypted rooms, the text of decrypted messages must be readable by SQLite on the device. This is the one place where Halo stores E2EE content without its own encryption:
 - The text never leaves the device and is never sent to the server to search; end-to-end encryption between people is unchanged.

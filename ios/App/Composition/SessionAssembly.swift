@@ -61,21 +61,30 @@ extension AppRoot {
                 } catch {
                     // Without a database, receipts and drafts still work from memory; there is nothing to restore.
                 }
+                AccountDataEraser.excludeFromBackup(.standard())
                 await search.attach(user, cipher: fieldCipher)
                 await syncBotAllowlist()
             case .signedOut:
-                guard current != nil else {
-                    // Signed out while the app wasn't running, or killed while signing out: no index may stay (AC-SRCH-8).
-                    SearchIndexStore.removeAll(in: HaloShared.searchDirectory())
+                guard let user = current else {
+                    // Signed out while the app wasn't running, killed while signing out, or restored from a backup (its Keychain
+                    // items stayed behind): nothing of an account may stay (AC-SRCH-8, AC-AUTH-4, AC-SEC-4).
+                    await eraseAccountData(for: nil)
                     continue
                 }
                 current = nil
                 signedInUser = nil
                 await resetAccountState()
+                await eraseAccountData(for: user)
             default:
                 continue
             }
         }
+    }
+
+    /// Removes what the account left on the device: stores, staged shares, search index, shortcuts, database key.
+    func eraseAccountData(for user: UserID?) async {
+        let shortcuts = SystemChatShortcutStore(file: SystemChatShortcutStore.defaultFile())
+        await AccountDataEraser.erase(.standard(), account: user, keychain: HaloShared.keychain(), shortcuts: shortcuts)
     }
 
     func resetAccountState() async {
