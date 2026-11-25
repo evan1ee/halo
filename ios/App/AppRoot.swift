@@ -72,8 +72,14 @@ final class AppRoot {
     var signedInUserID: String? { signedInUser?.rawValue }
     let log: HaloLog
     let ringLog: RingLogSink
+    /// Apple's own crash, hang and performance reports, on this device only (D114); exported with the diagnostics.
+    let metricPayloads = MetricPayloadStore(directory: MetricPayloadStore.standardDirectory())
+    private let metricKit: MetricKitRecorder
     let webAuth = WebAuthSessionPresenter()
     var auditPort: (any AuditEventPort)?
+    /// Running performance signposts (LOGGING_AND_DIAGNOSTICS §5); dropped, not ended, when the measured path didn't happen.
+    var coldStart: HaloSignpost.Running?
+    var roomOpen: HaloSignpost.Running?
     private(set) var hasBegun = false
 
     init() {
@@ -85,6 +91,8 @@ final class AppRoot {
         let namespace = Bundle.main.bundleIdentifier ?? "one.mbm.halo"
         let ringLog = RingLogSink(capacity: 500, forwarding: OSLogSink(subsystem: namespace))
         self.ringLog = ringLog
+        metricKit = MetricKitRecorder(store: metricPayloads)
+        metricKit.start()
         let log = HaloLog(
             category: .session, sink: ringLog,
             minimum: Self.minimumLogLevel, salt: Self.installSalt()

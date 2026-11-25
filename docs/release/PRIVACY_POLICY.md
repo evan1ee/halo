@@ -1,12 +1,12 @@
 # Halo Privacy Policy
 
-*Last updated: 2026-11-24 — Publish at `[https://YOUR_DOMAIN/privacy]` before Beta 2 / App Store submission. Draft: publish only text that matches the build (ROADMAP M22-3; MetricKit isn't in the app yet, M17-2).*
+*Last updated: 2026-11-24 — Publish at `[https://YOUR_DOMAIN/privacy]` before Beta 2 / App Store submission. Draft: publish only text that matches the build (ROADMAP M22-3).*
 
 Halo is an independent iOS and iPadOS client for the Matrix messaging protocol. Privacy is a core design principle: Halo contains **no third-party analytics, advertising, tracking, or crash-reporting SDKs**.
 
 ## 1. Data Halo Does Not Collect
 - Halo's developer does **not** operate a central analytics server and does **not** collect your messages, contacts, Matrix ID, room list, or usage telemetry.
-- Crash diagnostics use Apple's built-in opt-in Crash Organizer and on-device MetricKit only (D114).
+- Crash diagnostics use Apple's built-in opt-in Crash Organizer and on-device MetricKit only (D114). MetricKit reports stay on your device for at most 30 days and are included only in a diagnostics archive you export and share yourself.
 
 ## 2. Where Your Data Goes
 Data leaves your device only when required for the features you use:

@@ -30,14 +30,12 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 
 | ID | Gap | Evidence | Task |
 |---|---|---|---|
-| GA-01 | MetricKit isn't collected, though D59/D114 and the privacy policy name it and the stability bar depends on it | no `MXMetricManager` | M17-2 |
-| GA-02 | No signposts, so NFR-1/2 can't be broken down | no `OSSignposter` | M17-1 |
 | GA-03 | Large accounts never measured; classic sync has no filter or lazy-loaded members (R-18) | `SyncSettingsV2` (F-FFI-23) | M17-4 |
 | GA-04 | `infra/test`, the fault proxy and `scenarios.yml` don't exist | only `infra/dev`, `infra/sygnal`; no such workflow | M17-6 |
 | GA-05 | Contacts' identity changes are never shown (security) | no `IdentityStatus` use | M18-1 |
 | GA-06 | The reason a send failed is dropped, so an encryption refusal looks like a network error and can't be resolved | `TimelineMapper.swift:153` | M18-2 |
 | GA-07 | A lost recovery key is a dead end | no `resetIdentity` | M18-3 |
-| GA-08 | Nothing is excluded from iCloud/device backups | no `isExcludedFromBackup` | M18-4 |
+| GA-08 | Stores and caches are not excluded from iCloud/device backups | `isExcludedFromBackup` only on the MetricKit folder | M18-4 |
 | GA-09 | No recovery when a database can't be opened; no migration fixtures | `HaloDatabase`, no `Fixtures/` | M18-5 |
 | GA-10 | OIDC checked only up to the authorization URL | `AdapterContractTests.oidcDiscovery` | M18-6 |
 | GA-11 | Notification Reply / Mark as read not built | no `UNNotificationCategory` | M18-7 |
@@ -64,8 +62,8 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 
 | Task | Class · size | Done when |
 |---|---|---|
-| [ ] **M17-1 Signposts** for cold start → list, room open → first frame, sync round trip, image decode, NSE | R · S | XCTest reads each interval; LOGGING §5 lists them |
-| [ ] **M17-2 MetricKit** payloads (crash, hang, CPU, memory, disk) kept on the device and included in the diagnostics export | R · S | Unit test round-trips a payload; export reviewed: no content or raw IDs; limited in size and age |
+| [x] **M17-1 Signposts** for cold start → list, room open → first frame, sync round trip, image decode, NSE | R · S | XCTest reads each interval; LOGGING §5 lists them |
+| [x] **M17-2 MetricKit** payloads (crash, hang, CPU, memory, disk) kept on the device and included in the diagnostics export | R · S | Unit test round-trips a payload; export reviewed: no content or raw IDs; limited in size and age |
 | [ ] **M17-3 Scale fixture**: own accounts with 300 and 1,000 rooms, one 10,000-member room, one 20,000-event media room | R · M | Script in `infra/dev`, idempotent, never touches the shared contract accounts, removable |
 | [ ] **M17-4 Measure classic sync at scale** (V-SCALE-1): first sync time, bytes, memory, store size; incremental sync; idle energy | R · M · 📱👤 | Table in TEST_STRATEGY §7 for both fixtures and one real public-server account; **G-SCALE** decided (Q-SYNC-SCALE) |
 | [ ] **M17-5 Repeatable performance suite** with the budgets of TEST_STRATEGY §7 | R · M · 📱 | One command prints budget / measured / pass; same device, Release build; over 20 % worse fails |
@@ -190,7 +188,7 @@ Halo is ready for external testers (Beta 2) when all rows hold except those mark
 | States | Every screen × every state | AC-UX-6 | open (GA-25) |
 | Accessibility | Zero audit issues on root screens; VoiceOver + AX5 golden path | AC-UX-8, AC-UX-9 | partly |
 | Language | AC-UX-10 | M21-6 | open (GA-24) |
-| Stability | Beta: crash-free sessions ≥ 99.5 %, no hang > 2 s. **1.0: ≥ 99.8 %, no hang > 1 s in the last 14 days** | TestFlight + MetricKit | not measured (GA-01) |
+| Stability | Beta: crash-free sessions ≥ 99.5 %, no hang > 2 s. **1.0: ≥ 99.8 %, no hang > 1 s in the last 14 days** | TestFlight + MetricKit | not measured (no build in the field yet) |
 | Compliance | Manifests, labels, export, licences, legal, report/block | AC-UX-12, M22 | open |
 
 ## 5. Release plan

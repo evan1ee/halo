@@ -776,6 +776,35 @@ final class HaloUITests: XCTestCase {
         if back.waitForExistence(timeout: 3) { back.tap() }
     }
 
+    /// The app's performance signposts (LOGGING_AND_DIAGNOSTICS §5) reach XCTest from a real launch, sync and room open. Values aren't
+    /// judged here: a simulator shows trends only (TEST_STRATEGY §7).
+    @MainActor
+    func testPerformanceSignpostsAreRecorded() throws {
+        let app = XCUIApplication()
+        app.launch()
+        dismissFirstRunSheets(app)
+        guard chatsRoot(app).waitForExistence(timeout: 10) else { throw XCTSkip("App is signed out.") }
+        app.terminate()
+
+        let intervals = ["cold-start", "sync-catch-up", "room-open"]
+        let options = XCTMeasureOptions()
+        options.iterationCount = 1
+        SignpostReader.durations = [:]
+        var opened: (any Error)?
+        measure(metrics: intervals.map { SignpostReader(subsystem: "one.mbm.halo", category: "performance", name: $0) }, options: options) {
+            app.launch()
+            do { try openFirstChat(app) } catch { opened = error }
+            returnToChatList(app)
+            app.terminate()
+        }
+        if let opened { throw opened }
+        for interval in intervals {
+            let values = SignpostReader.durations[interval] ?? []
+            XCTAssertFalse(values.isEmpty, "no \(interval) interval was recorded")
+            for value in values { XCTAssertTrue((0.001..<30).contains(value), "\(interval) took \(value) s") }
+        }
+    }
+
     @MainActor
     func testLaunchPerformanceMetric() throws {
         guard ProcessInfo.processInfo.environment["HALO_RUN_PERF_TESTS"] == "1" else {
@@ -1143,5 +1172,22 @@ final class HaloUITests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
         print("ICON_BADGE_TRACE \(trace.joined(separator: " "))")
+    }
+}
+
+/// `XCTOSSignpostMetric` that keeps what it measured; `measure` itself doesn't hand the values back. (XCTest copies metrics, hence the static.)
+private final class SignpostReader: XCTOSSignpostMetric {
+    /// Seconds by interval name.
+    nonisolated(unsafe) static var durations: [String: [Double]] = [:]
+
+    override func reportMeasurements(
+        from startTime: XCTPerformanceMeasurementTimestamp, to endTime: XCTPerformanceMeasurementTimestamp
+    ) throws -> [XCTPerformanceMeasurement] {
+        let found = try super.reportMeasurements(from: startTime, to: endTime)
+        for measurement in found {
+            let name = measurement.identifier.replacingOccurrences(of: "com.apple.dt.XCTMetric_OSSignpost-", with: "").replacingOccurrences(of: ".duration", with: "")
+            Self.durations[name, default: []].append(measurement.value.value)
+        }
+        return found
     }
 }

@@ -314,7 +314,9 @@ public actor MatrixSessionPort: SessionPort {
         let pass = Task<Result<Void, HaloError>, Never> { [weak self] in
             await previous?.value
             do {
+                let signpost = HaloSignpost.begin(.syncCatchUp)
                 let response = try await client.syncOnceV2(settings: SyncSettingsV2(timeoutMs: 0, fullState: false))
+                signpost.end()  // a failed sync records nothing
                 await self?.publish(change: SyncChange(
                     joined: Set(response.rooms.joined),
                     invited: Set(response.rooms.invited),
@@ -355,7 +357,9 @@ public actor MatrixSessionPort: SessionPort {
         var recovering = false
         while !Task.isCancelled {
             do {
+                let signpost = HaloSignpost.begin(first ? .syncCatchUp : .syncLongPoll)
                 let response = try await client.syncOnceV2(settings: SyncSettingsV2(timeoutMs: first ? 0 : Self.longPollMilliseconds, fullState: false))
+                signpost.end()  // a failed sync records nothing
                 if Task.isCancelled { return }
                 first = false
                 backoff = .seconds(1)

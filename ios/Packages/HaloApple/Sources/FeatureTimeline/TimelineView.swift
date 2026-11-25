@@ -15,6 +15,7 @@ public struct TimelineView: View {
     private let gifPanel: (@MainActor () -> AnyView)?
     private let onOpenThread: (@MainActor (EventID) -> Void)?
     private let onSaveAsSticker: (@MainActor (Data, String) -> Void)?
+    private let onFirstRows: (@MainActor () -> Void)?
     /// Keyboard vs. Halo's panels under the composer (COMPOSER_PANELS §3, D97).
     @State private var input = ComposerInputController()
     @State private var choosingFile = false
@@ -54,19 +55,22 @@ public struct TimelineView: View {
     /// - Parameter stickerPanel: the Stickers tab of the expression panel for this room, made by the composition root (a
     ///   feature never imports another feature). Without it the panel has no Stickers tab.
     /// - Parameter gifPanel: the GIFs tab (KLIPY, D98); without it the panel has no GIFs tab.
+    /// - Parameter onFirstRows: the rows are visible at the newest message for the first time (`room-open` signpost).
     /// - Parameter onOpenThread: opens a focused thread sheet for the chosen root event (M10 Threads).
     public init(
         model: TimelineViewModel,
         stickerPanel: (@MainActor () -> AnyView)? = nil,
         gifPanel: (@MainActor () -> AnyView)? = nil,
         onOpenThread: (@MainActor (EventID) -> Void)? = nil,
-        onSaveAsSticker: (@MainActor (Data, String) -> Void)? = nil
+        onSaveAsSticker: (@MainActor (Data, String) -> Void)? = nil,
+        onFirstRows: (@MainActor () -> Void)? = nil
     ) {
         self.model = model
         self.stickerPanel = stickerPanel
         self.gifPanel = gifPanel
         self.onOpenThread = onOpenThread
         self.onSaveAsSticker = onSaveAsSticker
+        self.onFirstRows = onFirstRows
     }
 
     public var body: some View {
@@ -157,6 +161,7 @@ public struct TimelineView: View {
                 // A tap on the conversation closes the keyboard or panel; the gesture only exists while one is open.
                 .simultaneousGesture(TapGesture().onEnded { input.dismiss() }, including: input.state.mode == .idle && input.state.displayedPanel == nil ? .subviews : .all)
                 .opacity(listPlaced || rows.isEmpty ? 1 : 0)
+                .onChange(of: listPlaced && !rows.isEmpty, initial: true) { _, visible in if visible { onFirstRows?() } }
                 .task {
                     try? await Task.sleep(for: .milliseconds(600))
                     listPlaced = true

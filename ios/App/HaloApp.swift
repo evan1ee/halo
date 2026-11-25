@@ -27,8 +27,11 @@ struct HaloApp: App {
     @UIApplicationDelegateAdaptor(PushDelegate.self) private var delegate
 
     init() {
+        // iOS may prewarm the process long before the user opens the app; that time isn't a launch.
+        let coldStart = ProcessInfo.processInfo.environment["ActivePrewarm"] == "1" ? nil : HaloSignpost.begin(.coldStart)
         // Not in a view: a background launch (silent push, app refresh) connects no scene, so no view ever appears.
         let root = AppRoot()
+        root.coldStart = coldStart
         _root = State(initialValue: root)
         PushDelegate.coordinator = root.push
         PushDelegate.onBackgroundPush = { await root.refreshInBackground() ? .newData : .noData }
@@ -191,6 +194,11 @@ private struct RootView: View {
                             moreMenu
                         }
                     }
+                    .onChange(of: root.roomList.content, initial: true) {
+                        guard case .loaded = root.roomList.content else { return }
+                        root.coldStart?.end()
+                        root.coldStart = nil
+                    }
                     .onChange(of: root.roomList.content) {
                         if !pathRestored, case .loaded = root.roomList.content {
                             pathRestored = true
@@ -203,8 +211,11 @@ private struct RootView: View {
                         }
                         Task { await root.scanBotRooms() }
                     }
-                    .onChange(of: router.path) { _, _ in
+                    .onChange(of: router.path) { old, new in
                         savedPath = router.encodePath()
+                        if new.count > old.count || Self.isPad, case .room = new.last, new.last != old.last {
+                            root.roomOpen = HaloSignpost.begin(.roomOpen)
+                        }
                     }
                     .sheet(item: $newChat) { NewChatView(model: $0) }
     }
@@ -280,6 +291,7 @@ private struct RootView: View {
                     ownAvatar = cached.avatar
                 }
             case .server, .credentials:
+                root.coldStart = nil
                 OwnProfileCache.clear()
                 ownName = ""
                 ownAvatar = nil
@@ -606,6 +618,10 @@ private struct TimelineScreen: View {
             onOpenThread: openThread,
             onSaveAsSticker: { data, filename in
                 stickerToSave = PendingStickerSave(data: data, filename: filename)
+            },
+            onFirstRows: {
+                root.roomOpen?.end()
+                root.roomOpen = nil
             }
         )
         .sheet(item: $stickerToSave) { pending in

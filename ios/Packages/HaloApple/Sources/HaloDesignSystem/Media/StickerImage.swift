@@ -1,4 +1,5 @@
 #if canImport(UIKit)
+import HaloFoundation
 import ImageIO
 import SwiftUI
 import UIKit
@@ -19,6 +20,10 @@ public enum StickerImage {
 
     /// The image for `data`: animated when `animated` and the data has several frames, else the first frame.
     public static func decode(_ data: Data, animated: Bool) -> UIImage? {
+        HaloSignpost.measure(.imageDecode) { frames(data, animated: animated) }
+    }
+
+    private static func frames(_ data: Data, animated: Bool) -> UIImage? {
         guard animated, let source = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(source) > 1 else {
             return UIImage(data: data)
         }

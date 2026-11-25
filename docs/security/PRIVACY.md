@@ -19,6 +19,7 @@ gateway and Apple (APNs metadata), KLIPY when GIF/sticker search is used (D98, r
 | Location (only when the user sends one, D100; access asked when the Location tab opens) | Homeserver as `m.location` (encrypted in E2EE rooms) | Messaging | Room members' devices |
 | Voice messages (microphone, only while the user records, D99) | Homeserver as `m.audio` (encrypted in E2EE rooms) | Messaging | Room members' devices; the temporary recording is deleted after sending |
 | Diagnostics export | Only where the user shares it | Debugging | Recipient |
+| MetricKit payloads (crashes, hangs, performance; redacted) | Nowhere: kept on the device, leave it only inside a diagnostics export | Debugging | Nobody, or the export's recipient |
 | Bot conversations | The bot's room (normal Matrix) | Bot features | The bot backend (by the user's choice to talk to it) |
 
 ## 2b. Dormant Sentry code in the prebuilt SDK

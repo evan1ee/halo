@@ -125,7 +125,14 @@ extension AppRoot {
         } else {
             lines.append("Read-state audit: off in this build")
         }
+        let reports = await storedMetricPayloads()
+        lines.append("Crash and performance reports from iOS: \(reports.count)")
         return lines.joined(separator: "\n")
+    }
+
+    private func storedMetricPayloads() async -> [MetricPayloadStore.Stored] {
+        let store = metricPayloads
+        return await Task(priority: .userInitiated) { @concurrent in store.all() }.value
     }
 
     func exportDiagnosticsZip() async -> URL? {
@@ -167,7 +174,7 @@ extension AppRoot {
             .init(filename: "app-logs.txt", text: logLines),
             .init(filename: "audit-events.jsonl", text: auditJSONL),
             .init(filename: "room-snapshots.jsonl", text: roomsJSONL),
-        ])
+        ] + (await storedMetricPayloads()).map { .init(filename: "metrickit/\($0.filename)", data: $0.data) })
         let out = FileManager.default.temporaryDirectory.appendingPathComponent("halo-diagnostics.zip")
         do {
             try archive.write(to: out, options: .atomic)

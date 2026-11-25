@@ -29,7 +29,7 @@
 
 ## 4. Secure local persistence
 File protection `completeUntilFirstUserAuthentication` for all Halo/SDK files; caches excluded from iCloud backups
-(`isExcludedFromBackup`; **not set anywhere yet**, ROADMAP M18-4); field encryption in `halo.sqlite` ([../data/PERSISTENCE.md](../data/PERSISTENCE.md) §3).
+(`isExcludedFromBackup`; **set only for the MetricKit payloads yet**, ROADMAP M18-4); field encryption in `halo.sqlite` ([../data/PERSISTENCE.md](../data/PERSISTENCE.md) §3).
 Screenshots in the app switcher: a privacy blur when backgrounding (setting, default on) **[DECISION D61]**. It covers the screen only while the app is leaving (active → inactive → background), so the snapshot is blurred, and is lifted as soon as the app comes back; it is never shown during a cold launch and carries no icon (D105).
 
 ## 5. Network security
