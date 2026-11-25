@@ -21,8 +21,16 @@ private func within<T: Sendable>(seconds: Double, _ operation: @escaping @Sendab
             try await Task.sleep(for: .seconds(seconds))
             throw ContractViolation("timed out after \(seconds) s")
         }
-        defer { group.cancelAll() }
-        return try await group.next() ?? { throw ContractViolation("no result") }()
+        do {
+            let result = try await group.next() ?? { throw ContractViolation("no result") }()
+            group.cancelAll()
+            return result
+        } catch {
+            // On a timeout the operation says, once cancelled, what it was waiting for.
+            group.cancelAll()
+            if let other = await group.nextResult(), case .failure(let reason as ContractViolation) = other { throw ContractViolation("\(error): \(reason)") }
+            throw error
+        }
     }
 }
 
