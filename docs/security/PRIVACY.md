@@ -33,7 +33,7 @@ Halo never sends data to a bot or AI service on its own. Rendering and indexing 
 messages already in the user's rooms. Any future feature that sends content to a bot must be an explicit user action and be documented here first.
 
 ## 4. Local data
-Covered in [SECURITY.md](SECURITY.md) §3–4. The Bot Activity index and audit log stay on the device. So will the message search index (D123, not built): searching sends nothing anywhere; building it downloads history and keys from the user's own homeserver, which sees that history is being loaded but not what is searched.
+Covered in [SECURITY.md](SECURITY.md) §3–4. The Bot Activity index and audit log stay on the device. So does the message search index (D123): searching sends no query anywhere (a shown result may be asked of the user's homeserver by its event ID, to catch deletions); building it downloads history and keys from the user's own homeserver, which sees that history is being loaded but not what is searched.
 
 ## 4b. Siri and Spotlight (D88)
 Off by default. When the person turns on "Chats in Siri and Spotlight", the names and room IDs of up to 100 joined chats are written to an App Group file and the system Spotlight index; no message text, preview or avatar. Turning it off or signing out deletes both. `SendMessageIntent` uses the same opt-in chat list and asks Siri for explicit confirmation before sending any message. The medium "Unread chats" widget reads the same file for names (D93); without the setting it shows none.

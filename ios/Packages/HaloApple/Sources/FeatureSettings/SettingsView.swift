@@ -42,6 +42,7 @@ public struct SettingsConfiguration {
     public let unexplainedAuditCount: (@Sendable () async -> Int?)?
     public let storageSizes: (@Sendable () async -> [StorageSize])?
     public let clearCache: (@Sendable () async -> Bool)?
+    public let searchIndex: SearchIndexSettingsActions?
     public let security: (@MainActor () -> [StorageSize])?
     public let setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)?
     public let replaceRecovery: (@MainActor () async -> Result<String, SettingsMessage>)?
@@ -71,6 +72,7 @@ public struct SettingsConfiguration {
         unexplainedAuditCount: (@Sendable () async -> Int?)? = nil,
         storageSizes: (@Sendable () async -> [StorageSize])? = nil,
         clearCache: (@Sendable () async -> Bool)? = nil,
+        searchIndex: SearchIndexSettingsActions? = nil,
         security: (@MainActor () -> [StorageSize])? = nil,
         setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil,
         replaceRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil,
@@ -99,6 +101,7 @@ public struct SettingsConfiguration {
         self.unexplainedAuditCount = unexplainedAuditCount
         self.storageSizes = storageSizes
         self.clearCache = clearCache
+        self.searchIndex = searchIndex
         self.security = security
         self.setUpRecovery = setUpRecovery
         self.replaceRecovery = replaceRecovery
@@ -359,6 +362,7 @@ public struct SettingsView: View {
                 }
                 .task { storage = await storageSizes() }
             }
+            if let searchIndex = config.searchIndex { SearchIndexSettingsSection(actions: searchIndex) }
             if let diagnostics {
                 Section {
                     NavigationLink { DiagnosticsView(report: diagnostics, exportZip: exportDiagnosticsZip, reconcile: reconcile) } label: {

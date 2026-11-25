@@ -23,11 +23,8 @@ public actor MatrixSessionPort: SessionPort {
     private let baseDirectory: URL
     private let holderName: String
     private let sendsMessages: Bool
-    /// Measurements (M17-4, M17-8) switch the search index, automatic back-pagination or the index's history sweep off to see
-    /// their cost; the app always has all three. The sweep needs back-pagination (F-FFI-25).
-    private let indexesMessages: Bool
+    /// Measurements switch automatic back-pagination off to see its cost; the app always has it.
     private let backPaginates: Bool
-    private let backfillsSearch: Bool
     private let lightweightRuntime: Bool
     private let enablesSlidingSync: Bool
     private let readStoredSession: (@Sendable () -> StoredSession?)?
@@ -52,7 +49,11 @@ public actor MatrixSessionPort: SessionPort {
     /// Set when a room's send queue reported an error (which disables that queue); the next successful sync re-enables them.
     private var sendQueueErrors: SendQueueErrors?
     private var sendQueueErrorsHandle: TaskHandle?
-    private var searchBackfillHandle: TaskHandle?
+    /// The client of the search history lane, if one is open (`historyClient`).
+    private var historyClient: Client?
+    private var historyCaches: [URL] = []
+    /// The signed-in store's passphrase, for a second client on the same stores.
+    private var passphrase: String?
     private var events: [UUID: AsyncStream<SessionEvent>.Continuation] = [:]
     /// Pending OIDC / OAuth 2.0 login flow awaiting the redirect callback URL (AUTHENTICATION FR-3).
     private var pendingOAuth: (client: Client, storeID: String, passphrase: String, authData: OAuthAuthorizationData)?
@@ -100,9 +101,7 @@ public actor MatrixSessionPort: SessionPort {
         baseDirectory: URL, holderName: String = "app", sendsMessages: Bool = true,
         lightweightRuntime: Bool = false,
         enablesSlidingSync: Bool = false,
-        indexesMessages: Bool = true,
         backPaginates: Bool = true,
-        backfillsSearch: Bool = true,
         readStoredSession: (@Sendable () -> StoredSession?)? = nil,
         persistRefreshedSession: (@Sendable (StoredSession) -> Void)? = nil,
         initialisePlatform: @escaping @Sendable (Bool) throws(HaloError) -> Void
@@ -110,9 +109,7 @@ public actor MatrixSessionPort: SessionPort {
         self.baseDirectory = baseDirectory
         self.holderName = holderName
         self.sendsMessages = sendsMessages
-        self.indexesMessages = sendsMessages && indexesMessages
         self.backPaginates = sendsMessages && backPaginates
-        self.backfillsSearch = sendsMessages && indexesMessages && backPaginates && backfillsSearch
         self.lightweightRuntime = lightweightRuntime
         self.enablesSlidingSync = enablesSlidingSync
         self.readStoredSession = readStoredSession
@@ -161,7 +158,7 @@ public actor MatrixSessionPort: SessionPort {
             }
             let stored = try Self.stored(from: client.session(), storeID: newStoreID, passphrase: passphrase)
             sessionGeneration &+= 1
-            await adopt(client, storeID: newStoreID, session: try client.session(), generation: sessionGeneration)
+            await adopt(client, storeID: newStoreID, passphrase: passphrase, session: try client.session(), generation: sessionGeneration)
             return stored
         } catch let error as HaloError {
             throw error
@@ -216,7 +213,7 @@ public actor MatrixSessionPort: SessionPort {
             let sdkSession = try pending.client.session()
             let stored = try Self.stored(from: sdkSession, storeID: pending.storeID, passphrase: pending.passphrase)
             sessionGeneration &+= 1
-            await adopt(pending.client, storeID: pending.storeID, session: sdkSession, generation: sessionGeneration)
+            await adopt(pending.client, storeID: pending.storeID, passphrase: pending.passphrase, session: sdkSession, generation: sessionGeneration)
             return stored
         } catch {
             Self.removeStore(baseDirectory, pending.storeID)
@@ -252,7 +249,7 @@ public actor MatrixSessionPort: SessionPort {
                 homeserver: payload.homeserverURL, storeID: payload.storeID, passphrase: payload.passphrase,
                 initialSession: sdkSession)
             try await client.restoreSession(session: sdkSession)
-            await self.adopt(client, storeID: payload.storeID, session: sdkSession, generation: generation)
+            await self.adopt(client, storeID: payload.storeID, passphrase: payload.passphrase, session: sdkSession, generation: generation)
         }
         inFlightRestore = (session.payload, generation, task)
         defer {
@@ -295,6 +292,8 @@ public actor MatrixSessionPort: SessionPort {
         let joined: Set<String>
         let invited: Set<String>
         let left: Set<String>
+        /// The first response of a run, or after an interruption: it can stand for a long absence.
+        var isCatchUp = false
     }
 
     /// Starts the classic `/sync` loop (`Client.syncOnceV2`, sliding sync off): the unread evidence is the server's counts
@@ -331,7 +330,8 @@ public actor MatrixSessionPort: SessionPort {
                 await self?.publish(change: SyncChange(
                     joined: Set(response.rooms.joined),
                     invited: Set(response.rooms.invited),
-                    left: Set(response.rooms.left)
+                    left: Set(response.rooms.left),
+                    isCatchUp: true
                 ))
                 return .success(())
             } catch { return .failure(ErrorMapper.map(error)) }
@@ -372,6 +372,7 @@ public actor MatrixSessionPort: SessionPort {
                 let response = try await client.syncOnceV2(settings: SyncSettingsV2(timeoutMs: first ? 0 : Self.longPollMilliseconds, fullState: false))
                 signpost.end()  // a failed sync records nothing
                 if Task.isCancelled { return }
+                let caughtUp = first || recovering
                 first = false
                 backoff = .seconds(1)
                 // A recoverable send failure (offline) disables that room's send queue until it is enabled again (SDK
@@ -381,7 +382,7 @@ public actor MatrixSessionPort: SessionPort {
                 if sendsMessages, recovering || queueFailed { await client.enableAllSendQueues(enable: true) }
                 recovering = false
                 publish(status: .running)
-                publish(change: SyncChange(joined: Set(response.rooms.joined), invited: Set(response.rooms.invited), left: Set(response.rooms.left)))
+                publish(change: SyncChange(joined: Set(response.rooms.joined), invited: Set(response.rooms.invited), left: Set(response.rooms.left), isCatchUp: caughtUp))
             } catch {
                 if Task.isCancelled { return }
                 let mapped = ErrorMapper.map(error)
@@ -463,6 +464,48 @@ public actor MatrixSessionPort: SessionPort {
         return client
     }
 
+    // MARK: Search history client (ADR-0024)
+
+    /// A second client for reading history for search: the same account, keys and state store, an event cache of its own, no sync, no
+    /// send queue. What its event-focused timelines load is never dropped by the SDK (F-FFI-26), so `dropHistoryClient` drops it all.
+    func searchHistoryClient() async throws(HaloError) -> Client {
+        if let historyClient { return historyClient }
+        guard let client, let storeID, let passphrase else { throw .unauthorized(soft: false) }
+        let generation = sessionGeneration
+        let data = baseDirectory.appendingPathComponent(storeID, isDirectory: true).appendingPathComponent("data")
+        let directory = Self.historyCacheDirectory(storeID)
+        let caches = directory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        // Caches of clients dropped a while ago; the last one may still be closing its files.
+        if historyCaches.isEmpty { try? FileManager.default.removeItem(at: directory) }
+        while historyCaches.count > 1 { try? FileManager.default.removeItem(at: historyCaches.removeFirst()) }
+        do {
+            try FileManager.default.createDirectory(at: caches, withIntermediateDirectories: true)
+            let session = try client.session()
+            let delegate = RefreshDelegate(
+                storeID: storeID, passphrase: passphrase, initialSession: session, readStoredSession: readStoredSession, onRefresh: refreshHandler())
+            let made = try await ClientBuilder()
+                .homeserverUrl(url: session.homeserverUrl)
+                .sessionPaths(dataPath: data.path, cachePath: caches.path)
+                .sqliteStore(config: SqliteStoreBuilder(dataPath: data.path, cachePath: caches.path).passphrase(passphrase: passphrase))
+                .slidingSyncVersionBuilder(versionBuilder: .none)
+                .autoEnableBackups(autoEnableBackups: true)
+                .crossProcessLockConfig(crossProcessLockConfig: .multiProcess(holderName: "search"))
+                .setSessionDelegate(sessionDelegate: delegate)
+                .build()
+            try await made.restoreSession(session: session)
+            guard generation == sessionGeneration else { throw HaloError.cancelled }
+            historyCaches.append(caches)
+            historyClient = made
+            return made
+        } catch { throw ErrorMapper.map(error) }
+    }
+
+    func dropHistoryClient() { historyClient = nil }
+
+    private static func historyCacheDirectory(_ storeID: String) -> URL {
+        URL.cachesDirectory.appendingPathComponent("search-history", isDirectory: true).appendingPathComponent(storeID, isDirectory: true)
+    }
+
     /// The SDK's encryption object for the signed-in client.
     func encryption() throws(HaloError) -> Encryption {
         guard let client else { throw .unauthorized(soft: false) }
@@ -480,7 +523,7 @@ public actor MatrixSessionPort: SessionPort {
     private func register(_ continuation: AsyncStream<SessionEvent>.Continuation, id: UUID) { events[id] = continuation }
     private func unregister(_ id: UUID) { events[id] = nil }
 
-    private func adopt(_ client: Client, storeID: String, session: Session, generation: UInt64) async {
+    private func adopt(_ client: Client, storeID: String, passphrase: String, session: Session, generation: UInt64) async {
         // If `logout()` or a newer login/restore superseded this generation while `restoreSession` was in flight,
         // discard the client instead of installing it behind the coordinator's back (R-12).
         guard sessionGeneration == generation else { return }
@@ -491,8 +534,6 @@ public actor MatrixSessionPort: SessionPort {
             sendQueueErrorsHandle?.cancel()
             sendQueueErrorsHandle = client.subscribeToSendQueueStatus(listener: errors)
             sendQueueErrors = errors
-            searchBackfillHandle?.cancel()
-            searchBackfillHandle = backfillsSearch ? client.runSearchBackfill(strategy: .foreground) : nil
             try? await client.setMediaRetentionPolicy(policy: Self.defaultMediaRetentionPolicy)
         }
         authDelegateHandle?.cancel()
@@ -503,8 +544,10 @@ public actor MatrixSessionPort: SessionPort {
         authDelegateHandle = try? client.setDelegate(delegate: auth)
         reportedAuthErrorGeneration = nil
         delegate?.seed(session)
+        historyClient = nil
         self.client = client
         self.storeID = storeID
+        self.passphrase = passphrase
     }
 
     private func handleAuthError(isSoftLogout: Bool, generation: UInt64) async {
@@ -530,8 +573,9 @@ public actor MatrixSessionPort: SessionPort {
         sendQueueErrorsHandle?.cancel()
         sendQueueErrorsHandle = nil
         sendQueueErrors = nil
-        searchBackfillHandle?.cancel()
-        searchBackfillHandle = nil
+        historyClient = nil
+        historyCaches = []
+        passphrase = nil
     }
 
     fileprivate func emit(_ event: SessionEvent) {
@@ -545,17 +589,8 @@ public actor MatrixSessionPort: SessionPort {
         let cache = baseDirectory.appendingPathComponent(storeID, isDirectory: true).appendingPathComponent("caches")
         try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
-        let persist = self.persistRefreshedSession
         let delegate = RefreshDelegate(
-            storeID: storeID,
-            passphrase: passphrase,
-            initialSession: initialSession,
-            readStoredSession: readStoredSession
-        ) { [weak self] stored in
-            persist?(stored)
-            guard let self else { return }
-            Task { await self.emit(.tokensRefreshed(stored)) }
-        }
+            storeID: storeID, passphrase: passphrase, initialSession: initialSession, readStoredSession: readStoredSession, onRefresh: refreshHandler())
         self.delegate = delegate
         let slidingSyncBuilder: SlidingSyncVersionBuilder = enablesSlidingSync ? .native : .none
         var builder = ClientBuilder()
@@ -572,13 +607,20 @@ public actor MatrixSessionPort: SessionPort {
             .autoEnableBackups(autoEnableBackups: true)
             .crossProcessLockConfig(crossProcessLockConfig: .multiProcess(holderName: holderName))
             .setSessionDelegate(sessionDelegate: delegate)
-        if indexesMessages {
-            let searchIndex = baseDirectory.appendingPathComponent(storeID, isDirectory: true).appendingPathComponent("search-index")
-            try FileManager.default.createDirectory(at: searchIndex, withIntermediateDirectories: true)
-            builder = builder.withSearchIndexStore(path: searchIndex.path, key: passphrase)
-        }
+        // The SDK's own search index (until M19-11); Halo searches its own (D123).
+        try? FileManager.default.removeItem(at: baseDirectory.appendingPathComponent(storeID, isDirectory: true).appendingPathComponent("search-index"))
         if backPaginates { builder = builder.enableAutomaticBackPagination(enableAutomaticBackPagination: true) }
         return try await builder.build()
+    }
+
+    /// Persists a refreshed token pair and tells the app.
+    private func refreshHandler() -> @Sendable (StoredSession) -> Void {
+        let persist = persistRefreshedSession
+        return { [weak self] stored in
+            persist?(stored)
+            guard let self else { return }
+            Task { await self.emit(.tokensRefreshed(stored)) }
+        }
     }
 
     static func sdkSession(from stored: StoredSession) throws(HaloError) -> Session {
@@ -610,6 +652,7 @@ public actor MatrixSessionPort: SessionPort {
 
     private static func removeStore(_ base: URL, _ storeID: String) {
         try? FileManager.default.removeItem(at: base.appendingPathComponent(storeID, isDirectory: true))
+        try? FileManager.default.removeItem(at: historyCacheDirectory(storeID))
     }
 }
 

@@ -939,6 +939,62 @@ struct TimelineViewModelTests {
         #expect(vm.jumpRequest == "old")
     }
 
+    @Test("a message far back opens the timeline around it: newer ones load, nothing is marked read, sending and the end lead back to the newest (M20-1)", .timeLimit(.minutes(1)))
+    func focusedJump() async throws {
+        let room = try RoomID("!r:x.org")
+        let ann = try UserID("@ann:x.org")
+        func msg(_ id: String, ts: TimeInterval) throws -> TimelineItem {
+            TimelineItem(id: TimelineItemID(id), content: .event(TimelineEvent(
+                eventID: try EventID("$\(id)"), sender: ann, senderName: "Ann", timestamp: Date(timeIntervalSince1970: ts), isOwn: false, kind: .text(id, isEdited: false))))
+        }
+        func shown(_ vm: TimelineViewModel) -> [String] { if case .live(let rows, _, _, _) = vm.content { rows.compactMap(\.eventID?.rawValue) } else { [] } }
+        let port = FakeTimelinePort(), receipts = FakeReadMarkerPort()
+        port.addRoom(room, items: [try msg("new", ts: 100)], older: [[try msg("mid", ts: 50)]])
+        port.addFocus(try EventID("$old"), in: room, items: [try msg("older", ts: 9), try msg("old", ts: 10)], newer: [[try msg("next", ts: 11)]])
+        let vm = TimelineViewModel(
+            coordinator: TimelineCoordinator(port: port, room: room), receipts: ReadReceiptCoordinator(port: receipts), room: room, dwell: .zero, sleep: { _ in })
+        vm.initialEvent = try EventID("$old")
+        await vm.start()
+        while vm.lastRowID != "new" { await Task.yield() }
+        guard case .live(let first, _, _, _) = vm.content else { return }
+        vm.rowVisibility(first[0], isVisible: true)  // on screen only until the jump
+        vm.landingShown()
+        while vm.jumpRequest == nil { await Task.yield() }
+        #expect(vm.jumpRequest == "old" && vm.isFocused && shown(vm) == ["$older", "$old"])
+        #expect(port.paginateCalls(in: room) == 0)
+        guard case .live(let rows, _, _, _) = vm.content else { return }
+        vm.rowVisibility(rows[1], isVisible: true)
+        // Newer messages load at the end; at the very end the live timeline comes back by itself.
+        vm.setAtBottom(true)
+        for _ in 0..<1_000 { await Task.yield() }
+        #expect(shown(vm).count == 2, "not while the list is being placed")
+        vm.jumpHandled()
+        vm.clearHighlight()
+        vm.setAtBottom(true)
+        while shown(vm).count < 3 { await Task.yield() }
+        for _ in 0..<1_000 { await Task.yield() }
+        #expect(receipts.receipts.isEmpty)
+        vm.setAtBottom(true)
+        while vm.isFocused { await Task.yield() }
+        while shown(vm) != ["$new"] { await Task.yield() }
+        #expect(port.openSessions(in: room) == 1, "the focused timeline is closed, the live one is the same")
+        // Sending from an older place goes to the newest messages.
+        #expect(await vm.jump(toEvent: try EventID("$old")))
+        vm.draft = "hello"
+        await vm.send()
+        while vm.isFocused { await Task.yield() }
+        // A message that is gone is said, and what is shown stays.
+        port.setFocusError(.notFound, in: room)
+        #expect(await !vm.jump(toEvent: try EventID("$gone")))
+        #expect(vm.jumpError != nil && !vm.isFocused)
+        vm.dismissJumpError()
+        // Without the server: what the device holds is searched.
+        port.setFocusError(.network(retryable: true), in: room)
+        #expect(await vm.jump(toEvent: try EventID("$mid")))
+        #expect(vm.jumpRequest == "mid" && vm.jumpError == nil)
+        #expect(await !vm.jump(toEvent: try EventID("$gone")) && vm.jumpError != nil)
+    }
+
     @Test("opening a file downloads it into a temporary folder, shows it, and deleting it again on close; big files are refused")
     func openingFiles() async throws {
         let port = FakeMediaPort()

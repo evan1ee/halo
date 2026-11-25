@@ -9,6 +9,10 @@ public protocol TimelinePort: Sendable {
     /// Opens a thread timeline focused on `rootEvent` inside `room` (`TimelineFocus.thread`, M10 Threads).
     func openThread(room: RoomID, rootEvent: EventID) async throws(HaloError) -> any TimelineSession
 
+    /// Opens `room`'s timeline around `event` instead of at its newest message (M20-1): any event of the room's history, loaded from the
+    /// server when needed. Nothing that arrives later shows in it. Throws `.notFound` when the event doesn't exist or can't be seen.
+    func openFocused(room: RoomID, event: EventID) async throws(HaloError) -> any TimelineSession
+
     /// Prepares the timelines of the rooms the user is most likely to open next (the top of the room list), so opening one
     /// shows its messages at once. Best effort: failures are ignored. Ports with nothing to prepare keep the default.
     func warm(_ rooms: [RoomID]) async
@@ -21,12 +25,14 @@ extension TimelineSession {
     public func addReaction(on event: EventID, key: String) async throws(HaloError) -> Bool { throw .unsupported("ADD_REACTION") }
     public func editHistory(of event: EventID) async throws(HaloError) -> [EditRevision] { throw .unsupported("EDIT_HISTORY") }
     public func latestEventID() async -> EventID? { nil }
+    public func paginateForwards(count: UInt16) async throws(HaloError) -> Bool { true }
 }
 
 extension TimelinePort {
     public func openThread(room: RoomID, rootEvent: EventID) async throws(HaloError) -> any TimelineSession {
         try await open(room: room)
     }
+    public func openFocused(room: RoomID, event: EventID) async throws(HaloError) -> any TimelineSession { throw .unsupported("FOCUS") }
     public func warm(_ rooms: [RoomID]) async {}
     public func dropWarm() async {}
 }
@@ -39,6 +45,10 @@ public protocol TimelineSession: Sendable {
 
     /// Loads up to `count` older events. Returns `true` when the start of the room has been reached.
     func paginateBackwards(count: UInt16) async throws(HaloError) -> Bool
+
+    /// Loads up to `count` newer events of a focused timeline. Returns `true` when there are none after the loaded ones; a live timeline
+    /// always ends at the newest.
+    func paginateForwards(count: UInt16) async throws(HaloError) -> Bool
 
     /// The people who can be mentioned: joined members of the room. Throws on failure.
     func members() async throws(HaloError) -> [RoomMember]

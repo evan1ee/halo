@@ -55,6 +55,16 @@ public final class PreferencesStore {
         set { update { $0.followFocusFilter = newValue } }
     }
 
+    public var searchHistoryPaused: Bool {
+        get { snapshot.searchHistoryPaused }
+        set { update { $0.searchHistoryPaused = newValue } }
+    }
+
+    public var searchHistoryOnMobileData: Bool {
+        get { snapshot.searchHistoryOnMobileData }
+        set { update { $0.searchHistoryOnMobileData = newValue } }
+    }
+
     /// Reloads from the backing port (e.g. if another view wrote via legacy `UserDefaults`).
     public func reload() {
         snapshot = port.load()

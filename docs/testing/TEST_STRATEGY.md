@@ -78,7 +78,7 @@ Targets in [../REQUIREMENTS.md](../REQUIREMENTS.md) NFR-1..3; measured with sign
 | NFR-13 main thread | no hang ≥ 250 ms | `main-thread-hang` signpost in the scripted sessions (`scripts/perf.py`); MetricKit in the field | see `perf-baseline.json` |
 | NFR-14 sync at scale | ≤ 60 s first, ≤ 10 s after 24 h | `scripts/scale-measure.py` | table below (simulator) |
 | NFR-15 energy | ≤ 4 %/h idle foreground | Xcode energy log, 1 h | none |
-| Message search (MESSAGE_SEARCH §4, M19-11): first results p95 at 300,000 messages; sync budgets with the index on | ≤ 200 ms; NFR-14/15 | store test with generated messages; `scripts/scale-measure.py` | ≤ 52 ms, 152 MB for 300,000 messages (simulator, spike table below) |
+| Message search (MESSAGE_SEARCH §4, M19-11): first results p95 at 300,000 messages; sync budgets with the index on | ≤ 200 ms; NFR-14/15 | store test with generated messages; `scripts/scale-measure.py` | ≤ 109 ms, 164 MB for 300,000 messages (simulator, table below) |
 
 **Scale (M17-4, V-SCALE-1), 2026-11-25.** `scripts/scale-measure.py` on the M17-3 fixture server; adapter and SDK as the app uses them, iPhone Air simulator on the dev Mac, no network latency: the work is
 real, the seconds are a Mac's. Fixture messages are short and members have no profile, so real accounts send more bytes. Not yet: an iPhone, energy, a real public-server account (📱👤).
@@ -120,6 +120,25 @@ test itself (10 ms per read, up to 300 ms after an empty page), so CPU and reque
 | … query p95: rare word, common word, one letter, one CJK character, in one room | 8, 24, 38, 52, 19 ms | 200 ms |
 
 Not measured: an iPhone, energy, a real account, months of mixed encrypted history, the same numbers with network latency.
+
+**Message search as shipped (M19-11), 2026-11-25.** Same simulator, server and limits; production code (`SearchIndexer`, `MatrixMessageIndexSource`, `SearchIndexStore`). `scripts/scale-measure.py` (search on), `--search` (full history), `SearchIndexMeasurements` (`TEST_RUNNER_HALO_SEARCH_MEASURE=1`), `infra/test/run.sh search`.
+The spike's own test code is gone (in git history before this change).
+
+| Measurement | With search | Without (same day) | Limit |
+|---|---|---|---|
+| 1,000 rooms: first sync → all rooms | 18.9 s | 17.2 s | 60 s |
+| Catch-up, 200 rooms × 5 messages / all of them in the index | 1.6 s / 3.7 s, 1,000 of 1,000 found | 1.6 s | 10 s |
+| CPU per idle minute (history paused / done) | 0.75 s / 0.59 s | 0.50 s | 1 s |
+| Memory settled / peak of the first sync / peak of the catch-up | 182 / 133 / 195 MB | 162 / 94 / 198 MB | +20 MB settled |
+| Threads; listening to every room at start | 18; 0.08 s | 18 | |
+| Full history of 1,000 rooms (47,015 messages), without rests | 13 min, 104 s CPU, 4,509 requests, 32 MB | | |
+| … memory while reading (listening: 179 MB) / after; index file | 186–194 / 185 MB; 20 MB | | +20 MB |
+| Full history of the 20,000-event room (and the 10,000-member one) | 25 s, 10.6 s CPU, +2 MB; 10 MB | | |
+| First results, 300,000 messages, p95: rare, common word, one letter, one CJK character, two CJK characters | 1, 45, 85, 108, 1 ms | | 200 ms |
+| Index of 300,000 messages: size / writing / slowest slice of 500 / leaving a room of 500 | 164 MB / 0.11 ms each / 241 ms / 1.7 s in steps | | |
+| Opening a message 1,300 back (local server) | 0.03–0.04 s | | 2 s |
+
+The memory of the listeners is at its limit (+20 MB). Taking a row out of the index is slow on purpose (`secure-delete`, 3 ms). Not measured: an iPhone, energy, a real account, network latency.
 
 **Performance suite (M17-5).** `scripts/perf.py` signs a simulator of its own in to the scale accounts (or uses a device's account, `--device`), runs `HaloPerformanceTests` with optimised code, reads the result bundle and prints
 budget / measured / baseline / pass; over 20 % (a simulator: 50 %, its runs differ by up to 28 %) and the noise floor worse than `perf-baseline.json` for the same device fails, and a missed budget fails on a device. Numbers are compared only with the same device and OS.

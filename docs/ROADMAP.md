@@ -46,18 +46,15 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 | GA-18 | Video and voice play only in Quick Look | no `AVPlayer` | M20-2, M20-3 |
 | GA-19 | Polls can be created but not voted in or ended | no `sendPollResponse` | M20-4 |
 | GA-20 | No camera: only existing photos can be sent | no capture code or usage string | M20-5 |
-| GA-21 | Jumping to an old message gives up silently after 10 pages | `maxJumpPages` | M20-1 |
 | GA-22 | No way to report a message or room (App Review 1.2) | no `reportContent` | M20-7 |
 | GA-23 | Upgraded rooms: no link to the successor | only the share extension checks it | M20-8 |
 | GA-24 | Localisation isn't ready: 12 catalog keys, about 376 literals in views (AC-UX-10 was ticked) | `Localizable.xcstrings` | M21-6 |
 | GA-25 | Shared loading/error states used on 2 screens; system motion and contrast settings barely read | `ErrorState`, `accessibilityReduceMotion` ×2, `HaloMotion` ×2 | M21-1, M21-3 |
 | GA-26 | Release builds have no push gateway; the privacy manifests and labels don't mention KLIPY search | `Base`/Release config, `PrivacyInfo.xcprivacy` | M22-1, M22-3 |
-| GA-27 | The SDK's message search index makes sync 3 to 20 times slower on large accounts and keeps the CPU busy (about 25 s per idle minute) | TEST_STRATEGY §7, scale table (2026-11-25) | M17-8, M19-11 |
 | GA-28 | Every launch asks the server for one event per unread room (344 requests at 1,000 rooms) to find the read position's time | scale measurement; `MatrixRoomListPort.ownReadThrough` | M19-3 |
 | GA-29 | A half-open connection hides new messages for 39 s | `FaultTests.halfOpenSync` | M18-11 |
 | GA-30 | The plain text of a message with a mention is the Markdown source, so other clients' notifications show a link | `InteropTests.outgoing` | M20-10 |
 | GA-31 | Messages of a type Halo doesn't know are missing from the timeline instead of showing their fallback text | `InteropTests.incoming` | M20-19 |
-| GA-32 | Message search can show results of the previous query, run two "load more" at once, and misplace results after one it can't map; no CJK words, filters or coverage notice | `SearchCoordinator.apply`/`loadMore`, `MatrixSearchPort` (`compactMap` before index diffs), read 2026-11-25 | M19-11 |
 
 ## 3. Queue
 
@@ -113,7 +110,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 | [ ] **M19-8 Scrolling**: mixed media, animated stickers, long formatted messages | R · M · 📱 | NFR-2 measured interactively, hitch ratio recorded |
 | [ ] **M19-9 Zero flash and jump audit**: launch, room open/close, keyboard, send → confirm, edit, reaction, reconnect, history prepend, appearance change, return from background | R · M | Frame-by-frame capture of each; every defect fixed or filed; UI tests for the ones that can be measured; AC-MOT-1 |
 | [ ] **M19-10 Leaks and soak**: 50 room open/close cycles, 30 min scroll, background/foreground | R · S · 📱 | No growth over 10 %; no task or subscription left after close |
-| [ ] **M19-11 Message search on Halo's own index** (GA-27, GA-32, D123, D124, ADR-0024): encrypted rooms, full history, CJK, files and links; SDK index off and its folder deleted. Slices: correctness of today's search (stale results, load-more guard) · tokeniser and store · live lane · history lane · switch-over · interface | R · L · 📱 | AC-SRCH-1…9; `messageSearch` and S01–S29 green. Needs M17-8 and **M20-1** |
+| [ ] **M19-11 Message search on Halo's own index** (*built 2026-11-25; open: iPhone checks 📱*) (D123, D124, ADR-0024): encrypted rooms, full history, CJK, files and links; SDK index off and its folder deleted. Slices: correctness of today's search (stale results, load-more guard) · tokeniser and store · live lane · history lane · switch-over · interface | R · L · 📱 | AC-SRCH-1…9; `infra/test/run.sh search` and S01–S29 green. Needs M17-8 and **M20-1** |
 
 **Exit:** **G-PERF** — all budgets of TEST_STRATEGY §7 met on the reference device with a Release build.
 
@@ -122,7 +119,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 
 | Task | Class · size | Done when |
 |---|---|---|
-| [ ] **M20-1 Jump to any message** (*taken with M19-11: search finds what the timeline can't reach*): event-focused timeline for replies, search, links, pins and notifications; back to newest | R · L | Event 5,000 messages back opens in ≤ 2 s online; offline or gone says so; read state unaffected |
+| [x] **M20-1 Jump to any message** (*built with M19-11, 2026-11-25; a message 1,300 back opens in 0.04 s on the simulator*): event-focused timeline for replies, search, links, pins and notifications; back to newest | R · L | Event 5,000 messages back opens in ≤ 2 s online; offline or gone says so; read state unaffected |
 | [ ] **M20-2 Voice and audio in the bubble**: waveform, scrub, 1×/1.5×/2×, route and interruption handling, keeps playing while scrolling | R · M | Unit on the player; interop with Element voice notes; VoiceOver adjustable |
 | [ ] **M20-3 Video**: poster inline, full-screen player, captions on send, save and share | R · M | Streams from file (M19-5); portrait and landscape |
 | [ ] **M20-4 Polls**: vote, change vote, end own poll, live results | R · M | Contract test with two accounts; pending vote looks pending |
@@ -226,7 +223,7 @@ wrong. P2: workaround exists. P3: polish. A P0 stops a rollout; fixed forward (B
 | **G-FFI** | M3 | **PASS (D109)** | Stay on upstream `MatrixRustSDK` binary (ADR-0003). |
 | **G-NSE** | M1 | **PASS (D109)** | 100/100 live iPhone 16 soak (ADR-0016). Re-run after M18-6/M18-7 change the NSE. |
 | **G-UNREAD** | M3 | **PASS (D109)** | S01–S29 over classic sync; 7-day AC-U8 soak in Beta 1. |
-| **G-SCALE** | M17 | **PASS with conditions (D125, founder, 2026-11-25)** | Accepted on the simulator numbers: classic sync meets NFR-14 at 1,000 rooms without the SDK's search index (TEST_STRATEGY §7, M17-8). Still to show, before G-PERF: M19-11 in the app, an iPhone, one real account; a failure reopens Q-SYNC-SCALE. |
+| **G-SCALE** | M17 | **PASS with conditions (D125, founder, 2026-11-25)** | Accepted on the simulator numbers: classic sync meets NFR-14 at 1,000 rooms without the SDK's search index (TEST_STRATEGY §7, M17-8). Still to show, before G-PERF: ~~M19-11 in the app~~ (done on the simulator, 2026-11-25), an iPhone, one real account; a failure reopens Q-SYNC-SCALE. |
 | **G-PERF** | M19 | open | All budgets on the reference device, Release build, two runs on different days. |
 | **G-SHIP** | M22 | open | §4 complete, zero P0/P1, upgrade path tested, rollback rehearsed, founder sign-off. |
 

@@ -29,6 +29,10 @@ public struct PreferencesSnapshot: Sendable, Equatable, Codable {
     /// `true`: a Focus's Halo filter (Settings → Focus → Halo) narrows the chat list while that Focus is on (M16, D90, D104).
     /// Default `false`: the chat list always shows every chat.
     public var followFocusFilter: Bool
+    /// `true`: reading older messages for search is paused (MESSAGE_SEARCH FR-14). Messages that arrive are still added.
+    public var searchHistoryPaused: Bool
+    /// `true`: older messages are also read on mobile data. Default `false`.
+    public var searchHistoryOnMobileData: Bool
 
     public init(
         privateReceipts: Bool = false,
@@ -38,8 +42,12 @@ public struct PreferencesSnapshot: Sendable, Equatable, Codable {
         appearance: AppAppearance = .system,
         lastSeenWhatsNewVersion: String? = nil,
         chatsInSystemSearch: Bool = false,
-        followFocusFilter: Bool = false
+        followFocusFilter: Bool = false,
+        searchHistoryPaused: Bool = false,
+        searchHistoryOnMobileData: Bool = false
     ) {
+        self.searchHistoryPaused = searchHistoryPaused
+        self.searchHistoryOnMobileData = searchHistoryOnMobileData
         self.privateReceipts = privateReceipts
         self.sendTypingNotices = sendTypingNotices
         self.privacyBlur = privacyBlur

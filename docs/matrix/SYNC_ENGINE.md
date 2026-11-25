@@ -32,6 +32,8 @@ stateDiagram-v2
 
 **In code:** `MatrixSessionPort.runSync` + `MatrixSyncPort` implement the classic sync loop; `SyncCoordinator` (HaloApplication) enforces rules 1–2 and restart backoff while `SessionCoordinator` is `.ready`.
 
+**Start (M19-11):** each start of a sync (loop or background pass) first waits until message search listens, at most 1.5 s (`SearchStartGate`); what it would miss is read from the server later.
+
 ## 3. Offline behaviour
 - Cached rooms and timelines are readable (SDK SQLite stores + event cache).
 - Sends go to the SDK send queue (persists across restarts and re-enables on reconnect, verified by `offlineSend`); receipts go to Halo's durable GRDB outbox (`read_intent`).

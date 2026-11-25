@@ -1,9 +1,8 @@
 # Feature: Message Search
 
-> Priority: P2 · Milestone: M8 (SDK index, shipped) → M17-8 / M19-11 (own index, **not built**) · Owner modules: FeatureSearch, HaloApplication, HaloDomain, HaloMatrixAdapter, HaloPersistence · Requirements: R-P2-SEARCH
+> Priority: P2 · Milestone: M8 (SDK index) → M19-11 (own index, **built**; not checked on an iPhone) · Owner modules: FeatureSearch, HaloApplication, HaloDomain, HaloMatrixAdapter, HaloPersistence · Requirements: R-P2-SEARCH
 
-Decisions: D30, D123, D124, ADR-0024. Sections 3–12 describe the target; what exists today is the SDK's `SearchService` behind `SearchPort`
-(text, file names and captions, up to about three months back). It indexes encrypted rooms too by its design, but Halo's `messageSearch` contract test only uses an unencrypted room, so that is not tested.
+Decisions: D30, D123, D124, ADR-0024. Built with M19-11 (2026-11-25), tested on the simulator and against real servers; not yet on an iPhone (§12, 📱).
 
 ## 1. Purpose
 Find any message this device can read, **in encrypted and unencrypted rooms, back to the start of each room**, on the device.
@@ -19,20 +18,21 @@ Find any message this device can read, **in encrypted and unencrypted rooms, bac
 - FR-1 **Encrypted rooms.** Messages are indexed on the device after the SDK decrypted them. Nothing is sent to the server to search: no query, no word, no hash. `POST /search` is never used, for unencrypted rooms either (one behaviour).
 - FR-2 **What is searchable in an encrypted room:** every message this device has the key for: received since sign-in, from key backup after verification or recovery, or shared with the device. A message without a key is not searchable; it is recorded (event ID only) and indexed when its key arrives.
 - FR-3 **Depth:** full history (D123), until each room's start or the point the server stops giving history.
-- FR-4 **Content:** text, notice and emote bodies (Markdown source and reply fallback stripped), captions, file names, link addresses, sender names, poll questions and options. Not: reactions, state events, media contents, locations' coordinates.
+- FR-4 **Content:** text, notice and emote bodies (Markdown source and reply fallback stripped), captions, file names, link addresses, sender names, poll questions and options (a poll that arrives live only in the 200 most recent rooms; elsewhere when the room is read). A gallery is one result, found by each of its file names. Not: reactions, state events, media contents, locations' coordinates.
 - FR-5 **Languages:** normalised (NFKC), case and diacritics ignored. Runs of CJK characters are split into characters on writing and matched as a **phrase** on reading; Latin words match by prefix. One tokeniser for index, query and highlighting. Scripts without spaces that aren't CJK (Thai, Lao, Khmer) match by prefix of the whole run only.
 - FR-6 **Query safety:** user text never reaches FTS5 as syntax; tokens are quoted; a query without any token returns no results and no error.
 - FR-7 **Order and paging:** newest first, paged by (time, row). No relevance ranking.
 - FR-8 **Filters:** room (used by M20-11) and kind: messages, media, files, links.
-- FR-9 **Live lane:** the SDK's per-room listeners deliver each synced message, decrypted; undecryptable ones are kept by ID and fetched again when keys arrive. Rooms with ten or more events in one response are read back to a known event (possible gap). Listeners are registered before the first sync of a run.
-- FR-10 **History lane:** starts by itself when sync is quiet; most recent rooms first; one room at a time, in slices; stores its position after each slice; runs in an SDK client of its own that is dropped about every 20 rooms or 5,000 events (ADR-0024); stops for Low Power Mode, thermal state serious or worse, mobile data (setting, default off), server rate limits and anything the person is doing; goes on in a processing task on the charger.
-- FR-11 **Re-check before showing:** each page of hits is read from the SDK; a deleted event is removed from the index and not shown, an edited one is updated, an ignored sender is hidden.
-- FR-12 **Opening a hit** goes to the event, in its thread if it is in one, through M20-1. Too old, gone or offline is said.
-- FR-13 **Coverage notice:** "Searched back to <month> · n of m chats complete", plus how many messages can't be decrypted, with a way to verification when the device isn't verified.
-- FR-14 **Settings → Storage:** index size, progress, pause, delete and rebuild.
+- FR-9 **Live lane:** the SDK's per-room listeners (message, encrypted, redaction; poll start in the 200 most recent rooms) deliver what sync brings, decrypted; edits and deletions are applied; undecryptable ones are kept by ID and asked for again after a minute, then at doubling intervals up to half a day, and at once when a key backup is connected. Listeners are registered before the first sync of a run, which waits for that at most 1.5 s.
+  **Missed messages:** after the first response of a run or an interruption every touched room, and later any room with five or more messages in one response, is compared with the server: the IDs of its 30 newest messages (one request). An unknown one is a gap, read back until known messages are reached. (Counting the events of a response isn't enough: reactions can fill it, ADR-0024.)
+- FR-10 **History lane:** starts by itself when sync is quiet; most recent rooms first; one room at a time, in slices; stores its position after each slice; runs in an SDK client of its own that is dropped about every 20 rooms or 5,000 events (ADR-0024); stops for Low Power Mode, thermal state serious or worse, mobile data (setting, default off), offline, server errors (waits 5 s to 5 min) and for 3 s after the person opens something or searches; rests as long as it reads; goes on in a processing task on the charger.
+- FR-11 **Re-check before showing:** hits not checked within the last hour are asked of the **server** (`GET /event`, not the SDK's cache: a deletion inside a part of the room that sync left out never reaches it). A deleted one is removed from the index and not shown, an edited one shows its new text. The page waits at most 1.2 s for the answers; what is unanswered then (offline) is shown as the index has it. Ignored senders and rooms that aren't joined are left out.
+- FR-12 **Opening a hit** goes to the event, in its thread if it is in one, through M20-1. Gone or not reachable is said.
+- FR-13 **Coverage notice:** "Searched back to <month> · n of m chats complete" ("Reading your chats" while a chat hasn't been read at all), why it waits, and how many messages can't be decrypted, with a way to verification when the device isn't verified. Nothing is shown once all is searchable.
+- FR-14 **Settings → Message search:** progress, size and number of messages, pause, mobile data, delete and rebuild.
 
 ## 4. Non-functional requirements
-NFR-14 and NFR-15 hold with the index on: at 1,000 rooms first sync ≤ 60 s, catch-up ≤ 10 s, ≤ 1 s CPU per idle minute once the history lane is done or paused, ≤ 20 MB extra memory (met on the simulator, TEST_STRATEGY §7; the listeners' 22 MB is at the limit).
+NFR-14 and NFR-15 hold with the index on: at 1,000 rooms first sync ≤ 60 s, catch-up ≤ 10 s, ≤ 1 s CPU per idle minute once the history lane is done or paused, ≤ 20 MB extra memory (simulator, TEST_STRATEGY §7).
 First results ≤ 200 ms p95 at 300,000 messages (simulator: ≤ 52 ms). NFR-4: no message text, file name, address or query in logs. Protection at rest: [../security/SECURITY.md](../security/SECURITY.md) §4.
 
 ## 5. User flows
@@ -40,21 +40,21 @@ Pull down on the chat list → type → chat names and "Messages" → tap a hit 
 First use on a large account: results appear at once for what is indexed, with the coverage notice.
 
 ## 6. State transitions
-Room coverage: `none → live → partial(oldest event) → complete`, or `partial → blocked(noAccess | rateLimited)` and back.
-Indexer: `idle → live → history → paused(reason) → history`; `stopped` on sign-out, revocation and background without a task.
+Room coverage: `none → partial(oldest event) → complete`, or `blocked` when the server doesn't give the history (counts as complete).
+Indexer: `indexing`, `paused(reason)`, `done`, `unavailable` (locked), `stopped` (signed out). The live lane runs in all but the last.
 Query: `empty → debouncing → loading → results | none | failed`; a result carries the query it answers and is dropped when the query changed.
 
 ## 7. Data models
-`SearchIndexEntry`, `SearchIndexQuery`, `SearchCoverage`, `SearchTokeniser`, `SearchIndexPolicy` (pure, `HaloDomain`). Schema: [../data/DATA_MODELS.md](../data/DATA_MODELS.md) §3b.
+`SearchIndexEntry`, `SearchQuery`, `RoomSearchCoverage`, `SearchHistorySlice`, `SearchIndexOperation`, `SearchTokeniser`, `SearchContent`, `SearchIndexPolicy` (pure, `HaloDomain`). Schema: [../data/DATA_MODELS.md](../data/DATA_MODELS.md) §3b.
 
 ## 8. API boundaries
-`SearchPort` (UI-facing, one implementation), `LocalSearchIndexPort` (HaloPersistence), `MessageIndexSourcePort` (adapter: live and history slices as `SearchIndexEntry`), `SearchIndexer` (HaloApplication). Only the adapter sees SDK types; the index never feeds the timeline, the room list or unread state.
+`SearchPort` (UI-facing; `LocalMessageSearch` behind `CurrentSearchPort`), `LocalSearchIndexPort` (`SearchIndexStore`, HaloPersistence), `MessageIndexSourcePort` (`MatrixMessageIndexSource`, adapter), `SearchIndexer` and `SearchCoordinator` (HaloApplication). Only the adapter sees SDK types; the index never feeds the timeline, the room list or unread state.
 
 ## 9. Error scenarios
-Index damaged or of an older schema → deleted and rebuilt, search says "indexing" · disk full → indexing stops, search keeps working, Settings says it · server refuses history → room blocked with the reason · offline → local results only, hits outside the cache open with an explanation · index unreadable while locked → search unavailable until unlock.
+Index damaged or of an older schema → deleted and rebuilt, search says "indexing" · disk full → the write fails, the rooms are read again later, search keeps working · server refuses history → room blocked with the reason · offline → local results only, hits outside the cache open with an explanation · index unreadable while locked → search unavailable until unlock.
 
 ## 10. Edge cases
-Late or wrong timestamps · a message deleted or edited while its part of the room wasn't loaded (FR-11) · a message decrypted weeks later · event-focused paging anchored inside a thread (anchor only on events outside threads) · room upgraded (both rooms stay searchable) · left or forgotten room (entries removed) · ignored and un-ignored sender · history visibility that starts at joining · soft logout (index kept) · sign-in with another account (own file) · galleries with several files in one event.
+Late or wrong timestamps · a message deleted or edited while its part of the room wasn't loaded (FR-11) · a message decrypted weeks later · event-focused paging anchored inside a thread (anchor only on events outside threads) · room upgraded (both rooms stay searchable) · left or forgotten room (entries removed) · ignored and un-ignored sender · history visibility that starts at joining · soft logout (index kept) · sign-in with another account (own file) · galleries with several files in one event · a message whose only newer messages are in threads (a gap is read from outside threads).
 
 ## 11. Acceptance criteria
 - AC-SRCH-1 A word in an **encrypted** room is found: in a message received live, in one received before this run, and, after the recovery key is entered, in one sent before this device signed in.
@@ -69,7 +69,7 @@ Late or wrong timestamps · a message deleted or edited while its part of the ro
 
 ## 12. Test requirements
 Unit (Linux): tokeniser and query builder (AC-SRCH-5, 7), policy and coverage (out-of-order, future and late events), coordinator (stale results, load-more guard). Store (macOS): upsert, edit, delete, room leave, ignore, rebuild, wipe, paging.
-Contract (dev Synapse): encrypted room live, after recovery (throwaway account, recovery key), late key, kill and resume, deletion and edit while not loaded, thread hit. Scale: `scale1000` and the 20,000-event room. UI: coverage notice, CJK query, AX5, VoiceOver. 📱: locked phone, processing task, first sync of `scale1000`.
+Contract (`infra/test/run.sh search`): encrypted room live, after recovery (recovery key), an event without a key, kill and resume, gaps of several pages and under reactions, deletion and edit live and while away, polls, files, threads, left room, opening a message 1,300 back. Scale: `scale1000` and the 20,000-event room. Open: UI test of the coverage notice, AX5, VoiceOver. 📱: locked phone, processing task, first sync of `scale1000`.
 
 ## 13. Open questions
 None on design; V-SEARCH-2 still needs an iPhone ([../OPEN_QUESTIONS.md](../OPEN_QUESTIONS.md)).

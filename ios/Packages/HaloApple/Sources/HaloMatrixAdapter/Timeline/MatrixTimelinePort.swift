@@ -131,7 +131,7 @@ public final class MatrixTimelinePort: TimelinePort {
             internalIdPrefix: "thread-\(rootEvent.rawValue)",
             dateDividerMode: .daily,
             trackReadReceipts: .allEvents,
-            reportUtds: true)
+            reportUtds: false)  // `true` needs a hook on the client; without one the SDK refuses the timeline
         do {
             let timeline = try await room.timelineWithConfiguration(configuration: config)
             await Self.firstPage(of: timeline)
@@ -139,6 +139,19 @@ public final class MatrixTimelinePort: TimelinePort {
         } catch {
             throw ErrorMapper.map(error)
         }
+    }
+
+    /// The SDK keeps what a focused timeline loads for the life of the client (F-FFI-26): about 0.5 KB per event, so a jump costs little.
+    public func openFocused(room id: RoomID, event: EventID) async throws(HaloError) -> any TimelineSession {
+        let room = try await session.room(id)
+        let own = try await session.ownUserID()
+        let config = TimelineConfiguration(
+            focus: .event(eventId: event.rawValue, numContextEvents: 30, threadMode: .automatic(hideThreadedEvents: false)),
+            filter: .all, internalIdPrefix: "focus-\(event.rawValue)", dateDividerMode: .daily, trackReadReceipts: .disabled, reportUtds: false)
+        do {
+            let timeline = try await room.timelineWithConfiguration(configuration: config)
+            return MatrixTimelineSession(pinStore: pinStore, session: session, roomID: id, room: room, timeline: timeline, ownUserID: own)
+        } catch { throw ErrorMapper.mapFocus(error) }
     }
 }
 
@@ -232,6 +245,10 @@ final class MatrixTimelineSession: TimelineSession {
 
     func paginateBackwards(count: UInt16) async throws(HaloError) -> Bool {
         do { return try await timeline.paginateBackwards(numEvents: count) } catch { throw ErrorMapper.map(error) }
+    }
+
+    func paginateForwards(count: UInt16) async throws(HaloError) -> Bool {
+        do { return try await timeline.paginateForwards(numEvents: count) } catch { throw ErrorMapper.map(error) }
     }
 
     func send(text: String, mentions: [Mention]) async throws(HaloError) {

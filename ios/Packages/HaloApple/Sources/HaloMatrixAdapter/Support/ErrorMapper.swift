@@ -34,6 +34,16 @@ enum ErrorMapper {
         return map(error)
     }
 
+    /// For opening a timeline around an event: a missing event crosses FFI as a generic error naming `EventNotFound`.
+    static func mapFocus(_ error: any Error) -> HaloError {
+        if case let ClientError.Generic(msg, details) = error {
+            let text = msg + (details ?? "")
+            if text.contains("EventNotFound") || text.contains("M_NOT_FOUND") { return .notFound }
+            if text.contains("M_FORBIDDEN") { return .forbidden }
+        }
+        return map(error)
+    }
+
     static func map(_ error: ClientError) -> HaloError {
         switch error {
         case .MatrixApi(let kind, _, _, _): return map(kind)

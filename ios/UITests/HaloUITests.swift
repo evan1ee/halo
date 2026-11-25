@@ -452,6 +452,29 @@ final class HaloUITests: XCTestCase {
         }
     }
 
+    /// Message search (MESSAGE_SEARCH §5): filters and the coverage notice, a hit opens its chat at the message, back to the newest.
+    @MainActor
+    func testMessageSearchOpensAHit() throws {
+        let app = XCUIApplication()
+        app.launch()
+        dismissFirstRunSheets(app)
+        guard chatsRoot(app).waitForExistence(timeout: 15) else { throw XCTSkip("App is signed out.") }
+        let field = app.searchFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText("e")
+        XCTAssertTrue(app.buttons["search-filter-files"].waitForExistence(timeout: 5), "Filters show with a query")
+        let hits = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'search-hit-'"))
+        guard hits.firstMatch.waitForExistence(timeout: 20) else { throw XCTSkip("No message with an e on this account yet.") }
+        app.buttons["search-filter-files"].tap()
+        XCTAssertTrue(app.buttons["search-filter-files"].isSelected)
+        app.buttons["search-filter-all"].tap()
+        XCTAssertTrue(hits.firstMatch.waitForExistence(timeout: 10))
+        hits.element(boundBy: min(3, hits.count - 1)).tap()
+        XCTAssertTrue(app.descendants(matching: .any)["timeline"].waitForExistence(timeout: 10), "The hit opens its chat")
+        XCTAssertFalse(app.alerts.firstMatch.waitForExistence(timeout: 3), "The message is found")
+    }
+
     /// M4/M5 simulator UI check: opens a chat, verifies the sticker panel loads packs/stickers, and exercises New pack creation.
     @MainActor
     func testStickerPanelAndPackCreationFlow() throws {

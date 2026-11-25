@@ -10,7 +10,7 @@ style of Messages. The room list is the only root; everything else is pushed ont
 | Account avatar | Top-leading toolbar (shows a dot when this device needs verification) | Settings, pushed |
 | Compose (`square.and.pencil`) | Top-trailing toolbar | New chat, sheet |
 | More menu (`ellipsis.circle`) | Top-trailing toolbar, left of compose | Filters (All · Unread · People · Rooms · Favourites · Invites), Stickers, Activity (only when bot senders are set), pushed |
-| Search | `.searchable` field in the room list (pull down to reveal) | Filters rooms by name while typing; a "Messages" section shows `SearchPort` hits; tapping one opens the room at the event. Encrypted rooms, full history and a coverage notice: D123, [../features/MESSAGE_SEARCH.md](../features/MESSAGE_SEARCH.md), not built on the own index |
+| Search | `.searchable` field in the room list (pull down to reveal) | Filters rooms by name while typing; a "Messages" section shows `SearchPort` hits; with kind filters and a coverage notice (D123, [../features/MESSAGE_SEARCH.md](../features/MESSAGE_SEARCH.md)); tapping one opens the room, or the thread, at the message |
 | Media Gallery | Preset row in the room list (D83) | Global Media Gallery, pushed |
 
 Rules: the app badge is the only unread count outside the list (no tab badge); Activity and the sticker library are pushed screens,

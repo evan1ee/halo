@@ -13,6 +13,10 @@ public actor TimelineCoordinator {
         public var paginationError: HaloError?
         /// Other people currently typing.
         public var typing: [UserID]
+        /// The event the timeline is opened around; `nil` at the newest messages (M20-1).
+        public var focus: EventID?
+        /// There is nothing newer than the loaded events of a focused timeline.
+        public var reachedEnd = false
 
         public init(items: [TimelineItem], isPaginating: Bool, reachedStart: Bool, paginationError: HaloError?, typing: [UserID] = []) {
             self.typing = typing
@@ -42,6 +46,9 @@ public actor TimelineCoordinator {
     private let threadRoot: EventID?
     private var broadcaster = SnapshotBroadcaster<Status>()
     private var session: (any TimelineSession)?
+    /// The timeline at the newest messages, kept while `session` is a focused one.
+    private var liveSession: (any TimelineSession)?
+    private var isPaginatingForwards = false
     private var subscription: Task<Void, Never>?
     private var generation = 0
     private var consecutiveFailures = 0
@@ -95,11 +102,67 @@ public actor TimelineCoordinator {
         typingSubscription = nil
         if typingSentAt != nil { try? await session?.setTyping(false) }
         typingSentAt = nil
-        let closing = session
+        let closing = session, live = liveSession
         session = nil
+        liveSession = nil
         snapshot = Snapshot(items: [], isPaginating: false, reachedStart: false, paginationError: nil)
         status = .idle
         await closing?.close()
+        await live?.close()
+    }
+
+    // MARK: Around an older event (M20-1)
+
+    /// Shows the timeline around `event` instead of its newest messages. On failure what is shown stays. Not for threads.
+    public func focus(on event: EventID) async throws(HaloError) {
+        guard case .live = status, threadRoot == nil, session != nil else { throw .unsupported("FOCUS") }
+        let current = generation
+        let focused = try await port.openFocused(room: room, event: event)
+        guard current == generation, let session else {
+            await focused.close()
+            throw .cancelled
+        }
+        let earlier = liveSession == nil ? nil : session
+        if liveSession == nil { liveSession = session }
+        self.session = focused
+        start(focus: event)
+        await earlier?.close()
+    }
+
+    /// Back to the newest messages.
+    public func returnToLive() async {
+        guard let live = liveSession else { return }
+        let focused = session
+        session = live
+        liveSession = nil
+        start(focus: nil)
+        await focused?.close()
+    }
+
+    /// Loads newer events of a focused timeline, once at a time.
+    public func paginateForwards() async {
+        guard case .live = status, let session, snapshot.focus != nil, !snapshot.reachedEnd, !isPaginatingForwards else { return }
+        isPaginatingForwards = true
+        defer { isPaginatingForwards = false }
+        let current = generation
+        guard let reachedEnd = try? await session.paginateForwards(count: 20), current == generation else { return }
+        snapshot.reachedEnd = reachedEnd
+        publish()
+    }
+
+    /// The rows on screen stay until the first items of the new session arrive.
+    private func start(focus: EventID?) {
+        snapshot = Snapshot(items: [], isPaginating: false, reachedStart: false, paginationError: nil, typing: snapshot.typing)
+        snapshot.focus = focus
+        consecutiveFailures = 0
+        subscribe()
+    }
+
+    /// Sending happens at the newest messages, where the message will be.
+    private func sendingSession() async throws(HaloError) -> any TimelineSession {
+        await returnToLive()
+        guard let session, case .live = status else { throw .cancelled }
+        return session
     }
 
     /// Loads older events once at a time (TIMELINE FR-3). A failure is kept in the snapshot for a retry.
@@ -123,7 +186,7 @@ public actor TimelineCoordinator {
 
     /// Sends a message into the open timeline; the local echo arrives as a diff. Throws `.cancelled` when the timeline isn't open.
     public func send(_ text: String, mentions: [Mention] = []) async throws(HaloError) {
-        guard let session, case .live = status else { throw .cancelled }
+        let session = try await sendingSession()
         try await session.send(text: text, mentions: mentions)
     }
 
@@ -144,31 +207,31 @@ public actor TimelineCoordinator {
 
     /// Sends a sticker into the open timeline (no local echo: it shows when the server confirms).
     public func sendSticker(_ sticker: Sticker) async throws(HaloError) {
-        guard let session, case .live = status else { throw .cancelled }
+        let session = try await sendingSession()
         try await session.sendSticker(sticker)
     }
 
     /// Uploads and sends an image into the open timeline; returns when it is sent.
     public func sendImage(_ image: OutgoingImage) async throws(HaloError) {
-        guard let session, case .live = status else { throw .cancelled }
+        let session = try await sendingSession()
         try await session.sendImage(image)
     }
 
     /// Uploads and sends a file, audio or video clip into the open timeline; returns when it is sent.
     public func sendFile(_ file: OutgoingFile) async throws(HaloError) {
-        guard let session, case .live = status else { throw .cancelled }
+        let session = try await sendingSession()
         try await session.sendFile(file)
     }
 
     /// Sends a static location into the open timeline (D100).
     public func sendLocation(_ location: OutgoingLocation) async throws(HaloError) {
-        guard let session, case .live = status else { throw .cancelled }
+        let session = try await sendingSession()
         try await session.sendLocation(location)
     }
 
     /// Starts a poll in the open timeline (D100).
     public func createPoll(_ poll: OutgoingPoll) async throws(HaloError) {
-        guard let session, case .live = status else { throw .cancelled }
+        let session = try await sendingSession()
         try await session.createPoll(poll)
     }
 
@@ -180,7 +243,7 @@ public actor TimelineCoordinator {
 
     /// Replies to a confirmed event of the open timeline.
     public func reply(to event: EventID, text: String, mentions: [Mention] = []) async throws(HaloError) {
-        guard let session, case .live = status else { throw .cancelled }
+        let session = try await sendingSession()
         try await session.reply(to: event, text: text, mentions: mentions)
     }
 

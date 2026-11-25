@@ -25,6 +25,7 @@
 		5C97DDEAA552818CE3D396AA /* HaloApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26BC78D89D8CCE4267C675AB /* HaloApp.swift */; };
 		6540BF7F2E6040D0A2FCECA5 /* HaloMatrixAdapter in Frameworks */ = {isa = PBXBuildFile; productRef = 5F3A636705396CB5897C994D /* HaloMatrixAdapter */; };
 		71F4D3D5F0C15AEC925F539D /* SessionAssembly.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9372E57DDA275246046E5388 /* SessionAssembly.swift */; };
+		71F4D3D5F0C15AEC925F53A1 /* SearchAssembly.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9372E57DDA275246046E53A2 /* SearchAssembly.swift */; };
 		730CC79B0AF60C7960E81F40 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7B1FFC724B23663BCBD3B43E /* PrivacyInfo.xcprivacy */; };
 		75CAA59DD21250B3641AE203 /* FeatureMedia in Frameworks */ = {isa = PBXBuildFile; productRef = 84318732D188D72FB105A06B /* FeatureMedia */; };
 		7CEF96C450A5C3A50A9DA026 /* HaloFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 39B00119B42077430E50F171 /* HaloFoundation */; };
@@ -140,6 +141,7 @@
 		8C6A146CA948A68B3C27D0B0 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		8F90361C223365FE98857942 /* ChatsAssembly.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatsAssembly.swift; sourceTree = "<group>"; };
 		9372E57DDA275246046E5388 /* SessionAssembly.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionAssembly.swift; sourceTree = "<group>"; };
+		9372E57DDA275246046E53A2 /* SearchAssembly.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchAssembly.swift; sourceTree = "<group>"; };
 		97AB108BB6E92BAD05A9F942 /* AppRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRoot.swift; sourceTree = "<group>"; };
 		9A24ED83A74058A2B9962F2A /* HaloApple */ = {isa = PBXFileReference; lastKnownFileType = folder; name = HaloApple; path = Packages/HaloApple; sourceTree = SOURCE_ROOT; };
 		9FDC762E3C7658C6F5B852B9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -232,6 +234,7 @@
 				8F90361C223365FE98857942 /* ChatsAssembly.swift */,
 				C39E1DD7E1B18BA46D103E0D /* NotificationsAssembly.swift */,
 				9372E57DDA275246046E5388 /* SessionAssembly.swift */,
+				9372E57DDA275246046E53A2 /* SearchAssembly.swift */,
 				C16D71590F85662C76E571D5 /* SettingsAssembly.swift */,
 			);
 			path = Composition;
@@ -595,6 +598,7 @@
 				7DAC1635A11A25F03C8ADFCD /* OpenChatIntent.swift in Sources */,
 				54074BCAD2F228984FC35546 /* SendMessageIntent.swift in Sources */,
 				71F4D3D5F0C15AEC925F539D /* SessionAssembly.swift in Sources */,
+				71F4D3D5F0C15AEC925F53A1 /* SearchAssembly.swift in Sources */,
 				CCB0B01A6280350891123F8F /* SettingsAssembly.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

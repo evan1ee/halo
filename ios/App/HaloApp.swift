@@ -35,6 +35,7 @@ struct HaloApp: App {
         root.coldStart = coldStart
         _root = State(initialValue: root)
         PushDelegate.coordinator = root.push
+        SearchProcessingTask.register { await root.processSearchInBackground() }
         PushDelegate.onBackgroundPush = { await root.refreshInBackground() ? .newData : .noData }
     }
 
@@ -140,8 +141,12 @@ private struct RootView: View {
                         onMediaGallery: { router.push(.globalMediaGallery) },
                         onSelect: { router.openRoom($0) }
                     ) {
-                        MessageSearchResultsSection(model: searchModel) { room, event in
-                            router.openRoom(room, focus: event)
+                        MessageSearchResultsSection(model: searchModel, onVerify: { router.push(.settings) }) { row in
+                            if let thread = row.threadRoot {
+                                router.openThread(room: row.roomID, rootEvent: thread, focus: row.eventID)
+                            } else {
+                                router.openRoom(row.roomID, focus: row.eventID)
+                            }
                         }
                     }
                     .navigationTitle("")
@@ -155,17 +160,7 @@ private struct RootView: View {
                             .opacity(0)
                             .accessibilityHidden(true)
                     }
-                    .onSubmit(of: .search) { Task { await searchModel.submit() } }
-                    .task(id: searchModel.query) {
-                        let trimmed = searchModel.query.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if trimmed.isEmpty {
-                            await searchModel.submit()
-                            return
-                        }
-                        try? await Task.sleep(for: .milliseconds(300))
-                        guard !Task.isCancelled else { return }
-                        await searchModel.submit()
-                    }
+                    .onSubmit(of: .search) { searchModel.submit() }
                     .task {
                         await searchModel.start()
                         await refreshOwnProfile()
@@ -213,6 +208,7 @@ private struct RootView: View {
                         Task { await root.scanBotRooms() }
                     }
                     .onChange(of: router.path) { old, new in
+                        root.search.noteActivity()
                         savedPath = router.encodePath()
                         if new.count > old.count || Self.isPad, case .room = new.last, new.last != old.last {
                             root.roomOpen = HaloSignpost.begin(.roomOpen)
@@ -487,8 +483,9 @@ private struct RootView: View {
                 openRoom: { router.openRoom($0) },
                 onLeft: { router.removeRoom(room) }
             )
-        case .thread(let room, let rootEvent):
-            ThreadScreen(root: root, room: room, rootEvent: rootEvent)
+        case .thread(let room, let rootEvent, let focus):
+            ThreadScreen(root: root, room: room, rootEvent: rootEvent, jumpTo: focus)
+                .id(route)
         case .settings:
             SettingsView(config: root.makeSettingsConfiguration(onOpenStickers: {
                 router.push(.stickerLibrary)
@@ -742,8 +739,10 @@ private struct RoomInfoInspector<Inspector: View>: ViewModifier {
 private struct ThreadScreen: View {
     @State private var model: TimelineViewModel
 
-    init(root: AppRoot, room: RoomID, rootEvent: EventID) {
-        _model = State(initialValue: root.makeTimeline(room: room, threadRoot: rootEvent))
+    init(root: AppRoot, room: RoomID, rootEvent: EventID, jumpTo: EventID? = nil) {
+        let timeline = root.makeTimeline(room: room, threadRoot: rootEvent)
+        timeline.initialEvent = jumpTo
+        _model = State(initialValue: timeline)
     }
 
     var body: some View {

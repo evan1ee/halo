@@ -75,6 +75,20 @@ extension AppRoot {
                 guard let self else { return false }
                 return await self.clearMediaCache()
             },
+            searchIndex: SearchIndexSettingsActions(
+                status: { [search] in await search.settingsStatus() },
+                isPaused: { [preferences] in preferences.searchHistoryPaused },
+                setPaused: { [preferences, search] value in
+                    preferences.searchHistoryPaused = value
+                    search.conditionsChanged()
+                },
+                usesMobileData: { [preferences] in preferences.searchHistoryOnMobileData },
+                setUsesMobileData: { [preferences, search] value in
+                    preferences.searchHistoryOnMobileData = value
+                    search.conditionsChanged()
+                },
+                rebuild: { [search] in await search.rebuild() }
+            ),
             security: { [weak self] in
                 guard let self else { return [] }
                 return [

@@ -11,9 +11,12 @@ extension TimelineViewModel {
         case .idle, .opening:
             content = .opening
         case .live(let snapshot):
-            readTracker.update(items: snapshot.items)
+            // A focused timeline is an excerpt: it says nothing about what was read or which messages are the newest.
+            isFocused = snapshot.focus != nil
+            focusReachedEnd = snapshot.reachedEnd
+            if !isFocused { readTracker.update(items: snapshot.items) }
             botTasks = botTracker(snapshot.items)
-            if let botActivity, let room, !botSenders.isEmpty {
+            if let botActivity, let room, !botSenders.isEmpty, !isFocused {
                 let items = snapshot.items, senders = botSenders
                 Task { await botActivity.observe(room: room, items: items, botSenders: senders) }
             }
@@ -38,7 +41,10 @@ extension TimelineViewModel {
                 if case .event(let event) = item.content { switch event.kind { case .text, .notice, .emote, .media, .sticker: return true; default: return false } }
                 return false
             }
-            if !landed, !rows.isEmpty, hasMessage || (snapshot.reachedStart && !snapshot.isPaginating) {
+            if isFocused {
+                landed = true
+                trackedTailID = rows.last?.id
+            } else if !landed, !rows.isEmpty, hasMessage || (snapshot.reachedStart && !snapshot.isPaginating) {
                 landed = true
                 trackedTailID = rows.last?.id
                 // Always open at the newest message (D95); the first unread one stays marked, and the "Jump to unread" pill
@@ -56,7 +62,7 @@ extension TimelineViewModel {
                     Task { await loadEarlier() }
                 }
             }
-            reportOwnMessage(snapshot.items)
+            if !isFocused { reportOwnMessage(snapshot.items) }
             reevaluateSeen()
             typingText = Self.typingText(snapshot.typing, items: snapshot.items)
             content = .live(

@@ -49,7 +49,7 @@ don't collide with milestones (M0–M22), priorities (P0–P2), test properties 
 |---|---|---|---|---|
 | PERF-1 | Cold start slow for large accounts | Med | Med | Cache-first room list; NFR-1 measurement |
 | PERF-2 | Media cache growth | High | Low | Retention policy + storage screen |
-| PERF-3 | The SDK's search index slows sync and drains the battery on large accounts (measured, GA-27); hundreds of threads at once could hit iOS's limits | High | High | Own index (D123, ADR-0024), M17-8 spike, M19-11 |
+| PERF-3 | The SDK's search index slows sync and drains the battery on large accounts (measured; off since M19-11); hundreds of threads at once could hit iOS's limits | High | High | Own index (D123, ADR-0024), built with M19-11: 0.6–0.75 s CPU per idle minute, 18 threads (simulator); an iPhone to confirm |
 | PERF-4 | Full-history indexing costs hours, data, battery and up to about 0.5 GB per million messages (estimate), or is refused or limited by the homeserver | High | Med | Slices with saved position, pause rules, coverage notice, size and delete in Settings (MESSAGE_SEARCH FR-10, FR-13, FR-14); measured: 0.2 to 1.3 s of CPU on a Mac per 1,000 messages read, 0.5 KB per message stored |
 
 ## Maintenance / project
