@@ -394,9 +394,9 @@ final class HaloUITests: XCTestCase {
         add(note)
     }
 
-    /// Founder report (2026-11-23): opening a room without messages froze the app (seen in "Invite decline fixture", whose
-    /// only event is the join). Opens the chats named "Empty…" or "Invite decline…" (rooms without messages) and checks each
-    /// shows its empty state and stays responsive.
+    /// Founder report (2026-11-23): opening a room without messages froze the app (seen in a room whose only event
+    /// is the join). Opens the chats named "Empty…" (rooms without messages; `create-fixtures.py` makes one) and checks each shows
+    /// its empty state and stays responsive.
     @MainActor
     func testEmptyRoomStaysResponsive() throws {
         let app = XCUIApplication()
@@ -407,12 +407,12 @@ final class HaloUITests: XCTestCase {
         }
         guard chatsRoot(app).waitForExistence(timeout: 10) else { throw XCTSkip("App is signed out.") }
         if app.buttons["focus-show-all"].exists { app.buttons["focus-show-all"].tap() }
-        let rows = app.collectionViews.firstMatch.cells.containing(NSPredicate(format: "label BEGINSWITH[c] 'empty' OR label BEGINSWITH[c] 'invite decline'"))
-        let emptyRow = app.collectionViews.firstMatch.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] 'empty' OR label BEGINSWITH[c] 'invite decline'"))
+        let rows = app.collectionViews.firstMatch.cells.containing(NSPredicate(format: "label BEGINSWITH[c] 'empty'"))
+        let emptyRow = app.collectionViews.firstMatch.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] 'empty'"))
         guard emptyRow.firstMatch.waitForExistence(timeout: 5) || rows.firstMatch.exists else { throw XCTSkip("No empty room on this account.") }
         // Names first: the list re-sorts while rooms are visited, so rows are found by name, not position.
         let names = emptyRow.allElementsBoundByIndex.map { String($0.label.split(separator: ",").first ?? "") }
-        let wanted = Array((names.filter { $0.localizedCaseInsensitiveContains("invite decline") } + names).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }.prefix(5))
+        let wanted = Array(names.reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }.prefix(5))
         for (index, name) in wanted.enumerated() {
             let row = app.collectionViews.firstMatch.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name + ",")).firstMatch
             guard row.waitForExistence(timeout: 5) else { XCTFail("\(name): row not found"); continue }

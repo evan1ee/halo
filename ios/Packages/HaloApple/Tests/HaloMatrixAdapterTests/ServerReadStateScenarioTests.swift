@@ -22,7 +22,7 @@ private let configured = [
     "HALO_DEV_PEER_USER", "HALO_DEV_PEER_PASSWORD",
 ].allSatisfy { env[$0] != nil }
 
-@Suite("Real-server read-state scenarios S01–S29 (G-UNREAD)", .serialized, .enabled(if: configured, "needs HALO_DEV_SERVER/USER/PASSWORD/PEER_*"))
+@Suite("Real-server read-state scenarios S01–S29 (G-UNREAD)", .serialized, .cleansUp, .enabled(if: configured, "needs HALO_DEV_SERVER/USER/PASSWORD/PEER_*"))
 struct ServerReadStateScenarioTests {
     /// Minimal Matrix Client-Server HTTP helper for the peer user (B) and the user's second device (A2).
     private struct MatrixHTTP: Sendable {
@@ -66,10 +66,6 @@ struct ServerReadStateScenarioTests {
                 "initial_device_display_name": device,
             ])
             return (try #require(r["access_token"] as? String), try #require(r["user_id"] as? String))
-        }
-
-        func logout(_ token: String) async {
-            _ = try? await call("POST", "/logout", token: token, body: [:])
         }
 
         func createRoom(creatorToken: String, inviteUserID: String, joinToken: String? = nil, encrypted: Bool = false, name: String) async throws -> RoomID {
@@ -227,6 +223,8 @@ struct ServerReadStateScenarioTests {
             storedSession = try await session.loginPassword(
                 PasswordCredentials(username: user, password: password, deviceDisplayName: "scenario-a1"),
                 on: details)
+            let signedIn = session  // `relaunch` replaces `session`, not the device
+            Cleanup.current.add { try? await signedIn.logout() }
             account = storedSession.userID
             intentStore = ReadIntentStore(database: database, account: account)
             recordStore = NotificationRecordStore(database: database, account: account)
@@ -360,10 +358,7 @@ struct ServerReadStateScenarioTests {
 
     @Test("Real-server client & server scenarios S01, S02, S03, S07b, S08, S09, S10, S11, S12, S13, S14, S15, S16, S17, S18, S19, S20, S25, S26, S27, S28, S29 against infra/dev")
     func realServerScenarios() async throws {
-        try await withCleanup { try await scenarios($0) }
-    }
-
-    private func scenarios(_ cleanup: Cleanup) async throws {
+        let cleanup = Cleanup.current
         let server = try #require(env["HALO_DEV_SERVER"])
         let user = try #require(env["HALO_DEV_USER"])
         let password = try #require(env["HALO_DEV_PASSWORD"])
@@ -372,23 +367,20 @@ struct ServerReadStateScenarioTests {
 
         let http = MatrixHTTP(server: server)
         let a2 = try await http.login(user: user, password: password, device: "scenario-a2")
+        cleanup.logout(server: server, token: a2.token)
         let b = try await http.login(user: peerUser, password: peerPassword, device: "scenario-b")
+        cleanup.logout(server: server, token: b.token)
         let stack = try await LiveStack(server: server, user: user, password: password)
-        let createdRooms = Mutex<[RoomID]>([])
-        cleanup.add {
-            for r in createdRooms.withLock({ $0 }) {
-                await http.leaveAndForget(a2.token, room: r)
-                await http.leaveAndForget(b.token, room: r)
-            }
-            await stack.shutdown()
-            await http.logout(a2.token)
-            await http.logout(b.token)
+        cleanup.add { await stack.shutdown() }
+
+        func leaveAtEnd(_ room: RoomID) {
+            for token in [a2.token, b.token] { cleanup.leave(room.rawValue, server: server, token: token) }
         }
 
         func makeRoom(_ name: String) async throws -> RoomID {
             let room = try await http.createRoom(
                 creatorToken: b.token, inviteUserID: a2.userID, joinToken: a2.token, name: name)
-            createdRooms.withLock { $0.append(room) }
+            leaveAtEnd(room)
             _ = try await stack.waitForRoom(room, "joined \(name)") { _ in true }
             return room
         }
@@ -641,7 +633,7 @@ struct ServerReadStateScenarioTests {
         // --- S25: Encrypted room UTD push stamped with event ts, sync delivers & decrypts, A2 reads -> record superseded & pruned without opening (R-02) ---
         let r25 = try await http.createRoom(
             creatorToken: b.token, inviteUserID: a2.userID, joinToken: a2.token, encrypted: true, name: "S25-enc")
-        createdRooms.withLock { $0.append(r25) }
+        leaveAtEnd(r25)
         _ = try await stack.waitForRoom(r25, "joined S25-enc") { _ in true }
         await stack.sync.stop()
         let ev25 = try await http.sendOpaqueEncrypted(b.token, room: r25)

@@ -13,7 +13,7 @@ private let env = ProcessInfo.processInfo.environment
 private let configured = ["HALO_DEV_SERVER", "HALO_DEV_USER", "HALO_DEV_PASSWORD", "HALO_DEV_PEER_USER", "HALO_DEV_PEER_PASSWORD", "HALO_DEV_UNREAD_ROOM"]
     .allSatisfy { env[$0] != nil }
 
-@Suite("Classic sync evidence (V-RS-7)", .serialized, .enabled(if: configured, "needs the peer fixtures"))
+@Suite("Classic sync evidence (V-RS-7)", .serialized, .cleansUp, .enabled(if: configured, "needs the peer fixtures"))
 struct ClassicSyncEvidenceTests {
     private struct Http {
         let server: String
@@ -57,19 +57,16 @@ struct ClassicSyncEvidenceTests {
 
     @Test("with classic sync the SDK serves server counts, mentions, SDK counts, the own receipt and the latest event per room")
     func evidence() async throws {
-        try await withCleanup { try await evidence($0) }
-    }
-
-    private func evidence(_ cleanup: Cleanup) async throws {
+        let cleanup = Cleanup.current
         let server = try #require(env["HALO_DEV_SERVER"])
         let user = try #require(env["HALO_DEV_USER"])
         let http = Http(server: server)
         let me = "@\(user):halo.localhost"
         let roomID = try #require(env["HALO_DEV_UNREAD_ROOM"])
         let peerToken = try await http.login(try #require(env["HALO_DEV_PEER_USER"]), try #require(env["HALO_DEV_PEER_PASSWORD"]))
-        cleanup.add { _ = try? await http.call("POST", "/logout", token: peerToken, body: [:]) }
+        cleanup.logout(server: server, token: peerToken)
         let otherDevice = try await http.login(user, try #require(env["HALO_DEV_PASSWORD"]))
-        cleanup.add { _ = try? await http.call("POST", "/logout", token: otherDevice, body: [:]) }
+        cleanup.logout(server: server, token: otherDevice)
 
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("halo-classic-\(UUID().uuidString)")
         let data = dir.appendingPathComponent("data"), cache = dir.appendingPathComponent("cache")
@@ -121,19 +118,16 @@ struct ClassicSyncEvidenceTests {
     /// the vote itself, so the server count goes back to zero.
     @Test("encrypted room over classic sync: a poll vote and a call invite are counted by the server only, an undecryptable event by the SDK too, also after the read position (R-01, R-07)")
     func encryptedNonMessageEvidence() async throws {
-        try await withCleanup { try await encryptedNonMessageEvidence($0) }
-    }
-
-    private func encryptedNonMessageEvidence(_ cleanup: Cleanup) async throws {
+        let cleanup = Cleanup.current
         let server = try #require(env["HALO_DEV_SERVER"])
         let user = try #require(env["HALO_DEV_USER"]), peerUser = try #require(env["HALO_DEV_PEER_USER"])
         let me = "@\(user):halo.localhost"
         let mine = try await makeClient(server: server, user: user, password: try #require(env["HALO_DEV_PASSWORD"]), name: "enc-r01-me")
         let peer = try await makeClient(server: server, user: peerUser, password: try #require(env["HALO_DEV_PEER_PASSWORD"]), name: "enc-r01-peer")
-        cleanup.add { try? await mine.logout(); try? await peer.logout() }
 
         let roomID = try await peer.createRoom(request: CreateRoomParameters(
             name: "Encrypted poll vote evidence", isEncrypted: true, visibility: .private, preset: .privateChat, invite: [me]))
+        for client in [peer, mine] { cleanup.leave(roomID, as: client) }
         try await sync(peer); try await sync(mine)
         var joined: Room?
         for _ in 0..<15 {
@@ -141,10 +135,6 @@ struct ClassicSyncEvidenceTests {
             try await sync(mine); try await sync(peer)
         }
         let room = try #require(joined)
-        cleanup.add {
-            try? await room.leave(); try? await room.forget()
-            if let peerRoom = try? peer.getRoom(roomId: roomID) { try? await peerRoom.leave(); try? await peerRoom.forget() }
-        }
         let peerRoom = try await { () async throws -> Room in
             for _ in 0..<15 { try await sync(peer); if let r = try peer.getRoom(roomId: roomID) { return r } }
             throw CancellationError()
@@ -285,6 +275,7 @@ struct ClassicSyncEvidenceTests {
             .slidingSyncVersionBuilder(versionBuilder: .none)
             .build()
         try await client.login(username: user, password: password, initialDeviceName: name, deviceId: nil)
+        Cleanup.current.add { try? await client.logout() }
         return client
     }
 
@@ -295,19 +286,16 @@ struct ClassicSyncEvidenceTests {
     /// S06 / S07 / S21 with real keys: an encrypted room, the peer's SDK client sends, our SDK client decrypts, all over classic sync.
     @Test("encrypted room over classic sync: server counts in all-messages mode, the SDK's own counts after decryption, and mentions-only mode")
     func encryptedEvidence() async throws {
-        try await withCleanup { try await encryptedEvidence($0) }
-    }
-
-    private func encryptedEvidence(_ cleanup: Cleanup) async throws {
+        let cleanup = Cleanup.current
         let server = try #require(env["HALO_DEV_SERVER"])
         let user = try #require(env["HALO_DEV_USER"]), peerUser = try #require(env["HALO_DEV_PEER_USER"])
         let me = "@\(user):halo.localhost"
         let mine = try await makeClient(server: server, user: user, password: try #require(env["HALO_DEV_PASSWORD"]), name: "enc-me")
         let peer = try await makeClient(server: server, user: peerUser, password: try #require(env["HALO_DEV_PEER_PASSWORD"]), name: "enc-peer")
-        cleanup.add { try? await mine.logout(); try? await peer.logout() }
 
         let roomID = try await peer.createRoom(request: CreateRoomParameters(
             name: "Encrypted evidence", isEncrypted: true, visibility: .private, preset: .privateChat, invite: [me]))
+        for client in [peer, mine] { cleanup.leave(roomID, as: client) }
         try await sync(peer); try await sync(mine)
         var joined: Room?
         for _ in 0..<15 {
@@ -315,11 +303,6 @@ struct ClassicSyncEvidenceTests {
             try await sync(mine); try await sync(peer)
         }
         let room = try #require(joined)
-        // Leave no room behind on the shared account.
-        cleanup.add {
-            try? await room.leave(); try? await room.forget()
-            if let peerRoom = try? peer.getRoom(roomId: roomID) { try? await peerRoom.leave(); try? await peerRoom.forget() }
-        }
         let peerRoom = try await { () async throws -> Room in
             for _ in 0..<15 { try await sync(peer); if let r = try peer.getRoom(roomId: roomID) { return r } }
             throw CancellationError()

@@ -7,6 +7,7 @@
 #
 # Settings come from $HALO_CONTRACT_ENV (default ~/.config/halo-dev/contract.env), a private file outside the repository
 # with TEST_RUNNER_HALO_DEV_* lines. Values are never printed. Tests whose fixture variable is missing skip themselves.
+# The run also fails if it leaves a room or a device on the shared accounts (infra/dev/leftovers.py).
 set -euo pipefail
 
 env_file="${HALO_CONTRACT_ENV:-$HOME/.config/halo-dev/contract.env}"
@@ -41,9 +42,17 @@ else
 fi
 
 cd "$(dirname "$0")/../ios/Packages/HaloApple"
+leftovers="../../../infra/dev/leftovers.py"
 log="$(mktemp -t halo-contract)"
+before="$(mktemp -t halo-contract-before)"
+trap 'rm -f "$before"' EXIT
+"$leftovers" snapshot "$before"
 status=0
 xcodebuild -scheme HaloApple-Package -destination "platform=iOS Simulator,name=${HALO_SIM:-iPhone 17}" test "${only[@]}" >"$log" 2>&1 || status=$?
 grep -E '^(✔|✘) (Test|Suite)|Test run with' "$log" || true
 [[ $status -eq 0 ]] || echo "contract-test: failed (exit $status); full log: $log" >&2
+if ! "$leftovers" check "$before" >&2; then
+  echo "contract-test: the run left rooms or devices behind (or they could not be checked); see infra/dev/leftovers.py" >&2
+  [[ $status -ne 0 ]] || status=1
+fi
 exit "$status"
