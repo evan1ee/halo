@@ -18,6 +18,8 @@ public enum SignpostInterval: String, Sendable, CaseIterable {
     case imageDecode = "image-decode"
     /// One push in the notification extension, from its start to the delivered notification.
     case notificationService = "notification-service"
+    /// One turn of the main run loop that took 250 ms or more (`MainThreadHangs`, performance suite only).
+    case mainThreadHang = "main-thread-hang"
 }
 
 /// Performance signposts (GA-02): they cost next to nothing when nobody records, so they stay in Release builds, where the budgets are measured.
@@ -75,6 +77,7 @@ extension SignpostInterval {
         case .syncLongPoll: "sync-long-poll"
         case .imageDecode: "image-decode"
         case .notificationService: "notification-service"
+        case .mainThreadHang: "main-thread-hang"
         }
     }
 }

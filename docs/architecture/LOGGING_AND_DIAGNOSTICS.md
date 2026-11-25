@@ -48,6 +48,7 @@ the budgets are measured. Only the name is recorded: no identifiers, sizes or co
 | `sync-catch-up` | before an immediate `/sync` (`timeoutMs` 0) | the SDK has processed and stored the response | `MatrixSessionPort` |
 | `sync-long-poll` | before a long-poll `/sync` | as above; includes the server's waiting time | `MatrixSessionPort` |
 | `image-decode` | before decoding one image or animation | decoded | `StickerImage` (thumbnails, stickers, GIFs); the plain `UIImage(data:)` sites follow with M19-1 |
+| `main-thread-hang` | a main run-loop turn begins | it ended after 250 ms or more | `MainThreadHangs`, only when launched with `-HaloMeasureHangs YES` (performance suite) |
 | `notification-service` | the extension got the push | the notification was handed to iOS | `NotificationService` |
 
 XCTest reads them with `XCTOSSignpostMetric`: `HaloSignpostMetricTests` (every interval), `ImageDecodeSignpostTests`, and

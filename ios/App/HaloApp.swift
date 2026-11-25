@@ -30,6 +30,7 @@ struct HaloApp: App {
         // iOS may prewarm the process long before the user opens the app; that time isn't a launch.
         let coldStart = ProcessInfo.processInfo.environment["ActivePrewarm"] == "1" ? nil : HaloSignpost.begin(.coldStart)
         // Not in a view: a background launch (silent push, app refresh) connects no scene, so no view ever appears.
+        MainThreadHangs.startIfAsked()
         let root = AppRoot()
         root.coldStart = coldStart
         _root = State(initialValue: root)

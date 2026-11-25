@@ -30,6 +30,7 @@ final class HaloSignpostMetricTests: XCTestCase {
     func testSyncLongPollIsRecorded() { assertRecorded(.syncLongPoll) }
     func testImageDecodeIsRecorded() { assertRecorded(.imageDecode) }
     func testNotificationServiceIsRecorded() { assertRecorded(.notificationService) }
+    func testMainThreadHangIsRecorded() { assertRecorded(.mainThreadHang) }
 
     private func assertRecorded(_ interval: SignpostInterval) {
         CapturingMetric.durations = []

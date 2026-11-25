@@ -14,7 +14,7 @@ don't collide with milestones (M0–M22), priorities (P0–P2), test properties 
 | T-SQLITE | Two SQLite libraries in one process misbehave | Low | High | Never share files; M0 smoke test | V-SQL-1 |
 | T-CHURN | Upstream API churn makes bumps expensive | High | Med | Adapter-only changes; monthly bumps at most | Bump > 1 day |
 | T-PERF | SwiftUI timeline performance with media and animated stickers (photos are decoded on the main thread and every row is rebuilt per change today, GA-15, GA-16) | High | High | M19-1 image pipeline, M19-2 incremental rows, G-PERF | Dropped frames, MetricKit hangs |
-| T-SCALE | Classic sync without a filter is too slow or heavy on real accounts (hundreds of rooms, very large federated rooms) | Med–High | Very high | Measure first (M17-4), G-SCALE before M19, upstream filter PR, Q-SYNC-SCALE | First sync > 60 s; memory kills |
+| T-SCALE | Classic sync without a filter is too slow or heavy on real accounts (hundreds of rooms, very large federated rooms) | Med–High | Very high | Measured on fixtures (M17-4): the sync passes, the SDK's search index doesn't (Q-SEARCH-INDEX); a real account and an iPhone next; upstream filter PR | First sync > 60 s; memory kills |
 | T-IDENTITY | A contact's identity changes and Halo says nothing; a refused send looks like a network error | High (today) | High | M18-1, M18-2 | Interop matrix; security review |
 | T-RECOVER | A damaged store or a restored backup without its keys leaves the app unusable | Low–Med | High | M18-4, M18-5 | Storage errors in diagnostics |
 | T-LIVETIME | Field problems can't be measured. MetricKit and signposts are in the app since 2026-11-25 (M17-1, M17-2); no payload from a device seen yet | Low | Med | Check a payload from a real device before Beta 1 | Beta reports that can't be reproduced |
@@ -49,7 +49,7 @@ don't collide with milestones (M0–M22), priorities (P0–P2), test properties 
 |---|---|---|---|---|
 | PERF-1 | Cold start slow for large accounts | Med | Med | Cache-first room list; NFR-1 measurement |
 | PERF-2 | Media cache growth | High | Low | Retention policy + storage screen |
-| PERF-3 | Search index growth (P2) | Med | Med | Evaluate upstream SearchService first |
+| PERF-3 | The SDK's search index slows sync and drains the battery on large accounts (measured, GA-27); hundreds of threads at once could hit iOS's limits | High | High | Q-SEARCH-INDEX, M19-11 |
 
 ## Maintenance / project
 | ID | Risk | L | I | Mitigation |

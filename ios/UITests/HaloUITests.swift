@@ -805,57 +805,6 @@ final class HaloUITests: XCTestCase {
         }
     }
 
-    @MainActor
-    func testLaunchPerformanceMetric() throws {
-        guard ProcessInfo.processInfo.environment["HALO_RUN_PERF_TESTS"] == "1" else {
-            throw XCTSkip("Set HALO_RUN_PERF_TESTS=1 to run XCTApplicationLaunchMetric.")
-        }
-        measure(metrics: [XCTApplicationLaunchMetric(), XCTApplicationLaunchMetric(waitUntilResponsive: true)]) {
-            XCUIApplication().launch()
-        }
-    }
-
-    /// Timeline scroll hitch and memory performance metric (ROADMAP M15, SR-06, NFR-2, AC-UX-11).
-    /// Opt-in via `HALO_RUN_PERF_TESTS=1` so routine `prepush.sh` runs stay fast.
-    @MainActor
-    func testTimelineScrollPerformanceMetric() throws {
-        guard ProcessInfo.processInfo.environment["HALO_RUN_PERF_TESTS"] == "1" else {
-            throw XCTSkip("Set HALO_RUN_PERF_TESTS=1 to run timeline scroll and memory metrics.")
-        }
-        let app = XCUIApplication()
-        app.launch()
-        dismissFirstRunSheets(app)
-
-        // Prefer a large seeded room (S10) when available; otherwise open the first chat.
-        if chatsRoot(app).waitForExistence(timeout: 5) {
-            if app.buttons["focus-show-all"].exists { app.buttons["focus-show-all"].tap() }
-            let s10 = app.collectionViews.firstMatch.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'S10'")).firstMatch
-            if s10.waitForExistence(timeout: 3) {
-                s10.tap()
-                XCTAssertTrue(app.buttons["sticker-button"].waitForExistence(timeout: 8), "Expected timeline composer in S10")
-            } else {
-                try openFirstChat(app)
-            }
-        } else {
-            try openFirstChat(app)
-        }
-
-        let scrollTarget = app.scrollViews.firstMatch.exists ? app.scrollViews.firstMatch : app.collectionViews.firstMatch
-        XCTAssertTrue(scrollTarget.waitForExistence(timeout: 5), "Expected a scrollable timeline")
-
-        let options = XCTMeasureOptions()
-        options.iterationCount = 5
-        measure(
-            metrics: [XCTOSSignpostMetric.scrollingAndDecelerationMetric, XCTMemoryMetric(application: app)],
-            options: options
-        ) {
-            scrollTarget.swipeDown(velocity: .fast)
-            scrollTarget.swipeUp(velocity: .fast)
-        }
-
-        returnToChatList(app)
-    }
-
     /// Physical-device D95 check: open S10 (or the first non-gallery room) 10 times; each open must land at the newest
     /// message (no `jump-to-bottom` button, no lingering loading spinner). Opt-in via `HALO_RUN_DEVICE_CHECKS=1`.
     @MainActor
@@ -1176,7 +1125,7 @@ final class HaloUITests: XCTestCase {
 }
 
 /// `XCTOSSignpostMetric` that keeps what it measured; `measure` itself doesn't hand the values back. (XCTest copies metrics, hence the static.)
-private final class SignpostReader: XCTOSSignpostMetric {
+final class SignpostReader: XCTOSSignpostMetric {
     /// Seconds by interval name.
     nonisolated(unsafe) static var durations: [String: [Double]] = [:]
 

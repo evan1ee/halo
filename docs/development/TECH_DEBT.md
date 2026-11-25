@@ -25,7 +25,7 @@ Healthy signals: no `TODO`/`FIXME`, `print`, `as!` or `Task.detached` in product
 | TD-07 | UI actions | `ActionState` was added but nothing uses it | no caller | 2 | 4 | 2 | **24** | M18-8 |
 | TD-16 | Performance | Images decoded on the main thread, no decoded cache | `UIImage(data:)` ×13 | 4 | 5 | 3 | **27** | M19-1 |
 | TD-17 | Performance | Timeline rows and the room list are rebuilt as a whole | `TimelineViewModel+Mapping.apply`, `.reset(list)` | 3 | 4 | 3 | **21** | M19-2, M19-3 |
-| TD-18 | Testing | No fault injection, no scenarios in CI, no migration fixtures, no visual regression tests | GA-04, GA-09 | 4 | 4 | 3 | **24** | M17-6, M18-5, M21-4 |
+| TD-18 | Testing | No migration fixtures, no visual regression tests | GA-09 | 3 | 4 | 3 | **21** | M18-5, M21-4 |
 | TD-20 | Localisation | Literals in views, one app-level catalog that packages don't use | 12 of ~376 | 2 | 3 | 3 | **15** | M21-6 |
 | TD-21 | Structure | Nine source files over 500 lines; `SettingsView` and `HaloApp` mix concerns | `wc -l` | 3 | 2 | 3 | **15** | M21-10 |
 | TD-22 | Duplication | Three private error-to-text maps beside `HaloErrorCopy` | `UserProfileViewModel`, `RoomDetailsViewModel`, `NewChatViewModel` | 2 | 2 | 1 | **20** | M21-7 |

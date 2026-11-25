@@ -47,7 +47,13 @@ Approach **[DECISION D35, ADR-0009]**:
 - Persistence: two `DatabasePool`s on one file in parallel threads performing monotonic upserts → final state = maximum.
 
 ## 5. Offline and reconnect tests
-*Planned (ROADMAP M17-6; neither the proxy nor `infra/test` exists yet):* the scenario driver toggles a Toxiproxy-like proxy **[DECISION ADR-0009: a tiny proxy container in `infra/test`]** between the device's client and Synapse to simulate drops, latency and blackholes during the local FFI runs.
+`infra/test` is a throwaway Synapse (in-memory Postgres) behind `fault_proxy.py` (standard library; runs in the Synapse image, so nothing more is pulled) **[DECISION ADR-0009]**. The proxy
+drops, delays, throttles, cuts, hangs, refuses or answers requests with a status, loses the answer of a request the server handled, and counts requests and bytes per endpoint.
+- `infra/test/run.sh scenarios [S04 F02 …]`: the scenario driver S01–S22 plus F01–F06 (server down, lost answer, 429, cut response, half-open, 5xx). In CI (`scenarios.yml`), where a client
+  broken on purpose (`HALO_SCENARIO_BREAK`) must turn F02–F06 red.
+- `infra/test/run.sh faults` (Mac): the real adapter and SDK behind the same faults (`FaultTests`). Result 2026-11-25, simulator: an outage ends 2.1 s after the server is back, a cut sync
+  response is fetched again in 1.2 s, three 502 answers in 3.5 s; a send meets a lost answer, two 429, two 503, a dropped connection or a slow network and arrives **exactly once, in order**.
+  A half-open connection takes **39 s** to recover (the SDK's request timeout; GA-29, M18-11).
 
 ## 6. Fixtures
 Bot messages: copied **verbatim** from the bot repo's tests (MIT, attribution file in the fixture folder). Spec examples for image packs. Recorded sync traces (anonymised).
@@ -57,8 +63,8 @@ Targets in [../REQUIREMENTS.md](../REQUIREMENTS.md) NFR-1..3; measured with sign
 (`XCTApplicationLaunchMetric`, `XCTOSSignpostMetric` scroll hitches, `XCTMemoryMetric`) on a physical iPhone 15-class device and recorded here (AC-UX-11).
 
 **Physical-device baseline (2026-11-24, iPhone 16 `iPhone17,3`, iOS 27.2.1 `24B156`, `Halo-Debug`, signed-in `infra/dev` account, `TEST_RUNNER_HALO_RUN_PERF_TESTS=1`):**
-- **NFR-1 cold launch (`HaloUITests.testLaunchPerformanceMetric`, 5 iterations):** `AppLaunch` **0.348 s** avg (RSD 2.49%, values `0.332–0.357 s`); `ApplicationFirstFramePresentationResponsive` **0.357 s** avg (RSD 2.14%, values `0.345–0.367 s`) — well below the 1.0 s budget (dev-account room count; 300-room account still to validate).
-- **Timeline memory (`HaloUITests.testTimelineScrollPerformanceMetric` in `S10 scroll test`, 5 iterations):** `Memory Peak Physical` **76.8–78.1 MB** avg (`76,778–78,108 kB`, RSD 0.51–0.69%); `Absolute Memory Physical` **76.7–78.0 MB** avg — well below the 200 MB budget.
+- **NFR-1 cold launch (`testLaunchPerformanceMetric`, 5 iterations; now `HaloPerformanceTests`):** `AppLaunch` **0.348 s** avg (RSD 2.49%, values `0.332–0.357 s`); `ApplicationFirstFramePresentationResponsive` **0.357 s** avg (RSD 2.14%, values `0.345–0.367 s`) — well below the 1.0 s budget (dev-account room count; 300-room account still to validate).
+- **Timeline memory (`testTimelineScrollPerformanceMetric` in `S10 scroll test`, 5 iterations):** `Memory Peak Physical` **76.8–78.1 MB** avg (`76,778–78,108 kB`, RSD 0.51–0.69%); `Absolute Memory Physical` **76.7–78.0 MB** avg — well below the 200 MB budget.
 - **NFR-2 scroll hitch ratio (`XCTOSSignpostMetric.scrollingAndDecelerationMetric`):** did not emit hitch-ratio lines in non-interactive `xcodebuild` (device diagnostics timed out waiting for interactive auth); measure interactively via Xcode Test Navigator / Instruments Animation Hitches on device.
 
 **Release budgets (gate G-PERF, ROADMAP M19).** Reference: iPhone 15-class device, **Release** build, signed in, Wi-Fi; scale rows on the M17-3 fixtures. Targets are the NFRs; the two baselines above are a **Debug** build on a small account and don't count for the gate.
@@ -69,9 +75,32 @@ Targets in [../REQUIREMENTS.md](../REQUIREMENTS.md) NFR-1..3; measured with sign
 | NFR-2 scrolling, mixed media | hitch ratio ≤ 5 ms/s **[ASSUMPTION]** | Instruments Animation Hitches, 3 runs | none |
 | NFR-11 room open p95 | ≤ 250 ms | signpost, 30 opens | ~150 ms after the push (observed, not measured) |
 | NFR-12 memory | ≤ 200 / 300 MB, ≤ 10 % growth over 50 cycles | `XCTMemoryMetric` | 76.8–78.1 MB, one small room |
-| NFR-13 main thread | no hang ≥ 250 ms | MetricKit + `XCTHitchMetric`-style script | none |
-| NFR-14 sync at scale | ≤ 60 s first, ≤ 10 s after 24 h | M17-4 | none |
+| NFR-13 main thread | no hang ≥ 250 ms | `main-thread-hang` signpost in the scripted sessions (`scripts/perf.py`); MetricKit in the field | see `perf-baseline.json` |
+| NFR-14 sync at scale | ≤ 60 s first, ≤ 10 s after 24 h | `scripts/scale-measure.py` | table below (simulator) |
 | NFR-15 energy | ≤ 4 %/h idle foreground | Xcode energy log, 1 h | none |
+
+**Scale (M17-4, V-SCALE-1), 2026-11-25.** `scripts/scale-measure.py` on the M17-3 fixture server; adapter and SDK as the app uses them, iPhone Air simulator on the dev Mac, no network latency: the work is
+real, the seconds are a Mac's. Fixture messages are short and members have no profile, so real accounts send more bytes. Not yet: an iPhone, energy, a real public-server account (📱👤).
+
+| Measurement | 300 rooms | 1,000 rooms | 1,000 rooms, search index off | one 10,000-member and one 20,000-event room |
+|---|---|---|---|---|
+| First sync → all rooms in the list (NFR-14 ≤ 60 s) | 8.8–14.8 s | 31.6–43.4 s | **11.8 s** | 2.0 s |
+| First sync response | 2.7 MB | 9.0 MB | 9.0 MB | 2.8 MB |
+| Peak memory, first sync (28 before) | 63–82 MB | 133–159 MB | 109 MB | 56 MB |
+| Memory settled | 81–100 MB | 147–189 MB | 184 MB | 44 MB |
+| Store on disk | 45–52 MB | 85–94 MB | 69 MB | 36 MB |
+| CPU per idle minute, from 20 s after the first sync | 19–24 s | 25 s | **0.6 s** | 0.3 s |
+| Threads after that minute | 113 (up to 925 seen) | 118–191 | **18** | — |
+| Live message → in the list | 0.06–0.08 s | 0.09–0.12 s | 0.07 s | — |
+| Restart: cached list complete | 0.3–0.7 s | 1.5–2.5 s | 0.8 s | 0.1 s |
+| Catch-up, 200 rooms × 5 messages (NFR-14 ≤ 10 s) | 3.8–10.2 s | **12.6–19.2 s** | **0.9 s** | — |
+
+What it says: classic sync itself carries 1,000 rooms well inside NFR-14. **The SDK's search index is what misses it**: one index per room, committed with a full disk sync, on a pool of threads each; leaving out only
+the history sweep changes nothing (`HALO_SCALE_SEARCH=live`: 42.1 s, 12.6 s). Q-SEARCH-INDEX decides what to do. Two smaller findings: every launch fetches the event behind the read receipt of each unread
+room (344 requests at 1,000 rooms, GA-28), and the room list is rebuilt per response (GA-17).
+
+**Performance suite (M17-5).** `scripts/perf.py` signs a simulator of its own in to the scale accounts (or uses a device's account, `--device`), runs `HaloPerformanceTests` with optimised code, reads the result bundle and prints
+budget / measured / baseline / pass; over 20 % (and the noise floor) worse than `perf-baseline.json` for the same device fails, and a missed budget fails on a device. Numbers are compared only with the same device and OS.
 
 Rules: same device and OS for baseline and gate; median of 5 unless p95 is named; over 20 % worse than the last release blocks. Simulator numbers show trends only.
 

@@ -30,8 +30,6 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 
 | ID | Gap | Evidence | Task |
 |---|---|---|---|
-| GA-03 | Large accounts never measured; classic sync has no filter or lazy-loaded members (R-18) | `SyncSettingsV2` (F-FFI-23) | M17-4 |
-| GA-04 | `infra/test`, the fault proxy and `scenarios.yml` don't exist | only `infra/dev`, `infra/sygnal`; no such workflow | M17-6 |
 | GA-05 | Contacts' identity changes are never shown (security) | no `IdentityStatus` use | M18-1 |
 | GA-06 | The reason a send failed is dropped, so an encryption refusal looks like a network error and can't be resolved | `TimelineMapper.swift:153` | M18-2 |
 | GA-07 | A lost recovery key is a dead end | no `resetIdentity` | M18-3 |
@@ -54,6 +52,11 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 | GA-24 | Localisation isn't ready: 12 catalog keys, about 376 literals in views (AC-UX-10 was ticked) | `Localizable.xcstrings` | M21-6 |
 | GA-25 | Shared loading/error states used on 2 screens; system motion and contrast settings barely read | `ErrorState`, `accessibilityReduceMotion` ×2, `HaloMotion` ×2 | M21-1, M21-3 |
 | GA-26 | Release builds have no push gateway; the privacy manifests and labels don't mention KLIPY search | `Base`/Release config, `PrivacyInfo.xcprivacy` | M22-1, M22-3 |
+| GA-27 | The SDK's message search index makes sync 3 to 20 times slower on large accounts and keeps the CPU busy (about 25 s per idle minute) | TEST_STRATEGY §7, scale table (2026-11-25) | M19-11 |
+| GA-28 | Every launch asks the server for one event per unread room (344 requests at 1,000 rooms) to find the read position's time | scale measurement; `MatrixRoomListPort.ownReadThrough` | M19-3 |
+| GA-29 | A half-open connection hides new messages for 39 s | `FaultTests.halfOpenSync` | M18-11 |
+| GA-30 | The plain text of a message with a mention is the Markdown source, so other clients' notifications show a link | `InteropTests.outgoing` | M20-10 |
+| GA-31 | Messages of a type Halo doesn't know are missing from the timeline instead of showing their fallback text | `InteropTests.incoming` | M20-19 |
 
 ## 3. Queue
 
@@ -64,11 +67,11 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 |---|---|---|
 | [x] **M17-1 Signposts** for cold start → list, room open → first frame, sync round trip, image decode, NSE | R · S | XCTest reads each interval; LOGGING §5 lists them |
 | [x] **M17-2 MetricKit** payloads (crash, hang, CPU, memory, disk) kept on the device and included in the diagnostics export | R · S | Unit test round-trips a payload; export reviewed: no content or raw IDs; limited in size and age |
-| [ ] **M17-3 Scale fixture**: own accounts with 300 and 1,000 rooms, one 10,000-member room, one 20,000-event media room | R · M | Script in `infra/dev`, idempotent, never touches the shared contract accounts, removable |
-| [ ] **M17-4 Measure classic sync at scale** (V-SCALE-1): first sync time, bytes, memory, store size; incremental sync; idle energy | R · M · 📱👤 | Table in TEST_STRATEGY §7 for both fixtures and one real public-server account; **G-SCALE** decided (Q-SYNC-SCALE) |
+| [x] **M17-3 Scale fixture**: own accounts with 300 and 1,000 rooms, one 10,000-member room, one 20,000-event media room | R · M | Script in `infra/dev`, idempotent, never touches the shared contract accounts, removable |
+| [ ] **M17-4 Measure classic sync at scale** (V-SCALE-1; *fixtures measured 2026-11-25, TEST_STRATEGY §7; open: iPhone and energy 📱, a real public-server account 👤, G-SCALE 👤*): first sync time, bytes, memory, store size; incremental sync; idle energy | R · M · 📱👤 | Table in TEST_STRATEGY §7 for both fixtures and one real public-server account; **G-SCALE** decided (Q-SYNC-SCALE) |
 | [ ] **M17-5 Repeatable performance suite** with the budgets of TEST_STRATEGY §7 | R · M · 📱 | One command prints budget / measured / pass; same device, Release build; over 20 % worse fails |
-| [ ] **M17-6 Fault injection and scenarios in CI**: `infra/test` with a proxy (drop, latency, 5xx, 429, half-open) and `scenarios.yml` | R · M | The scenario driver runs on Linux CI; offline, reconnect and rate-limit cases red/green on demand |
-| [ ] **M17-7 Interoperability matrix** (V-INTEROP-1): every message kind, both directions, Element Web + Element X | R · M | Second-client checks automated where possible, the rest a signed checklist; gaps become tasks |
+| [x] **M17-6 Fault injection and scenarios in CI**: `infra/test` with a proxy (drop, latency, 5xx, 429, half-open) and `scenarios.yml` | R · M | The scenario driver runs on Linux CI; offline, reconnect and rate-limit cases red/green on demand |
+| [ ] **M17-7 Interoperability matrix** (V-INTEROP-1; *wire level automated and green but for GA-30/GA-31; open: the signed checklist in Element Web and Element X 👤, INTEGRATION_TESTS §4*): every message kind, both directions, Element Web + Element X | R · M | Second-client checks automated where possible, the rest a signed checklist; gaps become tasks |
 
 **Exit:** G-SCALE recorded; every NFR has a measured baseline.
 
@@ -108,6 +111,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 | [ ] **M19-8 Scrolling**: mixed media, animated stickers, long formatted messages | R · M · 📱 | NFR-2 measured interactively, hitch ratio recorded |
 | [ ] **M19-9 Zero flash and jump audit**: launch, room open/close, keyboard, send → confirm, edit, reaction, reconnect, history prepend, appearance change, return from background | R · M | Frame-by-frame capture of each; every defect fixed or filed; UI tests for the ones that can be measured; AC-MOT-1 |
 | [ ] **M19-10 Leaks and soak**: 50 room open/close cycles, 30 min scroll, background/foreground | R · S · 📱 | No growth over 10 %; no task or subscription left after close |
+| [ ] **M19-11 Search index at scale** (GA-27): apply Q-SEARCH-INDEX | R · M · 📤? | `scripts/scale-measure.py scale1000` with search as shipped: first sync ≤ 60 s, catch-up ≤ 10 s, ≤ 1 s CPU per idle minute; message search still passes `messageSearch` |
 
 **Exit:** **G-PERF** — all budgets of TEST_STRATEGY §7 met on the reference device with a Release build.
 
@@ -134,6 +138,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 | [ ] **M20-16 Multi-select** (copy, forward, delete) | C · M | Power levels respected; partial failure reported |
 | [ ] **M20-17 Link previews**, off by default, never in encrypted rooms by default (D57) | C · M | No request before opt-in |
 | [ ] **M20-18 Unread tools**: mark all read, low-priority section | C · S | Goes through `ReadStatePolicy`; badge test |
+| [ ] **M20-19 Unknown message types** show the sender's fallback text (GA-31) | R · S · 📤? | `InteropTests.incoming` without the known issue |
 
 **Exit:** R tasks done; interop matrix (M17-7) re-run green.
 
@@ -219,7 +224,7 @@ wrong. P2: workaround exists. P3: polish. A P0 stops a rollout; fixed forward (B
 | **G-FFI** | M3 | **PASS (D109)** | Stay on upstream `MatrixRustSDK` binary (ADR-0003). |
 | **G-NSE** | M1 | **PASS (D109)** | 100/100 live iPhone 16 soak (ADR-0016). Re-run after M18-6/M18-7 change the NSE. |
 | **G-UNREAD** | M3 | **PASS (D109)** | S01–S29 over classic sync; 7-day AC-U8 soak in Beta 1. |
-| **G-SCALE** | M17 | open | Classic sync meets NFR-14 on the 1,000-room fixture and one real account, or Q-SYNC-SCALE picks another path **before** M19. The agent measures; the founder decides. |
+| **G-SCALE** | M17 | **measured on fixtures (2026-11-25), not decided** | Sync passes NFR-14 only without the SDK's search index (Q-SEARCH-INDEX). Classic sync meets NFR-14 on the 1,000-room fixture and one real account, or Q-SYNC-SCALE picks another path **before** M19. The agent measures; the founder decides. |
 | **G-PERF** | M19 | open | All budgets on the reference device, Release build, two runs on different days. |
 | **G-SHIP** | M22 | open | §4 complete, zero P0/P1, upgrade path tested, rollback rehearsed, founder sign-off. |
 

@@ -1666,6 +1666,13 @@ final class TimelineMirror: Sendable {
 
     deinit { task.withLock { $0?.cancel() } }
 
+    func event(_ id: String) -> HaloDomain.TimelineEvent? {
+        items.withLock { items in
+            for item in items { if case .event(let event) = item.content, event.eventID?.rawValue == id { return event } }
+            return nil
+        }
+    }
+
     /// Whether the timeline holds a text message with this body, from anyone.
     func shows(_ body: String) -> Bool {
         items.withLock { items in
