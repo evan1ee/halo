@@ -74,6 +74,26 @@ def login(name, password):
     return r["access_token"]
 
 
+def retire(name, password):
+    """Deactivate the previous Encryption account, unless someone signed in to it in the app."""
+    try:
+        token = login(name, password)
+        if any(d.get("display_name") == "Halo (iPhone)" for d in call("GET", "/_matrix/client/v3/devices", token=token)["devices"]):
+            return
+        req = urllib.request.Request(SERVER + "/_matrix/client/v3/account/deactivate", data=b"{}", method="POST", headers={
+            "Authorization": "Bearer " + token, "Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(req, timeout=30)
+        except urllib.error.HTTPError as e:  # user-interactive authentication: confirm with the password
+            if e.code != 401:
+                raise SystemExit(f"deactivate failed: {e.code}")
+            auth = {"type": "m.login.password", "session": json.loads(e.read())["session"], "password": password,
+                    "identifier": {"type": "m.id.user", "user": name}}
+            call("POST", "/_matrix/client/v3/account/deactivate", {"auth": auth, "erase": True}, token)
+    except SystemExit as e:
+        print(f"kept {name}: {e}")  # an old throwaway account is no reason to stop
+
+
 def png(width, height, rgb):
     def chunk(tag, data):
         c = struct.pack(">I", len(data)) + tag + data
@@ -152,6 +172,8 @@ def main():
 
     # The Encryption contract sets recovery up, which an account can do once: --new-e2ee makes it a fresh account.
     if not values.get(P + "E2EE_USER") or "--new-e2ee" in sys.argv:
+        if values.get(P + "E2EE_USER"):
+            retire(values[P + "E2EE_USER"], values[P + "E2EE_PASSWORD"])
         e2ee_user, e2ee_pw = "e2ee" + secrets.token_hex(4), secrets.token_urlsafe(18)
         ensure_user(e2ee_user, e2ee_pw)
         values[P + "E2EE_USER"], values[P + "E2EE_PASSWORD"] = e2ee_user, e2ee_pw

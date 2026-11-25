@@ -68,6 +68,15 @@ struct ServerReadStateScenarioTests {
             return (try #require(r["access_token"] as? String), try #require(r["user_id"] as? String))
         }
 
+        /// What the server itself counts as unread in `room`, from a sync of its own.
+        func notificationCount(_ token: String, room: RoomID) async throws -> Int {
+            let filter = enc(#"{"room":{"rooms":["\#(room.rawValue)"],"timeline":{"limit":1}},"presence":{"types":[]}}"#)
+            let reply = try await call("GET", "/sync?timeout=0&filter=\(filter)", token: token)
+            let joined = (reply["rooms"] as? [String: Any])?["join"] as? [String: Any]
+            let unread = (joined?[room.rawValue] as? [String: Any])?["unread_notifications"] as? [String: Any]
+            return try #require(unread?["notification_count"] as? Int, "no unread count for \(room.rawValue)")
+        }
+
         func createRoom(creatorToken: String, inviteUserID: String, joinToken: String? = nil, encrypted: Bool = false, name: String) async throws -> RoomID {
             var body: [String: Any] = [
                 "name": name,
@@ -593,26 +602,38 @@ struct ServerReadStateScenarioTests {
         otherStore.clearAll()
 
         // --- S18 & S29: Clock-skewed / identical-timestamp messages: viewing the first does not hide the second once confirmed; viewing the second advances the receipt (R-06, ADR-0020) ---
-        let r29 = try await makeRoom("S18-S29")
-        let ev29a = try await http.send(b.token, room: r29, text: "s29-first")
-        let ev29b = try await http.send(b.token, room: r29, text: "s29-second")
-        _ = try await stack.waitForRoom(r29, "S29 2 unread") { $0.attention && $0.badgeCount == 2 }
-        let ts29b = try await stack.eventTimestamp(room: r29, event: ev29b)
-        // Stamp the first receipt with the same timestamp as `ev29b` (simulating identical millisecond `origin_server_ts`, S29).
-        // Once the first receipt is confirmed on the server, `INTENT_STALE` prevents the equal timestamp from hiding `ev29b`.
-        await stack.receipts.reportSeen(room: r29, event: ev29a, timestamp: ts29b, advancesOrder: true)
-        await stack.receipts.flush()
-        _ = try await stack.waitForRoom(r29, "S29 second message still unread after first receipt confirmed") {
-            $0.attention && $0.badgeCount == 1 && $0.reasons.contains(.intentStale)
+        // Synapse now and then rotates its push counts just before the receipt arrives and keeps reporting the old count (its
+        // database is right). Only then, when the server itself still says so, the scenario is run once more in a new room.
+        func s29(_ attempt: Int) async throws {
+            let r29 = try await makeRoom("S18-S29")
+            let ev29a = try await http.send(b.token, room: r29, text: "s29-first")
+            let ev29b = try await http.send(b.token, room: r29, text: "s29-second")
+            _ = try await stack.waitForRoom(r29, "S29 2 unread") { $0.attention && $0.badgeCount == 2 }
+            let ts29b = try await stack.eventTimestamp(room: r29, event: ev29b)
+            // Stamp the first receipt with the same timestamp as `ev29b` (simulating identical millisecond `origin_server_ts`, S29).
+            // Once the first receipt is confirmed on the server, `INTENT_STALE` prevents the equal timestamp from hiding `ev29b`.
+            await stack.receipts.reportSeen(room: r29, event: ev29a, timestamp: ts29b, advancesOrder: true)
+            await stack.receipts.flush()
+            do {
+                _ = try await stack.waitForRoom(r29, "S29 second message still unread after first receipt confirmed") {
+                    $0.attention && $0.badgeCount == 1 && $0.reasons.contains(.intentStale)
+                }
+            } catch {
+                let server = try await http.notificationCount(a2.token, room: r29)
+                guard attempt == 0, server != 1 else { throw error }
+                print("S29 Synapse still reports \(server) after the receipt; trying once more")
+                return try await s29(1)
+            }
+            // S18: viewing `ev29b` even with a clock-skewed earlier timestamp advances the receipt by timeline order (`advancesOrder: true`).
+            let skewedEarlierTs = ts29b.addingTimeInterval(-600)
+            await stack.receipts.reportSeen(room: r29, event: ev29b, timestamp: skewedEarlierTs, advancesOrder: true)
+            await stack.receipts.flush()
+            _ = try await stack.waitForRoom(r29, "S18/S29 cleared after viewing skewed/equal-ts second message") { !$0.attention }
+            try await stack.waitUntil("S18/S29 server receipt advanced to second message") {
+                (try? await stack.ownReceiptEventID(room: r29)) == ev29b
+            }
         }
-        // S18: viewing `ev29b` even with a clock-skewed earlier timestamp advances the receipt by timeline order (`advancesOrder: true`).
-        let skewedEarlierTs = ts29b.addingTimeInterval(-600)
-        await stack.receipts.reportSeen(room: r29, event: ev29b, timestamp: skewedEarlierTs, advancesOrder: true)
-        await stack.receipts.flush()
-        _ = try await stack.waitForRoom(r29, "S18/S29 cleared after viewing skewed/equal-ts second message") { !$0.attention }
-        try await stack.waitUntil("S18/S29 server receipt advanced to second message") {
-            (try? await stack.ownReceiptEventID(room: r29)) == ev29b
-        }
+        try await s29(0)
 
         // --- S19: Concurrent multi-room mutations settle to a fresh evaluation ---
         let concRooms = [r01, r02, r08, r09, r13]

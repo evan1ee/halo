@@ -20,7 +20,7 @@ docker compose -f infra/dev/docker-compose.yml down       # stop; add -v to wipe
 
 - Contract-test fixtures: `infra/dev/create-fixtures.py` creates the throwaway accounts and rooms the adapter contract tests need and
   writes `~/.config/halo-dev/contract.env` (mode 600; passwords are never printed). `--new-e2ee` makes a fresh account for the Encryption contract, which
-  can set recovery up only once per account.
+  can set recovery up only once per account, and deactivates the previous one (unless the app is signed in to it).
 - Leftovers: the contract tests leave their rooms and sign out their devices also when they fail (`.cleansUp`), and `scripts/contract-test.sh` fails a
   run that left something. Only a run killed midway leaves any: `infra/dev/leftovers.py remove` lists them (exact test names, only the two accounts in the
   room; devices named "Halo (iPhone)" are never touched) and `remove --yes` removes them, which can't be undone.

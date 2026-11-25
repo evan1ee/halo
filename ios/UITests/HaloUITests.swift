@@ -167,7 +167,7 @@ final class HaloUITests: XCTestCase {
     }
 
     /// Skips a test that taps keys when this simulator shows no software keyboard (a hardware keyboard is connected: its keys
-    /// exist but lie off screen). Fix: I/O → Keyboard → Connect Hardware Keyboard (⇧⌘K). A skip is not a pass.
+    /// exist but lie off screen). `scripts/prepush.sh` turns that hiding off (`AutomaticMinimizationEnabled`). A skip is not a pass.
     @MainActor
     private func requireSoftwareKeyboard(_ app: XCUIApplication) throws {
         // On a physical device, the first key element in accessibility order may be non-hittable while the keyboard
