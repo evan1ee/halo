@@ -38,8 +38,9 @@ Summary only; older history lives in `git log`.
   - Made `jump-to-bottom` interrupt ongoing deceleration synchronously on the tap frame before converging; added and passed `HaloUITests.testTimelineImageScrollAndJumpToBottomWhileScrolling` on physical iPhone 16 (`00008140-000222592ED0801C`).
 
 ## 3. Key decisions
-Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D124), [docs/adr/README.md](docs/adr/README.md).
-- **D121:** roadmap re-planned; R/C/P classes; G-SCALE before M19; the sync path waits for Q-SYNC-SCALE.
+Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D125), [docs/adr/README.md](docs/adr/README.md).
+- **D121:** roadmap re-planned; R/C/P classes; G-SCALE before M19; the sync path is D125.
+- **D125:** G-SCALE accepted on simulator numbers, classic sync stays, M19 may start; iPhone, real account and M19-11 still to show before G-PERF.
 - **D123 (ADR-0024):** message search over Halo's own index: encrypted rooms, full history (founder; resolves Q-SEARCH-INDEX). **D124:** its file is unreadable while locked; an encrypted holding file takes overnight history.
 - **D122:** 1.0 ships the smaller scope (founder; resolves Q-SCOPE).
 - **D118:** one unread count for icon, widgets and list (E6, recomputed NSE badge, ordered writes, background refresh).
@@ -70,7 +71,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D124), [docs/adr/R
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
 
 **Waiting for the founder before work can pass a point**
-- 👤 **G-SCALE** (M17-8 passed on the simulator; numbers in TEST_STRATEGY §7), before M19 · **Q-VERIFY** before M18 ends · **Q-REPORT**, **Q-SIGNUP**, **Q-REVIEW** later.
+- 👤 **Q-VERIFY** before M18 ends · **Q-REPORT**, **Q-SIGNUP**, **Q-REVIEW** later.
 
 **Engineering (not blocking)** — the gaps are in ROADMAP §2, not repeated here.
 - **`timeline` contract flake:** `verifyInteractions` timed out (90 s) in the first 3 of 12 completed full runs on the branch, then in none (one more run was stopped at 290 s, unfinished); 0 of 2 on `main` the same hour, 0 of 4 alone. The same test also timed out on earlier branches. The step is unknown; the tests now name it in the failure ("timed out …: never saw …").
@@ -104,8 +105,8 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 
 ## 6. Next steps
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §3.
-1. Founder: G-SCALE; the device and hand checks of §5. Then M19-11 (search), with M20-1.
-2. M18 top to bottom (may start now; M19 may not before G-SCALE). Re-run `infra/test/run.sh faults` for send and sync changes.
+1. Founder: merge PR #90; the device and hand checks of §5. M19-11 (search, with M20-1) may start.
+2. M18 top to bottom (M19 may start too, D125). Re-run `infra/test/run.sh faults` for send and sync changes.
 3. Founder, long lead times: push gateway (M22-1), legal (M22-4), KLIPY production key, filtering entitlement, artwork.
 
 ## 7. Next Session Prompt
@@ -114,8 +115,8 @@ Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §3.
 Work the ROADMAP §3 queue from M18-1: Plan → Implement → Verify → Review → Land, R tasks first.
 
 A task is done only when its "Done when" holds by a test that failed before, its GA row is removed, its spec no longer says
-"not built", and the rules of ROADMAP §1 hold. G-SCALE (numbers in TEST_STRATEGY §7), G-PERF and
-G-SHIP are the founder's. Don't start M19 before G-SCALE is decided. 1.0 scope is fixed (D122). Open decision: Q-VERIFY.
+"not built", and the rules of ROADMAP §1 hold. G-SCALE is accepted with conditions (D125); G-PERF and
+G-SHIP are the founder's. 1.0 scope is fixed (D122). Open decision: Q-VERIFY.
 
 Checks per iteration:
 - HALO_SIM="iPhone Air" scripts/prepush.sh

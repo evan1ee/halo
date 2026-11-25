@@ -69,7 +69,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 | [x] **M17-1 Signposts** for cold start → list, room open → first frame, sync round trip, image decode, NSE | R · S | XCTest reads each interval; LOGGING §5 lists them |
 | [x] **M17-2 MetricKit** payloads (crash, hang, CPU, memory, disk) kept on the device and included in the diagnostics export | R · S | Unit test round-trips a payload; export reviewed: no content or raw IDs; limited in size and age |
 | [x] **M17-3 Scale fixture**: own accounts with 300 and 1,000 rooms, one 10,000-member room, one 20,000-event media room | R · M | Script in `infra/dev`, idempotent, never touches the shared contract accounts, removable |
-| [ ] **M17-4 Measure classic sync at scale** (V-SCALE-1; *fixtures measured 2026-11-25, TEST_STRATEGY §7; open: iPhone and energy 📱, a real public-server account 👤, G-SCALE 👤*): first sync time, bytes, memory, store size; incremental sync; idle energy | R · M · 📱👤 | Table in TEST_STRATEGY §7 for both fixtures and one real public-server account; **G-SCALE** decided (Q-SYNC-SCALE) |
+| [ ] **M17-4 Measure classic sync at scale** (V-SCALE-1; *fixtures measured 2026-11-25, TEST_STRATEGY §7; open: iPhone and energy 📱, a real public-server account 👤; G-SCALE accepted, D125*): first sync time, bytes, memory, store size; incremental sync; idle energy | R · M · 📱👤 | Table in TEST_STRATEGY §7 for both fixtures and one real public-server account; **G-SCALE** decided (Q-SYNC-SCALE) |
 | [ ] **M17-5 Repeatable performance suite** with the budgets of TEST_STRATEGY §7 (*`scripts/perf.py` built, simulator baseline recorded; open: the device baseline 📱*) | R · M · 📱 | One command prints budget / measured / pass; same device, Release build; over 20 % worse fails |
 | [x] **M17-6 Fault injection and scenarios in CI**: `infra/test` with a proxy (drop, latency, 5xx, 429, half-open) and `scenarios.yml` | R · M | The scenario driver runs on Linux CI; offline, reconnect and rate-limit cases red/green on demand |
 | [ ] **M17-7 Interoperability matrix** (V-INTEROP-1; *wire level automated and green but for GA-30/GA-31; open: the signed checklist in Element Web and Element X 👤, INTEGRATION_TESTS §4*): every message kind, both directions, Element Web + Element X | R · M | Second-client checks automated where possible, the rest a signed checklist; gaps become tasks |
@@ -187,7 +187,7 @@ Halo is ready for external testers (Beta 2) when all rows hold except those mark
 | Reliability | AC-REL-1–7 | M18, M17-6 | open |
 | Security | AC-SEC-1–5; no high finding open | M18-12 | open |
 | Performance | All budgets (NFR-1, 2, 11–15) on an iPhone 15-class device, Release build | G-PERF | 2 of 7 measured, on a small account and a Debug build |
-| Scale | G-SCALE decided and met | V-SCALE-1 | open |
+| Scale | G-SCALE decided and met | V-SCALE-1 | accepted (D125), conditions open |
 | Seamless | AC-MOT-1, AC-MOT-2 | M19-9, M21-3 | open |
 | Messaging | Every R task of M20; interop matrix green | M17-7 | open |
 | Native feel | No raw colours or fixed font sizes outside `HaloDesignSystem` | AC-UX-1 | ✅ |
@@ -226,7 +226,7 @@ wrong. P2: workaround exists. P3: polish. A P0 stops a rollout; fixed forward (B
 | **G-FFI** | M3 | **PASS (D109)** | Stay on upstream `MatrixRustSDK` binary (ADR-0003). |
 | **G-NSE** | M1 | **PASS (D109)** | 100/100 live iPhone 16 soak (ADR-0016). Re-run after M18-6/M18-7 change the NSE. |
 | **G-UNREAD** | M3 | **PASS (D109)** | S01–S29 over classic sync; 7-day AC-U8 soak in Beta 1. |
-| **G-SCALE** | M17 | **measured on fixtures (2026-11-25), not decided** | Sync passes NFR-14 only without the SDK's search index; Halo's own replaces it (D123); its spike passed on the simulator (M17-8). Classic sync meets NFR-14 on the 1,000-room fixture and one real account, or Q-SYNC-SCALE picks another path **before** M19. The agent measures; the founder decides. |
+| **G-SCALE** | M17 | **PASS with conditions (D125, founder, 2026-11-25)** | Accepted on the simulator numbers: classic sync meets NFR-14 at 1,000 rooms without the SDK's search index (TEST_STRATEGY §7, M17-8). Still to show, before G-PERF: M19-11 in the app, an iPhone, one real account; a failure reopens Q-SYNC-SCALE. |
 | **G-PERF** | M19 | open | All budgets on the reference device, Release build, two runs on different days. |
 | **G-SHIP** | M22 | open | §4 complete, zero P0/P1, upgrade path tested, rollback rehearsed, founder sign-off. |
 
