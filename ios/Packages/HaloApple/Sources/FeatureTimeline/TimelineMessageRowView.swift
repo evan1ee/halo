@@ -163,6 +163,7 @@ struct RowView: View {
                                 Button("Delete") { confirmingDelete = true }
                             }
                         } else if row.failedLocalID != nil {
+                            if row.canSendAnyway { Button("Send anyway") { Task { await model.sendAnyway(row) } } }
                             Button("Try again") { Task { await model.retry(row) } }
                             Button("Delete") { Task { await model.discard(row) } }
                         }
@@ -422,6 +423,12 @@ private struct MessageActionsSheet: View {
                 }
             } else if row.failedLocalID != nil {
                 VStack(spacing: 0) {
+                    if row.canSendAnyway {
+                        actionRow("Send anyway", systemImage: "paperplane") {
+                            dismiss()
+                            Task { await model.sendAnyway(row) }
+                        }
+                    }
                     actionRow("Try again", systemImage: "arrow.clockwise") {
                         dismiss()
                         Task { await model.retry(row) }

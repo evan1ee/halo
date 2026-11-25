@@ -5,8 +5,8 @@ import MatrixRustSDK
 
 /// Maps upstream timeline items to Halo's. Names that exist on both sides are written module-qualified.
 enum TimelineMapper {
-    static func map(_ update: MatrixRustSDK.TimelineDiff, ownUserID: String) -> HaloDomain.TimelineDiff {
-        func convert(_ item: MatrixRustSDK.TimelineItem) -> HaloDomain.TimelineItem { map(item, ownUserID: ownUserID) }
+    static func map(_ update: MatrixRustSDK.TimelineDiff, ownUserID: String, handles: SendHandleStore? = nil) -> HaloDomain.TimelineDiff {
+        func convert(_ item: MatrixRustSDK.TimelineItem) -> HaloDomain.TimelineItem { map(item, ownUserID: ownUserID, handles: handles) }
         switch update {
         case .append(let values): return .append(values.map(convert))
         case .clear: return .clear
@@ -22,9 +22,9 @@ enum TimelineMapper {
         }
     }
 
-    static func map(_ item: MatrixRustSDK.TimelineItem, ownUserID: String) -> HaloDomain.TimelineItem {
+    static func map(_ item: MatrixRustSDK.TimelineItem, ownUserID: String, handles: SendHandleStore? = nil) -> HaloDomain.TimelineItem {
         let id = TimelineItemID(item.uniqueId().id)
-        if let event = item.asEvent() { return HaloDomain.TimelineItem(id: id, content: .event(map(event, ownUserID: ownUserID))) }
+        if let event = item.asEvent() { return HaloDomain.TimelineItem(id: id, content: .event(map(event, ownUserID: ownUserID, handles: handles))) }
         if let virtual = item.asVirtual() { return HaloDomain.TimelineItem(id: id, content: .virtual(map(virtual))) }
         return HaloDomain.TimelineItem(id: id, content: .event(
             HaloDomain.TimelineEvent(eventID: nil, sender: nil, senderName: nil, timestamp: Date(timeIntervalSince1970: 0), isOwn: false, kind: .unsupported)))
@@ -38,7 +38,7 @@ enum TimelineMapper {
         }
     }
 
-    static func map(_ event: EventTimelineItem, ownUserID: String) -> HaloDomain.TimelineEvent {
+    static func map(_ event: EventTimelineItem, ownUserID: String, handles: SendHandleStore? = nil) -> HaloDomain.TimelineEvent {
         var eventID: EventID?
         var localID: String?
         switch event.eventOrTransactionId {
@@ -60,7 +60,8 @@ enum TimelineMapper {
             },
             replyTo: replyPreview(of: event.content), formattedBody: formattedHTML(of: event.content),
             localID: localID, senderAvatar: senderAvatar,
-            readBy: event.readReceipts.keys.filter { $0 != ownUserID }.sorted().compactMap { try? UserID($0) })
+            readBy: event.readReceipts.keys.filter { $0 != ownUserID }.sorted().compactMap { try? UserID($0) },
+            sendFailure: failure(of: event, localID: localID, handles: handles))
     }
 
     /// The HTML body of a text, notice or emote message, if the sender gave one in the standard format.
@@ -151,6 +152,25 @@ enum TimelineMapper {
         case nil, .sent: .sent
         case .notSentYet: .sending
         case .sendingFailed(_, let isRecoverable): .failed(recoverable: isRecoverable)
+        }
+    }
+
+    /// Why an own message failed, remembered with its send handle so "send anyway" can act on it (AC-SEC-2).
+    static func failure(of event: EventTimelineItem, localID: String?, handles: SendHandleStore?) -> SendFailure? {
+        guard case .sendingFailed(let error, _) = event.localSendState else { return nil }
+        let failure = failure(of: error)
+        if let localID, failure.canSendAnyway, let handle = event.lazyProvider.getSendHandle() { handles?.remember(localID: localID, handle: handle, error: error) }
+        return failure
+    }
+
+    static func failure(of error: QueueWedgeError) -> SendFailure {
+        switch error {
+        case .insecureDevices(let map): .unverifiedDevices(users: map.keys.sorted().compactMap { try? UserID($0) })
+        case .identityViolations(let users): .identityChanged(users: users.sorted().compactMap { try? UserID($0) })
+        case .crossVerificationRequired: .needsVerification
+        case .expiredAccessToken: .sessionExpired
+        case .missingMediaContent: .mediaGone
+        case .invalidMimeType, .genericApiError: .other
         }
     }
 

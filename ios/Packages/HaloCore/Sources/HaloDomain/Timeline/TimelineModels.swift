@@ -48,12 +48,15 @@ public struct TimelineEvent: Sendable, Equatable {
     public let senderAvatar: MediaRef?
     /// Other people whose newest read receipt is on this event (never the signed-in user); TIMELINE FR-6.
     public let readBy: [UserID]
+    /// Why a failed own message wasn't sent, when the SDK says; `nil` otherwise.
+    public let sendFailure: SendFailure?
 
     public init(
         eventID: EventID?, sender: UserID?, senderName: String?, timestamp: Date, isOwn: Bool, kind: TimelineEventKind,
         sendState: SendState = .sent, reactions: [ReactionSummary] = [], replyTo: ReplyPreview? = nil, formattedBody: String? = nil,
-        localID: String? = nil, senderAvatar: MediaRef? = nil, readBy: [UserID] = []
+        localID: String? = nil, senderAvatar: MediaRef? = nil, readBy: [UserID] = [], sendFailure: SendFailure? = nil
     ) {
+        self.sendFailure = sendFailure
         self.readBy = readBy
         self.senderAvatar = senderAvatar
         self.localID = localID
@@ -107,6 +110,29 @@ public enum SendState: Sendable, Equatable {
     case sending
     /// Sending failed. `recoverable` failures (offline, rate limit) retry by themselves; others wait for the user.
     case failed(recoverable: Bool)
+}
+
+/// Why the SDK refused to send an own message, when it says (AC-SEC-2). Nothing is ever sent unencrypted instead.
+public enum SendFailure: Sendable, Equatable {
+    /// Someone in the room has a device this account hasn't verified, and the SDK's setting keeps messages from it.
+    case unverifiedDevices(users: [UserID])
+    /// A contact who was verified now has a different identity.
+    case identityChanged(users: [UserID])
+    /// This device must be verified (cross-signing set up) before it can send.
+    case needsVerification
+    /// The session's access token was rejected; sending waits for a working one.
+    case sessionExpired
+    /// The picture or file to send is no longer on the device.
+    case mediaGone
+    case other
+
+    /// The SDK can send anyway after the person accepts the risk (unverified devices, a changed identity).
+    public var canSendAnyway: Bool {
+        switch self {
+        case .unverifiedDevices, .identityChanged: true
+        case .needsVerification, .sessionExpired, .mediaGone, .other: false
+        }
+    }
 }
 
 public enum TimelineEventKind: Sendable, Equatable {

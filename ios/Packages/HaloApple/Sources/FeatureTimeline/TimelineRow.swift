@@ -49,6 +49,8 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     public let styled: AttributedString?
     /// The local ID of an own message whose sending failed; the user can retry or delete it.
     public var failedLocalID: String?
+    /// What the person can do about a failed message beyond retrying: send it anyway after accepting the risk (AC-SEC-2).
+    public var canSendAnyway = false
     /// A sticker: its image is shown without a bubble or caption (`text` is the accessibility label).
     public let isSticker: Bool
     /// A file, audio or video attachment, shown as a tile that opens in Quick Look (MEDIA_ATTACHMENTS FR-2…4).

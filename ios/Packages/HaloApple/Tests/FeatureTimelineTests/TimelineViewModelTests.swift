@@ -166,6 +166,28 @@ struct TimelineViewModelTests {
         #expect(setupRows.count == 5)
     }
 
+    @Test("a refused send says why in plain words, and offers Send anyway only where the SDK can")
+    func refusedSendsSayWhy() throws {
+        let model = try model()
+        let bob = try UserID("@bob:x.org")
+        func own(_ failure: SendFailure?) -> TimelineItem {
+            TimelineItem(id: TimelineItemID("o"), content: .event(TimelineEvent(
+                eventID: nil, sender: nil, senderName: "Me", timestamp: Date(timeIntervalSince1970: 0), isOwn: true,
+                kind: .text("hi", isEdited: false), sendState: .failed(recoverable: false), localID: "txn", sendFailure: failure)))
+        }
+        model.senderNames = [bob: "Bob"]
+        #expect(model.row(own(.unverifiedDevices(users: [bob]))).status == "Not sent: Bob has a device you haven't verified.")
+        #expect(model.row(own(.unverifiedDevices(users: [bob]))).canSendAnyway)
+        #expect(model.row(own(.identityChanged(users: [bob]))).status == "Not sent: Bob was verified, and now has a different identity.")
+        #expect(model.row(own(.identityChanged(users: [bob]))).canSendAnyway)
+        for failure in [SendFailure.needsVerification, .sessionExpired, .mediaGone] {
+            let row = model.row(own(failure))
+            #expect(row.status?.hasPrefix("Not sent: ") == true && !row.canSendAnyway, "\(failure)")
+        }
+        #expect(model.row(own(.other)).status == "Not sent" && !model.row(own(.other)).canSendAnyway)
+        #expect(TimelineViewModel.status(of: .failed(recoverable: false), failure: .unverifiedDevices(users: []), names: [:]) == "Not sent: Someone in this chat has a device you haven't verified.")
+    }
+
     @Test("unconfirmed own messages say so; sent ones carry no status")
     func sendStatus() throws {
         let model = try model()

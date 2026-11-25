@@ -20,7 +20,7 @@ Send, reply, edit, delete and react reliably, online or offline.
 - FR-6 After sending → read intent at the own event (E1b).
 - FR-7 Emoji reactions: quick bar (6 recents) + full picker; custom emoticons from image packs (P2).
 - FR-8 Forward text, media, files, stickers and locations to one or more chats, re-encrypted for the target; warns when the target isn't encrypted and the source is (*not built*, ROADMAP M20-6).
-- FR-9 A failed send carries the SDK's reason (`QueueWedgeError`, F-FFI-24): network, refused by the server, or an encryption refusal naming the people or devices (*not built: the reason is dropped in `TimelineMapper`*, ROADMAP M18-2).
+- FR-9 A failed send carries the SDK's reason (`QueueWedgeError`, F-FFI-24): network, refused by the server, or an encryption refusal naming the people or devices **Built** (M18-2): `TimelineEvent.sendFailure` (`SendFailure`) says unverified devices, changed identity, device not verified, session expired, file gone, or other; the status line names the people, and "Send anyway" (SDK `ignoreDeviceTrustAndResend` / `withdrawVerificationAndResend`) is offered only for the first two. Nothing is ever sent unencrypted instead. The SDK default recipient strategy (D117) seldom refuses, so no real-server test makes it refuse; each reason is covered by a mapping test.
 - FR-10 Polls: vote, change the vote, end an own poll (*not built; creating and showing are*, ROADMAP M20-4).
 - FR-11 Multi-select for copy, forward and delete (candidate, D122, ROADMAP M20-16).
 

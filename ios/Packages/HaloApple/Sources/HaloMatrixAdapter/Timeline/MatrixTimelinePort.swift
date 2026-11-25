@@ -206,6 +206,8 @@ final class MatrixTimelineSession: TimelineSession {
     private let ownUserID: String
     /// Tells the port this session is gone; runs once, on `close` or when the session is dropped.
     private let release: Mutex<(@Sendable () -> Void)?>
+    /// The send handles of own messages that failed for an encryption reason ("send anyway", AC-SEC-2).
+    private let sendHandles = SendHandleStore()
 
     init(pinStore: PinOverlayStore, session: MatrixSessionPort, roomID: RoomID, room: Room, timeline: Timeline, ownUserID: String, release: @escaping @Sendable () -> Void = {}) {
         self.pinStore = pinStore
@@ -227,6 +229,7 @@ final class MatrixTimelineSession: TimelineSession {
 
     func items() -> AsyncStream<HaloDomain.TimelineDiff> {
         let (output, continuation) = AsyncStream<HaloDomain.TimelineDiff>.makeStream(bufferingPolicy: .unbounded)
+        let handles = sendHandles
         let task = Task { [timeline, ownUserID] in
             let (raw, rawContinuation) = AsyncStream<[MatrixRustSDK.TimelineDiff]>.makeStream(bufferingPolicy: .unbounded)
             let handle = await timeline.addListener(listener: Listener(rawContinuation))
@@ -235,7 +238,7 @@ final class MatrixTimelineSession: TimelineSession {
             // photo) never leaves the list (TimelineDiffCoalescer).
             var coalescer = TimelineDiffCoalescer()
             for await batch in raw {
-                for diff in coalescer.coalesce(batch.map { TimelineMapper.map($0, ownUserID: ownUserID) }) { continuation.yield(diff) }
+                for diff in coalescer.coalesce(batch.map { TimelineMapper.map($0, ownUserID: ownUserID, handles: handles) }) { continuation.yield(diff) }
             }
             continuation.finish()
         }
@@ -295,6 +298,18 @@ final class MatrixTimelineSession: TimelineSession {
 
     func setTyping(_ isTyping: Bool) async throws(HaloError) {
         do { try await room.typingNotice(isTyping: isTyping) } catch { throw ErrorMapper.map(error) }
+    }
+
+    func sendAnyway(localID: String) async throws(HaloError) {
+        guard let entry = sendHandles.entry(localID: localID) else { throw .notFound }
+        do {
+            switch entry.error {
+            case .insecureDevices(let devices): try await room.ignoreDeviceTrustAndResend(devices: devices, sendHandle: entry.handle)
+            case .identityViolations(let users): try await room.withdrawVerificationAndResend(userIds: users, sendHandle: entry.handle)
+            default: throw HaloError.notFound
+            }
+        } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
+        sendHandles.forget(localID: localID)
     }
 
     func identityAlerts() -> AsyncStream<[IdentityAlert]> {
@@ -589,4 +604,14 @@ private final class IdentityListener: IdentityStatusChangeListener {
         }
         continuation.yield(alerts)
     }
+}
+
+/// What "send anyway" needs for a failed own message: the SDK's handle on it and the error that stopped it.
+final class SendHandleStore: Sendable {
+    struct Entry { let handle: SendHandle; let error: QueueWedgeError }
+    private let entries = Mutex<[String: Entry]>([:])
+
+    func remember(localID: String, handle: SendHandle, error: QueueWedgeError) { entries.withLock { $0[localID] = Entry(handle: handle, error: error) } }
+    func entry(localID: String) -> Entry? { entries.withLock { $0[localID] } }
+    func forget(localID: String) { entries.withLock { _ = $0.removeValue(forKey: localID) } }
 }

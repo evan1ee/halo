@@ -142,6 +142,19 @@ struct TimelineCoordinatorTests {
         #expect(port.acceptedIdentities(in: room) == [bob])
     }
 
+    @Test("Send anyway goes to the session once live, and not before (M18-2)")
+    func sendAnyway() async throws {
+        let port = FakeTimelinePort()
+        let room = try RoomID("!r:x.org")
+        port.addRoom(room)
+        let coordinator = TimelineCoordinator(port: port, room: room)
+        await #expect(throws: HaloError.cancelled) { try await coordinator.sendAnyway(localID: "txn1") }
+        await coordinator.open()
+        _ = await wait(coordinator) { if case .live = $0 { true } else { false } }
+        try await coordinator.sendAnyway(localID: "txn1")
+        #expect(port.sentAnyway(in: room) == ["txn1"])
+    }
+
     @Test("Accepting an identity before the timeline is live is refused")
     func identityNeedsLiveTimeline() async throws {
         let port = FakeTimelinePort()
