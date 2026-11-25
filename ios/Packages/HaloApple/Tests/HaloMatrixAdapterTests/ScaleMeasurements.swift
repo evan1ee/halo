@@ -95,21 +95,9 @@ struct ScaleMeasurements {
 
     // MARK: Helpers
 
-    /// `HALO_SCALE_SEARCH=0` leaves the SDK's message search index out, `live` only its sweep through history, to see what they cost.
-    private func port(_ directory: URL) -> MatrixSessionPort {
-        MatrixSessionPort(
-            baseDirectory: directory, indexesMessages: env["HALO_SCALE_SEARCH"] != "0", backfillsSearch: env["HALO_SCALE_SEARCH"] != "live",
-            initialisePlatform: MatrixBootstrap.initialise(lightweightRuntime:))
-    }
+    private func port(_ directory: URL) -> MatrixSessionPort { ScaleStage.port(directory) }
 
-    private func threads() -> Int {
-        var list: thread_act_array_t?
-        var count: mach_msg_type_number_t = 0
-        guard task_threads(mach_task_self_, &list, &count) == KERN_SUCCESS else { return -1 }
-        for index in 0..<Int(count) { if let thread = list?[index] { mach_port_deallocate(mach_task_self_, thread) } }
-        vm_deallocate(mach_task_self_, vm_address_t(UInt(bitPattern: list)), vm_size_t(Int(count) * MemoryLayout<thread_t>.stride))
-        return Int(count)
-    }
+    private func threads() -> Int { ScaleStage.threads() }
 
     private func follow(_ session: MatrixSessionPort) -> ListFollower {
         let follower = ListFollower()
@@ -123,13 +111,7 @@ struct ScaleMeasurements {
     }
 
     @discardableResult
-    private func proxy(_ method: String, _ path: String) async -> Any {
-        guard let url = URL(string: (env["HALO_SCALE_CONTROL"] ?? "") + path) else { return [:] }
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        guard let (data, _) = try? await URLSession.shared.data(for: request), let object = try? JSONSerialization.jsonObject(with: data) else { return [:] }
-        return object
-    }
+    private func proxy(_ method: String, _ path: String) async -> Any { await ScaleStage.proxy(method, path) }
 
     private func size(of directory: URL) -> Double {
         let files = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: [.totalFileAllocatedSizeKey])?.allObjects as? [URL] ?? []
@@ -137,21 +119,66 @@ struct ScaleMeasurements {
         return Double(bytes) / 1_048_576
     }
 
+    private func cpuSeconds() -> Double { ScaleStage.cpuSeconds() }
+}
+
+/// What the measurements share.
+enum ScaleStage {
+    /// `HALO_SCALE_SEARCH`: `1` as the app ships, `live` without the index's sweep through history, `paginate` without the index but
+    /// with automatic back-pagination, `0` without both.
+    static func port(_ directory: URL) -> MatrixSessionPort {
+        let mode = env["HALO_SCALE_SEARCH"] ?? "1"
+        return MatrixSessionPort(
+            baseDirectory: directory, indexesMessages: !["0", "paginate"].contains(mode), backPaginates: mode != "0",
+            backfillsSearch: mode != "live", initialisePlatform: MatrixBootstrap.initialise(lightweightRuntime:))
+    }
+
+    static func threads() -> Int {
+        var list: thread_act_array_t?
+        var count: mach_msg_type_number_t = 0
+        guard task_threads(mach_task_self_, &list, &count) == KERN_SUCCESS else { return -1 }
+        for index in 0..<Int(count) { if let thread = list?[index] { mach_port_deallocate(mach_task_self_, thread) } }
+        vm_deallocate(mach_task_self_, vm_address_t(UInt(bitPattern: list)), vm_size_t(Int(count) * MemoryLayout<thread_t>.stride))
+        return Int(count)
+    }
+
     /// User and system time of this process: the part of "idle energy" a simulator can show.
-    private func cpuSeconds() -> Double {
+    static func cpuSeconds() -> Double {
         var usage = rusage()
         getrusage(RUSAGE_SELF, &usage)
         func value(_ time: timeval) -> Double { Double(time.tv_sec) + Double(time.tv_usec) / 1_000_000 }
         return value(usage.ru_utime) + value(usage.ru_stime)
     }
+
+    @discardableResult
+    static func proxy(_ method: String, _ path: String) async -> Any {
+        guard let url = URL(string: (env["HALO_SCALE_CONTROL"] ?? "") + path) else { return [:] }
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        guard let (data, _) = try? await URLSession.shared.data(for: request), let object = try? JSONSerialization.jsonObject(with: data) else { return [:] }
+        return object
+    }
+
+    static func endpoints() async -> [String: Int] {
+        (await proxy("GET", "/stats") as? [String: [String: Any]] ?? [:]).compactMapValues { $0["requests"] as? Int }
+    }
+
+    /// Requests and megabytes through the proxy since the last `DELETE /stats`, all endpoints or those containing `part`.
+    static func traffic(_ part: String = "") async -> (requests: Int, megabytes: Double) {
+        let stats = await proxy("GET", "/stats") as? [String: [String: Any]] ?? [:]
+        return stats.filter { part.isEmpty || $0.key.contains(part) }.values.reduce(into: (0, 0.0)) { sum, entry in
+            sum.0 += entry["requests"] as? Int ?? 0
+            sum.1 += Double(entry["bytes_down"] as? Int ?? 0) / 1e6
+        }
+    }
 }
 
-private extension Duration {
+extension Duration {
     var seconds: Double { Double(components.seconds) + Double(components.attoseconds) / 1e18 }
 }
 
 /// The room list as the app would hold it, and how many sync responses it includes.
-private final class ListFollower: @unchecked Sendable {  // every field is guarded by `lock`
+final class ListFollower: @unchecked Sendable {  // every field is guarded by `lock`
     private let lock = NSLock()
     private var list: [RoomSummary] = []
     private var synced = 0
@@ -187,7 +214,7 @@ private final class ListFollower: @unchecked Sendable {  // every field is guard
 }
 
 /// `phys_footprint` (what iOS limits) sampled every 20 ms on its own thread.
-private final class PeakMemory: @unchecked Sendable {  // every field is guarded by `lock`
+final class PeakMemory: @unchecked Sendable {  // every field is guarded by `lock`
     private let lock = NSLock()
     private var peak = 0.0
     private var running = true
@@ -217,7 +244,7 @@ private final class PeakMemory: @unchecked Sendable {  // every field is guarded
 }
 
 /// `scaleprobe`, the other person in every room, over plain HTTP and not through the proxy.
-private struct Probe {
+struct Probe {
     let base: String
     let token: String
 
@@ -230,8 +257,9 @@ private struct Probe {
 
     func rooms() async throws -> [String] { (try await Self.call("GET", base + "/joined_rooms", token, nil)["joined_rooms"] as? [String] ?? []).sorted() }
 
-    func send(_ text: String, to room: String, transaction: String) async throws {
-        _ = try await Self.call("PUT", base + "/rooms/\(room)/send/m.room.message/\(transaction)", token, ["msgtype": "m.text", "body": text])
+    @discardableResult
+    func send(_ text: String, to room: String, transaction: String) async throws -> String {
+        try await Self.call("PUT", base + "/rooms/\(room)/send/m.room.message/\(transaction)", token, ["msgtype": "m.text", "body": text])["event_id"] as? String ?? ""
     }
 
     func logout() async { _ = try? await Self.call("POST", base + "/logout", token, [:]) }

@@ -23,8 +23,10 @@ public actor MatrixSessionPort: SessionPort {
     private let baseDirectory: URL
     private let holderName: String
     private let sendsMessages: Bool
-    /// Measurements (M17-4) switch the search index or its history sweep off to see their cost; the app always has both.
+    /// Measurements (M17-4, M17-8) switch the search index, automatic back-pagination or the index's history sweep off to see
+    /// their cost; the app always has all three. The sweep needs back-pagination (F-FFI-25).
     private let indexesMessages: Bool
+    private let backPaginates: Bool
     private let backfillsSearch: Bool
     private let lightweightRuntime: Bool
     private let enablesSlidingSync: Bool
@@ -99,6 +101,7 @@ public actor MatrixSessionPort: SessionPort {
         lightweightRuntime: Bool = false,
         enablesSlidingSync: Bool = false,
         indexesMessages: Bool = true,
+        backPaginates: Bool = true,
         backfillsSearch: Bool = true,
         readStoredSession: (@Sendable () -> StoredSession?)? = nil,
         persistRefreshedSession: (@Sendable (StoredSession) -> Void)? = nil,
@@ -108,7 +111,8 @@ public actor MatrixSessionPort: SessionPort {
         self.holderName = holderName
         self.sendsMessages = sendsMessages
         self.indexesMessages = sendsMessages && indexesMessages
-        self.backfillsSearch = sendsMessages && indexesMessages && backfillsSearch
+        self.backPaginates = sendsMessages && backPaginates
+        self.backfillsSearch = sendsMessages && indexesMessages && backPaginates && backfillsSearch
         self.lightweightRuntime = lightweightRuntime
         self.enablesSlidingSync = enablesSlidingSync
         self.readStoredSession = readStoredSession
@@ -571,10 +575,9 @@ public actor MatrixSessionPort: SessionPort {
         if indexesMessages {
             let searchIndex = baseDirectory.appendingPathComponent(storeID, isDirectory: true).appendingPathComponent("search-index")
             try FileManager.default.createDirectory(at: searchIndex, withIntermediateDirectories: true)
-            builder = builder
-                .withSearchIndexStore(path: searchIndex.path, key: passphrase)
-                .enableAutomaticBackPagination(enableAutomaticBackPagination: true)
+            builder = builder.withSearchIndexStore(path: searchIndex.path, key: passphrase)
         }
+        if backPaginates { builder = builder.enableAutomaticBackPagination(enableAutomaticBackPagination: true) }
         return try await builder.build()
     }
 
