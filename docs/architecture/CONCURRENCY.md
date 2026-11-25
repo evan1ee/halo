@@ -45,6 +45,8 @@
   setup works for an app and an extension sharing a file.
 - After writing, the NSE posts a Darwin notification (`CFNotificationCenterGetDarwinNotifyCenter`) so a running app reloads its state.
 
+- `search-index.sqlite` (*not built*, D123): one process (the app), one writer (`SearchIndexer`, background priority, one room at a time); searches read through the pool and cancel with their query.
+
 ## 7. Forbidden patterns
 `DispatchQueue.main.sync`; semaphores to wait on async work; `Task.detached` without a justification;
 holding an upstream FFI object in a view model; blocking an FFI callback thread; shared mutable singletons.

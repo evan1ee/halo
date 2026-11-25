@@ -19,6 +19,7 @@ gateway and Apple (APNs metadata), KLIPY when GIF/sticker search is used (D98, r
 | Location (only when the user sends one, D100; access asked when the Location tab opens) | Homeserver as `m.location` (encrypted in E2EE rooms) | Messaging | Room members' devices |
 | Voice messages (microphone, only while the user records, D99) | Homeserver as `m.audio` (encrypted in E2EE rooms) | Messaging | Room members' devices; the temporary recording is deleted after sending |
 | Diagnostics export | Only where the user shares it | Debugging | Recipient |
+| MetricKit payloads (crashes, hangs, performance; redacted) | Nowhere: kept on the device, leave it only inside a diagnostics export | Debugging | Nobody, or the export's recipient |
 | Bot conversations | The bot's room (normal Matrix) | Bot features | The bot backend (by the user's choice to talk to it) |
 
 ## 2b. Dormant Sentry code in the prebuilt SDK
@@ -32,7 +33,7 @@ Halo never sends data to a bot or AI service on its own. Rendering and indexing 
 messages already in the user's rooms. Any future feature that sends content to a bot must be an explicit user action and be documented here first.
 
 ## 4. Local data
-Covered in [SECURITY.md](SECURITY.md) §3–4. The Bot Activity index and audit log stay on the device.
+Covered in [SECURITY.md](SECURITY.md) §3–4. The Bot Activity index and audit log stay on the device. So will the message search index (D123, not built): searching sends nothing anywhere; building it downloads history and keys from the user's own homeserver, which sees that history is being loaded but not what is searched.
 
 ## 4b. Siri and Spotlight (D88)
 Off by default. When the person turns on "Chats in Siri and Spotlight", the names and room IDs of up to 100 joined chats are written to an App Group file and the system Spotlight index; no message text, preview or avatar. Turning it off or signing out deletes both. `SendMessageIntent` uses the same opt-in chat list and asks Siri for explicit confirmation before sending any message. The medium "Unread chats" widget reads the same file for names (D93); without the setting it shows none.

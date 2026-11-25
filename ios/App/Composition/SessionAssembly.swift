@@ -100,6 +100,7 @@ extension AppRoot {
     /// new counts when this returns. `true` when a sync succeeded.
     func refreshInBackground() async -> Bool {
         guard UIApplication.shared.applicationState != .active else { return false }  // the sync loop delivers it
+        coldStart = nil  // launched without a window: not the start a person waits for
         HaloDatabase.resumeAll()
         await begin()
         let refreshed = await BackgroundRefresh(session: sessionCoordinator, sync: sync, rooms: roomCoordinator, readState: readState).run()

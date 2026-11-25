@@ -1,0 +1,44 @@
+name: scenarios
+# Read-state scenarios and fault cases against a throwaway Synapse behind the fault proxy (docs/development/CI_CD.md, ROADMAP M17-6).
+on:
+  pull_request:
+    paths:
+      - "infra/test/**"
+      - "infra/dev/synapse/**"
+      - "tools/scenario-driver/**"
+      - "ios/Packages/HaloCore/Sources/HaloDomain/ReadState/**"
+      - "ios/Packages/HaloCore/Sources/HaloApplication/ReadState/**"
+      - "ios/Packages/HaloCore/Sources/HaloApplication/ReadReceipts/**"
+      - "ios/Packages/HaloApple/Sources/HaloMatrixAdapter/**"
+      - ".github/workflows/scenarios.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/test/**"
+      - "tools/scenario-driver/**"
+      - ".github/workflows/scenarios.yml"
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  scenarios:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Fault proxy unit tests
+        run: python3 -m unittest discover -s infra/test -p "test_*.py" -v
+      - name: Scenarios and fault cases
+        run: HALO_TEST_KEEP=1 infra/test/run.sh scenarios
+      - name: The fault cases fail for broken clients
+        run: |
+          broken() {  # <kind> <case>: the case must be red for a client broken on purpose
+            if HALO_TEST_KEEP=1 HALO_SCENARIO_BREAK=$1 infra/test/run.sh scenarios "$2"; then echo "$2 passed with a broken client ($1)"; exit 1; fi
+          }
+          for case in F02 F03 F04 F05 F06; do broken retry "$case"; done
+          broken txn F02

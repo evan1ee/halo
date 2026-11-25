@@ -23,6 +23,11 @@ public actor MatrixSessionPort: SessionPort {
     private let baseDirectory: URL
     private let holderName: String
     private let sendsMessages: Bool
+    /// Measurements (M17-4, M17-8) switch the search index, automatic back-pagination or the index's history sweep off to see
+    /// their cost; the app always has all three. The sweep needs back-pagination (F-FFI-25).
+    private let indexesMessages: Bool
+    private let backPaginates: Bool
+    private let backfillsSearch: Bool
     private let lightweightRuntime: Bool
     private let enablesSlidingSync: Bool
     private let readStoredSession: (@Sendable () -> StoredSession?)?
@@ -95,6 +100,9 @@ public actor MatrixSessionPort: SessionPort {
         baseDirectory: URL, holderName: String = "app", sendsMessages: Bool = true,
         lightweightRuntime: Bool = false,
         enablesSlidingSync: Bool = false,
+        indexesMessages: Bool = true,
+        backPaginates: Bool = true,
+        backfillsSearch: Bool = true,
         readStoredSession: (@Sendable () -> StoredSession?)? = nil,
         persistRefreshedSession: (@Sendable (StoredSession) -> Void)? = nil,
         initialisePlatform: @escaping @Sendable (Bool) throws(HaloError) -> Void
@@ -102,6 +110,9 @@ public actor MatrixSessionPort: SessionPort {
         self.baseDirectory = baseDirectory
         self.holderName = holderName
         self.sendsMessages = sendsMessages
+        self.indexesMessages = sendsMessages && indexesMessages
+        self.backPaginates = sendsMessages && backPaginates
+        self.backfillsSearch = sendsMessages && indexesMessages && backPaginates && backfillsSearch
         self.lightweightRuntime = lightweightRuntime
         self.enablesSlidingSync = enablesSlidingSync
         self.readStoredSession = readStoredSession
@@ -314,7 +325,9 @@ public actor MatrixSessionPort: SessionPort {
         let pass = Task<Result<Void, HaloError>, Never> { [weak self] in
             await previous?.value
             do {
+                let signpost = HaloSignpost.begin(.syncCatchUp)
                 let response = try await client.syncOnceV2(settings: SyncSettingsV2(timeoutMs: 0, fullState: false))
+                signpost.end()  // a failed sync records nothing
                 await self?.publish(change: SyncChange(
                     joined: Set(response.rooms.joined),
                     invited: Set(response.rooms.invited),
@@ -355,7 +368,9 @@ public actor MatrixSessionPort: SessionPort {
         var recovering = false
         while !Task.isCancelled {
             do {
+                let signpost = HaloSignpost.begin(first ? .syncCatchUp : .syncLongPoll)
                 let response = try await client.syncOnceV2(settings: SyncSettingsV2(timeoutMs: first ? 0 : Self.longPollMilliseconds, fullState: false))
+                signpost.end()  // a failed sync records nothing
                 if Task.isCancelled { return }
                 first = false
                 backoff = .seconds(1)
@@ -477,7 +492,7 @@ public actor MatrixSessionPort: SessionPort {
             sendQueueErrorsHandle = client.subscribeToSendQueueStatus(listener: errors)
             sendQueueErrors = errors
             searchBackfillHandle?.cancel()
-            searchBackfillHandle = client.runSearchBackfill(strategy: .foreground)
+            searchBackfillHandle = backfillsSearch ? client.runSearchBackfill(strategy: .foreground) : nil
             try? await client.setMediaRetentionPolicy(policy: Self.defaultMediaRetentionPolicy)
         }
         authDelegateHandle?.cancel()
@@ -557,13 +572,12 @@ public actor MatrixSessionPort: SessionPort {
             .autoEnableBackups(autoEnableBackups: true)
             .crossProcessLockConfig(crossProcessLockConfig: .multiProcess(holderName: holderName))
             .setSessionDelegate(sessionDelegate: delegate)
-        if sendsMessages {
+        if indexesMessages {
             let searchIndex = baseDirectory.appendingPathComponent(storeID, isDirectory: true).appendingPathComponent("search-index")
             try FileManager.default.createDirectory(at: searchIndex, withIntermediateDirectories: true)
-            builder = builder
-                .withSearchIndexStore(path: searchIndex.path, key: passphrase)
-                .enableAutomaticBackPagination(enableAutomaticBackPagination: true)
+            builder = builder.withSearchIndexStore(path: searchIndex.path, key: passphrase)
         }
+        if backPaginates { builder = builder.enableAutomaticBackPagination(enableAutomaticBackPagination: true) }
         return try await builder.build()
     }
 

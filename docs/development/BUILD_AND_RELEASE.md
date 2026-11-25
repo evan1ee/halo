@@ -37,7 +37,7 @@ Archive from Xcode or `xcodebuild archive` on the founder's Mac; upload with Xco
    stage (Beta 1 → Beta 2 → 1.0) is named in the release notes.
 
 ## 5. Crash reporting and observability
-TestFlight/App Store crash reports + MetricKit + the diagnostics export ([../architecture/LOGGING_AND_DIAGNOSTICS.md](../architecture/LOGGING_AND_DIAGNOSTICS.md)). No third-party crash SDK (D114). MetricKit isn't wired yet (ROADMAP M17-2).
+TestFlight/App Store crash reports + MetricKit + the diagnostics export ([../architecture/LOGGING_AND_DIAGNOSTICS.md](../architecture/LOGGING_AND_DIAGNOSTICS.md)). No third-party crash SDK (D114).
 
 ## 5b. 1.0 release
 1. Feature freeze at the Beta 2 cut: only P0/P1 fixes; unfinished C tasks move to 1.x (ROADMAP §1).

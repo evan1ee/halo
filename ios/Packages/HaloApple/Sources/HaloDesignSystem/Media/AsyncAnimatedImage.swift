@@ -1,4 +1,5 @@
 #if canImport(UIKit)
+import HaloFoundation
 import ImageIO
 import SwiftUI
 import UIKit
@@ -53,6 +54,10 @@ extension StickerImage {
 
     /// Decodes `data` as display-size frames off the main actor; animated when `animated` and there are several frames.
     @concurrent public static func decodeThumbnail(_ data: Data, maxPixelSize: Int, animated: Bool) async -> UIImage? {
+        HaloSignpost.measure(.imageDecode) { thumbnail(data, maxPixelSize: maxPixelSize, animated: animated) }
+    }
+
+    private static func thumbnail(_ data: Data, maxPixelSize: Int, animated: Bool) -> UIImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         let count = CGImageSourceGetCount(source)
         let options: [CFString: Any] = [

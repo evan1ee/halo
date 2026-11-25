@@ -9,6 +9,9 @@ Decisions: D46, ADR-0006.
 | SDK state + crypto store (SQLite) | matrix-rust-sdk | App Group `accounts/<hash>/data/` | Session, room state, crypto keys | No (keys!) — needs recovery key/backup if lost |
 | SDK event cache + media store | matrix-rust-sdk | App Group `accounts/<hash>/cache/` | Cached events, media | Yes (from server) |
 | `halo.sqlite` | HaloPersistence (GRDB) | App Group `accounts/<hash>/halo/halo.sqlite` | Intents, notification records, audit, caches, bot index | Yes, except unsent intents |
+| `search-index.sqlite` (*not built*, D123) | HaloPersistence (GRDB, FTS5) | App's private Application Support `search/<hash>/`, excluded from backups | Text of decrypted messages, per-room coverage | Yes (from the SDK and the server; slow for full history) |
+| Search history client's event cache (*not built*) | matrix-rust-sdk | App's private folder, passphrase-encrypted like the app's | Scratch; deleted with the client | Yes |
+| Search holding file (*not built*) | HaloPersistence | App's private folder | History fetched while locked, AES-GCM, until it moves into the index | Yes |
 | Keychain (shared access group) | HaloPlatform | — | Session tokens, SDK store passphrase, Halo DB field key | No |
 | UserDefaults (App Group suite) | Features | — | UI preferences | Yes (defaults) |
 
@@ -28,6 +31,7 @@ that opens both]**.
 - Every Halo file is created with `FileProtectionType.completeUntilFirstUserAuthentication` (the NSE must work while the device is locked after the first unlock).
 - **Field encryption** for columns marked 🔒 in [DATA_MODELS.md](DATA_MODELS.md): AES-GCM (CryptoKit) with a 256-bit key from the Keychain (`afterFirstUnlockThisDeviceOnly`, shared access group). Format: `v1:` + base64(nonce ‖ ciphertext ‖ tag).
 - Not encrypted: ids, timestamps, counts, states (needed for queries; metadata, protected by file protection).
+- **Exception: `search-index.sqlite`** holds readable message text (FTS5 can't search encrypted columns); its protection is `complete` (D124, [../security/SECURITY.md](../security/SECURITY.md) §4). It is opened only while protected data is available, and only by the app.
 - SQLCipher is **not** used (adds a third SQLite build and its own licence/notice duty, for little benefit given file protection + field encryption).
 
 ## 4. Multi-process access (app + NSE)
@@ -43,6 +47,7 @@ that opens both]**.
 | SDK media store (disk) | SDK retention policy (`set_media_retention_policy`), default 1 GB / 30 days **[DECISION D55; V-MEDIA-1]** |
 | `sticker_pack_cache` | Refreshed on account-data/room-state change and at most every 6 h; served stale while refreshing |
 | `bot_task` | Derived; rebuild on demand |
+| `search-index.sqlite` (*not built*) | Kept until sign-out, account removal or "Delete" in Settings; a new schema version deletes and rebuilds it; not in Caches, because iOS would delete hours of indexing |
 
 ## 6. Offline behaviour and conflict resolution
 | Data | Conflict rule |
@@ -56,4 +61,4 @@ that opens both]**.
 On launch: Keychain session → SDK client (cached rooms appear) → `halo.sqlite` opened → `ReadStateCoordinator` evaluates from SDK snapshots + intents immediately (cached badge first, then recomputed) → sync starts.
 
 ## 8. Deletion
-Logout or account removal deletes the account's directory, Keychain items and badge cache. "Clear cache" deletes SDK caches and Halo caches but not intents or keys.
+Logout or account removal deletes the account's directory, its search index and holding file, Keychain items and badge cache. "Clear cache" deletes SDK caches and Halo caches but not intents or keys.

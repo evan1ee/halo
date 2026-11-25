@@ -58,7 +58,7 @@ Full design: [matrix/UNREAD_STATE.md](matrix/UNREAD_STATE.md). Must be prevented
 | R-P2-ST | Sticker v2: pack management, sharing, import, room packs | [features/STICKERS.md](features/STICKERS.md) §P2 |
 | R-P2-BOT | Bot template cards and reaction interactions (D20–D23) | [features/BOT_MESSAGES.md](features/BOT_MESSAGES.md) |
 | R-P2-ACT | Bot Activity tab with task extraction and tracking | [features/BOT_ACTIVITY.md](features/BOT_ACTIVITY.md) |
-| R-P2-SEARCH | Local message search (D30) | [ROADMAP.md](ROADMAP.md) M8 |
+| R-P2-SEARCH | Message search on the device in **encrypted and unencrypted rooms**, full history (D30, D123). *Built: the SDK index, about three months back; own index not built* | [features/MESSAGE_SEARCH.md](features/MESSAGE_SEARCH.md), ROADMAP M19-11 |
 | R-P2-SAVED | Saved messages room (D31, D33) | ROADMAP M8 |
 | R-P2-GALLERY | Global media gallery via a preset non-Matrix room entry in the room list (D34, D83) | [design/NAVIGATION.md](design/NAVIGATION.md), [features/ROOM_LIST.md](features/ROOM_LIST.md), ROADMAP M9 |
 | R-P2-EXPORT | Encrypted room export (D32) | ROADMAP M9 |
@@ -129,7 +129,7 @@ Production release requirements beyond features ([ROADMAP.md](ROADMAP.md) M17–
 | NFR-4 | No message content, keys, tokens or full Matrix IDs in logs at default level ([security/SECURITY.md](security/SECURITY.md)) |
 | NFR-5 | Works offline: browse cached rooms, compose and queue messages and receipts |
 | NFR-6 | Accessibility: Dynamic Type up to AX5, VoiceOver labels on every control, Reduce Motion respected |
-| NFR-7 | Data at rest protected by iOS Data Protection; content columns in Halo's DB encrypted |
+| NFR-7 | Data at rest protected by iOS Data Protection; content columns in Halo's DB encrypted. Exception, once built: the message search index holds readable text under `complete` protection (D124, ADR-0024) |
 | NFR-8 | Licence gate passes on every build; acknowledgements complete |
 | NFR-9 | Localisation-ready: every user-facing string in a String Catalog; plurals, dates and numbers locale-aware; layouts survive +100 % string length and right-to-left |
 | NFR-10 | App Store compliance: privacy manifests for every target, no tracking, privacy labels match [security/PRIVACY.md](security/PRIVACY.md); report and ignore available where others' content is shown |

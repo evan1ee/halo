@@ -30,14 +30,10 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 
 | ID | Gap | Evidence | Task |
 |---|---|---|---|
-| GA-01 | MetricKit isn't collected, though D59/D114 and the privacy policy name it and the stability bar depends on it | no `MXMetricManager` | M17-2 |
-| GA-02 | No signposts, so NFR-1/2 can't be broken down | no `OSSignposter` | M17-1 |
-| GA-03 | Large accounts never measured; classic sync has no filter or lazy-loaded members (R-18) | `SyncSettingsV2` (F-FFI-23) | M17-4 |
-| GA-04 | `infra/test`, the fault proxy and `scenarios.yml` don't exist | only `infra/dev`, `infra/sygnal`; no such workflow | M17-6 |
 | GA-05 | Contacts' identity changes are never shown (security) | no `IdentityStatus` use | M18-1 |
 | GA-06 | The reason a send failed is dropped, so an encryption refusal looks like a network error and can't be resolved | `TimelineMapper.swift:153` | M18-2 |
 | GA-07 | A lost recovery key is a dead end | no `resetIdentity` | M18-3 |
-| GA-08 | Nothing is excluded from iCloud/device backups | no `isExcludedFromBackup` | M18-4 |
+| GA-08 | Stores and caches are not excluded from iCloud/device backups | `isExcludedFromBackup` only on the MetricKit folder | M18-4 |
 | GA-09 | No recovery when a database can't be opened; no migration fixtures | `HaloDatabase`, no `Fixtures/` | M18-5 |
 | GA-10 | OIDC checked only up to the authorization URL | `AdapterContractTests.oidcDiscovery` | M18-6 |
 | GA-11 | Notification Reply / Mark as read not built | no `UNNotificationCategory` | M18-7 |
@@ -56,6 +52,12 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 | GA-24 | Localisation isn't ready: 12 catalog keys, about 376 literals in views (AC-UX-10 was ticked) | `Localizable.xcstrings` | M21-6 |
 | GA-25 | Shared loading/error states used on 2 screens; system motion and contrast settings barely read | `ErrorState`, `accessibilityReduceMotion` ×2, `HaloMotion` ×2 | M21-1, M21-3 |
 | GA-26 | Release builds have no push gateway; the privacy manifests and labels don't mention KLIPY search | `Base`/Release config, `PrivacyInfo.xcprivacy` | M22-1, M22-3 |
+| GA-27 | The SDK's message search index makes sync 3 to 20 times slower on large accounts and keeps the CPU busy (about 25 s per idle minute) | TEST_STRATEGY §7, scale table (2026-11-25) | M17-8, M19-11 |
+| GA-28 | Every launch asks the server for one event per unread room (344 requests at 1,000 rooms) to find the read position's time | scale measurement; `MatrixRoomListPort.ownReadThrough` | M19-3 |
+| GA-29 | A half-open connection hides new messages for 39 s | `FaultTests.halfOpenSync` | M18-11 |
+| GA-30 | The plain text of a message with a mention is the Markdown source, so other clients' notifications show a link | `InteropTests.outgoing` | M20-10 |
+| GA-31 | Messages of a type Halo doesn't know are missing from the timeline instead of showing their fallback text | `InteropTests.incoming` | M20-19 |
+| GA-32 | Message search can show results of the previous query, run two "load more" at once, and misplace results after one it can't map; no CJK words, filters or coverage notice | `SearchCoordinator.apply`/`loadMore`, `MatrixSearchPort` (`compactMap` before index diffs), read 2026-11-25 | M19-11 |
 
 ## 3. Queue
 
@@ -64,13 +66,14 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 
 | Task | Class · size | Done when |
 |---|---|---|
-| [ ] **M17-1 Signposts** for cold start → list, room open → first frame, sync round trip, image decode, NSE | R · S | XCTest reads each interval; LOGGING §5 lists them |
-| [ ] **M17-2 MetricKit** payloads (crash, hang, CPU, memory, disk) kept on the device and included in the diagnostics export | R · S | Unit test round-trips a payload; export reviewed: no content or raw IDs; limited in size and age |
-| [ ] **M17-3 Scale fixture**: own accounts with 300 and 1,000 rooms, one 10,000-member room, one 20,000-event media room | R · M | Script in `infra/dev`, idempotent, never touches the shared contract accounts, removable |
-| [ ] **M17-4 Measure classic sync at scale** (V-SCALE-1): first sync time, bytes, memory, store size; incremental sync; idle energy | R · M · 📱👤 | Table in TEST_STRATEGY §7 for both fixtures and one real public-server account; **G-SCALE** decided (Q-SYNC-SCALE) |
-| [ ] **M17-5 Repeatable performance suite** with the budgets of TEST_STRATEGY §7 | R · M · 📱 | One command prints budget / measured / pass; same device, Release build; over 20 % worse fails |
-| [ ] **M17-6 Fault injection and scenarios in CI**: `infra/test` with a proxy (drop, latency, 5xx, 429, half-open) and `scenarios.yml` | R · M | The scenario driver runs on Linux CI; offline, reconnect and rate-limit cases red/green on demand |
-| [ ] **M17-7 Interoperability matrix** (V-INTEROP-1): every message kind, both directions, Element Web + Element X | R · M | Second-client checks automated where possible, the rest a signed checklist; gaps become tasks |
+| [x] **M17-1 Signposts** for cold start → list, room open → first frame, sync round trip, image decode, NSE | R · S | XCTest reads each interval; LOGGING §5 lists them |
+| [x] **M17-2 MetricKit** payloads (crash, hang, CPU, memory, disk) kept on the device and included in the diagnostics export | R · S | Unit test round-trips a payload; export reviewed: no content or raw IDs; limited in size and age |
+| [x] **M17-3 Scale fixture**: own accounts with 300 and 1,000 rooms, one 10,000-member room, one 20,000-event media room | R · M | Script in `infra/dev`, idempotent, never touches the shared contract accounts, removable |
+| [ ] **M17-4 Measure classic sync at scale** (V-SCALE-1; *fixtures measured 2026-11-25, TEST_STRATEGY §7; open: iPhone and energy 📱, a real public-server account 👤; G-SCALE accepted, D125*): first sync time, bytes, memory, store size; incremental sync; idle energy | R · M · 📱👤 | Table in TEST_STRATEGY §7 for both fixtures and one real public-server account; **G-SCALE** decided (Q-SYNC-SCALE) |
+| [ ] **M17-5 Repeatable performance suite** with the budgets of TEST_STRATEGY §7 (*`scripts/perf.py` built, simulator baseline recorded; open: the device baseline 📱*) | R · M · 📱 | One command prints budget / measured / pass; same device, Release build; over 20 % worse fails |
+| [x] **M17-6 Fault injection and scenarios in CI**: `infra/test` with a proxy (drop, latency, 5xx, 429, half-open) and `scenarios.yml` | R · M | The scenario driver runs on Linux CI; offline, reconnect and rate-limit cases red/green on demand |
+| [ ] **M17-7 Interoperability matrix** (V-INTEROP-1; *wire level automated and green but for GA-30/GA-31; open: the signed checklist in Element Web and Element X 👤, INTEGRATION_TESTS §4*): every message kind, both directions, Element Web + Element X | R · M | Second-client checks automated where possible, the rest a signed checklist; gaps become tasks |
+| [x] **M17-8 Search index spike** (V-SEARCH-2, V-SEARCH-3; *passed on the simulator 2026-11-25, design corrected in ADR-0024; the iPhone run belongs to M19-11*): what Halo's own index costs at 1,000 rooms, and whether encrypted history decrypts while paging | R · M | Numbers in TEST_STRATEGY §7; pass or fail against MESSAGE_SEARCH §4 recorded in OPEN_QUESTIONS; feeds G-SCALE |
 
 **Exit:** G-SCALE recorded; every NFR has a measured baseline.
 
@@ -110,6 +113,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 | [ ] **M19-8 Scrolling**: mixed media, animated stickers, long formatted messages | R · M · 📱 | NFR-2 measured interactively, hitch ratio recorded |
 | [ ] **M19-9 Zero flash and jump audit**: launch, room open/close, keyboard, send → confirm, edit, reaction, reconnect, history prepend, appearance change, return from background | R · M | Frame-by-frame capture of each; every defect fixed or filed; UI tests for the ones that can be measured; AC-MOT-1 |
 | [ ] **M19-10 Leaks and soak**: 50 room open/close cycles, 30 min scroll, background/foreground | R · S · 📱 | No growth over 10 %; no task or subscription left after close |
+| [ ] **M19-11 Message search on Halo's own index** (GA-27, GA-32, D123, D124, ADR-0024): encrypted rooms, full history, CJK, files and links; SDK index off and its folder deleted. Slices: correctness of today's search (stale results, load-more guard) · tokeniser and store · live lane · history lane · switch-over · interface | R · L · 📱 | AC-SRCH-1…9; `messageSearch` and S01–S29 green. Needs M17-8 and **M20-1** |
 
 **Exit:** **G-PERF** — all budgets of TEST_STRATEGY §7 met on the reference device with a Release build.
 
@@ -118,7 +122,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 
 | Task | Class · size | Done when |
 |---|---|---|
-| [ ] **M20-1 Jump to any message**: event-focused timeline for replies, search, links, pins and notifications; back to newest | R · L | Event 5,000 messages back opens in ≤ 2 s online; offline or gone says so; read state unaffected |
+| [ ] **M20-1 Jump to any message** (*taken with M19-11: search finds what the timeline can't reach*): event-focused timeline for replies, search, links, pins and notifications; back to newest | R · L | Event 5,000 messages back opens in ≤ 2 s online; offline or gone says so; read state unaffected |
 | [ ] **M20-2 Voice and audio in the bubble**: waveform, scrub, 1×/1.5×/2×, route and interruption handling, keeps playing while scrolling | R · M | Unit on the player; interop with Element voice notes; VoiceOver adjustable |
 | [ ] **M20-3 Video**: poster inline, full-screen player, captions on send, save and share | R · M | Streams from file (M19-5); portrait and landscape |
 | [ ] **M20-4 Polls**: vote, change vote, end own poll, live results | R · M | Contract test with two accounts; pending vote looks pending |
@@ -128,7 +132,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 | [ ] **M20-8 Room lifecycle**: successor of an upgraded room, knock/invite-only/banned previews, left and forgotten rooms | R · M | Each state has a screen and an action; no stuck row |
 | [ ] **M20-9 Who read it, what happened**: receipts under others' messages (TIMELINE FR-6), message info sheet | R · M | Same readers as Element Web; no layout jump when receipts move |
 | [ ] **M20-10 Text rendering**: code blocks with copy, spoilers, tables and lists safe | R · M | Interop fixtures; hostile HTML can't break layout or fetch anything |
-| [ ] **M20-11 Search inside a room** with next/previous | R · M | Uses `SearchPort`; jumps via M20-1; empty and indexing states |
+| [ ] **M20-11 Search inside a room** with next/previous | R · M | Uses `SearchPort` with its room filter (MESSAGE_SEARCH FR-8); jumps via M20-1; empty and indexing states |
 | [ ] **M20-12 Basic moderation**: remove, ban, unban, roles shown, gated by live power levels | R · M | Contract test; refused actions explained |
 | [ ] **M20-13 Storage**: sizes, clear media cache, retention (D55) | R · S | Frees what it says; never touches keys or unsent messages |
 | [ ] **M20-14 Notification keywords** | C · S | Round-trip push-rule contract test |
@@ -136,6 +140,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 | [ ] **M20-16 Multi-select** (copy, forward, delete) | C · M | Power levels respected; partial failure reported |
 | [ ] **M20-17 Link previews**, off by default, never in encrypted rooms by default (D57) | C · M | No request before opt-in |
 | [ ] **M20-18 Unread tools**: mark all read, low-priority section | C · S | Goes through `ReadStatePolicy`; badge test |
+| [ ] **M20-19 Unknown message types** show the sender's fallback text (GA-31) | R · S · 📤? | `InteropTests.incoming` without the known issue |
 
 **Exit:** R tasks done; interop matrix (M17-7) re-run green.
 
@@ -164,7 +169,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 |---|---|---|
 | [ ] **M22-1 Production push** 👤: `infra/sygnal` deployed with monitoring, APNs keys, capacity and an on-call rule | R · M | V-PUSH-5 on the Beta build; restart and key-rotation drill; PUSH_NOTIFICATIONS §6 checked |
 | [ ] **M22-2 Build pipeline**: versions, signing, dSYMs, reproducible archive, macOS workflow on the release commit | R · M · 👤 | A second person could cut a build from BUILD_AND_RELEASE alone |
-| [ ] **M22-3 Privacy**: manifests for every target, labels, policy text equal to behaviour (KLIPY, MetricKit, APNs) | R · S · 👤 | Archive privacy report clean (AC-UX-12); policy reviewed against PRIVACY §2 |
+| [ ] **M22-3 Privacy**: manifests for every target, labels, policy text equal to behaviour (KLIPY, MetricKit, APNs, the message search index if built) | R · S · 👤 | Archive privacy report clean (AC-UX-12); policy reviewed against PRIVACY §2 |
 | [ ] **M22-4 Legal** 👤: licences, export compliance, trademark, notices (D38, V-LEGAL) | R | Written sign-off |
 | [ ] **M22-5 Beta 1** (§5) and fixes | R · 👤📱 | AC-U8 7-day soak clean; exit bar met |
 | [ ] **M22-6 Final icon, sign-in artwork and published support and privacy pages** 👤 (Q-BRAND, Q-APPSTORE; before Beta 2, D115) | R | Links in Settings and the metadata agree and load |
@@ -182,7 +187,7 @@ Halo is ready for external testers (Beta 2) when all rows hold except those mark
 | Reliability | AC-REL-1–7 | M18, M17-6 | open |
 | Security | AC-SEC-1–5; no high finding open | M18-12 | open |
 | Performance | All budgets (NFR-1, 2, 11–15) on an iPhone 15-class device, Release build | G-PERF | 2 of 7 measured, on a small account and a Debug build |
-| Scale | G-SCALE decided and met | V-SCALE-1 | open |
+| Scale | G-SCALE decided and met | V-SCALE-1 | accepted (D125), conditions open |
 | Seamless | AC-MOT-1, AC-MOT-2 | M19-9, M21-3 | open |
 | Messaging | Every R task of M20; interop matrix green | M17-7 | open |
 | Native feel | No raw colours or fixed font sizes outside `HaloDesignSystem` | AC-UX-1 | ✅ |
@@ -190,7 +195,7 @@ Halo is ready for external testers (Beta 2) when all rows hold except those mark
 | States | Every screen × every state | AC-UX-6 | open (GA-25) |
 | Accessibility | Zero audit issues on root screens; VoiceOver + AX5 golden path | AC-UX-8, AC-UX-9 | partly |
 | Language | AC-UX-10 | M21-6 | open (GA-24) |
-| Stability | Beta: crash-free sessions ≥ 99.5 %, no hang > 2 s. **1.0: ≥ 99.8 %, no hang > 1 s in the last 14 days** | TestFlight + MetricKit | not measured (GA-01) |
+| Stability | Beta: crash-free sessions ≥ 99.5 %, no hang > 2 s. **1.0: ≥ 99.8 %, no hang > 1 s in the last 14 days** | TestFlight + MetricKit | not measured (no build in the field yet) |
 | Compliance | Manifests, labels, export, licences, legal, report/block | AC-UX-12, M22 | open |
 
 ## 5. Release plan
@@ -221,7 +226,7 @@ wrong. P2: workaround exists. P3: polish. A P0 stops a rollout; fixed forward (B
 | **G-FFI** | M3 | **PASS (D109)** | Stay on upstream `MatrixRustSDK` binary (ADR-0003). |
 | **G-NSE** | M1 | **PASS (D109)** | 100/100 live iPhone 16 soak (ADR-0016). Re-run after M18-6/M18-7 change the NSE. |
 | **G-UNREAD** | M3 | **PASS (D109)** | S01–S29 over classic sync; 7-day AC-U8 soak in Beta 1. |
-| **G-SCALE** | M17 | open | Classic sync meets NFR-14 on the 1,000-room fixture and one real account, or Q-SYNC-SCALE picks another path **before** M19. The agent measures; the founder decides. |
+| **G-SCALE** | M17 | **PASS with conditions (D125, founder, 2026-11-25)** | Accepted on the simulator numbers: classic sync meets NFR-14 at 1,000 rooms without the SDK's search index (TEST_STRATEGY §7, M17-8). Still to show, before G-PERF: M19-11 in the app, an iPhone, one real account; a failure reopens Q-SYNC-SCALE. |
 | **G-PERF** | M19 | open | All budgets on the reference device, Release build, two runs on different days. |
 | **G-SHIP** | M22 | open | §4 complete, zero P0/P1, upgrade path tested, rollback rehearsed, founder sign-off. |
 

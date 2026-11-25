@@ -13,7 +13,7 @@ import WidgetKit
 /// Never sets `aps.badge` from a payload and never creates attention from a payload (AGENTS.md §17).
 ///
 /// `@unchecked Sendable` justification (AGENTS.md §9, TD-14): subclasses non-Sendable Objective-C
-/// `UNNotificationServiceExtension`. `handler` and `original` are assigned once in `didReceive` before the
+/// `UNNotificationServiceExtension`. `handler`, `original` and `signpost` are assigned once in `didReceive` before the
 /// async task starts, and `delivered` / completion delivery are serialized by `lock` (`NSLock`).
 final class NotificationService: UNNotificationServiceExtension, @unchecked Sendable {
     private struct SessionKey: Hashable, Sendable {
@@ -33,10 +33,12 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
 
     private var handler: ((UNNotificationContent) -> Void)?
     private var original: UNNotificationContent?
+    private var signpost: HaloSignpost.Running?
     private let lock = NSLock()
     private var delivered = false
 
     override func didReceive(_ request: UNNotificationRequest, withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
+        signpost = HaloSignpost.begin(.notificationService)
         handler = contentHandler
         original = request.content
         let info = request.content.userInfo
@@ -144,6 +146,7 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
         delivered = true
         lock.unlock()
         guard !already else { return }
+        signpost?.end()
         metrics.write(outcome: outcome, appGroup: "group.\(HaloShared.namespace())")
         handler?(content)
     }

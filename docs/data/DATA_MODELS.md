@@ -90,6 +90,32 @@ CREATE TABLE bot_action (
 );
 ```
 
+## 3b. `search-index.sqlite` (*not built*, D123; final columns with M19-11)
+
+```sql
+CREATE TABLE room   (id INTEGER PRIMARY KEY, room_id TEXT NOT NULL UNIQUE);
+CREATE TABLE sender (id INTEGER PRIMARY KEY, user_id TEXT NOT NULL UNIQUE);
+CREATE TABLE event (
+  id INTEGER PRIMARY KEY, room INTEGER NOT NULL, sender INTEGER NOT NULL,
+  event_id TEXT NOT NULL, media_index INTEGER NOT NULL DEFAULT 0,  -- NOT NULL: NULLs would never conflict
+  thread_root TEXT, ts INTEGER NOT NULL, kind INTEGER NOT NULL,    -- message | media | file | link
+  body TEXT NOT NULL, searchable TEXT NOT NULL,                    -- searchable: tokeniser output (text, file name, address, sender)
+  UNIQUE (room, event_id, media_index)
+);
+CREATE INDEX event_room ON event(room, ts DESC);
+CREATE INDEX event_kind ON event(kind, ts DESC);
+CREATE INDEX event_time ON event(ts DESC);
+CREATE VIRTUAL TABLE event_fts USING fts5(searchable, content='event', content_rowid='id',
+  tokenize='unicode61 remove_diacritics 2', prefix='2 3');         -- kept in step by GRDB triggers
+CREATE TABLE coverage (
+  room INTEGER PRIMARY KEY, oldest_event_id TEXT, reached_start INTEGER NOT NULL DEFAULT 0,
+  state INTEGER NOT NULL, updated_at INTEGER NOT NULL              -- gaps of the live lane are rows of `gap`
+);
+CREATE TABLE gap     (room INTEGER NOT NULL, newer_event_id TEXT NOT NULL, PRIMARY KEY (room, newer_event_id));
+CREATE TABLE pending (room INTEGER NOT NULL, event_id TEXT NOT NULL, PRIMARY KEY (room, event_id));  -- no key yet
+```
+One file per account. Nothing here decides what is read, unread or shown in a timeline (AGENTS §4.1).
+
 ## 4. Account data owned by Halo (synced via the homeserver)
 
 | Type | Content | Spec |

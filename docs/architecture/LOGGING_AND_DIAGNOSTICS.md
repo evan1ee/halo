@@ -25,13 +25,32 @@
 
 ## 3. Diagnostics export
 Settings → Diagnostics → "Export": a zip with app/SDK logs, audit events, DB schema version, sync state,
-anonymised room snapshots (hashed ids, counts only). Shared through the share sheet; never uploaded automatically.
+anonymised room snapshots (hashed ids, counts only), and the stored MetricKit payloads (`metrickit/`, §4). Shared through the share sheet; never uploaded automatically.
 
 ## 4. Crash reporting
 - **[DECISION D59]** No third-party crash SDK in the personal phase. Use Xcode Organizer / TestFlight crash reports
   and MetricKit (`MXMetricManager`) payloads saved to the diagnostics folder.
-- Decided for the public release too (D114). **Status (2026-11-25): MetricKit isn't wired** (ROADMAP M17-2).
+- Decided for the public release too (D114).
+- **Built (M17-2):** `MetricKitRecorder` (HaloPlatform) subscribes at launch in the app; `MetricPayloadStore` keeps each payload's JSON in the app's own
+  `Application Support/diagnostics/metrickit` (not the App Group, excluded from backups, `completeUntilFirstUserAuthentication`): at most 30 days, 40
+  payloads, 2 MB, 512 KB each. They describe the device and app, not the account, so signing out keeps them.
+- **Privacy:** call stacks hold binary names and offsets only. An Objective-C exception's message, format string and arguments may quote app data and are
+  dropped (its type and name stay); anything shaped like a Matrix identifier or a link is blanked. Tested in `MetricPayloadStoreTests`.
 
 ## 5. Metrics (local only)
-Signposts (`OSSignposter`) for: cold start → room list, room open → first timeline frame, NSE duration, sync
-round trip, image decode. **Status (2026-11-25): none exist yet** (ROADMAP M17-1). Used with Instruments; performance tests read them ([../testing/TEST_STRATEGY.md](../testing/TEST_STRATEGY.md) §7).
+`HaloSignpost` (HaloFoundation) over `OSSignposter`, subsystem `one.mbm.halo`, category `performance` in every build and process; also in Release, where
+the budgets are measured. Only the name is recorded: no identifiers, sizes or content. A path that didn't happen is dropped, not ended.
+
+| Interval | From | To | Recorded by |
+|---|---|---|---|
+| `cold-start` | first line of `HaloApp.init` | the room list has rows | app; not for prewarmed, background or signed-out launches |
+| `room-open` | the room is put on the navigation path | its rows are visible at the newest message (a frame before they are on screen) | `TimelineView` |
+| `sync-catch-up` | before an immediate `/sync` (`timeoutMs` 0) | the SDK has processed and stored the response | `MatrixSessionPort` |
+| `sync-long-poll` | before a long-poll `/sync` | as above; includes the server's waiting time | `MatrixSessionPort` |
+| `image-decode` | before decoding one image or animation | decoded | `StickerImage` (thumbnails, stickers, GIFs); the plain `UIImage(data:)` sites follow with M19-1 |
+| `main-thread-hang` | a main run-loop turn begins | it ended after 250 ms or more | `MainThreadHangs`, only when launched with `-HaloMeasureHangs YES` (performance suite) |
+| `notification-service` | the extension got the push | the notification was handed to iOS | `NotificationService` |
+
+XCTest reads them with `XCTOSSignpostMetric`: `HaloSignpostMetricTests` (every interval), `ImageDecodeSignpostTests`, and
+`HaloUITests.testPerformanceSignpostsAreRecorded` (launch, sync and room open in the running app). `OSLogStore` can't: signposts aren't persisted.
+Used with Instruments and by the performance suite ([../testing/TEST_STRATEGY.md](../testing/TEST_STRATEGY.md) §7).

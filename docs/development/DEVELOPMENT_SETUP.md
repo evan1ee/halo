@@ -40,7 +40,7 @@ Swift target per module. Responsibilities and allowed dependencies: [../architec
 | Tool | Version | Note |
 |---|---|---|
 | macOS + Xcode | Xcode with the iOS 26 SDK (D25) | Swift 6 language mode |
-| Docker Desktop / Colima | current | `infra/dev` (`infra/test` planned, ROADMAP M17-6) |
+| Docker Desktop / Colima | current | `infra/dev`, `infra/test`, the scale fixture |
 | Swift toolchain on Linux (CI) | same Swift minor as Xcode — `swift:6.2-noble` (Swift 6.2.4) is the floor; local Xcode 27.2 has Swift 6.4.2 and both pass (V-CI-2) | Docker image |
 | Rust (rustup) | ≥ 1.96 (SDK `rust-version`, F-FFI-17 context) | Only for building the SDK from source or `core/` |
 | SwiftLint | pinned in `.swiftlint.yml` comment | Lint |
@@ -77,7 +77,7 @@ types, so it is treated as fixed.
 | Name | Homeserver | Push | Used by |
 |---|---|---|---|
 | local | `infra/dev` on localhost (via the Mac's LAN IP for devices) | Sygnal → APNs sandbox | Development |
-| test (planned, ROADMAP M17-6) | `infra/test` ephemeral | none (pipeline called directly) | CI |
+| test | `infra/test/run.sh`, ephemeral | none (pipeline called directly) | CI |
 | personal | Founder's production Synapse | Sygnal → APNs production | Beta/Release |
 
 ## 5. Local workflow

@@ -1,0 +1,7 @@
+# On top of homeserver.dev.yaml for the scale fixture only (docker-compose.scale.yml).
+app_service_config_files: [/config/appservice.yaml]  # creates members and back-dated messages (scale-fixtures.py)
+presence: {enabled: false}                           # like the large public servers
+media_store_path: /data/media_store
+caches: {global_factor: 2.0}
+rc_joins_per_room: {per_second: 1000, burst_count: 1000}
+rc_invites: {per_room: {per_second: 1000, burst_count: 1000}, per_user: {per_second: 1000, burst_count: 1000}, per_issuer: {per_second: 1000, burst_count: 1000}}

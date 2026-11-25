@@ -776,55 +776,33 @@ final class HaloUITests: XCTestCase {
         if back.waitForExistence(timeout: 3) { back.tap() }
     }
 
+    /// The app's performance signposts (LOGGING_AND_DIAGNOSTICS §5) reach XCTest from a real launch, sync and room open. Values aren't
+    /// judged here: a simulator shows trends only (TEST_STRATEGY §7).
     @MainActor
-    func testLaunchPerformanceMetric() throws {
-        guard ProcessInfo.processInfo.environment["HALO_RUN_PERF_TESTS"] == "1" else {
-            throw XCTSkip("Set HALO_RUN_PERF_TESTS=1 to run XCTApplicationLaunchMetric.")
-        }
-        measure(metrics: [XCTApplicationLaunchMetric(), XCTApplicationLaunchMetric(waitUntilResponsive: true)]) {
-            XCUIApplication().launch()
-        }
-    }
-
-    /// Timeline scroll hitch and memory performance metric (ROADMAP M15, SR-06, NFR-2, AC-UX-11).
-    /// Opt-in via `HALO_RUN_PERF_TESTS=1` so routine `prepush.sh` runs stay fast.
-    @MainActor
-    func testTimelineScrollPerformanceMetric() throws {
-        guard ProcessInfo.processInfo.environment["HALO_RUN_PERF_TESTS"] == "1" else {
-            throw XCTSkip("Set HALO_RUN_PERF_TESTS=1 to run timeline scroll and memory metrics.")
-        }
+    func testPerformanceSignpostsAreRecorded() throws {
         let app = XCUIApplication()
         app.launch()
         dismissFirstRunSheets(app)
+        guard chatsRoot(app).waitForExistence(timeout: 10) else { throw XCTSkip("App is signed out.") }
+        app.terminate()
 
-        // Prefer a large seeded room (S10) when available; otherwise open the first chat.
-        if chatsRoot(app).waitForExistence(timeout: 5) {
-            if app.buttons["focus-show-all"].exists { app.buttons["focus-show-all"].tap() }
-            let s10 = app.collectionViews.firstMatch.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'S10'")).firstMatch
-            if s10.waitForExistence(timeout: 3) {
-                s10.tap()
-                XCTAssertTrue(app.buttons["sticker-button"].waitForExistence(timeout: 8), "Expected timeline composer in S10")
-            } else {
-                try openFirstChat(app)
-            }
-        } else {
-            try openFirstChat(app)
-        }
-
-        let scrollTarget = app.scrollViews.firstMatch.exists ? app.scrollViews.firstMatch : app.collectionViews.firstMatch
-        XCTAssertTrue(scrollTarget.waitForExistence(timeout: 5), "Expected a scrollable timeline")
-
+        let intervals = ["cold-start", "sync-catch-up", "room-open"]
         let options = XCTMeasureOptions()
-        options.iterationCount = 5
-        measure(
-            metrics: [XCTOSSignpostMetric.scrollingAndDecelerationMetric, XCTMemoryMetric(application: app)],
-            options: options
-        ) {
-            scrollTarget.swipeDown(velocity: .fast)
-            scrollTarget.swipeUp(velocity: .fast)
+        options.iterationCount = 1
+        SignpostReader.durations = [:]
+        var opened: (any Error)?
+        measure(metrics: intervals.map { SignpostReader(subsystem: "one.mbm.halo", category: "performance", name: $0) }, options: options) {
+            app.launch()
+            do { try openFirstChat(app) } catch { opened = error }
+            returnToChatList(app)
+            app.terminate()
         }
-
-        returnToChatList(app)
+        if let opened { throw opened }
+        for interval in intervals {
+            let values = SignpostReader.durations[interval] ?? []
+            XCTAssertFalse(values.isEmpty, "no \(interval) interval was recorded")
+            for value in values { XCTAssertTrue((0.001..<30).contains(value), "\(interval) took \(value) s") }
+        }
     }
 
     /// Physical-device D95 check: open S10 (or the first non-gallery room) 10 times; each open must land at the newest
@@ -1143,5 +1121,22 @@ final class HaloUITests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
         print("ICON_BADGE_TRACE \(trace.joined(separator: " "))")
+    }
+}
+
+/// `XCTOSSignpostMetric` that keeps what it measured; `measure` itself doesn't hand the values back. (XCTest copies metrics, hence the static.)
+final class SignpostReader: XCTOSSignpostMetric {
+    /// Seconds by interval name.
+    nonisolated(unsafe) static var durations: [String: [Double]] = [:]
+
+    override func reportMeasurements(
+        from startTime: XCTPerformanceMeasurementTimestamp, to endTime: XCTPerformanceMeasurementTimestamp
+    ) throws -> [XCTPerformanceMeasurement] {
+        let found = try super.reportMeasurements(from: startTime, to: endTime)
+        for measurement in found {
+            let name = measurement.identifier.replacingOccurrences(of: "com.apple.dt.XCTMetric_OSSignpost-", with: "").replacingOccurrences(of: ".duration", with: "")
+            Self.durations[name, default: []].append(measurement.value.value)
+        }
+        return found
     }
 }

@@ -43,7 +43,8 @@ public actor SessionCoordinator {
     /// At most one `port.restore` in flight at a time (R-12): a timeout leaves it tracked so `retryRestore()` awaits
     /// the same call instead of building a second SDK client on the same store, and a late completion adopts cleanly
     /// if the user is still on `.restoreFailed` or is discarded if the user signed out.
-    private var inFlightRestore: (generation: UInt64, session: StoredSession, task: Task<Result<Void, HaloError>, Never>)?
+    /// `applied` ends when the result has been acted on, also for a result that arrives after `start()` gave up waiting.
+    private var inFlightRestore: (generation: UInt64, task: Task<Result<Void, HaloError>, Never>, applied: Task<Void, Never>)?
 
     /// How long looking up a homeserver may take. Without a limit a host that never answers (for example `localhost:8008` over
     /// HTTPS against a plain-HTTP server) leaves the sign-in screen spinning forever.
@@ -232,13 +233,12 @@ public actor SessionCoordinator {
     private func restoreStoredSession() async {
         state = .restoring
         let generation: UInt64
-        let session: StoredSession
         let task: Task<Result<Void, HaloError>, Never>
+        let applied: Task<Void, Never>
         if let existing = inFlightRestore, existing.generation == sessionGeneration {
-            generation = existing.generation
-            session = existing.session
-            task = existing.task
+            (generation, task, applied) = existing
         } else {
+            let session: StoredSession
             do {
                 guard let data = try await keychain.read(.session) else {
                     state = .signedOut(failure: nil)
@@ -260,14 +260,14 @@ public actor SessionCoordinator {
                     return .failure(error)
                 }
             }
-            inFlightRestore = (generation, session, task)
-            Task { [weak self] in
+            applied = Task { [weak self, generation, task] in
                 let result = await task.value
                 await self?.applyRestoreResult(generation: generation, session: session, result: result)
             }
+            inFlightRestore = (generation, task, applied)
         }
-        if let result = await awaitRestore(task, timeout: restoreTimeout) {
-            await applyRestoreResult(generation: generation, session: session, result: result)
+        if await awaitRestore(task, timeout: restoreTimeout) != nil {
+            await applied.value
         } else if inFlightRestore?.generation == generation, sessionGeneration == generation {
             state = .restoreFailed(.network(retryable: true))
         }

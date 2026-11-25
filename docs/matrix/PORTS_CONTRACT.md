@@ -25,6 +25,9 @@ needs, made of Halo value types, and independent of the SDK version underneath.
 | `ProfilePort` | Profiles | `ownProfile`, `setDisplayName`, `setAvatar`, `profile(user)`, `ignore(user)` | Adapter |
 | `AccountDataPort` | Account data | `get(type) -> JSON?`, `set(type, JSON)`, `observe(type)` | Adapter |
 | `EncryptionPort` | E2EE & devices | `statuses() -> AsyncStream<EncryptionStatus>` (verification + recovery state, snapshot), `recover(recoveryKey:)`, `enableRecovery() -> key` — **in code since M1**; `startVerification`, `backupState`, `devices` follow | Adapter |
+| `SearchPort` | Message search | `snapshots()` (latest wins), `setQuery(_:)`, `loadMore()` — **in code since M8** over the SDK's `SearchService`; D123 replaces the implementation and adds the query to every snapshot, coverage, room and kind filters (*not built*) | Adapter (today), HaloApplication over the index (target) |
+| `MessageIndexSourcePort` (*not built*) | Decrypted messages to index | `live()` (stream from the listeners: entries, undecryptable IDs, possible gaps), `history(room, before event, limit)` (from the history client: entries, undecryptable IDs, start reached), `newest(room)`, `current(events)` for the re-check and for late keys | Adapter |
+| `LocalSearchIndexPort` (*not built*) | The index | upsert, remove (event, room, sender), query page, coverage, size, wipe | HaloPersistence |
 | `NotificationFetchPort` | NSE | `notification(room, event) -> FetchedNotification` | Adapter |
 | `PusherPort` | Pushers | `register(token, gateway)`, `unregister()` | Adapter |
 | `ReadIntentStore`, `NotificationRecordStore`, `AuditStore`, `StickerPackCache`, `BotTaskStore` | Halo persistence | CRUD with monotonic guards (sticker favourites/recents are account data via `AccountDataPort`, not a store) | HaloPersistence |

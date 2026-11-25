@@ -88,9 +88,13 @@ let package = Package(
         // Presentation shared layers
         .target(
             name: "HaloDesignSystem",
+            dependencies: [.product(name: "HaloFoundation", package: "HaloCore")],
             resources: [.process("Resources")]
         ),
-        .testTarget(name: "HaloDesignSystemTests", dependencies: ["HaloDesignSystem"]),
+        .testTarget(
+            name: "HaloDesignSystemTests",
+            dependencies: ["HaloDesignSystem", .product(name: "HaloFoundation", package: "HaloCore")]
+        ),
 
         .target(
             name: "HaloBotRendering",

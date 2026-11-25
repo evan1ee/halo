@@ -160,6 +160,20 @@ struct SessionCoordinatorTests {
         #expect(keychain.stored(.session) == nil)
     }
 
+    /// The result of a restore is applied by whichever is first: the waiting `start()` or the task that also serves a restore that came in
+    /// late. `start()` returned early when that task was first and still deleting the session.
+    @Test("start returns only when a revoked session has been forgotten, however long that takes")
+    func hardRevokedSlowKeychain() async throws {
+        for _ in 0..<100 {
+            let (_, port, keychain) = try await signedIn()
+            let session = try JSONDecoder().decode(StoredSession.self, from: try #require(keychain.stored(.session)))
+            port.revoke(session, soft: false)
+            let relaunched = SessionCoordinator(port: port, keychain: SlowDeletingKeychain(wrapped: keychain))
+            await relaunched.start()
+            try #require(await relaunched.state == .signedOut(failure: .unauthorized(soft: false)))
+        }
+    }
+
     @Test("a transient restore error keeps the session")
     func transientRestoreError() async throws {
         let (_, port, keychain) = try await signedIn()
@@ -344,5 +358,16 @@ struct SessionCoordinatorTests {
         await coordinator.completeOAuth(callbackURL: try #require(URL(string: "one.mbm.halo:/oauth/callback?code=xyz")))
         #expect(await coordinator.state == .ready(try UserID("@alice:oidc.halo.localhost")))
         #expect(keychain.stored(.session) != nil)
+    }
+}
+
+private struct SlowDeletingKeychain: KeychainPort {
+    let wrapped: InMemoryKeychain
+
+    func read(_ item: KeychainItem) async throws(HaloError) -> Data? { try await wrapped.read(item) }
+    func write(_ data: Data, for item: KeychainItem) async throws(HaloError) { try await wrapped.write(data, for: item) }
+    func delete(_ item: KeychainItem) async throws(HaloError) {
+        for _ in 0..<50 { await Task.yield() }
+        try await wrapped.delete(item)
     }
 }
