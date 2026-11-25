@@ -27,7 +27,7 @@ struct IdentityContractTests {
         try await SearchStage.wait(60, "the room joined") { (try? await alice.room(room))?.membership() == .joined }
 
         let timeline = try await MatrixTimelinePort(session: alice).open(room: room)
-        var alerts = Alerts(timeline.identityAlerts())
+        let alerts = Alerts(timeline.identityAlerts())
         // First sight of Bob's identity is trusted: nothing to show yet.
         try await Task.sleep(for: .seconds(3))
         #expect(alerts.current.isEmpty)

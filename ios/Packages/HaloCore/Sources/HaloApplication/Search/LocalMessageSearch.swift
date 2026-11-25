@@ -52,7 +52,7 @@ public actor LocalMessageSearch: SearchPort {
         let results = await recheck(found.filter { $0.checkedAt < due }.map { ($0.entry.room, $0.entry.event) })
         if Task.isCancelled { throw .cancelled }
         // Not shown any more either way; a failed write only means asking again.
-        if !results.isEmpty { try? await index.record(results.map { ($0.key.room, $0.key.event, $0.value) }) }
+        if !results.isEmpty { try? await index.record(results.map { ($0.key.room, $0.key.event, $0.value) }) }  // best-effort: the index repairs itself: the next pass redoes what is missing
         return found.compactMap { hit in
             let entry = hit.entry
             var content = entry.content
@@ -88,7 +88,7 @@ public actor LocalMessageSearch: SearchPort {
             }
         }
         let deadline = Task { [timeout = Self.recheckTimeout] in
-            try? await wait(timeout)
+            try? await wait(timeout)  // best-effort: the index repairs itself: the next pass redoes what is missing
             continuation.finish()
         }
         defer { for task in lanes + [deadline] { task.cancel() } }

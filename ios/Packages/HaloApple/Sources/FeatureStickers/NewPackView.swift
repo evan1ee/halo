@@ -72,7 +72,7 @@ public struct NewPackView: View {
         picked = []
         Task {
             for item in items {
-                if let data = try? await item.loadTransferable(type: Data.self) { model.add(data: data, filename: item.itemIdentifier ?? "sticker") }
+                if let data = try? await item.loadTransferable(type: Data.self) { model.add(data: data, filename: item.itemIdentifier ?? "sticker") }  // best-effort: an item the picker can't read is skipped
             }
         }
     }

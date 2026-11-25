@@ -389,7 +389,7 @@ private struct RootView: View {
             NotificationPrimingView(
                 onTurnOn: {
                     notificationPrimingShown = true
-                    if (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) == true {
+                    if (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) == true {  // best-effort: a refusal reads as no; the screen asks the system for the status afterwards
                         UIApplication.shared.registerForRemoteNotifications()
                     }
                     showingNotificationPriming = false
@@ -427,7 +427,7 @@ private struct RootView: View {
                 if case .signedIn = root.auth.screen { await root.shareHandoff.refresh() }
                 UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ["halo.share.ready"])
                 // M16 Focus filter: the system's current filter is the truth; a change missed in the background is caught here.
-                root.focus.chats = (try? await HaloFocusFilter.current)?.chats.domain
+                root.focus.chats = (try? await HaloFocusFilter.current)?.chats.domain  // best-effort: no Focus filter means all chats
                 await root.receipts.flush()
                 await root.renewForeground()
             case .background:

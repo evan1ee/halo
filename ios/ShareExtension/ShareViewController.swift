@@ -154,7 +154,7 @@ final class ShareViewController: UIViewController {
         let request = UNNotificationRequest(
             identifier: readyNotificationID, content: content, trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
         )
-        return (try? await center.add(request)) != nil
+        return (try? await center.add(request)) != nil  // best-effort: the system decides whether the reminder shows; the share itself is already done
     }
 
     private static func message(for error: HaloError) -> String {

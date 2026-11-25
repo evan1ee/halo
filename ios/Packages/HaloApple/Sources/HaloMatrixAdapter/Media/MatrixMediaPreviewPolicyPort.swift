@@ -18,7 +18,7 @@ public final class MatrixMediaPreviewPolicyPort: MediaPreviewPolicyPort {
     public init(session: MatrixSessionPort) { self.session = session }
 
     public func setting() async -> MediaPreviewSetting {
-        guard let client = try? await session.signedInClient() else { return .always }
+        guard let client = try? await session.signedInClient() else { return .always }  // best-effort: a read; the caller falls back to a default and nothing changes
         return await Self.read(client)
     }
 
@@ -37,20 +37,20 @@ public final class MatrixMediaPreviewPolicyPort: MediaPreviewPolicyPort {
     }
 
     public func previewsAllowed(in room: RoomID) async -> Bool {
-        guard let client = try? await session.signedInClient() else { return true }
+        guard let client = try? await session.signedInClient() else { return true }  // best-effort: a read; the caller falls back to a default and nothing changes
         switch await Self.read(client) {
         case .always: return true
         case .never: return false
         case .privateRoomsOnly:
             // Public rooms are the ones to protect; a room whose join rule is unknown counts as public (the careful reading).
-            guard let sdkRoom = try? await session.room(room) else { return false }
+            guard let sdkRoom = try? await session.room(room) else { return false }  // best-effort: a read; the caller falls back to a default and nothing changes
             return sdkRoom.isPublic() == false
         }
     }
 
     private static func read(_ client: Client) async -> MediaPreviewSetting {
         for type in [stableType, unstableType] {
-            guard let json = try? await client.accountData(eventType: type), let value = object(json)?["media_previews"] as? String else { continue }
+            guard let json = try? await client.accountData(eventType: type), let value = object(json)?["media_previews"] as? String else { continue }  // best-effort: a read; the caller falls back to a default and nothing changes
             switch value {
             case "off": return .never
             case "private": return .privateRoomsOnly

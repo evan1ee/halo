@@ -50,12 +50,12 @@ public final class UserProfileViewModel: Identifiable {
     /// Loads the profile avatar thumbnail; `nil` when absent, without a loader, or on failure (the view keeps the initial).
     public func avatarData() async -> Data? {
         guard let avatar, let media else { return nil }
-        return try? await media.thumbnail(avatar, width: 160, height: 160)
+        return try? await media.thumbnail(avatar, width: 160, height: 160)  // best-effort: a picture that can't load shows its placeholder; nothing changes
     }
 
     /// Loads the profile and whether the user is ignored. A profile that can't be fetched still shows the name known from the room.
     public func load() async {
-        let ignored = (try? await profiles.ignoredUsers())?.contains(userID) ?? false
+        let ignored = (try? await profiles.ignoredUsers())?.contains(userID) ?? false  // best-effort: a read or a cache; a miss changes nothing the person sees
         do throws(HaloError) {
             content = .loaded(try await profiles.profile(of: userID), isIgnored: ignored)
         } catch {

@@ -1,5 +1,6 @@
 import Foundation
 import HaloApplication
+import HaloDesignSystem
 import HaloDomain
 import HaloFoundation
 import Observation
@@ -140,7 +141,7 @@ public final class RoomListViewModel {
     /// The avatar's image bytes (a small thumbnail); `nil` when there is no loader or the download failed, so the row keeps its initials.
     public func avatarData(_ ref: MediaRef) async -> Data? {
         guard let media else { return nil }
-        return try? await media.thumbnail(ref, width: 96, height: 96)
+        return try? await media.thumbnail(ref, width: 96, height: 96)  // best-effort: a picture that can't load shows its placeholder; nothing changes
     }
     private var tasks: [Task<Void, Never>] = []
     private var hasStarted = false
@@ -151,6 +152,8 @@ public final class RoomListViewModel {
     public private(set) var actionError: String?
 
     public func dismissActionError() { actionError = nil }
+
+    private let guardTaps = ActionGuard()
 
     /// Restarts the room-list subscription after a failure (ROOM_LIST §9).
     public func retry() async { await rooms.start() }
@@ -181,19 +184,19 @@ public final class RoomListViewModel {
     public func markRead(_ room: RoomID) async {
         guard let receipts else { return }
         let latest = await rooms.rooms.first { $0.id == room }?.latestEvent?.timestamp
-        await perform { () async throws(HaloError) in try await receipts.markRoomRead(room, latestEventTime: latest) }
+        await perform("read:\(room.rawValue)") { () async throws(HaloError) in try await receipts.markRoomRead(room, latestEventTime: latest) }
     }
 
     /// "Mark as unread" (swipe, ROOM_LIST FR-6).
     public func markUnread(_ room: RoomID) async {
         guard let receipts else { return }
-        await perform { () async throws(HaloError) in try await receipts.markRoomUnread(room) }
+        await perform("unread:\(room.rawValue)") { () async throws(HaloError) in try await receipts.markRoomUnread(room) }
     }
 
     /// Accepts an invitation (ROOM_MANAGEMENT FR-6); the room then arrives as joined with the next sync.
     public func acceptInvite(_ room: RoomID) async {
         guard let actions else { return }
-        await perform { () async throws(HaloError) in try await actions.acceptInvite(room) }
+        await perform("accept:\(room.rawValue)") { () async throws(HaloError) in try await actions.acceptInvite(room) }
     }
 
     /// What the user has asked to see of invitations, by room (ROOM_MANAGEMENT FR-6).
@@ -213,23 +216,26 @@ public final class RoomListViewModel {
     /// Declines an invitation.
     public func declineInvite(_ room: RoomID) async {
         guard let actions else { return }
-        await perform { () async throws(HaloError) in try await actions.declineInvite(room) }
+        await perform("decline:\(room.rawValue)") { () async throws(HaloError) in try await actions.declineInvite(room) }
     }
 
     /// Swipe: add or remove a favourite (ROOM_LIST FR-6).
     public func toggleFavourite(_ row: Row) async {
         guard let actions else { return }
-        await perform { () async throws(HaloError) in try await actions.setFavourite(!row.isFavourite, in: row.id) }
+        await perform("favourite:\(row.id.rawValue)") { () async throws(HaloError) in try await actions.setFavourite(!row.isFavourite, in: row.id) }
     }
 
     /// Swipe: mute, or back to all messages when already muted (ROOM_LIST FR-6).
     public func toggleMute(_ row: Row) async {
         guard let actions else { return }
-        await perform { () async throws(HaloError) in try await actions.setNotificationMode(row.isMuted ? .allMessages : .mute, in: row.id) }
+        await perform("mute:\(row.id.rawValue)") { () async throws(HaloError) in try await actions.setNotificationMode(row.isMuted ? .allMessages : .mute, in: row.id) }
     }
 
-    private func perform(_ action: () async throws(HaloError) -> Void) async {
-        do { try await action(); actionError = nil } catch { actionError = "That didn't work. Try again." }
+    /// Runs one change to a room; a second tap on the same one while it runs does nothing (AC-REL-4), and a failure is said.
+    private func perform(_ key: String, _ action: () async throws(HaloError) -> Void) async {
+        await guardTaps.run(key) {
+            do { try await action(); actionError = nil } catch { actionError = "That didn't work. Try again." }
+        }
     }
 
     isolated deinit { tasks.forEach { $0.cancel() } }

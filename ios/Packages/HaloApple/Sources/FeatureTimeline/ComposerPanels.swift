@@ -308,7 +308,7 @@ private struct GalleryTab: View {
         for (index, item) in new.enumerated() {
             let id = item.itemIdentifier ?? "item-\(index)"
             guard !attached.contains(id) else { continue }
-            guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
+            guard let data = try? await item.loadTransferable(type: Data.self) else { continue }  // best-effort: an item the picker can't read is skipped
             let before = model.pendingPhotos.count
             await model.attachPhoto(data: data, filename: id.components(separatedBy: "/").first ?? "photo")
             if model.pendingPhotos.count > before { attached.append(id) }

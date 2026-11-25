@@ -20,7 +20,7 @@ public final class MatrixRoomPort: RoomPort {
         } catch { throw ErrorMapper.map(error) }
         // Permissions: unknown power levels mean "no" (the server still has the last word).
         var canEdit = false, canInvite = false
-        if let levels = try? await room.getPowerLevels(), let own = try? await session.ownUserID() {
+        if let levels = try? await room.getPowerLevels(), let own = try? await session.ownUserID() {  // best-effort: a read; the caller falls back to a default and nothing changes
             canEdit = (try? levels.canUserSendState(userId: own, stateEvent: .roomName)) == true && (try? levels.canUserSendState(userId: own, stateEvent: .roomTopic)) == true
             canInvite = (try? levels.canUserInvite(userId: own)) == true
         }
@@ -131,7 +131,7 @@ public final class MatrixRoomPort: RoomPort {
             // Paginate backwards until we have enough media items or reach the start of the room (bounded to 5 pages).
             let paginateTask = Task {
                 for _ in 0..<5 {
-                    let reachedStart = (try? await timeline.paginateBackwards(numEvents: 40)) ?? true
+                    let reachedStart = (try? await timeline.paginateBackwards(numEvents: 40)) ?? true  // best-effort: a read; the caller falls back to a default and nothing changes
                     if reachedStart { break }
                 }
                 continuation.finish()
@@ -180,7 +180,7 @@ public final class MatrixRoomPort: RoomPort {
 
             let paginateTask = Task {
                 for _ in 0..<10 {
-                    let reachedStart = (try? await timeline.paginateBackwards(numEvents: 50)) ?? true
+                    let reachedStart = (try? await timeline.paginateBackwards(numEvents: 50)) ?? true  // best-effort: a read; the caller falls back to a default and nothing changes
                     if reachedStart { break }
                 }
                 continuation.finish()

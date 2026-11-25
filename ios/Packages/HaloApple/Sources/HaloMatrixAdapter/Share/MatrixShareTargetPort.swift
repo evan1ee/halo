@@ -14,7 +14,7 @@ public final class MatrixShareTargetPort: ShareTargetPort {
         let client = try await session.signedInClient()
         var targets: [ShareTarget] = []
         for room in client.rooms() where room.membership() == .joined {
-            guard let info = try? await room.roomInfo(), !info.isSpace, info.successorRoom == nil else { continue }
+            guard let info = try? await room.roomInfo(), !info.isSpace, info.successorRoom == nil else { continue }  // best-effort: a read; the caller falls back to a default and nothing changes
             let name = (info.displayName ?? room.displayName() ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty, let id = try? RoomID(room.id()) else { continue }
             let latest = MatrixRoomListPort.latestEvent(await room.latestEvent())

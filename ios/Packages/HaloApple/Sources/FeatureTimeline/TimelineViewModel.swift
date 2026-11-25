@@ -1,6 +1,7 @@
 import Foundation
 import HaloApplication
 import HaloBotRendering
+import HaloDesignSystem
 import HaloDomain
 import HaloFoundation
 import Observation
@@ -146,7 +147,7 @@ public final class TimelineViewModel {
         guard !membersRequested else { return }
         membersRequested = true
         Task {
-            if let loaded = try? await coordinator.members() { members = loaded } else { membersRequested = false }
+            if let loaded = try? await coordinator.members() { members = loaded } else { membersRequested = false }  // best-effort: a read or a cache; a miss changes nothing the person sees
         }
     }
 
@@ -188,6 +189,8 @@ public final class TimelineViewModel {
     var senderNames: [UserID: String] = [:]
     public internal(set) var isSending = false
     public internal(set) var sendError: String?
+    /// Double-tap protection for changes to messages (AC-REL-4).
+    let actions = ActionGuard()
     /// The own message being edited, or `nil` when the composer writes a new message.
     public internal(set) var editing: EventID?
     /// The message an emoji is being picked for, or `nil` when the picker is closed.

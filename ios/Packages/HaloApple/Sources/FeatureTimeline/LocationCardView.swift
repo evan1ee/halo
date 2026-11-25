@@ -97,7 +97,7 @@ struct LocationCardView: View {
         options.size = snapshotSize
         options.traitCollection = UITraitCollection(userInterfaceStyle: colorScheme == .dark ? .dark : .light)
         let snapshotter = MKMapSnapshotter(options: options)
-        return try? await snapshotter.start().image
+        return try? await snapshotter.start().image  // best-effort: a picture that can't load shows its placeholder; nothing changes
     }
 }
 

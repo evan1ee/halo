@@ -66,7 +66,7 @@ extension AppRoot {
         content.body = body
         content.threadIdentifier = room.rawValue
         content.userInfo = ["room_id": room.rawValue]
-        try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+        try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))  // best-effort: a failed local notice about a failed reply is dropped; the reply failure is already reported
     }
 
     private func clearDelivered(for room: RoomID) async {

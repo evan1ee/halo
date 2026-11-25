@@ -77,7 +77,7 @@ public final class MatrixMessageIndexSource: MessageIndexSourcePort {
     }
 
     private func follow(_ rooms: [RoomID], polls: Set<RoomID>) async {
-        guard let client = try? await session.signedInClient() else { return }
+        guard let client = try? await session.signedInClient() else { return }  // best-effort: a read; the caller falls back to a default and nothing changes
         let followed = state.withLock { $0.client === client ? Array($0.handles.keys) : [] }
         let leftRooms = followed.filter { (try? client.getRoom(roomId: $0.rawValue))?.membership() != .joined }
         let (missing, missingPolls, gone) = state.withLock { state -> ([RoomID], Set<RoomID>, [TaskHandle]) in
@@ -114,13 +114,13 @@ public final class MatrixMessageIndexSource: MessageIndexSourcePort {
     }
 
     public func joinedRooms() async -> Set<RoomID>? {
-        guard let client = try? await session.signedInClient() else { return nil }
+        guard let client = try? await session.signedInClient() else { return nil }  // best-effort: a read; the caller falls back to a default and nothing changes
         return Set(client.rooms().filter { $0.membership() == .joined }.compactMap { try? RoomID($0.id()) })
     }
 
     /// All joined rooms the store knows, before the room list is ready and before the first sync of a run.
     public func followKnownRooms() async {
-        guard let client = try? await session.signedInClient() else { return }
+        guard let client = try? await session.signedInClient() else { return }  // best-effort: a read; the caller falls back to a default and nothing changes
         let joined = client.rooms().filter { $0.membership() == .joined }.compactMap { try? RoomID($0.id()) }
         // Without an order nobody knows which are recent: polls wait for `follow`.
         await follow(joined, polls: [])
@@ -184,7 +184,7 @@ public final class MatrixMessageIndexSource: MessageIndexSourcePort {
         case .encrypted: return .undecryptable(event.room, event.event)
         case .redaction:
             // Older room versions keep the deleted event's ID outside the content, where only the typed event has it.
-            guard let room = try? await session.room(event.room), let full = try? await room.loadOrFetchEvent(eventId: event.event.rawValue),
+            guard let room = try? await session.room(event.room), let full = try? await room.loadOrFetchEvent(eventId: event.event.rawValue),  // best-effort: a read; the caller falls back to a default and nothing changes
                   case .messageLike(.roomRedaction(let target, _)) = try? full.content(), let target, let id = try? EventID(target) else { return nil }
             return .removed(event.room, id)
         case .message, .poll:
@@ -199,7 +199,7 @@ public final class MatrixMessageIndexSource: MessageIndexSourcePort {
 
     private func name(of user: String, in id: RoomID) async -> String? {
         if let known = state.withLock({ $0.names[id]?[user] }) { return known }
-        guard let room = try? await session.room(id), let name = try? await room.memberDisplayName(userId: user) else { return nil }
+        guard let room = try? await session.room(id), let name = try? await room.memberDisplayName(userId: user) else { return nil }  // best-effort: a read; the caller falls back to a default and nothing changes
         state.withLock { $0.names[id, default: [:]][user] = name }
         return name
     }
@@ -253,7 +253,7 @@ public final class MatrixMessageIndexSource: MessageIndexSourcePort {
         do {
             guard let room = try client.getRoom(roomId: id.rawValue) else { throw HaloError.notFound }
             // Keys of older messages come from the backup, after the decryption failed; without a backup there is nothing to wait for.
-            let waits = (try? await session.encryption().backupState()) == .enabled
+            let waits = (try? await session.encryption().backupState()) == .enabled  // best-effort: a read; the caller falls back to a default and nothing changes
             return try await read(room, id, from: event, pages: pages, waitsForKeys: waits)
         } catch { throw ErrorMapper.map(error) }
     }

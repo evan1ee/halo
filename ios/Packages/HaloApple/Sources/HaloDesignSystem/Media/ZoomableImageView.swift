@@ -127,7 +127,7 @@ public struct ZoomableImageView: UIViewRepresentable {
             analysisTask = Task { [weak interaction] in
                 let analyzer = ImageAnalyzer()
                 let configuration = ImageAnalyzer.Configuration([.text, .machineReadableCode, .visualLookUp])
-                guard let analysis = try? await analyzer.analyze(image, configuration: configuration),
+                guard let analysis = try? await analyzer.analyze(image, configuration: configuration),  // best-effort: a picture that can't load shows its placeholder; nothing changes
                       !Task.isCancelled else { return }
                 interaction?.analysis = analysis
             }

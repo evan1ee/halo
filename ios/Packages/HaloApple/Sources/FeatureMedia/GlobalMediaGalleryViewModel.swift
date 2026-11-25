@@ -212,12 +212,12 @@ public final class GlobalMediaGalleryViewModel: Identifiable {
 
     public func thumbnailData(_ ref: MediaRef, size: Int = 240) async -> Data? {
         guard let media else { return nil }
-        return try? await media.thumbnail(ref, width: size, height: size)
+        return try? await media.thumbnail(ref, width: size, height: size)  // best-effort: a picture that can't load shows its placeholder; nothing changes
     }
 
     public func fullImageData(_ ref: MediaRef) async -> Data? {
         guard let media else { return nil }
-        return try? await media.content(ref)
+        return try? await media.content(ref)  // best-effort: a picture that can't load shows its placeholder; nothing changes
     }
 
     /// Downloads full bytes of a gallery item to a temporary file so the user can share/export it.

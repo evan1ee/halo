@@ -148,14 +148,14 @@ public final class StickerPanelViewModel {
 
     public func thumbnail(for sticker: Sticker) async -> Data? {
         guard let media, let image = sticker.image else { return nil }
-        return try? await media.thumbnail(image, width: 256, height: 256)
+        return try? await media.thumbnail(image, width: 256, height: 256)  // best-effort: a picture that can't load shows its placeholder; nothing changes
     }
 
     /// The full image for the long-press preview (it may be animated); the thumbnail when it can't be loaded.
     public func previewContent(for sticker: Sticker) async -> Data? {
         guard let media, let image = sticker.image else { return nil }
-        if let full = try? await media.content(image) { return full }
-        return try? await media.thumbnail(image, width: 256, height: 256)
+        if let full = try? await media.content(image) { return full }  // best-effort: a picture that can't load shows its placeholder; nothing changes
+        return try? await media.thumbnail(image, width: 256, height: 256)  // best-effort: a picture that can't load shows its placeholder; nothing changes
     }
 
     /// Largest file the grid plays by itself.
@@ -175,7 +175,7 @@ public final class StickerPanelViewModel {
     public func animatedContent(for sticker: Sticker, cell: UUID = UUID()) async -> Data? {
         guard activeAnimations.contains(cell) || activeAnimations.count < Self.maxSimultaneousAnimations else { return nil }
         guard let media, let image = sticker.image, (sticker.info?.size ?? 0) <= Self.autoplayLimit else { return nil }
-        guard let full = try? await media.content(image), !Task.isCancelled,
+        guard let full = try? await media.content(image), !Task.isCancelled,  // best-effort: a picture that can't load shows its placeholder; nothing changes
               full.count <= Self.autoplayLimit, Self.isAnimated(full) else { return nil }
         guard activeAnimations.contains(cell) || activeAnimations.count < Self.maxSimultaneousAnimations else { return nil }
         activeAnimations.insert(cell)

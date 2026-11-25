@@ -155,8 +155,8 @@ extension AppRoot {
         ]
         lines.append("Bot messages shown as plain text (no template matched), this launch: \(unrecognisedBots.count)")
         if let auditPort {
-            let events = (try? await auditPort.all().count).map(String.init) ?? "unavailable"
-            let unexplained = (try? await auditPort.unexplainedCount()).map(String.init) ?? "unavailable"
+            let events = (try? await auditPort.all().count).map(String.init) ?? "unavailable"  // best-effort: the closure's nil or false is the failure the Settings screen shows
+            let unexplained = (try? await auditPort.unexplainedCount()).map(String.init) ?? "unavailable"  // best-effort: the closure's nil or false is the failure the Settings screen shows
             lines.append("Read-state audit: \(events) events, \(unexplained) unexplained")
         } else {
             lines.append("Read-state audit: off in this build")
@@ -175,7 +175,7 @@ extension AppRoot {
         let reportText = await diagnosticsReport()
         let logLines = ringLog.snapshot().joined(separator: "\n") + "\n"
         var auditLines: [String] = []
-        if let events = try? await auditPort?.all() {
+        if let events = try? await auditPort?.all() {  // best-effort: the closure's nil or false is the failure the Settings screen shows
             let formatter = ISO8601DateFormatter()
             for event in events {
                 auditLines.append(
@@ -236,7 +236,7 @@ extension AppRoot {
 
     func unexplainedAuditCount() async -> Int? {
         guard let auditPort else { return nil }
-        return try? await auditPort.unexplainedCount()
+        return try? await auditPort.unexplainedCount()  // best-effort: the closure's nil or false is the failure the Settings screen shows
     }
 
     func reconcileNow() async {
@@ -282,7 +282,7 @@ extension AppRoot {
         @Sendable func kind(_ target: NotificationDefaultTarget) -> NotificationDefaultKind { target == .directChats ? .directChats : .groupChats }
         return NotificationDefaultsActions(
             load: { target in
-                switch try? await port.mode(for: kind(target)) {
+                switch try? await port.mode(for: kind(target)) {  // best-effort: the closure's nil or false is the failure the Settings screen shows
                 case .allMessages: .allMessages
                 case .mentionsAndKeywords: .mentionsAndKeywords
                 case .mute, nil: nil
@@ -292,7 +292,7 @@ extension AppRoot {
                 do { try await port.setMode(choice == .allMessages ? .allMessages : .mentionsAndKeywords, for: kind(target)) } catch { return false }
                 return true
             },
-            loadMention: { target in try? await port.isMentionEnabled(target == .user ? .user : .room) },
+            loadMention: { target in try? await port.isMentionEnabled(target == .user ? .user : .room) },  // best-effort: the closure's nil or false is the failure the Settings screen shows
             saveMention: { target, enabled in
                 do { try await port.setMention(target == .user ? .user : .room, enabled: enabled) } catch { return false }
                 return true
@@ -320,7 +320,7 @@ extension AppRoot {
     func deviceSettings() -> DevicesSettingsActions {
         let port = devicesPort
         return DevicesSettingsActions(load: {
-            guard let devices = try? await port.devices() else { return nil }
+            guard let devices = try? await port.devices() else { return nil }  // best-effort: the closure's nil or false is the failure the Settings screen shows
             return devices.map { .init(id: $0.id, name: $0.displayName ?? $0.id, lastSeen: $0.lastSeen, isCurrent: $0.isCurrent) }
         })
     }
@@ -365,23 +365,23 @@ extension AppRoot {
         let media = media
         let rooms = roomCoordinator
         return ProfileSettingsActions(
-            loadName: { try? await port.ownDisplayName() },
-            saveName: { name in (try? await port.setOwnDisplayName(name)) != nil },
-            loadIgnored: { (try? await port.ignoredUsers())?.map(\.rawValue) },
+            loadName: { try? await port.ownDisplayName() },  // best-effort: the closure's nil or false is the failure the Settings screen shows
+            saveName: { name in (try? await port.setOwnDisplayName(name)) != nil },  // best-effort: the closure's nil or false is the failure the Settings screen shows
+            loadIgnored: { (try? await port.ignoredUsers())?.map(\.rawValue) },  // best-effort: the closure's nil or false is the failure the Settings screen shows
             unignore: { raw in
-                guard let user = try? UserID(raw), (try? await port.unignore(user)) != nil else { return false }
+                guard let user = try? UserID(raw), (try? await port.unignore(user)) != nil else { return false }  // best-effort: the closure's nil or false is the failure the Settings screen shows
                 await rooms.refreshIgnoredUsers()
                 return true
             },
             loadAvatar: {
-                guard let ref = try? await port.ownAvatar() else { return nil }
-                return try? await media.thumbnail(ref, width: 256, height: 256)
+                guard let ref = try? await port.ownAvatar() else { return nil }  // best-effort: the closure's nil or false is the failure the Settings screen shows
+                return try? await media.thumbnail(ref, width: 256, height: 256)  // best-effort: a picture that can't load shows its placeholder; nothing changes
             },
             setAvatar: { data in
                 guard let image = try? ImagePreparer(maximumDimension: 512).prepare(data: data, filename: "avatar") else { return false }
-                return (try? await port.setOwnAvatar(mimeType: image.mimeType, data: image.data)) != nil
+                return (try? await port.setOwnAvatar(mimeType: image.mimeType, data: image.data)) != nil  // best-effort: the closure's nil or false is the failure the Settings screen shows
             },
-            removeAvatar: { (try? await port.removeOwnAvatar()) != nil },
+            removeAvatar: { (try? await port.removeOwnAvatar()) != nil },  // best-effort: the closure's nil or false is the failure the Settings screen shows
             userID: signedInUser?.rawValue
         )
     }

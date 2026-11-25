@@ -41,11 +41,9 @@ public final class WebAuthSessionPresenter: NSObject, ASWebAuthenticationPresent
     }
 
     public func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        // `authenticate` only starts a session after it found an anchor, so this is set whenever the system asks.
-        guard let anchor = activeAnchor ?? Self.currentAnchor() else {
-            preconditionFailure("ASWebAuthenticationSession asked for an anchor with no window scene")
-        }
-        return anchor
+        // `authenticate` only starts a session after it found an anchor, so this is set whenever the system asks. If the scene is
+        // gone anyway, an empty window is better than ending the app (AC-REL-4): the sign-in then fails and says so.
+        activeAnchor ?? Self.currentAnchor() ?? ASPresentationAnchor()
     }
 
     /// The key window of a connected scene, else a new window on the first scene (`UIWindow(frame:)` is deprecated in iOS 26).

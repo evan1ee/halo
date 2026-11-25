@@ -66,7 +66,7 @@ final class MessageSearchEngine {
         self.store = store
         self.indexer = indexer
         port.set(LocalMessageSearch(
-            index: store, source: source, joined: { Set(await joined()) }, ignored: { Set((try? await profiles.ignoredUsers()) ?? []) }))
+            index: store, source: source, joined: { Set(await joined()) }, ignored: { Set((try? await profiles.ignoredUsers()) ?? []) }))  // best-effort: a failed read means none ignored, or a failed rebuild is reported as false
         await indexer.begin()
         await gate.open()
         let statuses = await indexer.statuses(), lists = await rooms.summaryChanges(), keys = await encryption.snapshots()
@@ -194,7 +194,7 @@ final class MessageSearchEngine {
 
     func rebuild() async -> Bool {
         guard let indexer else { return false }
-        return (try? await indexer.rebuild()) != nil
+        return (try? await indexer.rebuild()) != nil  // best-effort: a failed read means none ignored, or a failed rebuild is reported as false
     }
 }
 

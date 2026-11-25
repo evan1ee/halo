@@ -40,7 +40,7 @@ public final class SearchIndexStore: LocalSearchIndexPort {
 
     /// The phone is about to lock: nothing may touch the file until `resume`. Keeps what is to be read next for a processing task.
     public func suspend(rooms: [RoomID]) async {
-        if let holding, let work = try? await nextWork(rooms: rooms, limit: SearchHoldingFile.plannedWork) { holding.save(plan: work) }
+        if let holding, let work = try? await nextWork(rooms: rooms, limit: SearchHoldingFile.plannedWork) { holding.save(plan: work) }  // best-effort: the index repairs itself: the next pass redoes what is missing
         let pool = state.withLock { state in
             state.suspended = true
             defer { state.pool = nil }
@@ -53,7 +53,7 @@ public final class SearchIndexStore: LocalSearchIndexPort {
     /// The phone was unlocked: opens the file and applies what was held meanwhile.
     public func resume() async {
         state.withLock { $0.suspended = false }
-        _ = try? await database()
+        _ = try? await database()  // best-effort: the index repairs itself: the next pass redoes what is missing
     }
 
     /// Deletes the index and the holding file of every account (sign-out, revocation; AC-SRCH-8).

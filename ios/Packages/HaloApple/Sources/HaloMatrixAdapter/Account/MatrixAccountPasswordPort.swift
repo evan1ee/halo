@@ -16,7 +16,7 @@ public final class MatrixAccountPasswordPort: AccountPasswordPort {
     }
 
     public func canChangePassword() async -> Bool {
-        guard let client = try? await session.signedInClient(), let sdkSession = try? client.session() else { return false }
+        guard let client = try? await session.signedInClient(), let sdkSession = try? client.session() else { return false }  // best-effort: a read; the caller falls back to a default and nothing changes
         return sdkSession.oauthData == nil
     }
 

@@ -427,7 +427,7 @@ extension TimelineViewModel {
     /// A KLIPY file for a message, loaded directly from KLIPY (memory cache only).
     public func klipyMedia(_ url: URL) async -> Data? {
         guard showsKlipyMedia, let klipy else { return nil }
-        return try? await klipy.media(url)
+        return try? await klipy.media(url)  // best-effort: a picture that can't load shows its placeholder; nothing changes
     }
 
     /// The emoji panel's delete key: removes the last character (a whole emoji, flags and families included).
@@ -439,7 +439,7 @@ extension TimelineViewModel {
     /// Reacts to a confirmed message, or removes the user's reaction.
     public func toggleReaction(on row: TimelineRow, key: String) async {
         guard let id = row.eventID else { return }
-        await perform { try await coordinator.toggleReaction(on: id, key: key) }
+        await perform("react:\(id.rawValue):\(key)") { try await coordinator.toggleReaction(on: id, key: key) }
     }
 
     /// Opens the emoji picker for a confirmed message.
@@ -470,25 +470,25 @@ extension TimelineViewModel {
     /// Deletes the user's own confirmed message.
     public func delete(_ row: TimelineRow) async {
         guard let id = row.eventID, row.isOwn else { return }
-        await perform { try await coordinator.delete(event: id) }
+        await perform("delete:\(id.rawValue)") { try await coordinator.delete(event: id) }
     }
 
     /// Sends a message that failed again.
     public func retry(_ row: TimelineRow) async {
         guard let id = row.failedLocalID else { return }
-        await perform { try await coordinator.retrySend(localID: id) }
+        await perform("retry:\(id)") { try await coordinator.retrySend(localID: id) }
     }
 
     /// Sends a message again after the person accepted the encryption risk that stopped it (AC-SEC-2).
     public func sendAnyway(_ row: TimelineRow) async {
         guard let id = row.failedLocalID, row.canSendAnyway else { return }
-        await perform { try await coordinator.sendAnyway(localID: id) }
+        await perform("sendAnyway:\(id)") { try await coordinator.sendAnyway(localID: id) }
     }
 
     /// Deletes a message that failed to send, so it never goes out.
     public func discard(_ row: TimelineRow) async {
         guard let id = row.failedLocalID else { return }
-        await perform { try await coordinator.abortSend(localID: id) }
+        await perform("abort:\(id)") { try await coordinator.abortSend(localID: id) }
     }
 
     /// Loads an own, confirmed text message into the composer for editing.
@@ -515,9 +515,12 @@ extension TimelineViewModel {
         stashedDraft = ""
     }
 
-    func perform(_ action: () async throws -> Void) async {
-        do { try await action() } catch {
-            sendError = (error as? HaloError) == .forbidden ? "You can only change your own messages." : "That didn't work. Try again."
+    /// Runs one change to a message; a second tap on the same one while it runs does nothing (AC-REL-4), and a failure is said.
+    func perform(_ key: String, _ action: () async throws -> Void) async {
+        await actions.run(key) {
+            do { try await action() } catch {
+                sendError = (error as? HaloError) == .forbidden ? "You can only change your own messages." : "That didn't work. Try again."
+            }
         }
     }
 
@@ -530,7 +533,7 @@ extension TimelineViewModel {
     /// A sender's profile picture, small; `nil` if it can't be loaded (the view keeps the initial).
     public func avatarData(_ ref: MediaRef) async -> Data? {
         guard let media else { return nil }
-        return try? await media.thumbnail(ref, width: 64, height: 64)
+        return try? await media.thumbnail(ref, width: 64, height: 64)  // best-effort: a picture that can't load shows its placeholder; nothing changes
     }
 
     /// Largest sticker file the timeline plays by itself (STICKERS FR-8/FR-9; the same limit as the panel).
@@ -539,14 +542,14 @@ extension TimelineViewModel {
     /// The full file of a sticker, so an animated one can play; `nil` when it can't be loaded or is too large to autoplay.
     /// The view decides whether it is animated and whether motion is allowed.
     public func stickerContent(for image: TimelineRow.Image) async -> Data? {
-        guard let media, let full = try? await media.content(image.ref), full.count <= Self.stickerAutoplayLimit else { return nil }
+        guard let media, let full = try? await media.content(image.ref), full.count <= Self.stickerAutoplayLimit else { return nil }  // best-effort: a picture that can't load shows its placeholder; nothing changes
         return full
     }
 
     /// Thumbnail bytes for an image row, or `nil` if it can't be loaded (the row then shows a placeholder).
     public func thumbnail(for image: TimelineRow.Image) async -> Data? {
         if let known = thumbnailMemory.data(for: image.ref) { return known }
-        guard let media, let loaded = try? await media.thumbnail(image.ref, width: 600, height: 600) else { return nil }
+        guard let media, let loaded = try? await media.thumbnail(image.ref, width: 600, height: 600) else { return nil }  // best-effort: a picture that can't load shows its placeholder; nothing changes
         thumbnailMemory.store(loaded, for: image.ref)
         return loaded
     }
@@ -582,8 +585,8 @@ extension TimelineViewModel {
     /// Full-resolution bytes for the full-screen photo viewer, falling back to thumbnail if full download fails.
     public func fullImageData(for image: TimelineRow.Image) async -> Data? {
         guard let media else { return nil }
-        if let full = try? await media.content(image.ref) { return full }
-        return try? await media.thumbnail(image.ref, width: 1200, height: 1200)
+        if let full = try? await media.content(image.ref) { return full }  // best-effort: a picture that can't load shows its placeholder; nothing changes
+        return try? await media.thumbnail(image.ref, width: 1200, height: 1200)  // best-effort: a picture that can't load shows its placeholder; nothing changes
     }
 
     /// Exports a photo from the full-screen viewer to a temporary file for ShareLink / Save Image.

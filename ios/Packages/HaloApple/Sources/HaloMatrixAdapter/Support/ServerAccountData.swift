@@ -41,7 +41,7 @@ struct ClientServerGET: Sendable {
         case 200: return data
         case 404: return nil
         case 401 where !retried:
-            _ = try? await client.getProfile(userId: sdkSession.userId)  // a network request of the SDK refreshes an expired token
+            _ = try? await client.getProfile(userId: sdkSession.userId)  // a network request of the SDK refreshes an expired token  // best-effort: a read; the caller falls back to a default and nothing changes
             return try await get(client, path, query: query, retried: true)
         case 403: throw Forbidden()
         default: throw URLError(.badServerResponse)

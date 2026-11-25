@@ -182,7 +182,7 @@ public struct StickerLibraryView: View {
     private func importPicked(_ items: [PhotosPickerItem], into ref: PackRef) async {
         var files: [(data: Data, filename: String)] = []
         for item in items {
-            if let data = try? await item.loadTransferable(type: Data.self) {
+            if let data = try? await item.loadTransferable(type: Data.self) {  // best-effort: an item the picker can't read is skipped
                 files.append((data: data, filename: item.itemIdentifier ?? "sticker"))
             }
         }
@@ -450,7 +450,7 @@ public struct StickerPackDetailView: View {
     private func importPicked(_ items: [PhotosPickerItem]) async {
         var files: [(data: Data, filename: String)] = []
         for item in items {
-            if let data = try? await item.loadTransferable(type: Data.self) {
+            if let data = try? await item.loadTransferable(type: Data.self) {  // best-effort: an item the picker can't read is skipped
                 files.append((data: data, filename: item.itemIdentifier ?? "sticker"))
             }
         }

@@ -128,7 +128,7 @@ public actor RoomListCoordinator {
 
     /// Re-reads the ignored-user list immediately (e.g. after ignoring or unignoring someone in the UI).
     public func refreshIgnoredUsers() async {
-        guard let profiles, let list = try? await profiles.ignoredUsers() else { return }
+        guard let profiles, let list = try? await profiles.ignoredUsers() else { return }  // best-effort: a read or a page of the list; the next change retries
         setIgnored(Set(list), generation: generation)
     }
 
@@ -199,7 +199,7 @@ public actor RoomListCoordinator {
     private func refreshIgnored(generation: Int) {
         guard let profiles, allRooms.contains(where: { $0.membership == .invited }) else { return }
         Task { [weak self] in
-            guard let list = try? await profiles.ignoredUsers() else { return }
+            guard let list = try? await profiles.ignoredUsers() else { return }  // best-effort: a read or a page of the list; the next change retries
             await self?.setIgnored(Set(list), generation: generation)
         }
     }
@@ -271,7 +271,7 @@ public actor RoomListCoordinator {
             publishExcluded()
             if loadsAllPages, allRooms.count > requestedAt {
                 requestedAt = allRooms.count
-                Task { [port] in try? await port.loadMore() }
+                Task { [port] in try? await port.loadMore() }  // best-effort: a read or a page of the list; the next change retries
             }
             refreshHidden(generation: generation)
             refreshIgnored(generation: generation)

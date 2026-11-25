@@ -14,7 +14,7 @@ extension AppRoot {
                 await roomList.refresh()
             } else {
                 let local = preferences.botSenders.compactMap { try? UserID($0) }
-                if !local.isEmpty { _ = try? await botAllowlistPort.change(from: BotAllowlist(), to: BotAllowlist(bots: local)) }
+                if !local.isEmpty { _ = try? await botAllowlistPort.change(from: BotAllowlist(), to: BotAllowlist(bots: local)) }  // best-effort: the allowlist stays local and syncs on the next change; the editor treats nil as a failure
             }
         } catch {
             // Keep the local cache until the next launch or edit.
@@ -27,7 +27,7 @@ extension AppRoot {
         func list(_ rawIDs: [String]) -> BotAllowlist { BotAllowlist(bots: rawIDs.compactMap { try? UserID($0) }) }
         preferences.botSenders = new
         await roomList.refresh()
-        guard let merged = try? await botAllowlistPort.change(from: list(old), to: list(new)).bots.map(\.rawValue) else { return nil }
+        guard let merged = try? await botAllowlistPort.change(from: list(old), to: list(new)).bots.map(\.rawValue) else { return nil }  // best-effort: the allowlist stays local and syncs on the next change; the editor treats nil as a failure
         if merged != new, preferences.botSenders == new {
             preferences.botSenders = merged
             await roomList.refresh()

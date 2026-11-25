@@ -32,19 +32,19 @@ public struct SystemChatShortcutStore: ChatShortcutPort {
         write(shortcuts)
         guard let index else { return }
         // Replace the whole domain so a left or renamed chat doesn't linger in Spotlight.
-        try? await index.deleteSearchableItems(withDomainIdentifiers: [Self.domain])
+        try? await index.deleteSearchableItems(withDomainIdentifiers: [Self.domain])  // best-effort: system index or badge; a miss is repaired by the next update
         let items = shortcuts.map { shortcut -> CSSearchableItem in
             let attributes = CSSearchableItemAttributeSet(contentType: .content)
             attributes.title = shortcut.name
             attributes.displayName = shortcut.name
             return CSSearchableItem(uniqueIdentifier: shortcut.id, domainIdentifier: Self.domain, attributeSet: attributes)
         }
-        try? await index.indexSearchableItems(items)
+        try? await index.indexSearchableItems(items)  // best-effort: system index or badge; a miss is repaired by the next update
     }
 
     public func clear() async {
         write([])
-        try? await index?.deleteSearchableItems(withDomainIdentifiers: [Self.domain])
+        try? await index?.deleteSearchableItems(withDomainIdentifiers: [Self.domain])  // best-effort: system index or badge; a miss is repaired by the next update
     }
 
     private var index: CSSearchableIndex? { indexName.map { CSSearchableIndex(name: $0) } }

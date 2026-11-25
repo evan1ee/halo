@@ -15,14 +15,14 @@ public actor DraftCoordinator {
     /// Attaches the store once the account is known; drafts typed before that are written to it.
     public func attach(_ store: any DraftPort) async {
         self.store = store
-        for (room, text) in cache { try? await store.save(text, for: room) }
+        for (room, text) in cache { try? await store.save(text, for: room) }  // best-effort: drafts are best effort; the text stays in the composer and is saved again on the next change
     }
 
     /// The draft of `room`: what was typed in this run, else what the store holds.
     public func draft(for room: RoomID) async -> String {
         if let text = cache[room] { return text }
         let started = generation
-        guard let store, let text = try? await store.draft(for: room), generation == started else { return "" }
+        guard let store, let text = try? await store.draft(for: room), generation == started else { return "" }  // best-effort: drafts are best effort; the text stays in the composer and is saved again on the next change
         cache[room] = text
         return text
     }
@@ -39,6 +39,6 @@ public actor DraftCoordinator {
         let blank = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         // An empty entry (not removal) so a read racing the store write can't bring the old text back.
         cache[room] = blank ? "" : text
-        try? await store?.save(text, for: room)
+        try? await store?.save(text, for: room)  // best-effort: drafts are best effort; the text stays in the composer and is saved again on the next change
     }
 }

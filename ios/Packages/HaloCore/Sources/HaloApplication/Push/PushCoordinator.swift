@@ -49,7 +49,7 @@ public actor PushCoordinator {
     /// must not block signing out, and the homeserver drops a pusher whose gateway rejects the token anyway.
     public func unregister() async {
         guard let token else { return }
-        try? await port.unregister(deviceToken: token, appID: appID)
+        try? await port.unregister(deviceToken: token, appID: appID)  // best-effort: the server drops the pusher at its expiry; sign-out continues
         registered = nil
     }
 

@@ -42,4 +42,30 @@ struct ActionStateTests {
         state.cancel()
         #expect(state.isRunning == false)
     }
+
+    @MainActor
+    final class Box { var runs = 0; var gate: CheckedContinuation<Void, Never>? }
+
+    @Test("a keyed action runs once while it is running; another key runs alongside; the key is free again afterwards")
+    @MainActor
+    func keyedGuard() async {
+        let guardTaps = ActionGuard()
+        let box = Box()
+        let first = Task { @MainActor in
+            await guardTaps.run("delete:a") {
+                box.runs += 1
+                await withCheckedContinuation { box.gate = $0 }
+            }
+        }
+        while box.gate == nil { await Task.yield() }
+        #expect(guardTaps.isRunning("delete:a"))
+        let second = await guardTaps.run("delete:a") { box.runs += 1 }
+        let other = await guardTaps.run("delete:b") { box.runs += 1 }
+        #expect(second == false && other == true && box.runs == 2)
+        box.gate?.resume()
+        #expect(await first.value)
+        #expect(!guardTaps.isRunning("delete:a"))
+        #expect(await guardTaps.run("delete:a") { box.runs += 1 })
+        #expect(box.runs == 3)
+    }
 }

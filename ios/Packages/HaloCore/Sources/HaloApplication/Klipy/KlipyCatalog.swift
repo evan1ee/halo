@@ -63,7 +63,7 @@ public actor KlipyCatalog {
         publish()
         await shelfStore?.save(shelf)
         let trimmed = query?.trimmingCharacters(in: .whitespacesAndNewlines)
-        try? await port?.registerShare(item, query: trimmed?.isEmpty == false ? trimmed : nil)
+        try? await port?.registerShare(item, query: trimmed?.isEmpty == false ? trimmed : nil)  // best-effort: diagnostics, cache or best-effort sync; the next update repeats it
     }
 
     // MARK: Results

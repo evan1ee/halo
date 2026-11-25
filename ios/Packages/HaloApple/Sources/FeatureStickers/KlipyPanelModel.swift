@@ -121,7 +121,7 @@ public final class KlipyPanelModel {
     /// A KLIPY file for a grid cell or the preview.
     public func media(_ rendition: KlipyRendition) async -> Data? {
         guard let url = URL(string: rendition.url) else { return nil }
-        return try? await catalog.media(url)
+        return try? await catalog.media(url)  // best-effort: a picture that can't load shows its placeholder; nothing changes
     }
 
     /// The loader a grid cell hands to its image view.
@@ -129,7 +129,7 @@ public final class KlipyPanelModel {
         let catalog = catalog
         return {
             guard let url = URL(string: rendition.url) else { return nil }
-            return try? await catalog.media(url)
+            return try? await catalog.media(url)  // best-effort: a picture that can't load shows its placeholder; nothing changes
         }
     }
 

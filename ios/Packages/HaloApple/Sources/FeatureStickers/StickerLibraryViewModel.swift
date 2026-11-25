@@ -155,12 +155,12 @@ public final class StickerLibraryViewModel {
 
     public func thumbnail(for sticker: Sticker) async -> Data? {
         guard let media, let ref = sticker.image else { return nil }
-        return try? await media.thumbnail(ref, width: 160, height: 160)
+        return try? await media.thumbnail(ref, width: 160, height: 160)  // best-effort: a picture that can't load shows its placeholder; nothing changes
     }
 
     public func fullImage(for sticker: Sticker) async -> Data? {
         guard let media, let ref = sticker.image else { return nil }
-        return try? await media.content(ref)
+        return try? await media.content(ref)  // best-effort: a picture that can't load shows its placeholder; nothing changes
     }
 
     private func syncCurrentSnapshot() async {

@@ -137,7 +137,7 @@ public actor BotActivityCoordinator {
         for item in items {
             if case .event(let event) = item.content, case .redacted = event.kind, let id = event.eventID { redacted.insert(id) }
         }
-        guard !redacted.isEmpty, let stored = try? await port.entries() else { return }
+        guard !redacted.isEmpty, let stored = try? await port.entries() else { return }  // best-effort: diagnostics, cache or best-effort sync; the next update repeats it
         var changed = stored.filter { $0.key.room == room && !$0.sourceRedacted && $0.sourceEventID.map(redacted.contains) == true }
         guard !changed.isEmpty else { return }
         for index in changed.indices { changed[index].sourceRedacted = true }
@@ -153,7 +153,7 @@ public actor BotActivityCoordinator {
     public func rebuild() async {
         lastWritten = [:]
         scanned = [:]
-        try? await port?.removeAll()
+        try? await port?.removeAll()  // best-effort: diagnostics, cache or best-effort sync; the next update repeats it
     }
 
     /// Starts keeping the index of the signed-in account in `port`.

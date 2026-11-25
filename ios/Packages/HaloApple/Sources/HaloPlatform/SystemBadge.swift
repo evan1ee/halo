@@ -17,7 +17,7 @@ public struct SystemBadge: BadgePort {
     public func reset() async {
         attention.store(BadgeSnapshot(attentionCounts: [:], evaluatedAt: Date()))
         WidgetCenter.shared.reloadAllTimelines()
-        try? await UNUserNotificationCenter.current().setBadgeCount(0)
+        try? await UNUserNotificationCenter.current().setBadgeCount(0)  // best-effort: system index or badge; a miss is repaired by the next update
     }
 
     public func update(_ snapshot: BadgeSnapshot) async {

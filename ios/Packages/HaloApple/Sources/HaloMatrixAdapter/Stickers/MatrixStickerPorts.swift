@@ -38,8 +38,8 @@ public final class MatrixHiddenRoomsPort: HiddenRoomsPort {
     public init(session: MatrixSessionPort) { self.session = session }
 
     public func hiddenRooms() async -> Set<RoomID> {
-        guard let client = try? await session.signedInClient(),
-              let json = try? await client.accountData(eventType: "one.mbm.halo.sticker_rooms"),
+        guard let client = try? await session.signedInClient(),  // best-effort: a read; no pack or a missing room reads as nothing to show
+              let json = try? await client.accountData(eventType: "one.mbm.halo.sticker_rooms"),  // best-effort: a read; no pack or a missing room reads as nothing to show
               let object = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else { return [] }
         return PackRegistry.packRooms(in: object)
     }
@@ -152,7 +152,7 @@ public final class MatrixStickerPackPort: StickerPackPort {
         if let cached = await roomPacks.packs(of: room) { return cached }
         // The panel is opened from a room's timeline, so the room is known locally; if it isn't, its size is unknown and
         // the whole state is read as before.
-        let members = (try? await session.room(room))?.joinedMembersCount()
+        let members = (try? await session.room(room))?.joinedMembersCount()  // best-effort: a read; no pack or a missing room reads as nothing to show
         var packs: [StickerPack] = []
         if members.map(StickerRoomState.readsWholeState) ?? true {
             for (key, content, legacy) in try await allPacks(client, room: room) {
@@ -247,7 +247,7 @@ public final class MatrixStickerPackCreationPort: StickerPackCreationPort {
             do {
                 // The room must be known locally before a state event can be sent into it.
                 for _ in 0..<30 {
-                    if let known = try? await session.room(ref.room) { room = known; break }
+                    if let known = try? await session.room(ref.room) { room = known; break }  // best-effort: a read; no pack or a missing room reads as nothing to show
                     try await Task.sleep(for: .seconds(1))
                 }
                 guard let room else { throw HaloError.notFound }
@@ -261,7 +261,7 @@ public final class MatrixStickerPackCreationPort: StickerPackCreationPort {
                 return ref
             } catch {
                 var known = room
-                if known == nil { known = try? await session.room(ref.room) }
+                if known == nil { known = try? await session.room(ref.room) }  // best-effort: a read; no pack or a missing room reads as nothing to show
                 await abandon(known, registeredAs: ref, client: client)
                 throw error
             }
@@ -271,10 +271,10 @@ public final class MatrixStickerPackCreationPort: StickerPackCreationPort {
     /// Best effort, after a failed creation: removes the pack from the enabled list in case that write got through, then
     /// leaves and forgets the room. The uploaded media stay on the server (there is no API to delete them).
     private func abandon(_ room: Room?, registeredAs ref: PackRef, client: Client) async {
-        try? await ServerAccountData(client).update("m.image_pack.rooms") { PackRegistry.disabling(ref, in: $0) }
+        try? await ServerAccountData(client).update("m.image_pack.rooms") { PackRegistry.disabling(ref, in: $0) }  // best-effort: cleanup after the main change succeeded or failed already; a leftover is harmless
         guard let room else { return }
-        try? await room.leave()
-        try? await room.forget()
+        try? await room.leave()  // best-effort: cleanup after the main change succeeded or failed already; a leftover is harmless
+        try? await room.forget()  // best-effort: cleanup after the main change succeeded or failed already; a leftover is harmless
     }
 }
 
@@ -297,7 +297,7 @@ public final class MatrixStickerPackManagementPort: StickerPackManagementPort {
             try await writePackState(updated, to: room, stateKey: ref.stateKey)
             // Keep the personal pack room's own display name aligned with the renamed pack.
             if await isPersonalPackRoom(ref.room, client: client) {
-                try? await room.setName(name: ImagePackBuilder.roomName(for: name.trimmingCharacters(in: .whitespacesAndNewlines)))
+                try? await room.setName(name: ImagePackBuilder.roomName(for: name.trimmingCharacters(in: .whitespacesAndNewlines)))  // best-effort: cleanup after the main change succeeded or failed already; a leftover is harmless
             }
             await packs.invalidateRoom(ref.room)
         } catch let error as HaloError { throw error } catch { throw ErrorMapper.map(error) }
@@ -340,10 +340,10 @@ public final class MatrixStickerPackManagementPort: StickerPackManagementPort {
         do {
             try await ServerAccountData(client).update("m.image_pack.rooms") { PackRegistry.disabling(ref, in: $0) }
             if await isPersonalPackRoom(ref.room, client: client) {
-                try? await ServerAccountData(client).update("one.mbm.halo.sticker_rooms") { PackRegistry.removingPackRoom(ref.room, in: $0) }
-                if let room = try? await session.room(ref.room) {
-                    try? await room.leave()
-                    try? await room.forget()
+                try? await ServerAccountData(client).update("one.mbm.halo.sticker_rooms") { PackRegistry.removingPackRoom(ref.room, in: $0) }  // best-effort: cleanup after the main change succeeded or failed already; a leftover is harmless
+                if let room = try? await session.room(ref.room) {  // best-effort: a read; no pack or a missing room reads as nothing to show
+                    try? await room.leave()  // best-effort: cleanup after the main change succeeded or failed already; a leftover is harmless
+                    try? await room.forget()  // best-effort: cleanup after the main change succeeded or failed already; a leftover is harmless
                 }
             }
             await packs.invalidateRoom(ref.room)
@@ -356,7 +356,7 @@ public final class MatrixStickerPackManagementPort: StickerPackManagementPort {
     }
 
     private func isPersonalPackRoom(_ room: RoomID, client: Client) async -> Bool {
-        guard let json = try? await client.accountData(eventType: "one.mbm.halo.sticker_rooms"),
+        guard let json = try? await client.accountData(eventType: "one.mbm.halo.sticker_rooms"),  // best-effort: a read; no pack or a missing room reads as nothing to show
               let object = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else { return false }
         return PackRegistry.packRooms(in: object).contains(room)
     }
