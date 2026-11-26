@@ -372,9 +372,26 @@ public final class TimelineViewModel {
         }
     }
 
-    /// Opens the timeline and follows it. Call when the screen appears.
+    /// Opens the timeline and follows it. Call when the screen appears. A start already under way (`startAhead`) is awaited, not
+    /// repeated.
     public func start() async {
+        if let starting {
+            await starting.value
+            return
+        }
         guard observation == nil else { return }
+        let task = Task { await opening() }
+        starting = task
+        await task.value
+        starting = nil
+    }
+
+    /// The start under way, so a second caller waits for it instead of opening the timeline twice.
+    var starting: Task<Void, Never>?
+    /// `present()` ran: a start ahead that only runs afterwards must not hide the screen's model again.
+    var wasPresented = false
+
+    private func opening() async {
         // The saved draft is not needed to show messages: restore it while the timeline opens.
         let draftRestored = Task { await restoreDraft() }
         readThroughAtOpen = await readThrough?()
@@ -401,14 +418,15 @@ public final class TimelineViewModel {
     /// Opens the timeline before its screen exists (M19-9, D-MOT-2): the screen pushed later shows rows on its first frame. Until
     /// `present()` the model reports nothing about what was read; the draft is only read, never written.
     public func startAhead() async {
-        guard observation == nil else { return }
-        isPresented = false
+        guard observation == nil, starting == nil else { return }
+        if !wasPresented { isPresented = false }
         await start()
     }
 
     /// The screen of a model started ahead is shown: from now on it is an opened room. It lands at the newest row (D95), and
     /// what may have changed while it waited (the read position, the preview setting) is read again.
     public func present() {
+        wasPresented = true
         guard !isPresented else { return }
         isPresented = true
         let presented = onPresented

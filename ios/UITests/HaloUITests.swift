@@ -882,6 +882,18 @@ final class HaloUITests: XCTestCase {
             hold(2)
             returnToChatList(app)
             hold(2)
+        case "room-open-other":
+            // A room below the top three of the chat list (M19-9, D-MOT-2): the fifth chat row, opened twice.
+            let row = app.collectionViews.firstMatch.cells.element(boundBy: 5)
+            guard row.waitForExistence(timeout: 5) else { throw XCTSkip("Fewer than five chats.") }
+            for _ in 0..<2 {
+                row.tap()
+                XCTAssertTrue(app.buttons["sticker-button"].waitForExistence(timeout: 8), "the room opened")
+                hold(2)
+                returnToChatList(app)
+                hold(2)
+            }
+            hold(3)  // the film's window is matched to the marks only roughly: keep the last close inside it
         case "keyboard":
             try openFirstChat(app)
             hold(2)

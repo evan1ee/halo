@@ -85,17 +85,27 @@ public final class WarmTimelines {
     private func startMissing() async {
         for room in wanted where models[room] == nil {
             guard !Task.isCancelled else { return }
-            let model = make(room)
-            model.onPresented = { [weak self, weak model] in
-                guard let self, let model, self.models[room] === model else { return }
-                self.models[room] = nil
-            }
-            models[room] = model
             // One at a time: each opens an SDK timeline and maps its first rows on the main actor.
-            await model.startAhead()
-            // Let go of while it was starting: `drop` couldn't close what wasn't open yet.
-            if models[room] !== model, !model.isPresented { await model.stop() }
+            await start(install(room), room)
         }
+    }
+
+    private func install(_ room: RoomID) -> TimelineViewModel {
+        let model = make(room)
+        // Held back from the moment it is handed out, not only once its start runs: a screen may take it before that.
+        model.isPresented = false
+        model.onPresented = { [weak self, weak model] in
+            guard let self, let model, self.models[room] === model else { return }
+            self.models[room] = nil
+        }
+        models[room] = model
+        return model
+    }
+
+    private func start(_ model: TimelineViewModel, _ room: RoomID) async {
+        await model.startAhead()
+        // Let go of while it was starting: `drop` couldn't close what wasn't open yet.
+        if models[room] !== model, !model.isPresented { await model.stop() }
     }
 
     private func drop(_ room: RoomID) {

@@ -145,4 +145,25 @@ struct WarmTimelinesTests {
         await settle { opened().isEmpty }
         #expect(opened().isEmpty)
     }
+
+    @Test("a screen appearing before or while its model starts ahead: the start is awaited, the timeline opens once, and the shown model reports", .timeLimit(.minutes(1)))
+    func screenDuringTheStartAhead() async throws {
+        let room = try RoomID("!r:x.org")
+        let port = FakeTimelinePort()
+        port.addRoom(room, items: [try message(1), try message(2, own: true)])
+        let markers = FakeReadMarkerPort()
+        let model = TimelineViewModel(
+            coordinator: TimelineCoordinator(port: port, room: room), receipts: ReadReceiptCoordinator(port: markers), room: room, dwell: .zero, sleep: { _ in })
+        // The screen appears, then its start and the cache's start ahead run at the same time.
+        model.present()
+        async let screenStart: Void = model.start()
+        async let aheadStart: Void = model.startAhead()
+        _ = await (screenStart, aheadStart)
+        #expect(model.isPresented, "a start ahead after the screen appeared doesn't hide it")
+        for _ in 0..<200_000 where markers.receipts.isEmpty { await Task.yield() }
+        #expect(markers.receipts.map(\.event.rawValue) == ["$e2"], "the shown model reports the own message")
+        for _ in 0..<2_000 { await Task.yield() }
+        #expect(port.totalOpens(in: room) == 1, "opened once")
+        await model.stop()
+    }
 }

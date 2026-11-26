@@ -1,7 +1,7 @@
 # Motion audit (ROADMAP M19-9, AC-MOT-1)
 
 `scripts/motion_audit.py` films the simulator while `HaloUITests.testMotionAudit` plays one transition (scenarios: `launch`,
-`room-open-close`, `keyboard`, `send`, `reaction`, `appearance`, `background`, `scroll-up`), asks ffmpeg for the difference between
+`room-open-close`, `room-open-other` (the fifth chat, outside the rooms started ahead), `keyboard`, `send`, `reaction`, `appearance`, `background`, `scroll-up`), asks ffmpeg for the difference between
 neighbouring frames at 30 fps, and writes a strip of frames per burst of change (`build/motion-audit/<scenario>-burst-N.png`, read
 left to right, top to bottom) and a table of burst lengths. It needs the signed-in `Halo Perf` simulator (`scripts/perf.py` makes it)
 and the scale server (`infra/dev/scale-fixtures.py up`). The strips are read by eye; nothing here is pass/fail yet.
@@ -49,11 +49,19 @@ A list that appears with its messages already known (`model.landed`), no more th
   first open after a launch and the re-open both slide in with their rows on the first frame (0 empty frames), at the newest message, without a
   jump. The re-open fell just after the script's window (it is still approximate) and was cut from the film by hand
   (`ffmpeg -ss … -vf fps=30,tile`). D95 check (`testRoomOpeningLandsAtNewestTenTimes`, 10 opens on `Halo Perf`) passed.
-- **Not covered:** a room outside the top three still opens as before (≈ 0.23 s re-open, 0.4–0.7 s first open); touch-down warming of the
-  tapped row was not built. Each waiting model holds a live SDK timeline (three at most, on top of the adapter's six prepared ones).
+- **Not covered:** a room outside the top three still opens as before. Film of `room-open-other` (fifth chat, simulator): the first open
+  shows the empty message area for 7–9 frames, a re-open for about 2. Each waiting model holds a live SDK timeline (three at most, on top
+  of the adapter's six prepared ones).
+- **Tried and dropped: starting the model on touch-down of a row.** A `simultaneousGesture(LongPressGesture(minimumDuration: 0))` on the
+  row swallowed the row's tap in the `List` (the film showed no room opening while the UI test still passed: the scenario now asserts
+  that the room opened). It also cannot win much: a list's scroll view holds back a quick tap's touch-began until the finger lifts, so
+  "touch-down" arrives about when the tap does. A custom `ButtonStyle` reading `isPressed` would have the same delay and lose the row
+  highlight. What it uncovered was kept: a model handed out by the cache is held back from the moment it is made (not only once its
+  start runs), `start()` waits for a start already under way instead of opening the timeline twice, and a start ahead that runs after
+  the screen appeared doesn't hide it again (`WarmTimelinesTests`, checked by mutation).
 
 ## To do
-1. Rooms outside the top three: start a model on touch-down of a row, or cut the first-open build of the screen (205 ms) and the serial reads (150 ms).
+1. Rooms outside the top three: cut the first-open build of the screen (205 ms) and the serial reads (150 ms), or start more rooms ahead (memory); touch-down was tried and dropped (above).
 2. Make the window exact: have the test draw a marker the film can find (for example a one-frame colour flash in a corner at each mark), then read the strips of send, reaction, scroll up, room close and the two appearance flips.
 3. Scenarios for edit, reconnect and history prepend.
 4. Turn what can be measured into UI tests (for example: no frame with an empty message area after a warm push, from the film's frame differences).

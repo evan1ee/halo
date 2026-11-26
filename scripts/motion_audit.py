@@ -13,7 +13,7 @@ step between two frames was. A frame that is nearly one flat colour in the middl
 import argparse, glob, json, os, re, signal, subprocess, sys, threading, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCENARIOS = ["launch", "room-open-close", "keyboard", "send", "reaction", "appearance", "background", "scroll-up"]
+SCENARIOS = ["launch", "room-open-close", "room-open-other", "keyboard", "send", "reaction", "appearance", "background", "scroll-up"]
 FPS = 30
 # A frame differs from the one before it when its average brightness changes by more than this (0-255 scale).
 THRESHOLD = 0.35
