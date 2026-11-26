@@ -78,6 +78,70 @@ struct FaultTests {
         #expect(Array(bodies.reversed()) == ["m1", "m2", "m3"], "\(broken.name)")
     }
 
+    @Test("Every kind of own message reaches the server exactly once, whatever breaks (M18-11, AC-REL-3)", .timeLimit(.minutes(5)), arguments: [
+        Broken(name: "lost answer", rule: ["action": "lose", "path": "/send/|/upload", "times": 4]),
+        Broken(name: "rate limited", rule: ["action": "status", "status": 429, "retry_after_ms": 600, "path": "/send/|/upload", "times": 4]),
+        Broken(name: "connection dropped", rule: ["action": "drop", "path": "/send/|/upload", "times": 4]),
+    ])
+    func everyKindOnce(_ broken: Broken) async throws {
+        let stage = try await TestStage()
+        try await stage.timeline.send(text: "base", mentions: [])
+        try await stage.wait(60, "the base message") { stage.mirror.own("base")?.sendState == .sent }
+        let base = try #require(stage.mirror.own("base")?.eventID)
+        let png = try #require(Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="))
+        let mxc = try await stage.peer.upload(png, type: "image/png")
+        let sticker = Sticker(pack: PackRef(room: stage.room, stateKey: "p"), shortcode: "dot", body: "dot", url: mxc, info: nil)
+
+        try await stage.proxy.fault(broken.rule)
+        let start = ContinuousClock.now
+        var refused: [String] = []
+        func attempt(_ kind: String, _ send: () async throws -> Void) async { do { try await send() } catch { refused.append("\(kind): \(error)") } }
+        await attempt("reply") { try await stage.timeline.reply(to: base, text: "the reply", mentions: []) }
+        await attempt("edit") { try await stage.timeline.edit(event: base, newText: "base, edited") }
+        await attempt("reaction") { try await stage.timeline.toggleReaction(on: base, key: "👍") }
+        await attempt("image") { try await stage.timeline.sendImage(OutgoingImage(data: png, filename: "dot.png", mimeType: "image/png", width: 1, height: 1)) }
+        await attempt("file") { try await stage.timeline.sendFile(OutgoingFile(data: Data("file".utf8), filename: "note.txt", mimeType: "text/plain")) }
+        await attempt("sticker") { try await stage.timeline.sendSticker(sticker) }
+        print("FAULT everyKindOnce, \(broken.name): refused \(refused)")
+
+        func counts() async throws -> [String: Int] {
+            var found: [String: Int] = [:]
+            for event in try await stage.peer.events(in: stage.room) {
+                let content = event["content"] as? [String: Any] ?? [:]
+                let relation = content["m.relates_to"] as? [String: Any]
+                let kind: String?
+                switch event["type"] as? String {
+                case "m.sticker": kind = "sticker"
+                case "m.reaction": kind = "reaction"
+                case "m.room.message":
+                    if relation?["rel_type"] as? String == "m.replace" { kind = "edit" }
+                    else if content["body"] as? String == "the reply" { kind = "reply" }
+                    else if content["msgtype"] as? String == "m.image" { kind = "image" }
+                    else if content["msgtype"] as? String == "m.file" { kind = "file" }
+                    else if content["body"] as? String == "base" { kind = "base" }
+                    else { kind = nil }
+                default: kind = nil
+                }
+                if let kind { found[kind, default: 0] += 1 }
+            }
+            return found
+        }
+        // A sticker is sent at once, outside the send queue (the SDK offers no queued sticker), so it is not retried: a refusal is
+        // shown to the person, who sends it again. Everything else goes through the queue and must arrive exactly once.
+        let queued = ["base", "reply", "edit", "reaction", "image", "file"]
+        #expect(refused.allSatisfy { $0.hasPrefix("sticker") }, "only a sticker may be refused: \(refused)")
+        try await stage.wait(120, "all queued kinds on the server (\(broken.name))") { try await counts().count >= queued.count }
+        stage.report("everyKindOnce, \(broken.name)", since: start)
+        try await stage.proxy.heal()
+        try await Task.sleep(for: .seconds(8))  // a late duplicate would show up now
+        let final = try await counts()
+        for kind in queued { #expect(final[kind] == 1, "\(kind) arrived \(final[kind] ?? 0) times (\(broken.name))") }
+        #expect(final["sticker"] == (refused.isEmpty ? 1 : nil) || (final["sticker"] ?? 0) <= 1, "a sticker is never sent twice by itself")
+        try await stage.wait(30, "no send is left pending") {
+            stage.mirror.own("base") == nil || stage.mirror.own("base")?.sendState == .sent
+        }
+    }
+
     struct Broken: Sendable, CustomTestStringConvertible {
         let name: String
         let rule: [String: any Sendable]

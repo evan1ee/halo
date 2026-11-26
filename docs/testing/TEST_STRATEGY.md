@@ -51,7 +51,7 @@ Approach **[DECISION D35, ADR-0009]**:
 drops, delays, throttles, cuts, hangs, refuses or answers requests with a status, loses the answer of a request the server handled, and counts requests and bytes per endpoint.
 - `infra/test/run.sh scenarios [S04 F02 …]`: the scenario driver S01–S22 plus F01–F06 (server down, lost answer, 429, cut response, half-open, 5xx). In CI (`scenarios.yml`), where a client
   broken on purpose (`HALO_SCENARIO_BREAK`) must turn F02–F06 red.
-- `infra/test/run.sh faults` (Mac): the real adapter and SDK behind the same faults (`FaultTests`). Result 2026-11-25, simulator: an outage ends 2.1 s after the server is back, a cut sync
+- `infra/test/run.sh faults` (Mac): the real adapter and SDK behind the same faults (`FaultTests`). Result 2026-11-25, simulator: an outage ends 2.1 s after the server is back, a cut sync M18-11: `everyKindOnce` sends a reply, edit, reaction, photo, file and sticker through a lost answer, 429 and a dropped connection; each reaches the server once (the sticker, sent outside the queue, may be refused and shown as failed).
   response is fetched again in 1.2 s, three 502 answers in 3.5 s; a send meets a lost answer, two 429, two 503, a dropped connection or a slow network and arrives **exactly once, in order**.
   A half-open connection takes **39 s** to recover (the SDK's request timeout; GA-29, M18-11).
 
