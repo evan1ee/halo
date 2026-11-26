@@ -828,6 +828,96 @@ final class HaloUITests: XCTestCase {
         }
     }
 
+    /// One transition of the zero flash and jump audit (ROADMAP M19-9, AC-MOT-1), filmed from outside by `scripts/motion_audit.py`, which
+    /// sets `HALO_MOTION_SCENARIO`. Every scenario holds still for a moment before and after, so the film shows the rest state too.
+    @MainActor
+    func testMotionAudit() throws {
+        guard let scenario = ProcessInfo.processInfo.environment["HALO_MOTION_SCENARIO"] else {
+            throw XCTSkip("Run through scripts/motion_audit.py.")
+        }
+        func hold(_ seconds: Double) { Thread.sleep(forTimeInterval: seconds) }
+        // The film also holds the test runner starting and the app launching: these two times say which part is the scenario.
+        let marks = ProcessInfo.processInfo.environment["HALO_MOTION_MARKS"]
+        func mark(_ name: String) {
+            guard let marks else { return }
+            let line = "\(name) \(Date().timeIntervalSince1970)\n"
+            if let handle = FileHandle(forWritingAtPath: marks) { handle.seekToEndOfFile(); handle.write(Data(line.utf8)); handle.closeFile() }
+        }
+        let app = XCUIApplication()
+        app.launch()
+        dismissFirstRunSheets(app)
+        if !chatsRoot(app).waitForExistence(timeout: 4) { returnToChatList(app) }  // a relaunch may restore an open room
+        guard chatsRoot(app).waitForExistence(timeout: 15) else { throw XCTSkip("App is signed out.") }
+        if app.buttons["focus-show-all"].exists { app.buttons["focus-show-all"].tap() }
+        hold(2)
+        mark("begin")
+        defer { mark("end") }
+        switch scenario {
+        case "launch":
+            app.terminate()
+            hold(1)
+            app.launch()
+            _ = chatsRoot(app).waitForExistence(timeout: 15)
+            hold(3)
+        case "room-open-close":
+            try openFirstChat(app)
+            hold(2)
+            returnToChatList(app)
+            hold(2)
+            try openFirstChat(app)
+            hold(2)
+            returnToChatList(app)
+            hold(2)
+        case "keyboard":
+            try openFirstChat(app)
+            hold(2)
+            app.descendants(matching: .any)["composer"].firstMatch.tap()
+            hold(2.5)
+            app.descendants(matching: .any)["timeline"].firstMatch.swipeDown(velocity: .slow)
+            hold(2.5)
+        case "send":
+            try openFirstChat(app)
+            hold(2)
+            let composer = app.descendants(matching: .any)["composer"].firstMatch
+            composer.tap()
+            hold(1.5)
+            composer.typeText("motion audit \(Int(Date().timeIntervalSince1970) % 1000)")
+            hold(1)
+            app.buttons["send-button"].tap()
+            hold(5)
+        case "reaction":
+            try openFirstChat(app)
+            hold(2)
+            let message = app.descendants(matching: .any)["timeline"].firstMatch.staticTexts.element(boundBy: 2)
+            message.doubleTap()
+            hold(4)
+        case "appearance":
+            try openFirstChat(app)
+            hold(2)
+            XCUIDevice.shared.appearance = .dark
+            hold(3)
+            XCUIDevice.shared.appearance = .light
+            hold(3)
+        case "background":
+            try openFirstChat(app)
+            hold(2)
+            XCUIDevice.shared.press(.home)
+            hold(4)
+            app.activate()
+            hold(3.5)
+        case "scroll-up":
+            try openFirstChat(app)
+            hold(2)
+            let timeline = app.descendants(matching: .any)["timeline"].firstMatch
+            timeline.swipeDown(velocity: .fast)
+            hold(1)
+            timeline.swipeDown(velocity: .fast)
+            hold(3)
+        default:
+            XCTFail("unknown scenario \(scenario)")
+        }
+    }
+
     /// Physical-device D95 check: open S10 (or the first non-gallery room) 10 times; each open must land at the newest
     /// message (no `jump-to-bottom` button, no lingering loading spinner). Opt-in via `HALO_RUN_DEVICE_CHECKS=1`.
     @MainActor

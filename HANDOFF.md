@@ -6,12 +6,13 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 1. Current status
 - **Roadmap:** M0–M16 are built and merged. Re-planned 2026-11-25 to a production release (D121): M17 measure → M18 security and reliability → M19 performance → M20 messaging → M21 experience → M22 beta and launch, with gates G-SCALE, G-PERF, G-SHIP ([docs/ROADMAP.md](docs/ROADMAP.md)). The audit behind it found 26 gaps (ROADMAP §2); Halo isn't a release candidate yet.
-- **Milestones:** M0–M16 built, partly for M14–M15 (GA-24…GA-26). **M17 in progress:** M17-1, 2, 3, 6, 8 done; M17-4, M17-5 and M17-7 done except what needs a device or the founder (§5). **M19 started early (D125): M19-11 message search and M20-1 jump to any message are built and merged (PR #91; the iPhone checks are still open)**. **M18 started: M18-1 merged (PR #92); M18-2 to M18-5, M18-7 and M18-9 merged (#93–#98); M18-8 no silent failures merged (#99); M18-11 delivery under faults built, M18-13 sign out other sessions built (all merged, #100); M19-1 one image pipeline, M19-2 incremental timeline (part), M19-3 incremental room list, M19-4 room opening built, M19-5 media by file (part)**; M18-6 needs the founder; M18-10, M18-12 next. Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1).
+- **Milestones:** M0–M16 built, partly for M14–M15 (GA-24…GA-26). **M17 in progress:** M17-1, 2, 3, 6, 8 done; M17-4, M17-5 and M17-7 done except what needs a device or the founder (§5). **M19 started early (D125): M19-11 message search and M20-1 jump to any message are built and merged (PR #91; the iPhone checks are still open)**. **M18 started: M18-1 merged (PR #92); M18-2 to M18-5, M18-7 and M18-9 merged (#93–#98); M18-8 no silent failures merged (#99); M18-11 delivery under faults built, M18-13 sign out other sessions built (all merged, #100); M19-1 one image pipeline, M19-2 incremental timeline (part), M19-3 incremental room list, M19-4 room opening built, M19-5 media by file (part), M19-9 motion audit tool and first pass**; M18-6 needs the founder; M18-10, M18-12 next. Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`, iOS 27.2.1).
 - **Last checks:** `prepush.sh` on the pushed commit (package tests, app build, UI tests with the new `testMessageSearchOpensAHit`, docs, boundaries, gitleaks, swiftlint); `infra/test/run.sh search` 5 of 5; full contract suite 37 of 37 (with S01–S29 over the server and the unread evidence); scale numbers in TEST_STRATEGY §7; by hand in the simulator: search, filters, opening an old message, Newest, dark mode at AX5. `faults` and `interop` (2 known issues) green. **Not run:** an iPhone, the scenario driver, light AX5 of Settings → Message search, VoiceOver.
 - **CI:** PRs #1–#90 merged. New `scenarios.yml` (Synapse behind the fault proxy). Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
+- **M19-9 motion audit (2026-11-26):** `scripts/motion_audit.py` + `HaloUITests.testMotionAudit` film transitions and cut frame strips; first pass in `docs/testing/MOTION_AUDIT.md`.
 - **M19-5 media by file, part (2026-11-26):** `MediaPort.file` writes a file or video to disk as it arrives (Quick Look, drag-out); limit 50 → 300 MB. Details: `docs/features/MEDIA_ATTACHMENTS.md` FR-10.
 - **M19-4 room opening (2026-11-26):** landing waits 80 + 60 → 16 + 32 ms; simulator p95 0.339 → 0.238 s; D95 check 10/10 on the simulator.
 - **M19-3 incremental room list (2026-11-26):** `RoomListDiffer` + atomic `RoomListUpdate.diffs`; the adapter sends only changes.
@@ -76,6 +77,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D125), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
+- **M19-9:** `scripts/motion_audit.py`, `ios/UITests/HaloUITests.swift` (`testMotionAudit`), `docs/testing/MOTION_AUDIT.md`, ROADMAP.
 - **M19-5:** `HaloDomain/Ports/MediaPort` (`file`), `MediaLoader`, `MatrixMediaPort`, `MatrixSessionPort.mediaFile`, `TimelineViewModel+Actions`, `MediaLoaderFileTests`, `FaultTests.fileToDisk`, `TestStage.session`, `TimelineMirror.mediaRef`, docs.
 - **M19-4:** `FeatureTimeline/TimelineView` (`firstLayoutWait`, `confirmationGap`), ROADMAP, TEST_STRATEGY.
 - **M19-3:** `HaloDomain/RoomList/RoomListDiffer`, `Ports/RoomListPort` (`.diffs`), `RoomListCoordinator`, `MatrixRoomListPort`, `FakeRoomListPort` (`emit(batch:)`), `ScaleMeasurements`, `RoomListDifferTests`, `RoomListCoordinatorTests`, ROADMAP.
@@ -87,6 +89,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D125), [docs/adr/R
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
 
 **Not done, for future action (from the M18 and M19 work; remove a line when done)**
+- **M19-9:** D-MOT-1 (room open shows an empty message area for ~0.23 s: show rows from the first frame, keep D95); read the strips of room close, scroll up, reaction; scenarios for edit, reconnect, history prepend; fix `send` (software keyboard), `appearance`, `launch`; UI tests for what can be measured; run on the iPhone 📱. Details: `docs/testing/MOTION_AUDIT.md` "To do".
 - **M19-5:** own thumbnails downloaded again after a restart, gallery pages, progress and cancel while a file opens, memory of a 100 MB video (📱), an encrypted room's file, the image viewer still loads full photos with `content`.
 - **M19-4:** the same on the iPhone (the UI-test runner timed out enabling automation: phone locked or UI Automation off); no change to the other NFR rows.
 - **M19-3:** the adapter over a real 1,000-room server (`ScaleMeasurements` consumes the new updates but wasn't run), device timings; the coordinator still recomputes summaries and read inputs from the whole list per change.
@@ -142,7 +145,7 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 ## 6. Next steps
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §3.
 1. Open M18 items: M18-10 (device matrix 📱), M18-12 (security review 👤), M18-6 (OIDC end to end 👤); then Q-VERIFY before M18 ends.
-2. M19 on `feat/m19-performance` (no PR until the milestone is done, D75): M19-1…M19-5 built or part built (see "Not done" in §5); next M19-9 (flash and jump audit), M19-7 (sync and energy), M19-6/8/10 need the iPhone. M20-11 (search inside a room) only needs its interface now (`SearchQuery.room`).
+2. M19 on `feat/m19-performance` (no PR until the milestone is done, D75): M19-1…M19-5 built or part built (see "Not done" in §5); next the M19-9 fix and the rest of its audit, M19-7 (sync and energy), M19-6/8/10 need the iPhone. M20-11 (search inside a room) only needs its interface now (`SearchQuery.room`).
 3. Founder: the device and hand checks of §5; long lead times: push gateway (M22-1), legal (M22-4), KLIPY production key, filtering entitlement, artwork.
 
 ## 7. Next Session Prompt
