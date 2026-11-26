@@ -60,8 +60,29 @@ A list that appears with its messages already known (`model.landed`), no more th
   start runs), `start()` waits for a start already under way instead of opening the timeline twice, and a start ahead that runs after
   the screen appeared doesn't hide it again (`WarmTimelinesTests`, checked by mutation).
 
+## Where a room outside the top three loses its time (2026-11-26, simulator, optimised build)
+Measured with a temporary `os.Logger` probe in `TimelineViewModel.start()` (not kept) while filming `room-open-other`, the fifth chat:
+
+| Open | model created → `start()` runs | read position + preview setting | `coordinator.open()` | first rows after `start()` |
+|---|---|---|---|---|
+| first after a launch | 313–385 ms | 6–9 ms | ≤ 1 ms | ≈ 10 ms |
+| re-open | 46–49 ms | 5–6 ms | 5–13 ms | ≈ 10 ms |
+
+- **The serial reads are not the cost any more:** reading the read position and the preview setting takes under 10 ms together (the
+  150 ms in the analysis above came from an earlier build). Overlapping them with the timeline's open would save at most that.
+- **The cost is the first build of the room screen.** `TimelineScreen.init` makes the model; its `start()` only runs from the screen's
+  `.task` 313–385 ms later on a first open, because the main actor is busy building and laying out the screen meanwhile.
+- **Tried and dropped: starting the model as the screen is built** (in `TimelineScreen.init`, through the cache so a rebuilt screen
+  gets the same model). The probe still showed the start 352 ms after the model was made: a `Task` queued on the busy main actor
+  waits for the screen build like everything else. The film went from 7–9 to about 6 empty frames on the first open, within noise, so it
+  was not kept.
+- A `sample` of the app from launch through the first open puts almost none of the main thread's time in Halo's own frames (row
+  bodies, `TimelineView.body`, `ComposerPanelArea.body` a few ms each); the rest is SwiftUI and UIKit building the screen. `xctrace`
+  could not symbolicate a simulator trace against a `dsymutil` dSYM ("no dSYMs relevant"). Next: profile the first room open in
+  Instruments with the SwiftUI template (or on the iPhone 📱) to see which views cost the 300 ms, or keep more rooms started ahead.
+
 ## To do
-1. Rooms outside the top three: cut the first-open build of the screen (205 ms) and the serial reads (150 ms), or start more rooms ahead (memory); touch-down was tried and dropped (above).
+1. Rooms outside the top three: cut the first build of the room screen (≈ 300–385 ms of main-thread time, see above; profile it with the SwiftUI template), or start more rooms ahead (memory). The serial reads (< 10 ms), touch-down and starting the model as the screen is built were measured or tried and don't help.
 2. Make the window exact: have the test draw a marker the film can find (for example a one-frame colour flash in a corner at each mark), then read the strips of send, reaction, scroll up, room close and the two appearance flips.
 3. Scenarios for edit, reconnect and history prepend.
 4. Turn what can be measured into UI tests (for example: no frame with an empty message area after a warm push, from the film's frame differences).
