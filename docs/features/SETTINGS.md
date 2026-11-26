@@ -13,7 +13,7 @@ One place for account, notifications, privacy, appearance, storage, diagnostics 
 ## 3. Functional requirements
 | Section | Items |
 |---|---|
-| Account | Profile, sessions (built, read-only list, ADR-0018; signing others out not built), change password (built, ADR-0019), sign out |
+| Account | Profile, sessions (built: list, ADR-0018; sign out one or all others with the password, `POST /delete_devices` with password authentication like ADR-0019, M18-13; an account-page (OIDC) account is pointed to its account page), change password (built, ADR-0019), sign out |
 | Security | Verification status (verify row, built), recovery key setup/change (built), key backup state and identity reset ("Lost your recovery key?", built, M18-3), App Lock (candidate, ROADMAP M20-15) |
 | Notifications | Permission status, push health, defaults for DMs/groups (built: all messages / mentions and keywords), name and @room mention toggles (built), keyword rules (candidate, ROADMAP M20-14) |
 | Privacy | Read receipts: public / private (D7); typing notices on/off; media previews (built); URL previews (candidate, ROADMAP M20-17) |

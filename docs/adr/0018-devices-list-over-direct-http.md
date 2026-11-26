@@ -28,3 +28,5 @@ A new direct-HTTP place to review in security audits (SECURITY.md). Option 3 sta
 ## Verified facts and assumptions
 - [VERIFIED] The Matrix client-server API defines `GET /_matrix/client/v3/devices` returning `devices[]` with `device_id`, `display_name`, `last_ip`, `last_seen_ts`; the dev Synapse answers it (contract test `devicesList`).
 - [VERIFIED] The pinned SDK has no device-list call (grep of `matrix_sdk_ffi.swift`).
+
+**Addendum (M18-13):** `POST /_matrix/client/v3/delete_devices` is the second direct call, with password interactive authentication exactly as in ADR-0019; the password lives in memory for two requests. This device can't be in the list; OIDC accounts don't use it.

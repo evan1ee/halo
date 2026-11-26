@@ -362,6 +362,11 @@ public actor MatrixSessionPort: SessionPort {
     /// short poll bounds how long a sign-out or a restart can wait; the cost is one empty request per interval while the app is open.
     static let longPollMilliseconds: UInt64 = 8_000
 
+    /// A request the server doesn't answer is given up after this long (the SDK's own is 30 s, so a half-open connection hid
+    /// new messages for 39 s: GA-29). The long poll above is shorter than this.
+    static let requestTimeoutMilliseconds: UInt64 = 15_000
+    static let requestConfig = RequestConfig(retryLimit: nil, timeout: requestTimeoutMilliseconds, maxConcurrentRequests: nil, maxRetryTime: nil)
+
     private func runSync(_ client: Client, generation: UInt64) async {
         var backoff = Duration.seconds(1)
         var first = true
@@ -613,6 +618,7 @@ public actor MatrixSessionPort: SessionPort {
             .autoEnableBackups(autoEnableBackups: true)
             .crossProcessLockConfig(crossProcessLockConfig: .multiProcess(holderName: holderName))
             .setSessionDelegate(sessionDelegate: delegate)
+            .requestConfig(config: Self.requestConfig)
         // The SDK's own search index (until M19-11); Halo searches its own (D123).
         try? FileManager.default.removeItem(at: baseDirectory.appendingPathComponent(storeID, isDirectory: true).appendingPathComponent("search-index"))
         if backPaginates { builder = builder.enableAutomaticBackPagination(enableAutomaticBackPagination: true) }

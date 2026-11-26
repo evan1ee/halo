@@ -47,6 +47,50 @@ public final class MatrixDevicesPort: DevicesPort {
         return try Self.parse(data, currentDeviceID: sdkSession.deviceId)
     }
 
+    public func canSignOutOthers() async -> Bool {
+        guard let client = try? await session.signedInClient(), let sdkSession = try? client.session() else { return false }  // best-effort: a read; the caller falls back to a default and nothing changes
+        return sdkSession.oauthData == nil
+    }
+
+    /// `POST /delete_devices` with password interactive authentication, as the password change does (ADR 0019).
+    public func signOut(devices ids: [String], password: String) async throws(HaloError) {
+        guard !ids.isEmpty else { return }
+        let client = try await session.signedInClient()
+        let sdkSession: Session
+        do { sdkSession = try client.session() } catch { throw ErrorMapper.map(error) }
+        guard sdkSession.oauthData == nil else { throw .unsupported("SIGN_OUT_OTHERS") }
+        guard !ids.contains(sdkSession.deviceId) else { throw .invalidInput("CURRENT_DEVICE") }
+        guard let base = URL(string: sdkSession.homeserverUrl), let scheme = base.scheme, scheme == "https" || scheme == "http" else {
+            throw .internal(code: "DEVICES_URL")
+        }
+        let url = base.appending(path: "_matrix/client/v3/delete_devices")
+
+        func send(auth: [String: Any]?) async throws(HaloError) -> (Data, Int) {
+            var body: [String: Any] = ["devices": ids]
+            if let auth { body["auth"] = auth }
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.timeoutInterval = 20
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(sdkSession.accessToken)", forHTTPHeaderField: "Authorization")
+            do { request.httpBody = try JSONSerialization.data(withJSONObject: body) } catch { throw .internal(code: "DEVICES_ENCODE") }
+            do { return try await transport(request) } catch { throw ErrorMapper.map(error) }
+        }
+
+        let (first, firstStatus) = try await send(auth: nil)
+        if firstStatus == 200 { return }
+        guard firstStatus == 401, let challenge = MatrixAccountPasswordPort.json(first), let authSession = challenge["session"] as? String else {
+            throw MatrixAccountPasswordPort.error(status: firstStatus, body: first)
+        }
+        let auth: [String: Any] = [
+            "type": "m.login.password", "session": authSession,
+            "identifier": ["type": "m.id.user", "user": sdkSession.userId], "password": password,
+        ]
+        let (second, secondStatus) = try await send(auth: auth)
+        if secondStatus == 200 { return }
+        throw MatrixAccountPasswordPort.error(status: secondStatus, body: second)
+    }
+
     /// The `devices` array of the response, this device first, then newest `last_seen_ts` first. IP addresses are not read.
     static func parse(_ data: Data, currentDeviceID: String) throws(HaloError) -> [SessionDevice] {
         struct Response: Decodable {

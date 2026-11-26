@@ -38,3 +38,58 @@ struct DevicesSettingsTests {
         #expect(model.rows.isEmpty && model.error == nil)
     }
 }
+
+@MainActor
+@Suite("DevicesSettingsModel sign-out (M18-13)")
+struct DevicesSignOutTests {
+    final class Calls: @unchecked Sendable {  // test double touched from one test at a time
+        var signedOut: [[String]] = []
+        var result: DevicesSettingsActions.SignOutFailure?
+        var rows: [DevicesSettingsActions.Row] = [
+            .init(id: "ME", name: "Halo", lastSeen: nil, isCurrent: true),
+            .init(id: "A", name: "A", lastSeen: nil, isCurrent: false),
+            .init(id: "B", name: "B", lastSeen: nil, isCurrent: false),
+        ]
+    }
+
+    private func model(_ calls: Calls, canSignOut: Bool = true) -> DevicesSettingsModel {
+        DevicesSettingsModel(actions: .init(
+            load: { calls.rows }, canSignOut: { canSignOut },
+            signOut: { ids, _ in
+                calls.signedOut.append(ids)
+                if calls.result == nil { calls.rows.removeAll { ids.contains($0.id) } }
+                return calls.result
+            }))
+    }
+
+    @Test("signing out the others removes them and never lists this device among them")
+    func signsOutOthers() async {
+        let calls = Calls()
+        let model = model(calls)
+        await model.load()
+        #expect(model.canSignOut && model.others.map(\.id) == ["A", "B"])
+        await model.confirmSignOut(model.others.map(\.id), password: "pw")
+        #expect(calls.signedOut == [["A", "B"]] && model.rows.map(\.id) == ["ME"] && model.error == nil)
+    }
+
+    @Test("a wrong password asks again and keeps the sessions; an empty password asks nothing")
+    func wrongPassword() async {
+        let calls = Calls()
+        calls.result = .wrongPassword
+        let model = model(calls)
+        await model.load()
+        await model.confirmSignOut([], password: "pw")
+        await model.confirmSignOut(["A"], password: "")
+        #expect(calls.signedOut.isEmpty)
+        await model.confirmSignOut(["A"], password: "wrong")
+        #expect(model.pendingSignOut == ["A"] && model.error != nil && model.rows.count == 3)
+    }
+
+    @Test("an account page account (OIDC) offers no sign-out here")
+    func oidc() async {
+        let calls = Calls()
+        let model = model(calls, canSignOut: false)
+        await model.load()
+        #expect(!model.canSignOut)
+    }
+}
