@@ -219,6 +219,12 @@ public final class TimelineViewModel {
     /// from its local echo to the confirmed message.
     let thumbnailMemory = TimelineThumbnailMemory()
     var knownPhotoRefs: [String: MediaRef] = [:]
+    /// The row made for each item the last time, reused while the item and what the mapping reads besides it are unchanged
+    /// (M19-2): a new message maps one row, not the whole room.
+    var rowCache: [TimelineItemID: (item: TimelineItem, row: TimelineRow)] = [:]
+    var rowCacheContext = 0
+    /// How many rows `row(_:)` made through `mappedRows`; the test that pins M19-2 reads it.
+    var rowsMapped = 0
     var observation: Task<Void, Never>?
     let dateFormatter: DateFormatter
     let timeFormatter: DateFormatter

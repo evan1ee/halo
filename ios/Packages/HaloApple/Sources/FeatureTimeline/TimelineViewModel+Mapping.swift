@@ -30,7 +30,7 @@ extension TimelineViewModel {
             }
             readerProfiles = profiles
             senderNames = Self.senderNames(snapshot.items)
-            let rows = Self.collapsingStateRuns(Self.groupingRuns(snapshot.items.map(row), items: snapshot.items), items: snapshot.items)
+            let rows = Self.collapsingStateRuns(Self.groupingRuns(mappedRows(snapshot.items), items: snapshot.items), items: snapshot.items)
             // A photo you sent changes its reference when the server confirms it: the picture on screen becomes the entry
             // for the new reference, so nothing is loaded again.
             for change in TimelineThumbnailMemory.changedReferences(rows: rows, known: &knownPhotoRefs) {
@@ -210,6 +210,47 @@ extension TimelineViewModel {
     static func localpart(_ user: UserID) -> String {
         let raw = user.rawValue
         return raw.hasPrefix("@") ? String(raw.dropFirst().prefix { $0 != ":" }) : raw
+    }
+
+    /// What `row(_:)` reads besides the item: sender names, readers' profiles and the bot allowlist. A change drops every cached row.
+    private func mappingContext() -> Int {
+        var hasher = Hasher()
+        hasher.combine(senderNames)
+        hasher.combine(botSenders)
+        var profiles = 0
+        for (user, profile) in readerProfiles {
+            var entry = Hasher()
+            entry.combine(user)
+            entry.combine(profile.name)
+            entry.combine(profile.avatar?.token)
+            profiles &+= entry.finalize()  // a sum, so the order of the dictionary doesn't matter
+        }
+        hasher.combine(profiles)
+        return hasher.finalize()
+    }
+
+    /// The rows for `items`: a cached row is reused when its item is equal and the mapping context is the same, so one new
+    /// message makes one row (M19-2). The result is the same as `items.map(row)`.
+    func mappedRows(_ items: [TimelineItem]) -> [TimelineRow] {
+        let context = mappingContext()
+        if context != rowCacheContext {
+            rowCache.removeAll(keepingCapacity: true)
+            rowCacheContext = context
+        }
+        var next: [TimelineItemID: (item: TimelineItem, row: TimelineRow)] = [:]
+        next.reserveCapacity(items.count)
+        let rows = items.map { item -> TimelineRow in
+            if let hit = rowCache[item.id], hit.item == item {
+                next[item.id] = hit
+                return hit.row
+            }
+            rowsMapped += 1
+            let made = row(item)
+            next[item.id] = (item, made)
+            return made
+        }
+        rowCache = next
+        return rows
     }
 
     func row(_ item: TimelineItem) -> TimelineRow {
