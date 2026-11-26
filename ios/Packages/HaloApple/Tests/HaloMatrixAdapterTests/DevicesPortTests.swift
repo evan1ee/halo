@@ -30,4 +30,10 @@ struct DevicesPortTests {
     func malformed() {
         #expect(throws: HaloError.internal(code: "DEVICES_DECODE")) { try MatrixDevicesPort.parse(json("{}"), currentDeviceID: "x") }
     }
+
+    @Test("a failed sign-out answer maps: wrong password, server trouble")
+    func signOutErrors() {
+        #expect(MatrixAccountPasswordPort.error(status: 401, body: json("{\"errcode\":\"M_FORBIDDEN\"}")) == .invalidInput("CURRENT_PASSWORD"))
+        #expect(MatrixAccountPasswordPort.error(status: 503, body: Data()) == .network(retryable: true))
+    }
 }

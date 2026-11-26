@@ -84,7 +84,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 | [ ] **M18-10 Read-state and push matrix**: foreground, suspended, terminated, rebooted-locked, airplane, clock change, two devices | R · M · 📱 | Table in UNREAD_REGRESSION_TESTS green on a device; widgets and icon agree; AC-REL-1, AC-REL-2 |
 | [~] **M18-11 Delivery under faults** (*part built 2026-11-26: every kind exactly once under lost answer, 429 and drop; a sticker is not queued so a failure is shown, not retried; open: kill mid-send, token expiry, the 39 s half-open sync*): no lost, duplicated or reordered own messages across kill, reconnect, 429 and token expiry | R · M | M17-6 cases green for text, photo, file, sticker, reply, edit, reaction; AC-REL-3 |
 | [ ] **M18-12 Security review**: threat model walk-through, log scan of a full session, lint for sensitive logging, build check for TLS bypass, advisory check, disclosure policy | R · M · 👤 | Report with zero open high findings; SECURITY §6/§9 true; legal parts stay with M22-4 |
-| [ ] **M18-13 Sign out other sessions** (password UIA; OIDC uses the account page, D117) | C · S | Contract test on a throwaway account |
+| [x] **M18-13 Sign out other sessions** (*built 2026-11-26; open: the OIDC account page link (M18-6), VoiceOver, an iPhone look*; password UIA; OIDC uses the account page, D117) | C · S | Contract test on a throwaway account |
 
 **Exit:** AC-SEC-1–5 and AC-REL-1–7 met; `G-UNREAD` re-run green.
 

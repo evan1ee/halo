@@ -322,6 +322,11 @@ extension AppRoot {
         return DevicesSettingsActions(load: {
             guard let devices = try? await port.devices() else { return nil }  // best-effort: the closure's nil or false is the failure the Settings screen shows
             return devices.map { .init(id: $0.id, name: $0.displayName ?? $0.id, lastSeen: $0.lastSeen, isCurrent: $0.isCurrent) }
+        }, canSignOut: { await port.canSignOutOthers() }, signOut: { ids, password in
+            do throws(HaloError) { try await port.signOut(devices: ids, password: password) } catch {
+                return error == .invalidInput("CURRENT_PASSWORD") ? .wrongPassword : .failed
+            }
+            return nil
         })
     }
 
