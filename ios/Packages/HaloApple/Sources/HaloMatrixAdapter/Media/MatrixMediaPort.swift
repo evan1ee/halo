@@ -15,4 +15,8 @@ public final class MatrixMediaPort: MediaPort {
     public func content(_ ref: MediaRef) async throws(HaloError) -> Data {
         try await session.mediaData(ref, thumbnail: nil)
     }
+
+    public func file(_ ref: MediaRef, name: String, mimeType: String?, in directory: URL) async throws(HaloError) -> URL {
+        try await session.mediaFile(ref, name: name, mimeType: mimeType, in: directory)
+    }
 }

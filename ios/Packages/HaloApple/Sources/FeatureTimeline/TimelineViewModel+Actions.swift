@@ -16,7 +16,8 @@ extension TimelineViewModel {
 
     /// The id of the row whose file is downloading.
     /// Files are read into memory whole for now (`MediaPort.content`); bigger ones wait for a file-based download.
-    public nonisolated static let openSizeLimit = 50 * 1024 * 1024
+    /// A file is written to disk as it arrives (M19-5), so the limit is disk and patience, not memory.
+    public nonisolated static let openSizeLimit = 300 * 1024 * 1024
 
     public func openFile(_ row: TimelineRow) async {
         guard let file = row.file, media != nil, openingRow == nil else { return }
@@ -39,16 +40,17 @@ extension TimelineViewModel {
     public func downloadFileToTemp(_ file: TimelineRow.FileTile) async throws -> URL {
         guard let media else { throw HaloError.notFound }
         if let size = file.size, size > Self.openSizeLimit {
-            throw HaloError.invalidInput("File exceeds the 50 MB size limit")
+            throw HaloError.invalidInput("File exceeds the size limit")
         }
-        let data = try await media.content(file.ref)
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("halo-open-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        // The name comes from the sender: keep only its last path component so it can't leave the folder.
-        let last = URL(fileURLWithPath: file.name).lastPathComponent
-        let url = directory.appendingPathComponent(last.isEmpty || last == "." || last == ".." ? "file" : last)
-        try data.write(to: url, options: .atomic)
-        return url
+        // The name comes from the sender: the port keeps only its last path component so it can't leave the folder.
+        do {
+            return try await media.file(file.ref, name: file.name, mimeType: nil, in: directory)
+        } catch {
+            try? FileManager.default.removeItem(at: directory)  // best-effort: a half-made temporary folder; the system clears the rest
+            throw error
+        }
     }
 
     /// Quick Look was dismissed: the temporary copy is deleted.

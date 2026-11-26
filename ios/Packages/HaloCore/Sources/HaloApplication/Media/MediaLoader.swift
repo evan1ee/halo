@@ -54,6 +54,11 @@ public actor MediaLoader {
         do { return try await port.content(ref) } catch { throw error }
     }
 
+    /// The full content as a file on disk, never as one block in memory (M19-5); not cached, the caller owns the file.
+    public func file(_ ref: MediaRef, name: String, mimeType: String?, in directory: URL) async throws(HaloError) -> URL {
+        try await port.file(ref, name: name, mimeType: mimeType, in: directory)
+    }
+
     /// Drops all cached thumbnails from memory (SETTINGS §3 Storage → Clear cache).
     public func clearCache() {
         cache.removeAll()

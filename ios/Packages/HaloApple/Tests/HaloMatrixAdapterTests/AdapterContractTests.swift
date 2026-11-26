@@ -1632,6 +1632,16 @@ final class TimelineMirror: Sendable {
         }
     }
 
+    /// The media reference of the timeline's media message with this file name.
+    func mediaRef(named name: String) -> MediaRef? {
+        items.withLock { items in
+            for item in items {
+                if case .event(let event) = item.content, case .media(let attachment) = event.kind, attachment.body == name { return attachment.source }
+            }
+            return nil
+        }
+    }
+
     /// Polls `probe` until it returns a value; fails after `seconds`.
     func wait<T: Sendable>(seconds: Double, _ what: String, _ probe: (TimelineMirror) -> T?) async throws -> T {
         let deadline = ContinuousClock.now + .seconds(seconds)

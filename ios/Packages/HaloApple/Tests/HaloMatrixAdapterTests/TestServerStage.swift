@@ -17,6 +17,7 @@ struct TestStage {
     let proxy = ProxyControl()
     let user = env["HALO_FAULT_USER"] ?? "", password = env["HALO_FAULT_PASSWORD"] ?? ""
     let direct = env["HALO_FAULT_DIRECT"] ?? ""
+    let session: MatrixSessionPort
     let peer: TestPeer
     let room: RoomID
     let sync: SyncFollower
@@ -28,6 +29,7 @@ struct TestStage {
         let session = MatrixSessionPort(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent("halo-fault-\(UUID().uuidString)"))
         let details = try await session.loginDetails(server: env["HALO_FAULT_SERVER"] ?? "")
         _ = try await session.loginPassword(PasswordCredentials(username: user, password: password, deviceDisplayName: "fault"), on: details)
+        self.session = session
         let proxy = proxy
         Cleanup.current.add {
             try? await proxy.heal()

@@ -238,6 +238,24 @@ struct FaultTests {
         #expect(bodies == ["after expiry"], "exactly once")
     }
 
+    @Test("A file comes down to a file on disk, byte for byte, in the folder it was asked for (M19-5)", .timeLimit(.minutes(3)))
+    func fileToDisk() async throws {
+        let stage = try await TestStage()
+        let payload = Data((0..<(3 * 1024 * 1024)).map { UInt8(truncatingIfNeeded: $0 &* 31 &+ ($0 >> 8)) })
+        try await stage.timeline.sendFile(OutgoingFile(data: payload, filename: "big.bin", mimeType: "application/octet-stream"))
+        let ref: MediaRef = try await stage.mirror.wait(seconds: 60, "the file event") { mirror in
+            mirror.mediaRef(named: "big.bin")
+        }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("halo-disk-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        Cleanup.current.add { try? FileManager.default.removeItem(at: directory) }
+        let url = try await MatrixMediaPort(session: stage.session).file(ref, name: "../big.bin", mimeType: "application/octet-stream", in: directory)
+        #expect(url.deletingLastPathComponent().standardizedFileURL == directory.standardizedFileURL)
+        #expect(url.lastPathComponent == "big.bin")
+        #expect(try Data(contentsOf: url) == payload)
+        print("FAULT fileToDisk: \(try FileManager.default.contentsOfDirectory(atPath: directory.path))")
+    }
+
     struct Broken: Sendable, CustomTestStringConvertible {
         let name: String
         let rule: [String: any Sendable]
