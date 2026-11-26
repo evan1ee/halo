@@ -114,7 +114,10 @@ def main():
     subprocess.run(["xcrun", "simctl", "spawn", udid, "defaults", "write", "com.apple.keyboard.preferences", "AutomaticMinimizationEnabled", "-bool", "NO"], capture_output=True)
     if not arguments.skip_build:
         subprocess.run(["xcodebuild", "build-for-testing", "-project", os.path.join(ROOT, "ios/Halo.xcodeproj"), "-scheme", "Halo-Debug",
-                        "-destination", f"id={udid}", "-derivedDataPath", derived, "-quiet"], check=True, capture_output=True)
+                        "-destination", f"id={udid}", "-derivedDataPath", derived, "-quiet",
+                        # Optimised like scripts/perf.py: an unoptimised build lays lists out several times slower and the film exaggerates.
+                        "SWIFT_OPTIMIZATION_LEVEL=-O", "SWIFT_COMPILATION_MODE=wholemodule", "GCC_OPTIMIZATION_LEVEL=s",
+                        "SWIFT_ACTIVE_COMPILATION_CONDITIONS="], check=True, capture_output=True)
     report = ["| Scenario | Burst | Frames (30 fps) | Length | Largest step | Strip |", "|---|---|---|---|---|---|"]
     for scenario in arguments.scenarios:
         movie, ok, window = film(udid, scenario, arguments.out, derived)

@@ -28,8 +28,14 @@ A list that appears with its messages already known (`model.landed`), no more th
 - **Appearance:** the runner's own `XCUIDevice.appearance` did not change the film; the script now switches the simulator (`simctl ui … appearance`) on the test's "dark" / "light" marks. The flips were filmed; their strips are not read yet.
 - **Send, reaction, scroll up, room close:** filmed; the scenario window is still approximate (the test's begin and end marks are matched to the film by the recorder's first frame, off by a second or so), so the strips after the room open show the end of the test (a blank screen when the app is closed), not the action. Typing now works (software keyboard setting, as `prepush.sh`).
 
+## D-MOT-2 analysis (2026-11-26, simulator, timings written from the code path)
+- The data is fast: from `TimelineViewModel.start` to the first snapshot with rows takes 5–45 ms, warm or not (the event cache serves the first page at once, `firstPage` returns in ~0 ms). Before it: route change → `start` 40 ms on a re-open, **205 ms on the first open after a launch** (building the screen); `start` → `coordinator.open()` 40 ms re-open, 150 ms first open (the draft, read position and preview-setting reads are awaited one after another before the timeline opens).
+- The film (optimised build, as `scripts/perf.py`) still shows about 7 empty frames (0.23 s) on a re-open and 0.4–0.7 s on the first open: the page slides in with the composer while the message area waits for the view model to open its timeline and the list to lay out 35 rows.
+- Tried and dropped: opening the timeline while the two reads run (a reorder of `start`). One `scripts/perf.py` run gave NFR-11 p95 0.315 s against 0.238 s before; the simulator differs by up to 28 % between runs, so it was not kept without a gain it could show, and the unread marker depends on the read position being known first.
+- What would remove the empty frames: a view model that is already started when the screen is pushed (created and started when the chat list shows the row, or on touch-down), so its first frame has rows. It needs care for read state: a started but not visible model must report nothing (`isActive` is false until it appears).
+
 ## To do
-1. D-MOT-2 (cold open) and the rest of D-MOT-1 (the 0.1 s before rows exist).
+1. D-MOT-2 (cold open: warm view model, above) and the rest of D-MOT-1 (the 0.1 s before rows exist); the first-open build of the screen (205 ms) and the serial reads (150 ms) are the cheapest parts to cut.
 2. Make the window exact: have the test draw a marker the film can find (for example a one-frame colour flash in a corner at each mark), then read the strips of send, reaction, scroll up, room close and the two appearance flips.
 3. Scenarios for edit, reconnect and history prepend.
 4. Turn what can be measured into UI tests (for example: no frame with an empty message area after a warm push, from the film's frame differences).
