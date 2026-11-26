@@ -330,7 +330,7 @@ public struct PagedPhotoViewer: View {
 
     #if canImport(UIKit)
     private func copyCurrentPhoto() {
-        guard let data = currentImageData, let image = UIImage(data: data) else { return }
+        guard let data = currentImageData, let image = UIImage(data: data) else { return }  // decode: the full photo, once, on the person's request
         UIPasteboard.general.image = image
         showToast("Copied")
     }
@@ -380,12 +380,16 @@ private struct PagedPhotoPage: View {
 
     @State private var data: Data?
     @State private var isLoading = false
+    #if canImport(UIKit)
+    /// The photo decoded off the main thread, at most `ImagePipeline.Size.viewer` on the long side.
+    @State private var viewerImage: UIImage?
+    #endif
 
     var body: some View {
         Group {
             #if canImport(UIKit)
             if item.isImage {
-                if let data, let image = UIImage(data: data) {
+                if let image = viewerImage {
                     ZoomableImageView(
                         image: image,
                         onSingleTap: onSingleTap,
@@ -409,7 +413,12 @@ private struct PagedPhotoPage: View {
             isLoading = true
             let loaded = await loadImageData(item)
             data = loaded
-            if let loaded { onLoaded(loaded) }
+            if let loaded {
+                onLoaded(loaded)
+                #if canImport(UIKit)
+                viewerImage = await ImagePipeline.decode(loaded, maxPixel: ImagePipeline.Size.viewer)
+                #endif
+            }
             isLoading = false
         }
     }

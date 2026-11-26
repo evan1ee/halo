@@ -93,7 +93,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 
 | Task | Class · size | Done when |
 |---|---|---|
-| [ ] **M19-1 One image pipeline**: decode and downsample off the main thread to display size, decoded cache with a cap, eviction on memory warnings; used by every image view | R · L | No `UIImage(data:)` in a view (lint); NFR-12/13; pictures paint on the first frame when cached |
+| [x] **M19-1 One image pipeline** (*built 2026-11-26; open: NFR-12/13 numbers on a device 📱, a frame-by-frame check that cached pictures paint on the first frame (M19-9)*): decode and downsample off the main thread to display size, decoded cache with a cap, eviction on memory warnings; used by every image view | R · L | No `UIImage(data:)` in a view (lint); NFR-12/13; pictures paint on the first frame when cached |
 | [ ] **M19-2 Incremental timeline**: map only changed rows, off the main actor | R · M | Counter test: one new message maps ≤ 2 rows at 2,000 loaded; randomised diffs equal a full rebuild |
 | [ ] **M19-3 Incremental room list**: real insert/move/update diffs | R · M | 1,000 rooms: one room's change updates one row; order still matches the SDK (AC-RL-2) |
 | [ ] **M19-4 Room opening**: shorten the ~150 ms after the push without losing D95 | R · M | NFR-11; `testRoomOpeningLandsAtNewestTenTimes` green |

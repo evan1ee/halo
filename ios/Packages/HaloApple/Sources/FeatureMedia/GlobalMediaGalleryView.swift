@@ -360,13 +360,9 @@ private struct GlobalMediaGridTile: View {
             .aspectRatio(1, contentMode: .fit)
             .overlay {
                 #if canImport(UIKit)
-                if let data, let image = UIImage(data: data) {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                } else {
-                    placeholder
-                }
+                DecodedImage(data, maxPixel: ImagePipeline.Size.gridCell) { image in
+                    image.resizable().scaledToFill()
+                } placeholder: { placeholder }
                 #else
                 placeholder
                 #endif

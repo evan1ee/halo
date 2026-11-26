@@ -129,15 +129,13 @@ private struct GalleryThumbnail: View {
     var body: some View {
         Group {
             #if canImport(UIKit)
-            if let data, let image = UIImage(data: data) {
-                Image(uiImage: image)
+            DecodedImage(data, maxPixel: ImagePipeline.Size.listRow) { image in
+                image
                     .resizable()
                     .scaledToFill()
                     .frame(width: 44, height: 44)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
-            } else {
-                placeholder
-            }
+            } placeholder: { placeholder }
             #else
             placeholder
             #endif

@@ -23,7 +23,7 @@ Display every incoming media type and send photos (D16).
 - FR-8 Share extension (D87): text, a link, photos and files shared from other apps are staged by the extension and sent from the app to a chat the person picks; images over `OutgoingImage.maximumBytes` and files over `OutgoingFile.maximumBytes` are refused with a plain message.
 
 ## 4. Non-functional requirements
-Thumbnail decode ≤ 16 ms on a background thread; memory cap per [../matrix/MEDIA.md](../matrix/MEDIA.md).
+Thumbnail decode ≤ 16 ms on a background thread; memory cap per [../matrix/MEDIA.md](../matrix/MEDIA.md). One pipeline (`ImagePipeline`, `DecodedImage`, M19-1): bytes are decoded off the main thread with ImageIO to the pixel size the place shows (timeline 960, grid 420, list 180, sticker 360, viewer 3072), kept in a 64 MB cost-capped cache keyed by the bytes and size, and dropped on a memory warning; a view whose picture is cached paints it on its first frame. Lint `image_pipeline` refuses a decode in a view (`// decode: <reason>` for the few off-main ones).
 
 ## 5–6. Flows and states
 Download: `NotLoaded → Loading → Loaded | Failed(retry)`. Upload: `Preparing → Uploading(progress) → Sent | Failed`.

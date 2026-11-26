@@ -67,16 +67,17 @@ struct ThumbnailView: View {
                 .accessibilityIdentifier("show-photo")
             } else if let animated {
                 AnimatedStickerView(data: animated).allowsHitTesting(false)
-            } else if let data, let uiImage = UIImage(data: data) {
+            } else if let data {
                 // A photo fills its box (cropped when the event announced no size; the viewer shows all of it); a sticker fits.
-                let rendered = Image(uiImage: uiImage)
-                if UIDevice.current.userInterfaceIdiom == .pad,
-                   TimelineDragExtractor.allowsPhotoDrag(isSticker: isSticker, hasImageData: true) {
-                    rendered.resizable().aspectRatio(contentMode: .fill)
-                        .draggable(rendered)
-                } else {
-                    rendered.resizable().aspectRatio(contentMode: isSticker ? .fit : .fill)
-                }
+                DecodedImage(data, maxPixel: isSticker ? ImagePipeline.Size.sticker : ImagePipeline.Size.timeline) { rendered in
+                    if UIDevice.current.userInterfaceIdiom == .pad,
+                       TimelineDragExtractor.allowsPhotoDrag(isSticker: isSticker, hasImageData: true) {
+                        rendered.resizable().aspectRatio(contentMode: .fill)
+                            .draggable(rendered)
+                    } else {
+                        rendered.resizable().aspectRatio(contentMode: isSticker ? .fit : .fill)
+                    }
+                } placeholder: { Rectangle().fill(.secondary.opacity(0.2)) }
             } else if failed {
                 Button { failed = false; attempt += 1 } label: {
                     VStack(spacing: 6) {
