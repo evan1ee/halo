@@ -53,7 +53,7 @@ drops, delays, throttles, cuts, hangs, refuses or answers requests with a status
   broken on purpose (`HALO_SCENARIO_BREAK`) must turn F02–F06 red.
 - `infra/test/run.sh faults` (Mac): the real adapter and SDK behind the same faults (`FaultTests`). Result 2026-11-25, simulator: an outage ends 2.1 s after the server is back, a cut sync M18-11: `everyKindOnce` sends a reply, edit, reaction, photo, file and sticker through a lost answer, 429 and a dropped connection; each reaches the server once (the sticker, sent outside the queue, may be refused and shown as failed).
   response is fetched again in 1.2 s, three 502 answers in 3.5 s; a send meets a lost answer, two 429, two 503, a dropped connection or a slow network and arrives **exactly once, in order**.
-  A half-open connection takes **39 s** to recover (the SDK's request timeout; GA-29, M18-11).
+  A half-open connection took **39 s** to recover (the SDK's 30 s request timeout); with Halo's 15 s request timeout it takes **24 s** (GA-29, M18-11). Risk: a single request, an upload included, is now cut after 15 s; checked only with the 4 s slow-network case.
 
 ## 6. Fixtures
 Bot messages: copied **verbatim** from the bot repo's tests (MIT, attribution file in the fixture folder). Spec examples for image packs. Recorded sync traces (anonymised).
