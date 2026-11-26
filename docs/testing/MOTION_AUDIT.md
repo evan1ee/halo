@@ -81,6 +81,27 @@ Measured with a temporary `os.Logger` probe in `TimelineViewModel.start()` (not 
   could not symbolicate a simulator trace against a `dsymutil` dSYM ("no dSYMs relevant"). Next: profile the first room open in
   Instruments with the SwiftUI template (or on the iPhone 📱) to see which views cost the 300 ms, or keep more rooms started ahead.
 
+## The first room screen of a launch: profiled; building it ahead tried and not kept (2026-11-26, simulator, optimised build)
+- **It is a once-per-launch cost, not a per-room one:** model made → `start()` for the fifth chat was 191–385 ms when it was the first room
+  screen of the launch, 73 ms when a top room had been opened before it, 46–58 ms on a re-open.
+- **Profile** (Time Profiler launched by `xctrace` with `HALO_MOTION_ATTACH=1`, so the motion test drives the running app; simulator
+  frames symbolicated with `atos -p` against a live Halo process of the same simulator boot; Instruments' SwiftUI instrument recorded
+  nothing on the simulator, attached or launched): of the 710 ms of main-thread time around the first open, about 95 ms is XCUITest's own
+  accessibility snapshots (a test artefact), 178 ms the Swift runtime's first protocol-conformance lookups
+  (`swift_conformsToProtocolMaybeInstantiateSuperclasses`; 73 ms of them from SwiftUI scanning each new view type for dynamic
+  properties, `DynamicPropertyCache.fields`, about 33 ms from resolving `some View` types), about 146 ms the list creating its first cells
+  and 126 ms the navigation stack making the pushed hosting controller. Halo's own code (row bodies, `TimelineView.body`) is a few ms.
+- **Tried and not kept:** `TimelineWarmUpView` (FeatureTimeline) is the room screen with sample rows, a model that belongs to no room (no receipts,
+  no drafts, a port that opens nothing) and none of the room's lifecycle (`TimelineView.isWarmUp`: no start, no present, no active state,
+  no stop). `RootView` puts it behind the chat list, transparent and hidden from accessibility, from 1 s to 2 s after the list first
+  loads, once per launch. Built off the window (offset) it gained nothing: the list inside made no cells.
+- **What it gained:** model made → `start()` on the fifth chat's first open 111–115 ms in three runs (191–385 ms before); the film showed
+  about 4 empty frames on that open (7–9 before) and no frame change while the warm-up was built.
+- **Why it was removed:** `testLaunchShowsChatsNotTheLastRoom` found a `sticker-button` right after launch: the hidden composer stayed
+  in the accessibility tree despite `.accessibilityHidden(true)` (so VoiceOver could likely reach it for that second); and
+  `scripts/perf.py --accounts scale300` gave NFR-11 p95 0.567 s against 0.206–0.222 s for the same code without it, as opens during the
+  warm-up wait for its ≈ 300 ms of main-thread work. A future attempt needs an accessibility-proof host and a time no open can meet.
+
 ## Rooms started on the tap, top-three models retired (2026-11-26/27, simulator, optimised build, D126)
 **How it was measured:** `scripts/room_open_bench.py` (`HaloPerformanceTests.test6RoomOpenSequence`) launches the app afresh in each
 round, lets it settle 4 s, then opens the fifth chat (the first room screen of the launch), the same chat again, the sixth chat and the

@@ -858,7 +858,8 @@ final class HaloUITests: XCTestCase {
             if let handle = FileHandle(forWritingAtPath: marks) { handle.seekToEndOfFile(); handle.write(Data(line.utf8)); handle.closeFile() }
         }
         let app = XCUIApplication()
-        app.launch()
+        // HALO_MOTION_ATTACH=1: drive the app already running (Instruments launched it, so its SwiftUI tracing is on).
+        if ProcessInfo.processInfo.environment["HALO_MOTION_ATTACH"] == "1" { app.activate() } else { app.launch() }
         dismissFirstRunSheets(app)
         if !chatsRoot(app).waitForExistence(timeout: 4) { returnToChatList(app) }
         guard chatsRoot(app).waitForExistence(timeout: 15) else { throw XCTSkip("App is signed out.") }
