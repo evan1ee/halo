@@ -22,6 +22,7 @@ SDK's point of view, not what the user actually looked at; Halo needs D6 semanti
 - *Mark as read* (room list swipe): `ReadMarkerPort.markRoomRead(room)` calls `Room.markAsRead(receiptType:)` for the public/private receipt and `.fullyRead` (R-20), returns the receipted `EventID` (`loadUserReceipt` with fallback to `Timeline.latestEventId()`), and the coordinator records it as an intent in state `sent`. Then clear `m.marked_unread`.
 - *Mark as unread*: `Room.set_unread_flag(true)` **[VERIFIED F-FFI-6]**.
 - *Opening a room* clears `m.marked_unread` (`set_unread_flag(false)`) once the room is visible.
+- *A timeline started ahead of its screen* (the top of the chat list, M19-9) sends nothing: no receipt, no own message as read, no `m.marked_unread` clearing, no draft or typing notice, until `TimelineViewModel.present()` (the screen appeared); then it behaves as a room just opened (`WarmTimelinesTests`).
 - *Sending a message*: write an intent at the own event (E1b) once it has a server event id.
 - *Mark all as read* (settings, safety valve): `Client.mark_all_rooms_as_read` **[VERIFIED F-FFI-4]**.
 

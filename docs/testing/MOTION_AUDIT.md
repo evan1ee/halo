@@ -34,8 +34,26 @@ A list that appears with its messages already known (`model.landed`), no more th
 - Tried and dropped: opening the timeline while the two reads run (a reorder of `start`). One `scripts/perf.py` run gave NFR-11 p95 0.315 s against 0.238 s before; the simulator differs by up to 28 % between runs, so it was not kept without a gain it could show, and the unread marker depends on the read position being known first.
 - What would remove the empty frames: a view model that is already started when the screen is pushed (created and started when the chat list shows the row, or on touch-down), so its first frame has rows. It needs care for read state: a started but not visible model must report nothing (`isActive` is false until it appears).
 
+## D-MOT-2 fix: view models started ahead (2026-11-26, simulator)
+- **Built:** `WarmTimelines` (FeatureTimeline) keeps a started `TimelineViewModel` for each of the top three rooms of the chat list (after
+  `MatrixTimelinePort.warm` has prepared their SDK timelines); `AppRoot.makeRoomTimeline` hands it to the pushed `TimelineScreen` (a room opened
+  at a message always gets a new one). The cache follows the top of the list, never prepares a room that is on screen, prepares a closed room
+  again 0.6 s after it closed, replaces a waiting model whose screen closed without it (opened at a message), and lets go of everything on
+  sign-out (`resetAccountState`) and on a memory warning.
+- **Read state:** a model started with `startAhead()` has `isPresented == false` and reports nothing: no read receipt or seen event
+  (`reevaluateSeen` treats it as inactive), no own message as read (`reportOwnMessage`), no `m.marked_unread` clearing; the draft is only read
+  (restoring it writes nothing and sends no typing notice). `TimelineView.onAppear` calls `present()`: it lands at the newest row (D95),
+  reports what a fresh open would, and reads the read position and the preview setting again (the unread marker follows the position of that
+  moment). Tested in `WarmTimelinesTests` (a mutation that lets `reportOwnMessage` run while hidden fails it).
+- **Film (`room-open-close`, optimised build):** before, the re-open showed the composer over an empty message area for 6 frames; after, the
+  first open after a launch and the re-open both slide in with their rows on the first frame (0 empty frames), at the newest message, without a
+  jump. The re-open fell just after the script's window (it is still approximate) and was cut from the film by hand
+  (`ffmpeg -ss … -vf fps=30,tile`). D95 check (`testRoomOpeningLandsAtNewestTenTimes`, 10 opens on `Halo Perf`) passed.
+- **Not covered:** a room outside the top three still opens as before (≈ 0.23 s re-open, 0.4–0.7 s first open); touch-down warming of the
+  tapped row was not built. Each waiting model holds a live SDK timeline (three at most, on top of the adapter's six prepared ones).
+
 ## To do
-1. D-MOT-2 (cold open: warm view model, above) and the rest of D-MOT-1 (the 0.1 s before rows exist); the first-open build of the screen (205 ms) and the serial reads (150 ms) are the cheapest parts to cut.
+1. Rooms outside the top three: start a model on touch-down of a row, or cut the first-open build of the screen (205 ms) and the serial reads (150 ms).
 2. Make the window exact: have the test draw a marker the film can find (for example a one-frame colour flash in a corner at each mark), then read the strips of send, reaction, scroll up, room close and the two appearance flips.
 3. Scenarios for edit, reconnect and history prepend.
 4. Turn what can be measured into UI tests (for example: no frame with an empty message area after a warm push, from the film's frame differences).

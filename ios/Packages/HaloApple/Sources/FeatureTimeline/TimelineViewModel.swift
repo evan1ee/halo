@@ -237,6 +237,13 @@ public final class TimelineViewModel {
     let sleep: @Sendable (Duration) async throws -> Void
     var readTracker = TimelineReadTracker()
     var isActive = true
+    /// `false` while the model was started ahead of its screen (`startAhead`, a warm model for the top of the chat list, M19-9):
+    /// it then reports nothing, no read receipt, no seen event, no own message as read, no `m.marked_unread` clearing.
+    public internal(set) var isPresented = true
+    /// Told once when a model started ahead of its screen is shown (`present`).
+    public var onPresented: (@MainActor () -> Void)?
+    /// The items of the last live snapshot, for what is worked out again when a model started ahead is shown.
+    var lastItems: [TimelineItem] = []
     var clearedMarkedUnread = false
     var isRestoringDraft = false
     /// The unsent text that was in the composer when an edit began; it comes back when the edit ends.
@@ -333,14 +340,14 @@ public final class TimelineViewModel {
 
     /// Opening a room clears `m.marked_unread` once the room is visible, once per opening of the screen.
     func clearMarkedUnreadIfVisible() {
-        guard isActive, !clearedMarkedUnread, observation != nil, let receipts, let room else { return }
+        guard isActive, isPresented, !clearedMarkedUnread, observation != nil, let receipts, let room else { return }
         clearedMarkedUnread = true
         Task { await receipts.roomOpened(room) }
     }
 
     func reevaluateSeen() {
         guard receipts != nil, room != nil, !isFocused, !receiptsWait else { return }
-        let candidate = readTracker.candidate(isActive: isActive)
+        let candidate = readTracker.candidate(isActive: isActive && isPresented)
         guard candidate?.event != pendingCandidate else { return }
         pendingCandidate = candidate?.event
         dwellTask?.cancel()
@@ -389,6 +396,41 @@ public final class TimelineViewModel {
         pinnedEventIDs = await coordinator.pinnedEventIDs()
         await draftRestored.value
         clearMarkedUnreadIfVisible()
+    }
+
+    /// Opens the timeline before its screen exists (M19-9, D-MOT-2): the screen pushed later shows rows on its first frame. Until
+    /// `present()` the model reports nothing about what was read; the draft is only read, never written.
+    public func startAhead() async {
+        guard observation == nil else { return }
+        isPresented = false
+        await start()
+    }
+
+    /// The screen of a model started ahead is shown: from now on it is an opened room. It lands at the newest row (D95), and
+    /// what may have changed while it waited (the read position, the preview setting) is read again.
+    public func present() {
+        guard !isPresented else { return }
+        isPresented = true
+        let presented = onPresented
+        onPresented = nil
+        presented?()
+        if landed, !isFocused, let newest = lastRowID {
+            landingRow = newest
+            trackedTailID = newest
+            isAtBottom = true
+            newSinceDetached = 0
+        }
+        if !isFocused { reportOwnMessage(lastItems) }
+        reevaluateSeen()
+        clearMarkedUnreadIfVisible()
+        Task { [weak self] in await self?.refreshAfterPresenting() }
+    }
+
+    private func refreshAfterPresenting() async {
+        let position = await readThrough?()
+        readThroughAtOpen = position
+        if landed, !isFocused { unreadMarkerID = Self.firstUnreadItemID(lastItems, readThrough: position) }
+        if let previewsAllowed { previewsHidden = await !previewsAllowed() }
     }
 
     func restoreDraft() async {

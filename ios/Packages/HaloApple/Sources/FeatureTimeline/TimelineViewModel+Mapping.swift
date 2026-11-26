@@ -15,6 +15,7 @@ extension TimelineViewModel {
             isFocused = snapshot.focus != nil
             focusReachedEnd = snapshot.reachedEnd
             if !isFocused { readTracker.update(items: snapshot.items) }
+            lastItems = snapshot.items
             botTasks = botTracker(snapshot.items)
             if let botActivity, let room, !botSenders.isEmpty, !isFocused {
                 let items = snapshot.items, senders = botSenders
@@ -102,7 +103,7 @@ extension TimelineViewModel {
     /// Sending a message means the user has read up to it (MESSAGING FR-6, rule E1b): once the newest own message (in
     /// timeline order, not by timestamp, R-06) has a server event ID it becomes the read position.
     func reportOwnMessage(_ items: [TimelineItem]) {
-        guard let receipts, let room else { return }
+        guard isPresented, let receipts, let room else { return }
         var newest: (id: EventID, time: Date)?
         for item in items {
             guard case .event(let event) = item.content, event.isOwn, let id = event.eventID else { continue }

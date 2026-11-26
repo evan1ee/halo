@@ -63,11 +63,28 @@ extension AppRoot {
             images: ImagePreparer(),
             readThrough: readThroughClosure
         )
-        model.botSenders = Set(preferences.botSenders)
         model.unrecognisedBotMessages = unrecognisedBots
         model.botActivity = threadRoot == nil ? botActivity : nil
         model.sendsTypingNotices = { [preferences] in preferences.sendTypingNotices }
+        configure(model)
+        return model
+    }
+
+    /// The settings a model reads when it is shown; set again on a model started ahead, as they may have changed meanwhile.
+    private func configure(_ model: TimelineViewModel) {
+        model.botSenders = Set(preferences.botSenders)
         model.klipy = klipy.isAvailable ? klipy : nil
+    }
+
+    /// The view model of a room screen: the one started ahead for the top of the chat list when there is one (M19-9, D-MOT-2),
+    /// so the first frame has rows; otherwise a new one. A room opened at a message always gets a new one.
+    func makeRoomTimeline(room: RoomID, jumpTo: EventID?) -> TimelineViewModel {
+        if jumpTo == nil, let started = warmTimelines.take(room) {
+            configure(started)
+            return started
+        }
+        let model = makeTimeline(room: room)
+        model.initialEvent = jumpTo
         return model
     }
 

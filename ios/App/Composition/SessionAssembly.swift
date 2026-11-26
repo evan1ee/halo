@@ -102,6 +102,7 @@ extension AppRoot {
         await botActivity.reset()
         await stickers.reset()
         await klipy.reset()
+        warmTimelines.dropAll()
         await timelinePort.dropWarm()
         await search.detach(deletingIndex: true)
         preferences.botSenders = []

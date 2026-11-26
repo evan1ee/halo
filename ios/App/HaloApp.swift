@@ -221,6 +221,10 @@ private struct RootView: View {
                         // when the app was last closed is not brought back. Notification taps and links still open their room.
                         Task { await root.scanBotRooms() }
                     }
+                    .onChange(of: router.path, initial: true) { _, new in
+                        // Rooms on screen aren't prepared again behind it; a closed one is prepared again (M19-9).
+                        root.warmTimelines.screensChanged(Set(new.compactMap { if case .room(let room, _) = $0 { room } else { nil } }))
+                    }
                     .onChange(of: router.path) { old, new in
                         root.search.noteActivity()
                         if new.count > old.count || Self.isPad, case .room = new.last, new.last != old.last {
@@ -586,8 +590,7 @@ private struct TimelineScreen: View {
         self.openThread = openThread
         self.root = root
         self.room = room
-        let timeline = root.makeTimeline(room: room)
-        timeline.initialEvent = jumpTo
+        let timeline = root.makeRoomTimeline(room: room, jumpTo: jumpTo)
         _model = State(initialValue: timeline)
         _stickers = State(initialValue: root.makeStickerPanel(room: room, timeline: timeline))
         _klipyGIFs = State(initialValue: root.makeKlipyPanel(.gifs, timeline: timeline))

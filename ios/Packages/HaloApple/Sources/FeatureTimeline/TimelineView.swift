@@ -521,6 +521,8 @@ public struct TimelineView: View {
         .sheet(isPresented: Binding(get: { model.reactionTarget != nil }, set: { if !$0 { model.cancelReactionPicker() } })) {
             ReactionPicker(model: model).presentationDetents([.medium])
         }
+        // A model started ahead of this screen (M19-9) becomes an opened room now; for any other model this does nothing.
+        .onAppear { model.present() }
         .task { await model.start() }
         .onChange(of: scenePhase, initial: true) { _, phase in model.setActive(phase == .active) }
         .onDisappear {

@@ -2,6 +2,7 @@ import AppIntents
 import FeatureBotActivity
 import FeatureOnboarding
 import FeatureRoomList
+import FeatureTimeline
 import Foundation
 import HaloApplication
 import HaloDomain
@@ -10,6 +11,7 @@ import HaloMatrixAdapter
 import HaloPersistence
 import HaloPlatform
 import Synchronization
+import UIKit
 
 /// Composition root object graph (ADR-0022 step 2, TD-10).
 ///
@@ -47,6 +49,10 @@ final class AppRoot {
         activity: botActivity,
         botSenders: { [preferencesPort] in Set(preferencesPort.load().botSenders) }
     )
+
+    /// Timeline view models started for the top of the chat list, so a pushed room has rows on its first frame (M19-9, D-MOT-2).
+    lazy var warmTimelines = WarmTimelines { [unowned self] room in makeTimeline(room: room) }
+    private var memoryWarning: (any NSObjectProtocol)?
 
     let attentionCache: AttentionCache
     let activeRecords = ActiveRecordsBox()
@@ -210,13 +216,21 @@ final class AppRoot {
         AppDependencyManager.shared.add(dependency: OpenChatRequestBox(self.openChat))
         AppDependencyManager.shared.add(dependency: FocusFilterStateBox(self.focus))
         AppDependencyManager.shared.add(dependency: siriSend)
-        roomList.warm = { [timelinePort] rooms in await timelinePort.warm(rooms) }
         roomList.botSenders = { [preferences] in Set(preferences.botSenders) }
 
         #if DEBUG
         Self.exportNSEMetrics(namespace: namespace)
         #endif
         self.log = log
+        roomList.warm = { [weak self, timelinePort] rooms in
+            // The adapter prepares the SDK timelines first; the view models started ahead then take them (M19-9).
+            await timelinePort.warm(rooms)
+            await self?.warmTimelines.setTop(rooms)
+        }
+        // Under memory pressure the timelines started ahead go first; new ones come with the next change of the chat list.
+        memoryWarning = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.warmTimelines.dropAll() } }
         log.info("app launched")
     }
 }
