@@ -34,7 +34,7 @@ A list that appears with its messages already known (`model.landed`), no more th
 - Tried and dropped: opening the timeline while the two reads run (a reorder of `start`). One `scripts/perf.py` run gave NFR-11 p95 0.315 s against 0.238 s before; the simulator differs by up to 28 % between runs, so it was not kept without a gain it could show, and the unread marker depends on the read position being known first.
 - What would remove the empty frames: a view model that is already started when the screen is pushed (created and started when the chat list shows the row, or on touch-down), so its first frame has rows. It needs care for read state: a started but not visible model must report nothing (`isActive` is false until it appears).
 
-## D-MOT-2 fix: view models started ahead (2026-11-26, simulator)
+## D-MOT-2 fix: view models started ahead (2026-11-26, simulator; retired by D126, see the last section)
 - **Built:** `WarmTimelines` (FeatureTimeline) keeps a started `TimelineViewModel` for each of the top three rooms of the chat list (after
   `MatrixTimelinePort.warm` has prepared their SDK timelines); `AppRoot.makeRoomTimeline` hands it to the pushed `TimelineScreen` (a room opened
   at a message always gets a new one). The cache follows the top of the list, never prepares a room that is on screen, prepares a closed room
@@ -81,8 +81,66 @@ Measured with a temporary `os.Logger` probe in `TimelineViewModel.start()` (not 
   could not symbolicate a simulator trace against a `dsymutil` dSYM ("no dSYMs relevant"). Next: profile the first room open in
   Instruments with the SwiftUI template (or on the iPhone 📱) to see which views cost the 300 ms, or keep more rooms started ahead.
 
+## Rooms started on the tap, top-three models retired (2026-11-26/27, simulator, optimised build, D126)
+**How it was measured:** `scripts/room_open_bench.py` (`HaloPerformanceTests.test6RoomOpenSequence`) launches the app afresh in each
+round, lets it settle 4 s, then opens the fifth chat (the first room screen of the launch), the same chat again, the sixth chat and the
+first chat, and reads two signposts from the simulator's log: `room-first-rows` (tap → the list first draws rows; the message area stops
+being empty) and `room-open` (tap → placed at the newest message, NFR-11). Both now begin at the tap, not when the room reaches the
+navigation path. Five rounds each; median (range), ms. The simulator varies up to 28 % between runs; the phone is still to do 📱.
+
+| Build | first room of the launch | re-open | new room, not the first | top room |
+|---|---|---|---|---|
+| before (top three started ahead) | 312 (292–1111) | 89 (88–438) | 77 (77–273) | 32 (32–100) |
+| + the tapped room starts before its push | 251 (229–365) | 84 (52–254) | 48 (32–60) | 34 (33–158) |
+| + the first room screen built once, hidden (not kept, see below) | 91 (71–107) | 53 (45–75) | 38 (37–112) | 40 (31–50) |
+| + top-three models retired, with that screen | 65 (61–830¹) | 49 (42–62) | 35 (32–40) | 35 (31–41) |
+| **kept:** started on the tap, top-three retired, no hidden screen | 236 (180–318) | 46 (43–79) | 36 (35–55) | 35 (33–88) |
+
+¹ the first launch after installing the build. `room-open` (placed at the newest message) medians: 195–199 ms for the later opens,
+554 ms for the first of a launch (before: 201–563 ms); it includes the landing check, which waits for the rows to settle at the bottom.
+`scripts/perf.py --accounts scale300`, the same evening on the same simulator: NFR-11 p95 0.44 s for the kept build, 0.423 s for
+`7291be2` (top three started ahead): equal within the simulator's noise (the 0.206–0.222 s recorded earlier came from a quicker state
+of the simulator; idle CPU was higher in both of these runs too).
+
+- **Where the time was:** the data was never the cost (reads < 10 ms, first rows ≈ 10 ms after `start()`). Without a model ready, the
+  screen was pushed with an empty message area and the rows came 2–9 frames later; the first room screen of a launch also paid a
+  once-per-process ~230 ms of SwiftUI and Swift-runtime setup (the bench: 312 ms against 77 ms for a later new room; a Time Profiler
+  pass by the parallel session put most of it in the runtime's first protocol-conformance lookups and the list's first cells, almost
+  none in Halo's own view code).
+- **Start on the tap (`PreparedTimelines`, `AppRoot.openWhenReady`):** the tap starts the room's view model (held back, it reports
+  nothing) and pushes the screen when the model has landed (`TimelineViewModel.canShow`), or after 150 ms (a slow or empty room is
+  pushed as before and shows its rows when they come). A second tap before the push replaces the first, whose timeline closes.
+- **First screen built once (`TimelineWarmUpView`), measured and not kept:** the parallel session had built and removed it (its section
+  above): its composer stayed in the accessibility tree despite `.accessibilityHidden`, and opens that fall in its second wait for its
+  ≈ 300 ms of work (NFR-11 p95 0.567 s). This bench waits 4 s after launch, so it missed the second. Without it, the first room of a
+  launch is pushed ~200 ms later, with its rows: the film shows no empty frame, the slide just starts later.
+- **Retired:** the three view models kept started for the top of the chat list (three live SDK timelines and their mapping on every
+  change). A room started on the tap now opens as fast; the adapter still keeps the top rooms' SDK timelines ready.
+- **Film (`motion_audit.py room-open-other room-open-close`, kept build):** the fifth chat (first room of the launch, outside the old
+  top three) slides in with its rows on the push's first frame and they don't move (was 7–9 empty frames); the first chat the same. Left: on the
+  first chat, the newest own messages at the very bottom appear about two frames after the rest, without a jump.
+- **Measured and not changed:** `RowView` made `Equatable` (so a list pass could skip unchanged rows): a probe counted 440 row bodies
+  over 12 opens without it and 453 with it, about one per visible row per open, so SwiftUI already skips unchanged rows here; not kept.
+  Scrolling was not probed.
+- **Media:** the thumbnail memory a row paints from on its first frame was one per view model, so a re-opened room started empty and
+  showed placeholders until its pictures came back from the loader; one store now serves every timeline (32 MB, cleared on a memory
+  warning and on sign-out). Not filmed: the scale accounts' rooms have no photos.
+
+### Against Element X's room opening (the founder's investigation report, 2026-11-26)
+| Area | Halo now | Verdict |
+|---|---|---|
+| Chrome, timeline and composer state apart | One `TimelineViewModel`; rows read only narrow model state (pins, preview setting), tracked per row by Observation | Not split: the probe shows no excess row work on open; revisit only with a measured cost (typing, keyboard) |
+| Subscribe before the screen mounts | Built: the tap starts the timeline, the push waits for its rows (bounded) | Adopted, with Halo's cancellation (a newer tap wins, the old timeline closes) |
+| Virtualised list (`UITableView`, diffable, inverted) | SwiftUI `List` (a collection view underneath, cells only for visible rows), opened at the bottom with `defaultScrollAnchor` | Not adopted: the cost was never the list's rows (Halo's own view code is a few ms of the open) |
+| Presentation built off the main actor | Mapping on the main actor, rows reused per item (M19-2); the first snapshot maps in ≈ 10 ms | Not now: no measured open cost; M19-2's open items stay |
+| Per-row observation and equality checks | Rows take value rows; Observation per row | Measured (above), nothing to gain on open |
+| Heavy composer panels mounted lazily | Panels are built when shown (`ComposerPanelArea`) | Already so |
+| Media frames, memory fast path, cancellation | Frames from the event's size, BlurHash, decoded-image cache read in `init`, `.task` loads cancelled with the row, loader de-duplicates | Already so; the shared thumbnail memory added |
+| Visible-room sliding-sync subscriptions | Classic sync (D73/D125): every joined room's events arrive anyway; the adapter prepares the top rooms' SDK timelines | Not applicable |
+| Cache of recent rows across visits | None | Not built: rows are on the device within ms of the tap; a second copy of timeline state would need reconciling for edits, redactions and decryption (AGENTS §4.1) |
+
 ## To do
-1. Rooms outside the top three: cut the first build of the room screen (≈ 300–385 ms of main-thread time, see above; profile it with the SwiftUI template), or start more rooms ahead (memory). The serial reads (< 10 ms), touch-down and starting the model as the screen is built were measured or tried and don't help.
+1. The first room of a launch: ~200 ms between the tap and the slide (once-per-process SwiftUI and runtime setup); paying it ahead needs a host accessibility can't reach and a moment no open falls into. Room open on the iPhone 📱 (`scripts/room_open_bench.py` needs a simulator); the newest own rows appearing two frames late on the first chat; a room with photos filmed on a re-open.
 2. Make the window exact: have the test draw a marker the film can find (for example a one-frame colour flash in a corner at each mark), then read the strips of send, reaction, scroll up, room close and the two appearance flips.
 3. Scenarios for edit, reconnect and history prepend.
 4. Turn what can be measured into UI tests (for example: no frame with an empty message area after a warm push, from the film's frame differences).

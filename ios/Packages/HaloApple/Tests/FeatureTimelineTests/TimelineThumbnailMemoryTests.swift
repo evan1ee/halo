@@ -60,6 +60,23 @@ struct TimelineThumbnailMemoryTests {
         #expect(memory.data(for: MediaRef(token: "huge")) == nil, "more than the whole budget isn't kept")
     }
 
+    @Test("the room opened again (a new view model) paints the pictures shown before at once: the app's timelines share one memory")
+    func reopenedRoomPaintsAtOnce() async throws {
+        let shared = TimelineThumbnailMemory()
+        let room = try RoomID("!r:x.org")
+        func model() -> TimelineViewModel {
+            TimelineViewModel(coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: room), thumbnails: shared)
+        }
+        let photo = TimelineRow.Image(ref: remote, aspectRatio: 1.5)
+        let first = model()
+        first.thumbnailMemory.store(Data([5]), for: remote)  // what `thumbnail(for:)` keeps after a load
+        let reopened = model()
+        #expect(reopened.cachedThumbnail(for: photo) == Data([5]), "the row's first frame has the picture, no placeholder")
+        shared.removeAll()  // memory warning or sign-out
+        #expect(reopened.cachedThumbnail(for: photo) == nil)
+        #expect(TimelineViewModel(coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: room)).thumbnailMemory !== shared)
+    }
+
     @Test("a view model hands out what it loaded, and carries a photo over to its confirmed reference")
     func viewModelCarriesTheEcho() async throws {
         let model = TimelineViewModel(

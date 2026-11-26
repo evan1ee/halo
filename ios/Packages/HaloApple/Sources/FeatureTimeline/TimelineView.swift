@@ -16,6 +16,7 @@ public struct TimelineView: View {
     private let onOpenThread: (@MainActor (EventID) -> Void)?
     private let onSaveAsSticker: (@MainActor (Data, String) -> Void)?
     private let onFirstRows: (@MainActor () -> Void)?
+    private let onRowsDrawn: (@MainActor () -> Void)?
     /// How long the landing check waits for the first layout, and between its two looks at the newest row (M19-4: both were 80 and
     /// 60 ms, about the whole of the ~150 ms between the push and the room appearing). Each is about a frame or two: the list has
     /// already opened at the bottom (`defaultScrollAnchor`), so the second look only guards against row heights settling.
@@ -65,6 +66,7 @@ public struct TimelineView: View {
     ///   feature never imports another feature). Without it the panel has no Stickers tab.
     /// - Parameter gifPanel: the GIFs tab (KLIPY, D98); without it the panel has no GIFs tab.
     /// - Parameter onFirstRows: the rows are visible at the newest message for the first time (`room-open` signpost).
+    /// - Parameter onRowsDrawn: the list draws rows for the first time, before its landing is confirmed (`room-first-rows` signpost).
     /// - Parameter onOpenThread: opens a focused thread sheet for the chosen root event (M10 Threads).
     public init(
         model: TimelineViewModel,
@@ -72,7 +74,8 @@ public struct TimelineView: View {
         gifPanel: (@MainActor () -> AnyView)? = nil,
         onOpenThread: (@MainActor (EventID) -> Void)? = nil,
         onSaveAsSticker: (@MainActor (Data, String) -> Void)? = nil,
-        onFirstRows: (@MainActor () -> Void)? = nil
+        onFirstRows: (@MainActor () -> Void)? = nil,
+        onRowsDrawn: (@MainActor () -> Void)? = nil
     ) {
         self.model = model
         self.stickerPanel = stickerPanel
@@ -80,6 +83,7 @@ public struct TimelineView: View {
         self.onOpenThread = onOpenThread
         self.onSaveAsSticker = onSaveAsSticker
         self.onFirstRows = onFirstRows
+        self.onRowsDrawn = onRowsDrawn
     }
 
     public var body: some View {
@@ -175,6 +179,9 @@ public struct TimelineView: View {
                 // A tap on the conversation closes the keyboard or panel; the gesture only exists while one is open.
                 .simultaneousGesture(TapGesture().onEnded { input.dismiss() }, including: input.state.mode == .idle && input.state.displayedPanel == nil ? .subviews : .all)
                 .opacity(listPlaced || revealedAtOnce || rows.isEmpty || startsPlaced(rows) ? 1 : 0)
+                .onChange(of: !rows.isEmpty && (listPlaced || revealedAtOnce || startsPlaced(rows)), initial: true) { _, drawn in
+                    if drawn { onRowsDrawn?() }
+                }
                 .onChange(of: startsPlaced(rows), initial: true) { _, now in if now { revealedAtOnce = true } }
                 .onChange(of: listPlaced && !rows.isEmpty, initial: true) { _, visible in if visible { onFirstRows?() } }
                 .task {

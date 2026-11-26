@@ -64,7 +64,8 @@ extension AppRoot {
             room: room,
             drafts: threadRoot == nil ? drafts : nil,
             images: ImagePreparer(),
-            readThrough: readThroughClosure
+            readThrough: readThroughClosure,
+            thumbnails: thumbnailMemory
         )
         model.unrecognisedBotMessages = unrecognisedBots
         model.botActivity = threadRoot == nil ? botActivity : nil
@@ -79,10 +80,10 @@ extension AppRoot {
         model.klipy = klipy.isAvailable ? klipy : nil
     }
 
-    /// The view model of a room screen: the one started ahead for the top of the chat list when there is one (M19-9, D-MOT-2),
-    /// so the first frame has rows; otherwise a new one. A room opened at a message always gets a new one.
+    /// The view model of a room screen: the one started when the room was chosen in the chat list (M19-9, D-MOT-2), so the first
+    /// frame has rows; otherwise a new one. A room opened at a message always gets a new one.
     func makeRoomTimeline(room: RoomID, jumpTo: EventID?) -> TimelineViewModel {
-        if jumpTo == nil, let started = warmTimelines.take(room) {
+        if jumpTo == nil, let started = preparedTimelines.take(room) {
             configure(started)
             return started
         }

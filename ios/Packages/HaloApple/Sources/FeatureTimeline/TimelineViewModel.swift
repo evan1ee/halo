@@ -217,7 +217,7 @@ public final class TimelineViewModel {
     var revealedPreviews: Set<MediaRef> = []
     /// Pictures already shown (`TimelineThumbnailMemory`) and the photo reference last seen per row, to carry a sent photo
     /// from its local echo to the confirmed message.
-    let thumbnailMemory = TimelineThumbnailMemory()
+    let thumbnailMemory: TimelineThumbnailMemory
     var knownPhotoRefs: [String: MediaRef] = [:]
     /// The row made for each item the last time, reused while the item and what the mapping reads besides it are unchanged
     /// (M19-2): a new message maps one row, not the whole room.
@@ -285,12 +285,14 @@ public final class TimelineViewModel {
     ///   - drafts: when given together with `room`, the unsent text is kept per room (MESSAGING FR-5).
     ///   - images: prepares picked photos for sending; without it the composer offers no photo button.
     ///   - receipts: when given together with `room`, the newest visible confirmed event is reported as read.
+    ///   - thumbnails: the pictures already shown, shared by the app's timelines; a model of its own when not given.
     public init(
         coordinator: TimelineCoordinator, media: MediaLoader? = nil, previewsAllowed: (@Sendable () async -> Bool)? = nil, receipts: ReadReceiptCoordinator? = nil, room: RoomID? = nil,
         drafts: DraftCoordinator? = nil, images: (any ImagePreparing)? = nil, readThrough: (@Sendable () async -> Date?)? = nil, dwell: Duration = TimelineViewModel.seenDwell, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
-        locale: Locale = .current, timeZone: TimeZone = .current
+        locale: Locale = .current, timeZone: TimeZone = .current, thumbnails: TimelineThumbnailMemory? = nil
     ) {
         self.coordinator = coordinator
+        self.thumbnailMemory = thumbnails ?? TimelineThumbnailMemory()
         self.media = media
         self.previewsAllowed = previewsAllowed
         self.receipts = receipts
@@ -388,6 +390,26 @@ public final class TimelineViewModel {
 
     /// The start under way, so a second caller waits for it instead of opening the timeline twice.
     var starting: Task<Void, Never>?
+    /// Told once each when a screen shown now would draw the room at once (`canShow`).
+    var showableWaiters: [@MainActor () -> Void] = []
+
+    /// A screen shown now would draw rows at the place it lands, or the failure, on its first frame (M19-9).
+    public var canShow: Bool {
+        if case .failed = content { return true }
+        return landed
+    }
+
+    /// Calls `action` once `canShow` holds (at once if it does now).
+    func whenShowable(_ action: @escaping @MainActor () -> Void) {
+        if canShow { action() } else { showableWaiters.append(action) }
+    }
+
+    func noteIfShowable() {
+        guard canShow, !showableWaiters.isEmpty else { return }
+        let waiting = showableWaiters
+        showableWaiters = []
+        for action in waiting { action() }
+    }
     /// `present()` ran: a start ahead that only runs afterwards must not hide the screen's model again.
     var wasPresented = false
 

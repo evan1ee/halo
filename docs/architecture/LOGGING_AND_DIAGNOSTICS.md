@@ -44,7 +44,8 @@ the budgets are measured. Only the name is recorded: no identifiers, sizes or co
 | Interval | From | To | Recorded by |
 |---|---|---|---|
 | `cold-start` | first line of `HaloApp.init` | the room list has rows | app; not for prewarmed, background or signed-out launches |
-| `room-open` | the room is put on the navigation path | its rows are visible at the newest message (a frame before they are on screen) | `TimelineView` |
+| `room-open` | the room is chosen: its chat-list row is tapped, or it is put on the navigation path another way | its rows are visible at the newest message (a frame before they are on screen) | `TimelineView` |
+| `room-first-rows` | as `room-open` | the list first draws rows (the message area stops being empty; before the landing is confirmed) | `TimelineView` |
 | `sync-catch-up` | before an immediate `/sync` (`timeoutMs` 0) | the SDK has processed and stored the response | `MatrixSessionPort` |
 | `sync-long-poll` | before a long-poll `/sync` | as above; includes the server's waiting time | `MatrixSessionPort` |
 | `image-decode` | before decoding one image or animation | decoded | `StickerImage` (thumbnails, stickers, GIFs); the plain `UIImage(data:)` sites follow with M19-1 |

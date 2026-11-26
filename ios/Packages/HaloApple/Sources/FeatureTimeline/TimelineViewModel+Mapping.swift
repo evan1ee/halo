@@ -76,6 +76,7 @@ extension TimelineViewModel {
         case .failed(let error):
             content = .failed(error == .notFound ? "This room isn't available." : "The timeline couldn't be loaded.")
         }
+        noteIfShowable()
     }
 
     /// Counts incoming messages appended after `trackedTailID` while scrolled up; ignores back-pagination and edits.

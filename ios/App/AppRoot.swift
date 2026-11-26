@@ -50,8 +50,10 @@ final class AppRoot {
         botSenders: { [preferencesPort] in Set(preferencesPort.load().botSenders) }
     )
 
-    /// Timeline view models started for the top of the chat list, so a pushed room has rows on its first frame (M19-9, D-MOT-2).
-    lazy var warmTimelines = WarmTimelines { [unowned self] room in makeTimeline(room: room) }
+    /// The timeline of a room chosen in the chat list, started before its screen is pushed (M19-9, D-MOT-2).
+    lazy var preparedTimelines = PreparedTimelines { [unowned self] room in makeTimeline(room: room) }
+    /// The pictures the timelines have shown, one bounded store for all of them (M19-9): a re-opened room paints them at once.
+    let thumbnailMemory = TimelineThumbnailMemory(byteLimit: 32 * 1024 * 1024)
     private var memoryWarning: (any NSObjectProtocol)?
 
     let attentionCache: AttentionCache
@@ -102,6 +104,11 @@ final class AppRoot {
     /// Running performance signposts (LOGGING_AND_DIAGNOSTICS §5); dropped, not ended, when the measured path didn't happen.
     var coldStart: HaloSignpost.Running?
     var roomOpen: HaloSignpost.Running?
+    var roomFirstRows: HaloSignpost.Running?
+    /// The room whose chat-list row was just tapped: its timing began at the tap, not when it reached the navigation path.
+    var roomChosen: RoomID?
+    /// The chat-list tap waiting for its room's rows before pushing the screen (`openWhenReady`); a newer tap replaces it.
+    private var pendingOpen: Task<Void, Never>?
     private(set) var hasBegun = false
 
     init() {
@@ -222,20 +229,46 @@ final class AppRoot {
         Self.exportNSEMetrics(namespace: namespace)
         #endif
         self.log = log
-        roomList.warm = { [weak self, timelinePort] rooms in
-            // The adapter prepares the SDK timelines first; the view models started ahead then take them (M19-9).
-            await timelinePort.warm(rooms)
-            await self?.warmTimelines.setTop(rooms)
-        }
-        // Under memory pressure the timelines started ahead go first; new ones come with the next change of the chat list.
+        // The adapter keeps the SDK timelines of the top rooms ready; no view model is made before a room is chosen (M19-9).
+        roomList.warm = { [timelinePort] rooms in await timelinePort.warm(rooms) }
+        // Under memory pressure a timeline started for a room not yet pushed goes first.
         memoryWarning = NotificationCenter.default.addObserver(
             forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main
-        ) { [weak self] _ in MainActor.assumeIsolated { self?.warmTimelines.dropAll() } }
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.preparedTimelines.dropAll()
+                self?.thumbnailMemory.removeAll()
+            }
+        }
         log.info("app launched")
     }
 }
 
 extension AppRoot {
+    /// Opens `room`, chosen in the chat list: its timeline starts now and `push` runs once the screen would draw its rows on the
+    /// first frame, or after `PreparedTimelines.openingWait` (M19-9). A newer choice cancels this one: only the last room is pushed,
+    /// and the abandoned room lets go of its timeline.
+    func openWhenReady(_ room: RoomID, push: @escaping @MainActor () -> Void) {
+        pendingOpen?.cancel()
+        pendingOpen = Task { [weak self] in
+            guard let self else { return }
+            await preparedTimelines.prepare(room)
+            guard !Task.isCancelled else {
+                preparedTimelines.abandon(room)
+                return
+            }
+            pendingOpen = nil
+            push()
+        }
+    }
+
+    /// Begins the `room-open` and `room-first-rows` signposts (a room is being opened); `chosen` when a chat-list row was tapped.
+    func beginRoomOpen(chosen: RoomID? = nil) {
+        roomChosen = chosen
+        roomOpen = HaloSignpost.begin(.roomOpen)
+        roomFirstRows = HaloSignpost.begin(.roomFirstRows)
+    }
+
     /// Starts everything that must run whenever the process runs, with or without a window: iOS launches the app in the
     /// background for a silent push or an app refresh without connecting a scene. Call it as often as you like.
     func begin() async {

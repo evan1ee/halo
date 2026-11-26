@@ -117,6 +117,30 @@ final class HaloPerformanceTests: XCTestCase {
         }
     }
 
+    /// M19-9: how a room open differs by what came before it. Each round launches the app afresh and, once it has settled, opens
+    /// the fifth chat (the first room screen of the launch), the same chat again, the sixth chat (a room not opened before, but
+    /// not the first screen) and the first chat. (Lower rows sit under the floating search field.) `scripts/room_open_bench.py` reads the `room-first-rows` and `room-open`
+    /// intervals of the simulator's log in this order; the test itself only plays the opens.
+    @MainActor
+    func test6RoomOpenSequence() throws {
+        let rounds = Int(env["HALO_BENCH_ROUNDS"] ?? "") ?? 5
+        let settle = Double(env["HALO_BENCH_SETTLE"] ?? "") ?? 4
+        for _ in 0..<rounds {
+            let app = try requireSignedIn()
+            Thread.sleep(forTimeInterval: settle)  // the top rooms start ahead and the chat list settles after the first rows
+            for chat in [4, 4, 5, 0] {
+                let cell = app.collectionViews["room-list"].cells.element(boundBy: 1 + chat)  // after the Media Gallery entry
+                XCTAssertTrue(cell.waitForExistence(timeout: 5), "chat \(chat)")
+                cell.tap()
+                XCTAssertTrue(app.buttons["sticker-button"].waitForExistence(timeout: 15), "The room opened")
+                Thread.sleep(forTimeInterval: 1)  // the landing and its signposts finish before the room closes
+                goBack(app)
+                Thread.sleep(forTimeInterval: 1.5)  // the closed room's timeline is let go of and the list is still again
+            }
+            app.terminate()
+        }
+    }
+
     // MARK: Helpers
 
     private func signpost(_ name: String) -> XCTOSSignpostMetric {

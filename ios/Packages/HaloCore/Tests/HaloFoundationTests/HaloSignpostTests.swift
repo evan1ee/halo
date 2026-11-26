@@ -25,6 +25,7 @@ import XCTest
 final class HaloSignpostMetricTests: XCTestCase {
     func testColdStartIsRecorded() { assertRecorded(.coldStart) }
     func testRoomOpenIsRecorded() { assertRecorded(.roomOpen) }
+    func testRoomFirstRowsIsRecorded() { assertRecorded(.roomFirstRows) }
     func testSyncCatchUpIsRecorded() { assertRecorded(.syncCatchUp) }
     func testSyncLongPollIsRecorded() { assertRecorded(.syncLongPoll) }
     func testImageDecodeIsRecorded() { assertRecorded(.imageDecode) }

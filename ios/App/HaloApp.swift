@@ -161,7 +161,11 @@ private struct RootView: View {
                         showsRoomMatches: searchModel.filter == .all,
                         onRoomInfo: { router.openRoomInfo($0) },
                         onMediaGallery: { router.push(.globalMediaGallery) },
-                        onSelect: { router.openRoom($0) }
+                        onSelect: { room in
+                            root.beginRoomOpen(chosen: room)
+                            // The room's rows are made first, then its screen is pushed with them (M19-9).
+                            root.openWhenReady(room) { router.openRoom(room) }
+                        }
                     ) {
                         MessageSearchResultsSection(model: searchModel, onVerify: { router.push(.settings) }) { row in
                             if let thread = row.threadRoot {
@@ -223,13 +227,14 @@ private struct RootView: View {
                         Task { await root.scanBotRooms() }
                     }
                     .onChange(of: router.path, initial: true) { _, new in
-                        // Rooms on screen aren't prepared again behind it; a closed one is prepared again (M19-9).
-                        root.warmTimelines.screensChanged(Set(new.compactMap { if case .room(let room, _) = $0 { room } else { nil } }))
+                        // A room on screen isn't prepared again behind it (M19-9).
+                        root.preparedTimelines.screensChanged(Set(new.compactMap { if case .room(let room, _) = $0 { room } else { nil } }))
                     }
                     .onChange(of: router.path) { old, new in
                         root.search.noteActivity()
-                        if new.count > old.count || Self.isPad, case .room = new.last, new.last != old.last {
-                            root.roomOpen = HaloSignpost.begin(.roomOpen)
+                        if new.count > old.count || Self.isPad, case .room(let room, _) = new.last, new.last != old.last {
+                            // A tap on a chat-list row began timing at the tap (`onSelect`); any other way in begins here.
+                            if root.roomChosen == room { root.roomChosen = nil } else { root.beginRoomOpen() }
                         }
                     }
                     .sheet(item: $newChat) { NewChatView(model: $0) }
@@ -654,6 +659,10 @@ private struct TimelineScreen: View {
             onFirstRows: {
                 root.roomOpen?.end()
                 root.roomOpen = nil
+            },
+            onRowsDrawn: {
+                root.roomFirstRows?.end()
+                root.roomFirstRows = nil
             }
         )
         .sheet(item: $stickerToSave) { pending in

@@ -7,11 +7,11 @@ import Synchronization
 import Testing
 @testable import FeatureTimeline
 
-/// A timeline started before its screen (M19-9, D-MOT-2): rows are ready for the first frame, and nothing about what was read
-/// leaves the device until the screen is shown (READ_RECEIPTS §1, UNREAD_STATE).
+/// A timeline started before its screen (M19-9, D-MOT-2): the tapped room's rows are ready for the first frame, and nothing about
+/// what was read leaves the device until the screen is shown (READ_RECEIPTS §1, UNREAD_STATE).
 @MainActor
-@Suite("Warm timelines")
-struct WarmTimelinesTests {
+@Suite("Prepared timelines")
+struct PreparedTimelinesTests {
     private func message(_ n: Int, own: Bool = false) throws -> TimelineItem {
         TimelineItem(id: TimelineItemID("i\(n)"), content: .event(TimelineEvent(
             eventID: try EventID("$e\(n)"), sender: own ? nil : try UserID("@bob:x.org"), senderName: "Bob",
@@ -99,51 +99,97 @@ struct WarmTimelinesTests {
         await model.stop()
     }
 
-    @Test("the cache keeps at most its limit for the top rooms, hands the same model until it is shown, and never prepares a room on screen again", .timeLimit(.minutes(1)))
-    func cacheFollowsTheTop() async throws {
-        let ids = try (1...5).map { try RoomID("!r\($0):x.org") }
+    @Test("a room on screen isn't prepared again; a screen that closed without showing the waiting model lets it go; dropAll lets go", .timeLimit(.minutes(1)))
+    func holderLifecycle() async throws {
+        let open = try RoomID("!open:x.org"), next = try RoomID("!next:x.org")
         let port = FakeTimelinePort()
-        for id in ids { port.addRoom(id, items: [try message(1)]) }
-        let cache = WarmTimelines(limit: 3, refillDelay: .zero) { TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: $0), room: $0) }
+        port.addRoom(open, items: [try message(1)])
+        port.addRoom(next, items: [try message(1)])
+        let holder = PreparedTimelines(wait: { _ in }) { TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: $0), room: $0) }
         func settle(_ done: () -> Bool) async { for _ in 0..<200_000 where !done() { await Task.yield() } }
-        func opened() -> Set<RoomID> { Set(ids.filter { port.openSessions(in: $0) > 0 }) }
 
-        cache.setTop(ids)
-        await settle { opened() == Set(ids.prefix(3)) }
-        #expect(cache.waitingRooms == Set(ids.prefix(3)))
-        #expect(opened() == Set(ids.prefix(3)), "three timelines, not five")
+        holder.screensChanged([open])
+        await holder.prepare(open)
+        #expect(holder.waitingRoom == nil && port.totalOpens(in: open) == 0, "an open room isn't prepared again behind its screen")
 
-        // A screen built twice gets the same model; it leaves the cache once shown.
-        let first = try #require(cache.take(ids[0]))
-        #expect(cache.take(ids[0]) === first)
-        cache.screensChanged([ids[0]])
-        first.present()
-        #expect(cache.take(ids[0]) == nil)
-        await settle { cache.waitingRooms == Set([ids[1], ids[2], ids[3]]) }
-        #expect(cache.waitingRooms == Set([ids[1], ids[2], ids[3]]), "the next room takes the free place")
-        #expect(port.openSessions(in: ids[0]) == 1, "the room on screen isn't prepared again behind it")
+        // Pushed, but the screen used a model of its own (opened at a message) and closed: the waiting model goes.
+        await holder.prepare(next)
+        await settle { port.openSessions(in: next) == 1 }
+        holder.screensChanged([open, next])
+        #expect(holder.take(next) != nil, "a screen built twice gets the same model")
+        holder.screensChanged([open])
+        #expect(holder.waitingRoom == nil)
+        await settle { port.openSessions(in: next) == 0 }
+        #expect(port.openSessions(in: next) == 0)
 
-        // Closed, it is prepared again; the room that falls out of the top lets go of its timeline.
-        await first.stop()
-        cache.screensChanged([])
-        await settle { cache.waitingRooms == Set(ids.prefix(3)) && port.openSessions(in: ids[3]) == 0 }
-        #expect(cache.waitingRooms == Set(ids.prefix(3)))
-        #expect(port.openSessions(in: ids[3]) == 0)
+        // Sign-out and memory pressure let go of a waiting model.
+        holder.screensChanged([])
+        await holder.prepare(open)
+        #expect(holder.waitingRoom == open)
+        holder.dropAll()
+        #expect(holder.waitingRoom == nil)
+        await settle { port.openSessions(in: open) == 0 }
+        #expect(port.openSessions(in: open) == 0)
+    }
 
-        // A room opened at a message uses a model of its own; the waiting one is replaced when that screen closes.
-        let stale = try #require(cache.take(ids[1]))
-        cache.screensChanged([ids[1]])
-        cache.screensChanged([])
-        await settle { cache.take(ids[1]).map { $0 !== stale } ?? false }
-        #expect(cache.take(ids[1]) !== stale)
-        await settle { port.openSessions(in: ids[1]) == 1 }
-        #expect(port.openSessions(in: ids[1]) == 1, "the replaced model closed its timeline")
+    @Test("a tapped room is prepared before its screen: prepare returns once it has landed, the screen takes that model, and nothing is reported until it is shown", .timeLimit(.minutes(1)))
+    func preparedOnTap() async throws {
+        let room = try RoomID("!r:x.org")
+        let port = FakeTimelinePort()
+        port.addRoom(room, items: [try message(1), try message(2, own: true)])
+        let markers = FakeReadMarkerPort()
+        let receipts = ReadReceiptCoordinator(port: markers)
+        // The time limit never runs out here: prepare must return because the rows are there.
+        let (never, end) = AsyncStream.makeStream(of: Void.self)
+        defer { end.finish() }
+        let cache = PreparedTimelines(wait: { _ in for await _ in never { return } }) {
+            TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: $0), receipts: receipts, room: $0, dwell: .zero, sleep: { _ in })
+        }
+        await cache.prepare(room)
+        let model = try #require(cache.take(room))
+        #expect(model.landed && model.canShow && model.lastRowID == "i2", "the screen pushed now has its rows on the first frame")
+        #expect(!model.isPresented)
+        for _ in 0..<5_000 { await Task.yield() }
+        #expect(markers.receipts.isEmpty, "nothing is reported before the screen shows the room")
+        cache.screensChanged([room])
+        model.present()
+        #expect(cache.take(room) == nil && cache.waitingRoom == nil, "shown, the model belongs to its screen")
+        for _ in 0..<200_000 where markers.receipts.isEmpty { await Task.yield() }
+        #expect(markers.receipts.map(\.event.rawValue) == ["$e2"])
+        #expect(port.totalOpens(in: room) == 1, "opened once: the screen's start waits for the one under way")
+        await model.stop()
+    }
 
-        // Sign-out and memory pressure let go of everything.
-        cache.dropAll()
-        #expect(cache.waitingRooms.isEmpty)
-        await settle { opened().isEmpty }
-        #expect(opened().isEmpty)
+    @Test("prepare gives up after its time limit when the rows don't come; a newer choice lets go of the older one", .timeLimit(.minutes(1)))
+    func prepareIsBoundedAndReplaced() async throws {
+        let slow = try RoomID("!slow:x.org"), other = try RoomID("!other:x.org")
+        let port = FakeTimelinePort()
+        port.addRoom(slow)  // nothing to land on: its rows never come
+        port.addRoom(other, items: [try message(1)])
+        let (limits, release) = AsyncStream.makeStream(of: Void.self)
+        let cache = PreparedTimelines(wait: { _ in for await _ in limits { return } }) {
+            TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: $0), room: $0)
+        }
+        var returned = false
+        let opening = Task { await cache.prepare(slow); returned = true }
+        for _ in 0..<5_000 { await Task.yield() }
+        #expect(!returned, "still waiting for rows")
+        release.yield()
+        await opening.value
+        #expect(returned, "the time limit ends the wait")
+        #expect(cache.take(slow)?.canShow == false, "pushed without rows, the screen shows them when they come")
+
+        // Another room is chosen before the first was pushed: the first lets go of its timeline.
+        await cache.prepare(other)
+        cache.abandon(slow)  // the older tap's task ends cancelled: this does nothing to the newer one
+        #expect(cache.waitingRoom == other)
+        for _ in 0..<200_000 where port.openSessions(in: slow) > 0 { await Task.yield() }
+        #expect(port.openSessions(in: slow) == 0)
+        cache.abandon(other)
+        #expect(cache.waitingRoom == nil)
+        for _ in 0..<200_000 where port.openSessions(in: other) > 0 { await Task.yield() }
+        #expect(port.openSessions(in: other) == 0, "an abandoned choice closes its timeline")
+        release.finish()
     }
 
     @Test("a screen appearing before or while its model starts ahead: the start is awaited, the timeline opens once, and the shown model reports", .timeLimit(.minutes(1)))
