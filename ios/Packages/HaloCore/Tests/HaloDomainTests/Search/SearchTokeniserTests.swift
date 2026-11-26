@@ -78,6 +78,34 @@ struct SearchTokeniserTests {
             }
         }
     }
+
+    @Test("preview computes single-pass snippet and character offsets identically, including on 20,000-character messages")
+    func previewPerformanceAndAccuracy() {
+        for (body, query) in [
+            ("Das Café am Café-Platz", "cafe"),
+            ("今天去AppleStore，今天", "今天 apple"),
+            ("a 👨‍👩‍👧 family\nwith newline", "family"),
+            (String(repeating: "lorem ipsum ", count: 40) + "needle" + String(repeating: " dolor sit", count: 40), "needle"),
+        ] {
+            let expectedSnippet = SearchTokeniser.snippet(of: body, query: query)
+            let expectedOffsets = SearchTokeniser.highlights(in: expectedSnippet, query: query).map { range in
+                expectedSnippet.distance(from: expectedSnippet.startIndex, to: range.lowerBound)
+                    ..< expectedSnippet.distance(from: expectedSnippet.startIndex, to: range.upperBound)
+            }
+            let preview = SearchTokeniser.preview(of: body, query: query)
+            #expect(preview.text == expectedSnippet)
+            #expect(preview.highlights == expectedOffsets)
+        }
+
+        // A 20,000-character Markdown article with an early match stops near the match instead of scanning the entire body twice.
+        let huge = "Intro: deploy checklist ready. " + String(repeating: "background notes and prose ", count: 800)
+        let started = ContinuousClock.now
+        let preview = SearchTokeniser.preview(of: huge, query: "deploy")
+        let elapsed = ContinuousClock.now - started
+        #expect(preview.text.hasPrefix("Intro: deploy checklist ready."))
+        #expect(preview.highlights == [7..<13])
+        #expect(elapsed < .milliseconds(50))
+    }
 }
 
 @Suite("SearchContent")
@@ -91,8 +119,14 @@ struct SearchContentTests {
         #expect(content(#"{"msgtype":"m.notice","body":"see https://example.org/a"}"#)?.kind == .link)
         let html = content(#"{"msgtype":"m.text","body":"docs","formatted_body":"<a href=\"https://example.org/?a=1&amp;b=2\">docs</a> <a href=\"https://matrix.to/#/@bob:x\">Bob</a>"}"#)
         #expect(html == SearchableContent(kind: .link, body: "docs", extra: ["https://example.org/?a=1&b=2"]))
-        #expect(content(#"{"msgtype":"m.file","body":"report.pdf"}"#) == SearchableContent(kind: .file, body: "report.pdf"))
-        #expect(content(#"{"msgtype":"m.image","body":"our trip","filename":"IMG_1.jpg"}"#) == SearchableContent(kind: .media, body: "our trip", extra: ["IMG_1.jpg"]))
+        #expect(content(#"{"msgtype":"m.file","body":"report.pdf"}"#) == SearchableContent(
+            kind: .file, body: "report.pdf",
+            attachment: SearchAttachment(mediaKind: .file, filename: "report.pdf")))
+        #expect(content(#"{"msgtype":"m.image","body":"our trip","filename":"IMG_1.jpg","info":{"mimetype":"image/png","size":1400000}}"#) == SearchableContent(
+            kind: .media, body: "our trip", extra: ["IMG_1.jpg"],
+            attachment: SearchAttachment(mediaKind: .image, filename: "IMG_1.jpg", mimeType: "image/png", sizeBytes: 1_400_000)))
+        #expect(SearchAttachment(mediaKind: .image, filename: "IMG_1.png", mimeType: "image/png", sizeBytes: 1_400_000).subtitle == "PNG (1.4 MB)")
+        #expect(SearchAttachment(mediaKind: .file, filename: "notes.pdf", sizeBytes: 240_000).subtitle == "PDF (240 KB)")
         #expect(content(#"{"msgtype":"dm.filament.gallery","body":"","itemtypes":[{"filename":"a.png"},{"body":"b.png"}]}"#)?.extra == ["a.png", "b.png"])
         #expect(content(#"{"msgtype":"m.location","body":"here","geo_uri":"geo:1,2"}"#) == nil)
         #expect(content(#"{"msgtype":"m.text","body":"   "}"#) == nil)

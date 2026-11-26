@@ -158,6 +158,7 @@ private struct RootView: View {
                     RoomListView(
                         model: root.roomList,
                         searchQuery: searchModel.query,
+                        showsRoomMatches: searchModel.filter == .all,
                         onRoomInfo: { router.openRoomInfo($0) },
                         onMediaGallery: { router.push(.globalMediaGallery) },
                         onSelect: { router.openRoom($0) }

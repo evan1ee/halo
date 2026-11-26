@@ -29,7 +29,10 @@ extension AppRoot {
         return UserProfileViewModel(
             profiles: profilePort, chats: chatCreation, user: user, roomDisplayName: member.displayName,
             isMe: member.isMe, avatar: member.avatar, media: media,
-            onIgnoreChanged: { [roomCoordinator] in await roomCoordinator.refreshIgnoredUsers() },
+            onIgnoreChanged: { [roomCoordinator, search] in
+                await roomCoordinator.refreshIgnoredUsers()
+                await search.refreshIgnoredUsers()
+            },
             onOpenRoom: onOpenRoom
         )
     }

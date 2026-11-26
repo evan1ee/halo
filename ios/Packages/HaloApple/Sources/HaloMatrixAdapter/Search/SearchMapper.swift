@@ -63,27 +63,57 @@ enum SearchMapper {
         case .text(let content): SearchContent.text(content.body, html: content.formatted?.body)
         case .notice(let content): SearchContent.text(content.body, html: content.formatted?.body)
         case .emote(let content): SearchContent.text(content.body, html: content.formatted?.body)
-        case .image(let content): SearchContent.attachment(.image, filename: content.filename, caption: content.caption)
-        case .video(let content): SearchContent.attachment(.video, filename: content.filename, caption: content.caption)
-        case .audio(let content): SearchContent.attachment(.audio, filename: content.filename, caption: content.caption)
-        case .file(let content): SearchContent.attachment(.file, filename: content.filename, caption: content.caption)
+        case .image(let content):
+            SearchContent.attachment(
+                .image, filename: content.filename, caption: content.caption,
+                mimeType: content.info?.mimetype, sizeBytes: content.info?.size.map(Int.init),
+                thumbnail: TimelineMapper.ref(content.info?.thumbnailSource ?? content.source))
+        case .video(let content):
+            SearchContent.attachment(
+                .video, filename: content.filename, caption: content.caption,
+                mimeType: content.info?.mimetype, sizeBytes: content.info?.size.map(Int.init),
+                thumbnail: content.info?.thumbnailSource.map(TimelineMapper.ref))
+        case .audio(let content):
+            SearchContent.attachment(
+                .audio, filename: content.filename, caption: content.caption,
+                mimeType: content.info?.mimetype, sizeBytes: content.info?.size.map(Int.init))
+        case .file(let content):
+            SearchContent.attachment(
+                .file, filename: content.filename, caption: content.caption,
+                mimeType: content.info?.mimetype, sizeBytes: content.info?.size.map(Int.init),
+                thumbnail: content.info?.thumbnailSource.map(TimelineMapper.ref))
         case .gallery(let content):
-            gallery(body: content.body, names: content.itemtypes.map { item in
-                switch item {
-                case .image(let content): content.filename
-                case .audio(let content): content.filename
-                case .video(let content): content.filename
-                case .file(let content): content.filename
-                case .other(_, let body): body
-                }
-            })
+            gallery(
+                body: content.body,
+                names: content.itemtypes.map { item in
+                    switch item {
+                    case .image(let content): content.filename
+                    case .audio(let content): content.filename
+                    case .video(let content): content.filename
+                    case .file(let content): content.filename
+                    case .other(_, let body): body
+                    }
+                },
+                firstPreview: content.itemtypes.lazy.compactMap { item -> SearchAttachment? in
+                    switch item {
+                    case .image(let c):
+                        SearchAttachment(
+                            mediaKind: .image, filename: c.filename, mimeType: c.info?.mimetype,
+                            sizeBytes: c.info?.size.map(Int.init), thumbnail: TimelineMapper.ref(c.info?.thumbnailSource ?? c.source))
+                    case .video(let c):
+                        SearchAttachment(
+                            mediaKind: .video, filename: c.filename, mimeType: c.info?.mimetype,
+                            sizeBytes: c.info?.size.map(Int.init), thumbnail: c.info?.thumbnailSource.map(TimelineMapper.ref))
+                    default: nil
+                    }
+                }.first)
         case .location, .other: nil
         }
     }
 
-    private static func gallery(body: String, names: [String]) -> SearchableContent? {
+    private static func gallery(body: String, names: [String], firstPreview: SearchAttachment? = nil) -> SearchableContent? {
         let shown = body.isEmpty ? names.joined(separator: ", ") : body
-        return shown.isEmpty ? nil : SearchableContent(kind: .media, body: shown, extra: names)
+        return shown.isEmpty ? nil : SearchableContent(kind: .media, body: shown, extra: names, attachment: firstPreview)
     }
 
     enum ServerAnswer: Equatable {
@@ -109,7 +139,7 @@ enum SearchMapper {
             guard case .messageLike(.roomMessage(let type, _)) = try? edit.content(), let content = self.content(of: type) else { continue }
             // The fallback of an edit is its text after "* ".
             let body = content.body.hasPrefix("* ") ? String(content.body.dropFirst(2)) : content.body
-            return .edited(SearchableContent(kind: content.kind, body: body, extra: content.extra))
+            return .edited(SearchableContent(kind: content.kind, body: body, extra: content.extra, attachment: content.attachment))
         }
         return .unchanged
     }

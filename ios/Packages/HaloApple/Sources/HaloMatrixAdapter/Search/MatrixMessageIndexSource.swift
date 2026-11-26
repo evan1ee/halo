@@ -189,12 +189,39 @@ public final class MatrixMessageIndexSource: MessageIndexSourcePort {
             return .removed(event.room, id)
         case .message, .poll:
             guard let parsed = event.kind == .poll ? SearchContent.parse(poll: event.json) : SearchContent.parse(message: event.json),
-                  let content = parsed.content, let sender = try? UserID(event.sender) else { return nil }
+                  let baseContent = parsed.content, let sender = try? UserID(event.sender) else { return nil }
+            let content = baseContent.attachment != nil ? baseContent.withThumbnail(Self.thumbnailRef(in: event.json)) : baseContent
             if let target = parsed.replaces { return .edit(event.room, target: target, sender: sender, content) }
             return .message(SearchIndexEntry(
                 room: event.room, event: event.event, sender: sender, senderName: await name(of: event.sender, in: event.room), threadRoot: parsed.threadRoot,
                 timestamp: TimelineMapper.date(event.timestamp), content: content))
         }
+    }
+
+    /// Resolves a validated `MediaRef` for an attachment's thumbnail (or image source) from a live event's JSON.
+    static func thumbnailRef(in json: String) -> MediaRef? {
+        guard var object = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any] else { return nil }
+        if let replacement = object["m.new_content"] as? [String: Any] { object = replacement }
+        let msgtype = object["msgtype"] as? String
+        let info = object["info"] as? [String: Any]
+        if let thumbFile = info?["thumbnail_file"] as? [String: Any], let ref = encryptedMediaRef(thumbFile) { return ref }
+        if let thumbURL = info?["thumbnail_url"] as? String, !thumbURL.isEmpty, let source = try? MediaSource.fromUrl(url: thumbURL) {
+            return TimelineMapper.ref(source)
+        }
+        if msgtype == "m.image" {
+            if let file = object["file"] as? [String: Any], let ref = encryptedMediaRef(file) { return ref }
+            if let url = object["url"] as? String, !url.isEmpty, let source = try? MediaSource.fromUrl(url: url) {
+                return TimelineMapper.ref(source)
+            }
+        }
+        return nil
+    }
+
+    private static func encryptedMediaRef(_ file: [String: Any]) -> MediaRef? {
+        guard let data = try? JSONSerialization.data(withJSONObject: ["file": file]),
+              let source = try? MediaSource.fromJson(json: String(decoding: data, as: UTF8.self))
+        else { return nil }
+        return TimelineMapper.ref(source)
     }
 
     private func name(of user: String, in id: RoomID) async -> String? {

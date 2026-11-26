@@ -9,8 +9,12 @@ public final class FakeSearchPort: SearchPort {
     private struct State {
         var nextError: HaloError?
         var queries: [SearchQuery] = []
+        var recheckBatches: [[MessageSearchHit]] = []
+        var remoteRechecks: [String: SearchRecheck] = [:]
         var held: [String: [CheckedContinuation<Void, Never>]] = [:]
         var holds: Set<String> = []
+        var heldRechecks: [CheckedContinuation<Void, Never>] = []
+        var holdsRechecks = false
     }
 
     private let corpus: [MessageSearchHit]
@@ -24,6 +28,26 @@ public final class FakeSearchPort: SearchPort {
 
     public func failNext(with error: HaloError) { state.withLock { $0.nextError = error } }
     public var queries: [SearchQuery] { state.withLock { $0.queries } }
+    public var recheckBatches: [[MessageSearchHit]] { state.withLock { $0.recheckBatches } }
+
+    /// Configures a remote server recheck outcome (`.edited` or `.gone`) for `hitID` (`MessageSearchHit.id`).
+    public func setRemoteRecheck(_ result: SearchRecheck, for hitID: String) {
+        state.withLock { $0.remoteRechecks[hitID] = result }
+    }
+
+    /// Holds background `recheck` calls until `releaseRechecks()`.
+    public func holdRechecks() { state.withLock { $0.holdsRechecks = true } }
+
+    public var isHoldingRecheck: Bool { state.withLock { !$0.heldRechecks.isEmpty } }
+
+    public func releaseRechecks() {
+        let waiting = state.withLock { state in
+            state.holdsRechecks = false
+            defer { state.heldRechecks = [] }
+            return state.heldRechecks
+        }
+        for continuation in waiting { continuation.resume() }
+    }
 
     /// Answers to `text` wait for `release`.
     public func hold(_ text: String) { state.withLock { _ = $0.holds.insert(text) } }
@@ -59,5 +83,28 @@ public final class FakeSearchPort: SearchPort {
         let start = Int(cursor?.row ?? 0), end = min(start + pageSize, matching.count)
         guard start < end else { return SearchPage(hits: [], next: nil) }
         return SearchPage(hits: Array(matching[start..<end]), next: end < matching.count ? SearchCursor(timestamp: 0, row: Int64(end)) : nil)
+    }
+
+    public func recheck(_ hits: [MessageSearchHit]) async throws(HaloError) -> [String: SearchRecheck] {
+        if Task.isCancelled { throw .cancelled }
+        state.withLock { $0.recheckBatches.append(hits) }
+        await withCheckedContinuation { continuation in
+            let waits = state.withLock { state in
+                guard state.holdsRechecks else { return false }
+                state.heldRechecks.append(continuation)
+                return true
+            }
+            if !waits { continuation.resume() }
+        }
+        if Task.isCancelled { throw .cancelled }
+        return state.withLock { state in
+            var deltas: [String: SearchRecheck] = [:]
+            for hit in hits {
+                if let result = state.remoteRechecks[hit.id] {
+                    deltas[hit.id] = result
+                }
+            }
+            return deltas
+        }
     }
 }

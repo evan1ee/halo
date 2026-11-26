@@ -16,12 +16,25 @@ public enum SearchContent {
     }
 
     /// A picture, video, audio file or other file.
-    public static func attachment(_ kind: MediaKind, filename: String, caption: String?) -> SearchableContent? {
+    public static func attachment(
+        _ kind: MediaKind, filename: String, caption: String?,
+        mimeType: String? = nil, sizeBytes: Int? = nil, thumbnail: MediaRef? = nil
+    ) -> SearchableContent? {
         let name = filename.trimmingCharacters(in: .whitespacesAndNewlines)
         let text = (caption ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty || !text.isEmpty else { return nil }
         let shown = text.isEmpty ? name : text
-        return SearchableContent(kind: kind == .file ? .file : .media, body: String(shown.prefix(maximumLength)), extra: shown == name || name.isEmpty ? [] : [name])
+        let meta = SearchAttachment(
+            mediaKind: kind,
+            filename: name.isEmpty ? nil : name,
+            mimeType: mimeType,
+            sizeBytes: sizeBytes,
+            thumbnail: thumbnail)
+        return SearchableContent(
+            kind: kind == .file ? .file : .media,
+            body: String(shown.prefix(maximumLength)),
+            extra: shown == name || name.isEmpty ? [] : [name],
+            attachment: meta)
     }
 
     public static func poll(question: String, options: [String]) -> SearchableContent? {
@@ -92,8 +105,13 @@ public enum SearchContent {
 
     /// With a `filename` the body is the caption (Matrix 1.10); without one it is the file name.
     private static func attachment(_ kind: MediaKind, _ object: [String: Any], _ body: String) -> SearchableContent? {
-        guard let name = object["filename"] as? String else { return attachment(kind, filename: body, caption: nil) }
-        return attachment(kind, filename: name, caption: body == name ? nil : body)
+        let info = object["info"] as? [String: Any]
+        let mimeType = info?["mimetype"] as? String
+        let sizeBytes = (info?["size"] as? NSNumber)?.intValue
+        guard let name = object["filename"] as? String else {
+            return attachment(kind, filename: body, caption: nil, mimeType: mimeType, sizeBytes: sizeBytes)
+        }
+        return attachment(kind, filename: name, caption: body == name ? nil : body, mimeType: mimeType, sizeBytes: sizeBytes)
     }
 
     // MARK: Text
