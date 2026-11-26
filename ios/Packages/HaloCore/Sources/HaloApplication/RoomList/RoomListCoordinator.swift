@@ -151,7 +151,9 @@ public actor RoomListCoordinator {
             for await update in updates {
                 switch update {
                 case .diff(let diff):
-                    guard let self, await self.apply(diff, generation: current, filter: filter) else { return }
+                    guard let self, await self.apply([diff], generation: current, filter: filter) else { return }
+                case .diffs(let diffs):
+                    guard let self, await self.apply(diffs, generation: current, filter: filter) else { return }
                 case .synced(let present):
                     await self?.syncCompleted(present, generation: current)
                 }
@@ -253,10 +255,12 @@ public actor RoomListCoordinator {
     }
 
     /// Applies one diff; returns `false` when this subscription must stop.
-    private func apply(_ diff: RoomListDiff, generation: Int, filter: RoomListFilter) -> Bool {
+    private func apply(_ diffs: [RoomListDiff], generation: Int, filter: RoomListFilter) -> Bool {
         guard generation == self.generation else { return false }
         do {
-            try RoomListReducer.apply(diff, to: &allRooms)
+            var next = allRooms
+            for diff in diffs { try RoomListReducer.apply(diff, to: &next) }  // all or nothing: a batch that doesn't fit changes nothing
+            allRooms = next
             // If a previously left room was rejoined or re-invited, it is no longer left.
             if !left.isEmpty {
                 left.subtract(allRooms.map(\.id))

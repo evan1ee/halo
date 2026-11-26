@@ -102,7 +102,14 @@ public final class MatrixRoomListPort: RoomListPort {
                         list.append(summary)
                     }
                     list.sort(by: Self.order)
-                    if list != last {
+                    if let previous = last {
+                        // Only what changed (M19-3): a changed room is one `set`, a moved one a remove and an insert.
+                        let diffs = RoomListDiffer.diffs(from: previous, to: list)
+                        if !diffs.isEmpty {
+                            last = list
+                            continuation.yield(diffs.count == 1 ? .diff(diffs[0]) : .diffs(diffs))
+                        }
+                    } else {
                         last = list
                         continuation.yield(.diff(.reset(list)))
                     }

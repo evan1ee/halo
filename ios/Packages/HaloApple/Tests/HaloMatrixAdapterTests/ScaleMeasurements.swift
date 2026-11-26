@@ -275,6 +275,7 @@ final class ListFollower: @unchecked Sendable {  // every field is guarded by `l
                 self?.lock.withLock {
                     switch update {
                     case .diff(let diff): if var list = self?.list { try? RoomListReducer.apply(diff, to: &list); self?.list = list }
+                    case .diffs(let diffs): if var list = self?.list { for diff in diffs { try? RoomListReducer.apply(diff, to: &list) }; self?.list = list }
                     case .synced: self?.synced += 1
                     }
                 }

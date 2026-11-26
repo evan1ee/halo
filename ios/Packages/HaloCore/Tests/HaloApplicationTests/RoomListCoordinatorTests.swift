@@ -75,6 +75,25 @@ struct RoomListCoordinatorTests {
         #expect(await coordinator.rooms.map(\.id) == [room(2), room(3), room(4), room(5)].map(\.id))
     }
 
+    @Test("a batch of diffs is one change: a room that moves is never missing from a published list (M19-3)")
+    func batches() async throws {
+        let port = FakeRoomListPort(rooms: [room(1), room(2), room(3)])
+        let coordinator = RoomListCoordinator(port: port)
+        let statuses = await coordinator.statuses()
+        await coordinator.start()
+        _ = await first(statuses) { $0 == .loaded(roomCount: 3) }
+        // Room 3 gets a message and moves to the top: a remove and an insert.
+        try port.emit(batch: [.remove(index: 2), .insert(index: 0, room(3))])
+        try port.emit(.pushBack(room(4)))  // a later single diff still applies
+        _ = await first(statuses) { $0 == .loaded(roomCount: 4) }
+        #expect(await coordinator.rooms.map(\.id) == [room(3), room(1), room(2), room(4)].map(\.id))
+        // A batch that doesn't fit changes nothing and starts a fresh subscription.
+        try port.emit(batch: [.remove(index: 0), .remove(index: 9)], validate: false)
+        _ = await first(statuses) { $0 == .loaded(roomCount: 4) }
+        #expect(port.subscriptionCount == 2)
+        #expect(await coordinator.rooms.count == 4)
+    }
+
     @Test("a diff that doesn't apply triggers a fresh subscription that repairs the list")
     func resubscribes() async throws {
         let port = FakeRoomListPort(rooms: [room(1)])

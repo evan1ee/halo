@@ -20,6 +20,9 @@ public protocol RoomListPort: Sendable {
 /// One element of `RoomListPort.updates(filter:)`.
 public enum RoomListUpdate: Sendable {
     case diff(RoomListDiff)
+    /// Several diffs that only make sense together (a room moving is a remove and an insert); applied as one change, so no
+    /// list between them is ever shown (M19-3). The first update of a subscription is still a `.diff(.reset)`.
+    case diffs([RoomListDiff])
     /// A sync response has been applied; carries the complete set of joined/invited rooms the SDK knows at that point.
     case synced(Set<RoomID>)
 }
@@ -32,7 +35,13 @@ public extension RoomListPort {
         let updates = updates(filter: filter)
         return AsyncStream { continuation in
             let task = Task {
-                for await update in updates { if case .diff(let diff) = update { continuation.yield(diff) } }
+                for await update in updates {
+                    switch update {
+                    case .diff(let diff): continuation.yield(diff)
+                    case .diffs(let diffs): for diff in diffs { continuation.yield(diff) }
+                    case .synced: break
+                    }
+                }
                 continuation.finish()
             }
             continuation.onTermination = { _ in task.cancel() }
