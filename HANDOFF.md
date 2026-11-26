@@ -12,7 +12,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
-- **M19-9 motion audit (2026-11-26):** `scripts/motion_audit.py` + `HaloUITests.testMotionAudit` film transitions and cut frame strips; first pass in `docs/testing/MOTION_AUDIT.md`.
+- **M19-9 motion audit (2026-11-26):** `scripts/motion_audit.py` + `HaloUITests.testMotionAudit` film transitions and cut frame strips (`docs/testing/MOTION_AUDIT.md`); D-MOT-1 mostly fixed: a short, already-known list is drawn at once (`TimelineView.startsPlaced`), empty area 7 → 3 frames, D95 check still 10/10.
 - **M19-5 media by file, part (2026-11-26):** `MediaPort.file` writes a file or video to disk as it arrives (Quick Look, drag-out); limit 50 → 300 MB. Details: `docs/features/MEDIA_ATTACHMENTS.md` FR-10.
 - **M19-4 room opening (2026-11-26):** landing waits 80 + 60 → 16 + 32 ms; simulator p95 0.339 → 0.238 s; D95 check 10/10 on the simulator.
 - **M19-3 incremental room list (2026-11-26):** `RoomListDiffer` + atomic `RoomListUpdate.diffs`; the adapter sends only changes.
@@ -77,7 +77,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D125), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
-- **M19-9:** `scripts/motion_audit.py`, `ios/UITests/HaloUITests.swift` (`testMotionAudit`), `docs/testing/MOTION_AUDIT.md`, ROADMAP.
+- **M19-9:** `FeatureTimeline/TimelineView` (`startsPlaced`), `scripts/motion_audit.py`, `ios/UITests/HaloUITests.swift` (`testMotionAudit`), `docs/testing/MOTION_AUDIT.md`, ROADMAP.
 - **M19-5:** `HaloDomain/Ports/MediaPort` (`file`), `MediaLoader`, `MatrixMediaPort`, `MatrixSessionPort.mediaFile`, `TimelineViewModel+Actions`, `MediaLoaderFileTests`, `FaultTests.fileToDisk`, `TestStage.session`, `TimelineMirror.mediaRef`, docs.
 - **M19-4:** `FeatureTimeline/TimelineView` (`firstLayoutWait`, `confirmationGap`), ROADMAP, TEST_STRATEGY.
 - **M19-3:** `HaloDomain/RoomList/RoomListDiffer`, `Ports/RoomListPort` (`.diffs`), `RoomListCoordinator`, `MatrixRoomListPort`, `FakeRoomListPort` (`emit(batch:)`), `ScaleMeasurements`, `RoomListDifferTests`, `RoomListCoordinatorTests`, ROADMAP.
@@ -89,7 +89,7 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D125), [docs/adr/R
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
 
 **Not done, for future action (from the M18 and M19 work; remove a line when done)**
-- **M19-9:** D-MOT-1 (room open shows an empty message area for ~0.23 s: show rows from the first frame, keep D95); read the strips of room close, scroll up, reaction; scenarios for edit, reconnect, history prepend; fix `send` (software keyboard), `appearance`, `launch`; UI tests for what can be measured; run on the iPhone 📱. Details: `docs/testing/MOTION_AUDIT.md` "To do".
+- **M19-9:** the rest of D-MOT-1 (an empty message area of ~0.1 s remains while the view model is `.opening`; rooms over 40 rows or with photos still wait for the landing scroll); read the strips of room close, scroll up, reaction; scenarios for edit, reconnect, history prepend; fix `send` (software keyboard), `appearance`, `launch`; UI tests for what can be measured; run on the iPhone 📱. Details: `docs/testing/MOTION_AUDIT.md` "To do".
 - **M19-5:** own thumbnails downloaded again after a restart, gallery pages, progress and cancel while a file opens, memory of a 100 MB video (📱), an encrypted room's file, the image viewer still loads full photos with `content`.
 - **M19-4:** the same on the iPhone (the UI-test runner timed out enabling automation: phone locked or UI Automation off); no change to the other NFR rows.
 - **M19-3:** the adapter over a real 1,000-room server (`ScaleMeasurements` consumes the new updates but wasn't run), device timings; the coordinator still recomputes summaries and read inputs from the whole list per change.

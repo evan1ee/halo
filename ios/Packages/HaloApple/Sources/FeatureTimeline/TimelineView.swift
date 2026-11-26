@@ -42,6 +42,10 @@ public struct TimelineView: View {
     /// The list is drawn once it has been placed at the newest row (a frame or two), so it never shows its top first and then
     /// jumps. No spinner: a short fallback timer shows it anyway if that never happens.
     @State private var listPlaced = false
+    /// A short list whose messages are already there when it first appears is drawn at once (M19-9, D-MOT-1): `defaultScrollAnchor`
+    /// opens it at the bottom and there are too few rows for their estimated heights to move it. Kept once set.
+    @State private var revealedAtOnce = false
+    static let immediateRevealRows = 40
     /// The list is being scrolled (a drag, a fling, an animated scroll): it is not following the newest row then.
     @State private var scrollMoving = false
     /// The user's finger is actively dragging the list (never re-anchor mid-drag).
@@ -80,6 +84,11 @@ public struct TimelineView: View {
 
     public var body: some View {
         bodyContent.modifier(TimelineDropModifier(model: model))
+    }
+
+    /// The room has what it lands on and few enough rows to show them at once (see `revealedAtOnce`).
+    private func startsPlaced(_ rows: [TimelineRow]) -> Bool {
+        model.landed && !model.isFocused && !rows.isEmpty && rows.count <= Self.immediateRevealRows
     }
 
     private var bodyContent: some View {
@@ -165,7 +174,8 @@ public struct TimelineView: View {
                 .scrollDismissesKeyboard(.never)
                 // A tap on the conversation closes the keyboard or panel; the gesture only exists while one is open.
                 .simultaneousGesture(TapGesture().onEnded { input.dismiss() }, including: input.state.mode == .idle && input.state.displayedPanel == nil ? .subviews : .all)
-                .opacity(listPlaced || rows.isEmpty ? 1 : 0)
+                .opacity(listPlaced || revealedAtOnce || rows.isEmpty || startsPlaced(rows) ? 1 : 0)
+                .onChange(of: startsPlaced(rows), initial: true) { _, now in if now { revealedAtOnce = true } }
                 .onChange(of: listPlaced && !rows.isEmpty, initial: true) { _, visible in if visible { onFirstRows?() } }
                 .task {
                     try? await Task.sleep(for: .milliseconds(600))
