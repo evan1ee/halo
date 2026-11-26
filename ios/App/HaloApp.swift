@@ -54,11 +54,9 @@ struct HaloApp: App {
 private struct RootView: View {
     let root: AppRoot
     @Environment(\.scenePhase) private var scenePhase
-    @SceneStorage("halo.navigation.path") private var savedPath: Data?
     @State private var router = ChatsRouter(replacesDetail: UIDevice.current.userInterfaceIdiom == .pad)
     @State private var compactColumn: NavigationSplitViewColumn = .sidebar
     @State private var searchPresented = false
-    @State private var pathRestored = false
     @State private var searchModel: MessageSearchViewModel
     @State private var newChat: NewChatViewModel?
     @State private var showingNotificationPriming = false
@@ -219,20 +217,12 @@ private struct RootView: View {
                         root.coldStart = nil
                     }
                     .onChange(of: root.roomList.content) {
-                        if !pathRestored, case .loaded = root.roomList.content {
-                            pathRestored = true
-                            // Only when nothing was opened yet: restoring (and pruning rooms the list hasn't shown yet)
-                            // after the user already opened a room would pop it.
-                            if router.path.isEmpty {
-                                router.restorePath(from: savedPath)
-                                router.pruneInvalidRooms(joinedRoomIDs: root.roomList.joinedRoomIDs)
-                            }
-                        }
+                        // A launch always shows the chat list (the founder's rule, 2026-11-26): the room or page that was open
+                        // when the app was last closed is not brought back. Notification taps and links still open their room.
                         Task { await root.scanBotRooms() }
                     }
                     .onChange(of: router.path) { old, new in
                         root.search.noteActivity()
-                        savedPath = router.encodePath()
                         if new.count > old.count || Self.isPad, case .room = new.last, new.last != old.last {
                             root.roomOpen = HaloSignpost.begin(.roomOpen)
                         }

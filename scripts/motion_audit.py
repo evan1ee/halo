@@ -10,7 +10,7 @@ difference between neighbouring frames. A run of frames that differ is a "burst"
 (`<scenario>-burst-N.png`, one frame per cell, left to right) to be read by eye, and a table of how long it lasted and how big the largest
 step between two frames was. A frame that is nearly one flat colour in the middle of the content is listed as blank. Needs ffmpeg.
 """
-import argparse, glob, json, os, re, signal, subprocess, sys, time
+import argparse, glob, json, os, re, signal, subprocess, sys, threading, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCENARIOS = ["launch", "room-open-close", "keyboard", "send", "reaction", "appearance", "background", "scroll-up"]
@@ -32,16 +32,34 @@ def simulator(name="Halo Perf"):
 def film(udid, scenario, out, derived):
     movie = os.path.join(out, scenario + ".mp4")
     if os.path.exists(movie): os.remove(movie)
-    marks = os.path.join(out, scenario + ".marks")
+    marks = os.path.abspath(os.path.join(out, scenario + ".marks"))
     open(marks, "w").close()
     recorder = subprocess.Popen(["xcrun", "simctl", "io", udid, "recordVideo", "--codec", "h264", "--force", movie], stderr=subprocess.DEVNULL)
-    time.sleep(2)
-    started = time.time() - 2  # the recorder's first frame is about when it was started
+    deadline = time.time() + 15
+    while time.time() < deadline and not (os.path.exists(movie) and os.path.getsize(movie) > 0):
+        time.sleep(0.05)  # the file appears when the recorder takes its first frame
+    started = time.time()
+    time.sleep(1)
     env = dict(os.environ, TEST_RUNNER_HALO_MOTION_SCENARIO=scenario, TEST_RUNNER_HALO_MOTION_MARKS=marks)
+    # Scenarios can ask the script to act on the simulator by writing a mark: "dark" or "light" switches its appearance.
+    stop = threading.Event()
+    def watch():
+        done = set()
+        while not stop.is_set():
+            for line in open(marks):
+                name = line.split()[0] if line.strip() else ""
+                if name in ("dark", "light") and line not in done:
+                    done.add(line)
+                    subprocess.run(["xcrun", "simctl", "ui", udid, "appearance", name], capture_output=True)
+            time.sleep(0.05)
+    watcher = threading.Thread(target=watch, daemon=True)
+    watcher.start()
     test = subprocess.run(
         ["xcodebuild", "test-without-building", "-project", os.path.join(ROOT, "ios/Halo.xcodeproj"), "-scheme", "Halo-Debug",
          "-destination", f"id={udid}", "-derivedDataPath", derived, "-only-testing:HaloUITests/HaloUITests/testMotionAudit"],
         env=env, text=True, capture_output=True)
+    stop.set()
+    subprocess.run(["xcrun", "simctl", "ui", udid, "appearance", "light"], capture_output=True)
     time.sleep(1)
     recorder.send_signal(signal.SIGINT)
     recorder.wait(timeout=30)

@@ -12,6 +12,7 @@ State and next steps only; history is in `git log`, facts in `docs/`. Updated in
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
+- **Launch shows the chat list (2026-11-26, founder's request):** the app no longer restores the room or page that was open (`RootView` stopped reading and writing `@SceneStorage`); notification taps and links still open their room; `testLaunchShowsChatsNotTheLastRoom`; `docs/design/NAVIGATION.md` §4. `ChatsRouter.encodePath/restorePath` stay (tested) but are unused.
 - **M19-9 motion audit (2026-11-26):** `scripts/motion_audit.py` + `HaloUITests.testMotionAudit` film transitions and cut frame strips (`docs/testing/MOTION_AUDIT.md`); D-MOT-1 mostly fixed: a short, already-known list is drawn at once (`TimelineView.startsPlaced`), empty area 7 → 3 frames, D95 check still 10/10.
 - **M19-5 media by file, part (2026-11-26):** `MediaPort.file` writes a file or video to disk as it arrives (Quick Look, drag-out); limit 50 → 300 MB. Details: `docs/features/MEDIA_ATTACHMENTS.md` FR-10.
 - **M19-4 room opening (2026-11-26):** landing waits 80 + 60 → 16 + 32 ms; simulator p95 0.339 → 0.238 s; D95 check 10/10 on the simulator.

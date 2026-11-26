@@ -828,6 +828,20 @@ final class HaloUITests: XCTestCase {
         }
     }
 
+    /// A launch shows the chat list, not the room (or page) that was open when the app was closed (founder, 2026-11-26).
+    @MainActor
+    func testLaunchShowsChatsNotTheLastRoom() throws {
+        let app = XCUIApplication()
+        app.launch()
+        dismissFirstRunSheets(app)
+        try openFirstChat(app)
+        XCTAssertTrue(app.buttons["sticker-button"].waitForExistence(timeout: 8), "a room is open")
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(chatsRoot(app).waitForExistence(timeout: 15), "the launch lands on the chat list")
+        XCTAssertFalse(app.buttons["sticker-button"].exists, "no room is open after the launch")
+    }
+
     /// One transition of the zero flash and jump audit (ROADMAP M19-9, AC-MOT-1), filmed from outside by `scripts/motion_audit.py`, which
     /// sets `HALO_MOTION_SCENARIO`. Every scenario holds still for a moment before and after, so the film shows the rest state too.
     @MainActor
@@ -846,7 +860,7 @@ final class HaloUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
         dismissFirstRunSheets(app)
-        if !chatsRoot(app).waitForExistence(timeout: 4) { returnToChatList(app) }  // a relaunch may restore an open room
+        if !chatsRoot(app).waitForExistence(timeout: 4) { returnToChatList(app) }
         guard chatsRoot(app).waitForExistence(timeout: 15) else { throw XCTSkip("App is signed out.") }
         if app.buttons["focus-show-all"].exists { app.buttons["focus-show-all"].tap() }
         hold(2)
@@ -894,10 +908,12 @@ final class HaloUITests: XCTestCase {
         case "appearance":
             try openFirstChat(app)
             hold(2)
-            XCUIDevice.shared.appearance = .dark
-            hold(3)
-            XCUIDevice.shared.appearance = .light
-            hold(3)
+            // The script switches the simulator (`xcrun simctl ui … appearance`) when it sees these marks: the runner's own
+            // `XCUIDevice.appearance` did not change what the film shows.
+            mark("dark")
+            hold(4)
+            mark("light")
+            hold(4)
         case "background":
             try openFirstChat(app)
             hold(2)
