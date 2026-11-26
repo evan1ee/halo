@@ -16,6 +16,11 @@ public struct TimelineView: View {
     private let onOpenThread: (@MainActor (EventID) -> Void)?
     private let onSaveAsSticker: (@MainActor (Data, String) -> Void)?
     private let onFirstRows: (@MainActor () -> Void)?
+    /// How long the landing check waits for the first layout, and between its two looks at the newest row (M19-4: both were 80 and
+    /// 60 ms, about the whole of the ~150 ms between the push and the room appearing). Each is about a frame or two: the list has
+    /// already opened at the bottom (`defaultScrollAnchor`), so the second look only guards against row heights settling.
+    static let firstLayoutWait = 16
+    static let confirmationGap = 32
     /// Keyboard vs. Halo's panels under the composer (COMPOSER_PANELS §3, D97).
     @State private var input = ComposerInputController()
     @State private var choosingFile = false
@@ -243,7 +248,7 @@ public struct TimelineView: View {
                 // `.task(id:)` also runs for a value that was already set when this list first appeared (onChange wouldn't).
                 .task(id: model.landingRow) {
                     guard let landing = model.landingRow else { return }
-                    try? await Task.sleep(for: .milliseconds(80))  // let the list lay the rows out first
+                    try? await Task.sleep(for: .milliseconds(Self.firstLayoutWait))  // let the list lay the rows out first
                     // A lazy list estimates the height of rows it hasn't laid out, so one jump to a row far below the visible
                     // part lands short; jumping again after each layout converges (at most ~2 s).
                     var confirmed = 0
@@ -254,7 +259,7 @@ public struct TimelineView: View {
                         if model.landingIsUnread ? markerVisible : bottomVisible {
                             confirmed += 1
                             if confirmed >= 2 { break }
-                            try? await Task.sleep(for: .milliseconds(60))
+                            try? await Task.sleep(for: .milliseconds(Self.confirmationGap))
                             continue
                         }
                         confirmed = 0
