@@ -110,6 +110,8 @@ def main():
     udid = simulator()
     derived = os.path.join(arguments.out, "derived")
     subprocess.run(["xcrun", "simctl", "boot", udid], capture_output=True)
+    # The Mac's keyboard counts as a hardware keyboard, so the simulator hides the software one and typed text stops after a few characters.
+    subprocess.run(["xcrun", "simctl", "spawn", udid, "defaults", "write", "com.apple.keyboard.preferences", "AutomaticMinimizationEnabled", "-bool", "NO"], capture_output=True)
     if not arguments.skip_build:
         subprocess.run(["xcodebuild", "build-for-testing", "-project", os.path.join(ROOT, "ios/Halo.xcodeproj"), "-scheme", "Halo-Debug",
                         "-destination", f"id={udid}", "-derivedDataPath", derived, "-quiet"], check=True, capture_output=True)
