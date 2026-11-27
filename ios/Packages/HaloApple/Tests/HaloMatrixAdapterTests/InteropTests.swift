@@ -1,4 +1,5 @@
 import Foundation
+import HaloApplication
 import HaloDomain
 import HaloFoundation
 import HaloTestSupport
@@ -224,7 +225,7 @@ struct InteropTests {
             },
             Incoming(name: "sticker", type: "m.sticker", content: [
                 "body": "cat", "url": uri, "info": ["mimetype": "image/png", "w": 128, "h": 128]
-            ]) { if case .sticker("cat", let source) = $0.kind { source != nil } else { false } },
+            ]) { if case .sticker("cat", let source, let url, _) = $0.kind { source != nil && url == uri } else { false } },
             Incoming(name: "unknown msgtype shows its fallback", content: ["msgtype": "com.example.new", "body": "fallback text"], isKnownMissing: true) {
                 switch $0.kind {
                 case .text("fallback text", _), .unsupported: true
@@ -296,6 +297,99 @@ struct InteropTests {
         let finalPoll = try #require(currentPoll()?.details)
         #expect(finalPoll.ended)
         #expect(finalPoll.options.first { $0.id == sushi.id }?.votes == 2)
+    }
+
+    // MARK: Forward encrypted photo & multiple types to several targets (M20-6, AC-M4)
+
+    @Test("Forward: encrypted photo re-encrypts for an encrypted target and isn't readable by the server (AC-M4)", .timeLimit(.minutes(3)))
+    func forwardEncryptedPhotoAndTypes() async throws {
+        let stage = try await TestStage()
+        let timelinePort = MatrixTimelinePort(session: stage.session)
+        let mediaPort = MatrixMediaPort(session: stage.session)
+        let forwarder = ForwardCoordinator(timeline: timelinePort, media: mediaPort)
+
+        // Create two encrypted rooms (source + encrypted target) and join Account 1 to both.
+        let encSource = try await stage.peer.makeEncryptedRoom()
+        let encTarget = try await stage.peer.makeEncryptedRoom()
+        let plainTarget = stage.room
+        let selfPeer = try await TestPeer(server: stage.direct, user: stage.user, password: stage.password)
+        try await selfPeer.join(encSource)
+        try await selfPeer.join(encTarget)
+        await selfPeer.logout()
+
+        func openRoom(_ id: RoomID) async throws -> any TimelineSession {
+            for _ in 0..<60 {
+                if let opened = try? await timelinePort.open(room: id) { return opened }
+                try await Task.sleep(for: .milliseconds(250))
+            }
+            throw ContractViolation("couldn't open room \(id.rawValue)")
+        }
+
+        let sourceSession = try await openRoom(encSource)
+        let sourceMirror = TimelineMirror(sourceSession.items())
+        let targetEncSession = try await openRoom(encTarget)
+        let targetEncMirror = TimelineMirror(targetEncSession.items())
+
+        // Send a real PNG photo into Encrypted Room A.
+        let png = try #require(Data(base64Encoded: Self.pixel))
+        try await sourceSession.sendImage(OutgoingImage(
+            data: png, filename: "secret.png", mimeType: "image/png", width: 1, height: 1, caption: "Top secret"
+        ))
+        try await stage.wait(30, "encrypted source photo confirmed") {
+            sourceMirror.ownMedia(named: "Top secret", confirmedOnly: true) != nil
+        }
+        let sourcePhoto = try #require(sourceMirror.ownMedia(named: "Top secret", confirmedOnly: true))
+        let sourceRef = try #require(sourcePhoto.source)
+
+        // Forward that encrypted photo simultaneously to Encrypted Room B and Unencrypted Room C.
+        let photoOutcome = await forwarder.forward(
+            .image(ref: sourceRef, filename: "secret.png", mimeType: "image/png", width: 1, height: 1, caption: "Top secret"),
+            to: [encTarget, plainTarget]
+        )
+        #expect(photoOutcome.isCompleteSuccess)
+        #expect(photoOutcome.succeeded == [encTarget, plainTarget])
+
+        // Verify Encrypted Room B received the forwarded photo, re-encrypted with a fresh ref, and decrypts to exact PNG bytes.
+        try await stage.wait(30, "forwarded photo confirmed in encrypted target") {
+            targetEncMirror.ownMedia(named: "Top secret", confirmedOnly: true) != nil
+        }
+        let encTargetPhoto = try #require(targetEncMirror.ownMedia(named: "Top secret", confirmedOnly: true))
+        let encTargetRef = try #require(encTargetPhoto.source)
+        #expect(encTargetRef != sourceRef, "re-encrypted upload must have a new key/IV/URL")
+        let decryptedEncBytes = try await mediaPort.content(encTargetRef)
+        #expect(decryptedEncBytes == png)
+
+        // Server view of Encrypted Room B must contain ciphertext (`m.room.encrypted`), never plaintext `m.room.message` (AC-M4).
+        let encServerEvents = try await stage.peer.events(in: encTarget)
+        #expect(encServerEvents.contains { $0["type"] as? String == "m.room.encrypted" })
+        #expect(!encServerEvents.contains {
+            $0["type"] as? String == "m.room.message" && (contents($0)?["body"] as? String) == "Top secret"
+        })
+
+        // Verify Unencrypted Room C also received the photo with exact PNG bytes.
+        try await stage.wait(30, "forwarded photo confirmed in plain target") {
+            stage.mirror.ownMedia(named: "Top secret", confirmedOnly: true) != nil
+        }
+        let plainRef = try #require(stage.mirror.ownMedia(named: "Top secret", confirmedOnly: true)?.source)
+        #expect(try await mediaPort.content(plainRef) == png)
+
+        // Also forward a location + sticker to both targets.
+        let stickerURI = try await stage.peer.upload(png, type: "image/png")
+        let locOutcome = await forwarder.forward(
+            .location(OutgoingLocation(latitude: 52.5, longitude: 13.4, description: "Spot", isOwnLocation: false)),
+            to: [encTarget, plainTarget]
+        )
+        #expect(locOutcome.isCompleteSuccess)
+        let stickerOutcome = await forwarder.forward(
+            .sticker(body: "Wave", url: stickerURI, info: StickerInfo(width: 1, height: 1, mimeType: "image/png", size: png.count)),
+            to: [encTarget, plainTarget]
+        )
+        #expect(stickerOutcome.isCompleteSuccess)
+        try await stage.wait(30, "forwarded location and sticker on server") {
+            let plainEvents = try await stage.peer.events(in: plainTarget)
+            return plainEvents.contains { $0["type"] as? String == "m.sticker" && (contents($0)?["url"] as? String) == stickerURI }
+                && plainEvents.contains { contents($0)?["msgtype"] as? String == "m.location" }
+        }
     }
 }
 

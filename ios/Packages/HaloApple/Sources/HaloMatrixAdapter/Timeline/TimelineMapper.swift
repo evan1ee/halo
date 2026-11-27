@@ -141,7 +141,16 @@ enum TimelineMapper {
             case .location(let content): .location(body: message.body, geoURI: content.geoUri)
             default: .unsupported
             }
-        case .sticker(let body, _, let source): .sticker(body: body, source: ref(source))
+        case .sticker(let body, let info, let source):
+            .sticker(
+                body: body,
+                source: ref(source),
+                url: source.url(),
+                info: StickerInfo(
+                    width: clampedInt(info.width),
+                    height: clampedInt(info.height),
+                    mimeType: info.mimetype,
+                    size: clampedInt(info.size)))
         case .redacted: .redacted
         case .unableToDecrypt(let message): .undecryptable(reason(of: message))
         case .poll(let question, let pollKind, let maxSelections, let answers, let votes, let endTime, _):

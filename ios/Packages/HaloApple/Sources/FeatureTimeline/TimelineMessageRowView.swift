@@ -191,6 +191,9 @@ struct RowView: View {
                     .accessibilityActions {
                         if row.eventID != nil {
                             Button("Reply") { model.beginReply(row) }
+                            if row.canForward, model.canForward {
+                                Button("Forward") { model.beginForward(row) }
+                            }
                             Button("React thumbs up") { Task { await model.toggleReaction(on: row, key: "👍") } }
                             Button("More reactions") { model.beginReactionPicker(row) }
                             if row.isOwn {
@@ -386,6 +389,12 @@ private struct MessageActionsSheet: View {
                         actionRow("Reply", systemImage: "arrowshape.turn.up.left") {
                             dismiss()
                             model.beginReply(row)
+                        }
+                        if row.canForward, model.canForward {
+                            actionRow("Forward", systemImage: "arrowshape.turn.up.right") {
+                                dismiss()
+                                model.beginForward(row)
+                            }
                         }
                         if let onOpenThread, let eventID = row.eventID {
                             actionRow("Reply in thread", systemImage: "bubble.left.and.text.bubble.right") {

@@ -207,7 +207,7 @@ public final class MatrixRoomPort: RoomPort {
             case .file: "file"
             }
             return RoomExportMessage(eventID: eventID.rawValue, senderID: senderID, senderName: senderName, timestamp: event.timestamp, kind: kindName, body: attachment.body, mediaFilename: attachment.body)
-        case .sticker(let body, _):
+        case .sticker(let body, _, _, _):
             return RoomExportMessage(eventID: eventID.rawValue, senderID: senderID, senderName: senderName, timestamp: event.timestamp, kind: "sticker", body: body)
         case .location(let body, let geoURI):
             return RoomExportMessage(eventID: eventID.rawValue, senderID: senderID, senderName: senderName, timestamp: event.timestamp, kind: "location", body: "\(body) (\(geoURI))")

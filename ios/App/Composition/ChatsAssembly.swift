@@ -71,6 +71,23 @@ extension AppRoot {
         model.unrecognisedBotMessages = unrecognisedBots
         model.botActivity = threadRoot == nil ? botActivity : nil
         model.sendsTypingNotices = { [preferences] in preferences.sendTypingNotices }
+        model.forwarder = ForwardCoordinator(timeline: timelinePort, media: MatrixMediaPort(session: matrixSession))
+        model.loadForwardTargets = { @Sendable [roomCoordinator] in
+            let allRooms = await roomCoordinator.rooms
+            let sourceIsEncrypted = allRooms.first { $0.id == room }?.isEncrypted ?? false
+            let targets = allRooms
+                .filter { $0.membership == .joined }
+                .map { summary in
+                    ForwardTarget(
+                        id: summary.id,
+                        name: summary.name ?? "Unnamed room",
+                        isDirect: summary.isDirect,
+                        isEncrypted: summary.isEncrypted,
+                        avatar: summary.avatar
+                    )
+                }
+            return (sourceIsEncrypted, targets)
+        }
         configure(model)
         return model
     }

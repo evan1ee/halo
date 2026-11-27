@@ -303,7 +303,7 @@ struct AdapterContractTests {
             for await diff in stream {
                 try ListReducer.apply(diff, to: &items)
                 for item in items {
-                    if case .event(let event) = item.content, case .sticker(let body, _) = event.kind { found.insert(body) }
+                    if case .event(let event) = item.content, case .sticker(let body, _, _, _) = event.kind { found.insert(body) }
                 }
                 if found.isSuperset(of: ["Waving", "Bare wave"]) { return true }
             }
@@ -329,7 +329,7 @@ struct AdapterContractTests {
             var items: [HaloDomain.TimelineItem] = []
             for await diff in encStream {
                 try ListReducer.apply(diff, to: &items)
-                if items.contains(where: { if case .event(let ev) = $0.content, case .sticker(let body, _) = ev.kind { return body == "Waving" } else { return false } }) {
+                if items.contains(where: { if case .event(let ev) = $0.content, case .sticker(let body, _, _, _) = ev.kind { return body == "Waving" } else { return false } }) {
                     return true
                 }
             }

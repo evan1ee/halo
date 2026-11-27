@@ -251,6 +251,29 @@ public final class TimelineViewModel {
     var lastItems: [TimelineItem] = []
     var clearedMarkedUnread = false
     var isRestoringDraft = false
+    /// The row currently being forwarded in `ForwardSheet`, if any (MESSAGING FR-8, M20-6).
+    public private(set) var forwardingRow: TimelineRow?
+    /// Executes multi-target message forwarding (injected by composition root, M20-6).
+    public var forwarder: ForwardCoordinator?
+    /// Loads the room encryption state and joined destination chats for `ForwardSheet`.
+    public var loadForwardTargets: (@Sendable () async -> (sourceIsEncrypted: Bool, targets: [ForwardTarget]))?
+    /// Whether forwarding is available in this timeline.
+    public var canForward: Bool { forwarder != nil && loadForwardTargets != nil }
+
+    public func beginForward(_ row: TimelineRow) {
+        guard row.canForward, canForward else { return }
+        forwardingRow = row
+    }
+
+    public func cancelForward() {
+        forwardingRow = nil
+    }
+
+    public func makeForwardViewModel(for row: TimelineRow) -> ForwardViewModel? {
+        guard let payload = row.forwardPayload, let forwarder, let loadForwardTargets else { return nil }
+        return ForwardViewModel(payload: payload, forwarder: forwarder, loadTargets: loadForwardTargets)
+    }
+
     /// The unsent text that was in the composer when an edit began; it comes back when the edit ends.
     var stashedDraft = ""
     var reportedOwn: EventID?
