@@ -211,6 +211,8 @@ public final class TimelineViewModel {
 
     let coordinator: TimelineCoordinator
     let media: MediaLoader?
+    /// Owns inline playback of voice messages and audio files for this room so playback survives scrolling (MEDIA_ATTACHMENTS FR-3, M20-2).
+    public let audioPlayer: AudioPlaybackController
     let previewsAllowed: (@Sendable () async -> Bool)?
     /// `true` when the account's media preview setting asks for a tap before photos in this room are shown (FR-7).
     public internal(set) var previewsHidden = false
@@ -291,9 +293,11 @@ public final class TimelineViewModel {
         coordinator: TimelineCoordinator, media: MediaLoader? = nil, previewsAllowed: (@Sendable () async -> Bool)? = nil, receipts: ReadReceiptCoordinator? = nil, room: RoomID? = nil,
         drafts: DraftCoordinator? = nil, images: (any ImagePreparing)? = nil, readThrough: (@Sendable () async -> Date?)? = nil, dwell: Duration = TimelineViewModel.seenDwell, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
         locale: Locale = .current, timeZone: TimeZone = .current, thumbnails: TimelineThumbnailMemory? = nil,
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        audioPlayer: AudioPlaybackController? = nil
     ) {
         self.coordinator = coordinator
+        self.audioPlayer = audioPlayer ?? AudioPlaybackController()
         self.thumbnailMemory = thumbnails ?? TimelineThumbnailMemory()
         self.media = media
         self.previewsAllowed = previewsAllowed
@@ -494,6 +498,7 @@ public final class TimelineViewModel {
     /// Closes the timeline. Call when the screen disappears.
     public func stop() async {
         cancelOpenFile()
+        audioPlayer.stop()
         observation?.cancel()
         observation = nil
         clearedMarkedUnread = false

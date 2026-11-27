@@ -686,8 +686,14 @@ struct TimelineViewModelTests {
         let pdf = vm.row(event(.media(MediaAttachment(kind: .file, body: "plan.pdf", source: MediaRef(token: "f"), mimeType: "application/pdf", size: 1_200_000))))
         #expect(pdf.file?.name == "plan.pdf" && pdf.file?.detail.hasPrefix("PDF · ") == true && pdf.file?.detail.contains("MB") == true)
         #expect(!pdf.showsText && pdf.text == "[File] plan.pdf")
-        let voice = vm.row(event(.media(MediaAttachment(kind: .audio, body: "voice.m4a", source: MediaRef(token: "a"), duration: 42.4))))
-        #expect(voice.file?.detail == "0:42")
+        let voice = vm.row(event(.media(MediaAttachment(
+            kind: .audio, body: "Voice message", source: MediaRef(token: "a"), mimeType: "audio/ogg",
+            duration: 42.4, isVoice: true, waveform: [0.1, 0.8, 0.3]))))
+        #expect(voice.file == nil)
+        #expect(voice.audio?.duration == 42.4)
+        #expect(voice.audio?.isVoice == true)
+        #expect(voice.audio?.waveform == [0.1, 0.8, 0.3])
+        #expect(!voice.showsText && !voice.canEdit && voice.text == "[Voice message]")
         let video = vm.row(event(.media(MediaAttachment(kind: .video, body: "clip.mp4", source: MediaRef(token: "v"), size: 3_000_000, duration: 75))))
         #expect(video.file?.detail.hasPrefix("1:15 · ") == true)
         let noSource = vm.row(event(.media(MediaAttachment(kind: .file, body: "gone.bin", source: nil))))

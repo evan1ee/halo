@@ -29,7 +29,9 @@ struct InteropTests {
         try await timeline.toggleReaction(on: EventID(asked), key: "👍")
         try await timeline.sendImage(OutgoingImage(data: png, filename: "pixel.png", mimeType: "image/png", width: 1, height: 1))
         try await timeline.sendFile(OutgoingFile(data: Data("notes".utf8), filename: "notes.txt", mimeType: "text/plain"))
-        try await timeline.sendFile(OutgoingFile(data: Data(count: 64), filename: "voice.m4a", mimeType: "audio/mp4"))
+        try await timeline.sendFile(OutgoingFile(
+            data: Data(count: 64), filename: "voice.m4a", mimeType: "audio/mp4",
+            duration: 2.5, waveform: [0.0, 0.5, 1.0], isVoiceMessage: true))
         try await timeline.sendFile(OutgoingFile(data: Data(count: 64), filename: "clip.mp4", mimeType: "video/mp4"))
         try await timeline.sendLocation(OutgoingLocation(latitude: 52.5, longitude: 13.4, isOwnLocation: false))
         try await timeline.createPoll(OutgoingPoll(question: "Lunch?", answers: ["Yes", "No"]))
@@ -82,7 +84,12 @@ struct InteropTests {
         #expect(info(image)["w"] as? Int == 1 && info(image)["size"] as? Int == png.count)
         let file = try message("notes.txt")
         #expect(file["msgtype"] as? String == "m.file" && info(file)["size"] as? Int == 5)
-        #expect(try message("voice.m4a")["msgtype"] as? String == "m.audio")
+        let voice = try message("voice.m4a")
+        #expect(voice["msgtype"] as? String == "m.audio")
+        #expect(voice["org.matrix.msc3245.voice"] != nil)
+        let mscAudio = try #require(voice["org.matrix.msc1767.audio"] as? [String: Any])
+        #expect(mscAudio["duration"] as? Int == 2500)
+        #expect((mscAudio["waveform"] as? [Int])?.count == 3)
         #expect(try message("clip.mp4")["msgtype"] as? String == "m.video")
         let location = try #require(events.compactMap(contents).first(where: { $0["msgtype"] as? String == "m.location" }))
         #expect((location["geo_uri"] as? String)?.hasPrefix("geo:52.5,13.4") == true)
@@ -187,7 +194,10 @@ struct InteropTests {
             Incoming(name: "voice message", content: [
                 "msgtype": "m.audio", "body": "Voice message", "url": uri, "info": ["mimetype": "audio/ogg", "duration": 3000, "size": 100],
                 "org.matrix.msc1767.audio": ["duration": 3000, "waveform": [0, 512, 1024]], "org.matrix.msc3245.voice": [String: Any]()
-            ]) { media($0, .audio)?.duration == 3 },
+            ]) {
+                guard let audio = media($0, .audio) else { return false }
+                return audio.duration == 3 && audio.isVoice && audio.waveform == [0, 0.5, 1]
+            },
             Incoming(name: "file", content: [
                 "msgtype": "m.file", "body": "d.pdf", "filename": "d.pdf", "url": uri, "info": ["mimetype": "application/pdf", "size": 999]
             ]) { media($0, .file)?.size == 999 },

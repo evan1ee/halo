@@ -35,7 +35,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 | GA-13 | Double-tap protection exists but only message and room-list changes use it (`ActionGuard`); other screens keep their own flags, with no test per action | `ActionGuard` callers | M18-8 (rest) |
 | GA-16 | Every timeline change rebuilds every row on the main actor (rows are cached since M19-2; the passes over all items and the main actor remain) | `TimelineViewModel+Mapping.apply` | M19-2 |
 | GA-17 | The room list is replaced as a whole on every change (ROOM_LIST §4 forbids it; the adapter sends only changes since M19-3) | `.diff(.reset(list))` | M19-3 |
-| GA-18 | Video and voice play only in Quick Look | no `AVPlayer` | M20-2, M20-3 |
+| GA-18 | Video plays only in Quick Look (voice and audio inline player built in M20-2) | no video `AVPlayerViewController` | M20-3 |
 | GA-19 | Polls can be created but not voted in or ended | no `sendPollResponse` | M20-4 |
 | GA-20 | No camera: only existing photos can be sent | no capture code or usage string | M20-5 |
 | GA-22 | No way to report a message or room (App Review 1.2) | no `reportContent` | M20-7 |
@@ -111,7 +111,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 | Task | Class · size | Done when |
 |---|---|---|
 | [x] **M20-1 Jump to any message** (*built with M19-11, 2026-11-25; a message 1,300 back opens in 0.04 s on the simulator*): event-focused timeline for replies, search, links, pins and notifications; back to newest | R · L | Event 5,000 messages back opens in ≤ 2 s online; offline or gone says so; read state unaffected |
-| [ ] **M20-2 Voice and audio in the bubble**: waveform, scrub, 1×/1.5×/2×, route and interruption handling, keeps playing while scrolling | R · M | Unit on the player; interop with Element voice notes; VoiceOver adjustable |
+| [x] **M20-2 Voice and audio in the bubble** (*built 2026-11-27: `AudioPlaybackRate` / `WaveformResampler` / `AudioPlaybackMath` in `HaloDomain`; `TimelineMapper` + `MatrixTimelinePort` map and send MSC3245 voice flag + MSC1767 waveform + duration; `VoiceRecorder` captures metering waveform; `AudioPlaybackController` + `AVAudioPlayerEngine` on `TimelineViewModel` stream from disk, play AAC and Element Ogg Opus `.ogg` at 1×/1.5×/2×, keep playing while scrolling, handle call interruptions and route changes, and extract waveforms via `AVAssetReader`; `AudioBubbleView` supports horizontal-only scrubbing, Light/Dark/AX5, and VoiceOver adjustable seek; verified by `AudioPlaybackTests`, `AudioPlaybackControllerTests` incl. real Ogg Opus + WAV, `InteropTests`, and `sendFiles` contract; open: live phone call / Bluetooth headphones & VoiceOver check on a physical iPhone 📱*): waveform, scrub, 1×/1.5×/2×, route and interruption handling, keeps playing while scrolling | R · M | Unit on the player; interop with Element voice notes; VoiceOver adjustable |
 | [ ] **M20-3 Video**: poster inline, full-screen player, captions on send, save and share | R · M | Streams from file (M19-5); portrait and landscape |
 | [ ] **M20-4 Polls**: vote, change vote, end own poll, live results | R · M | Contract test with two accounts; pending vote looks pending |
 | [ ] **M20-5 Camera**: take a photo or short video from the composer | R · M · 📱 | Permission asked in context; denied state; location stripped (D56) |

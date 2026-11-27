@@ -426,13 +426,24 @@ final class MatrixTimelineSession: TimelineSession {
             let handle: SendAttachmentJoinHandle
             switch file.kind {
             case .audio:
-                handle = try timeline.sendAudio(params: params, audioInfo: AudioInfo(duration: nil, size: size, mimetype: file.mimeType))
+                let audioInfo = AudioInfo(duration: file.duration, size: size, mimetype: file.mimeType)
+                if file.isVoiceMessage {
+                    handle = try timeline.sendAttachment(params: params, attachment: .voice(audioInfo: audioInfo, waveform: file.waveform ?? []))
+                } else {
+                    handle = try timeline.sendAttachment(params: params, attachment: .audio(audioInfo: audioInfo))
+                }
             case .video:
-                handle = try timeline.sendVideo(
-                    params: params, thumbnailSource: nil,
-                    videoInfo: VideoInfo(duration: nil, height: nil, width: nil, mimetype: file.mimeType, size: size, thumbnailInfo: nil, thumbnailSource: nil, blurhash: nil))
+                handle = try timeline.sendAttachment(
+                    params: params,
+                    attachment: .video(
+                        videoInfo: VideoInfo(
+                            duration: file.duration, height: nil, width: nil, mimetype: file.mimeType, size: size,
+                            thumbnailInfo: nil, thumbnailSource: nil, blurhash: nil),
+                        thumbnailSource: nil))
             case .file:
-                handle = try timeline.sendFile(params: params, fileInfo: FileInfo(mimetype: file.mimeType, size: size, thumbnailInfo: nil, thumbnailSource: nil))
+                handle = try timeline.sendAttachment(
+                    params: params,
+                    attachment: .file(fileInfo: FileInfo(mimetype: file.mimeType, size: size, thumbnailInfo: nil, thumbnailSource: nil)))
             }
             try await handle.join()
         } catch { throw ErrorMapper.map(error) }

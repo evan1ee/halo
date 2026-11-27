@@ -19,7 +19,17 @@ extension TimelineViewModel {
     public nonisolated static let openSizeLimit = 300 * 1024 * 1024
 
     public func openFile(_ row: TimelineRow) async {
-        guard let file = row.file, media != nil, openingRow == nil else { return }
+        let target: TimelineRow.FileTile?
+        if let file = row.file {
+            target = file
+        } else if let audio = row.audio {
+            target = TimelineRow.FileTile(
+                kind: .audio, name: Self.audioFilename(from: audio.name, mimeType: audio.mimeType),
+                detail: "", ref: audio.ref, size: audio.size, thumbnail: nil)
+        } else {
+            target = nil
+        }
+        guard let file = target, media != nil, openingRow == nil else { return }
         openFileError = nil
         if let size = file.size, size > Self.openSizeLimit {
             openFileError = "This file is too large to open here yet (\(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)))."
@@ -85,6 +95,66 @@ extension TimelineViewModel {
     public func closeFile() {
         if let url = openedFile?.url { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         openedFile = nil
+    }
+
+    // MARK: Inline audio and voice playback (MEDIA_ATTACHMENTS FR-3, M20-2)
+
+    /// Starts, pauses, resumes, or cancels inline playback for an audio or voice message bubble.
+    public func toggleAudioPlayback(for row: TimelineRow) {
+        guard let audio = row.audio else { return }
+        audioPlayer.togglePlay(
+            itemID: row.id,
+            announcedDuration: audio.duration,
+            isVoice: audio.isVoice,
+            hasWaveform: audio.waveform != nil
+        ) { [weak self] in
+            guard let self else { throw HaloError.cancelled }
+            return try await self.downloadAudioToTemp(audio)
+        }
+    }
+
+    /// Streams an audio attachment straight to a temporary file with a player-friendly file extension (M19-5, M20-2).
+    public func downloadAudioToTemp(_ audio: TimelineRow.Audio) async throws -> URL {
+        guard let media else { throw HaloError.notFound }
+        if let size = audio.size, size > Self.openSizeLimit {
+            throw HaloError.invalidInput("Audio exceeds the size limit")
+        }
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("halo-audio-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let filename = Self.audioFilename(from: audio.name, mimeType: audio.mimeType)
+        do {
+            return try await media.file(audio.ref, name: filename, mimeType: audio.mimeType, in: directory)
+        } catch {
+            try? FileManager.default.removeItem(at: directory)  // best-effort: half-made temporary folder
+            throw error
+        }
+    }
+
+    /// Ensures an audio file saved to disk carries an extension `AVURLAsset` recognises (Element voice notes often use
+    /// `"Voice message"` as `body` with `mimeType: "audio/ogg"`).
+    static func audioFilename(from rawName: String, mimeType: String?) -> String {
+        let last = rawName.split(whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? ""
+        let base = last.isEmpty || last == "." || last == ".." ? "audio" : last
+        let existingExt = (base as NSString).pathExtension.lowercased()
+        let knownAudioExtensions: Set<String> = ["m4a", "mp4", "ogg", "oga", "opus", "mp3", "wav", "aac", "caf", "flac", "aiff", "aif", "webm"]
+        if knownAudioExtensions.contains(existingExt) { return base }
+
+        let mime = (mimeType ?? "").split(separator: ";").first.map { $0.trimmingCharacters(in: .whitespaces).lowercased() } ?? ""
+        let inferredExt: String = switch mime {
+        case "audio/ogg", "application/ogg", "audio/opus": "ogg"
+        case "audio/mp4", "audio/m4a", "audio/x-m4a": "m4a"
+        case "audio/aac": "aac"
+        case "audio/mpeg", "audio/mp3": "mp3"
+        case "audio/wav", "audio/x-wav", "audio/wave": "wav"
+        case "audio/flac", "audio/x-flac": "flac"
+        case "audio/x-caf", "audio/caf": "caf"
+        case "audio/aiff", "audio/x-aiff": "aiff"
+        case "audio/webm": "webm"
+        default: ""
+        }
+        guard !inferredExt.isEmpty else { return base }
+        return "\(base).\(inferredExt)"
     }
 
     public func dismissOpenFileError() { openFileError = nil }
@@ -259,12 +329,23 @@ extension TimelineViewModel {
 
     /// Sends a picked file, recording or clip as it is. The message shows as a local echo while uploading.
     public func sendFile(data: Data, filename: String, mimeType: String) async {
+        await sendOutgoingFile(OutgoingFile(data: data, filename: filename, mimeType: mimeType))
+    }
+
+    /// Sends a recorded voice message with MSC3245 voice flag, duration, and MSC1767 waveform metadata (M20-2).
+    public func sendVoice(data: Data, duration: TimeInterval, waveform: [Float]) async {
+        await sendOutgoingFile(OutgoingFile(
+            data: data, filename: "Voice message.m4a", mimeType: "audio/mp4",
+            duration: duration, waveform: waveform, isVoiceMessage: true))
+    }
+
+    private func sendOutgoingFile(_ file: OutgoingFile) async {
         guard !isSendingFile else { return }
         isSendingFile = true
         sendError = nil
         defer { isSendingFile = false }
         do {
-            try await coordinator.sendFile(OutgoingFile(data: data, filename: filename, mimeType: mimeType))
+            try await coordinator.sendFile(file)
         } catch {
             switch error {
             case .invalidInput("FILE_TOO_LARGE"): sendError = "That file is too large to send."
@@ -293,6 +374,7 @@ extension TimelineViewModel {
             if let row = byEvent[id] {
                 let preview: String
                 if let location = row.location { preview = location.title }
+                else if let audio = row.audio { preview = audio.isVoice ? "Voice message" : audio.name }
                 else if let file = row.file { preview = file.name }
                 else if row.isSticker { preview = "Sticker" }
                 else if row.image != nil, !row.showsText { preview = "Photo" }

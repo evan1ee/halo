@@ -1,6 +1,7 @@
 #if canImport(UIKit)
 import AVFoundation
 import Foundation
+import HaloDomain
 import Observation
 
 /// Records a voice message for the composer's mic button (docs/features/COMPOSER_PANELS.md §2a, D99).
@@ -21,6 +22,7 @@ final class VoiceRecorder {
     @ObservationIgnored private var recorder: AVAudioRecorder?
     @ObservationIgnored private var ticker: Task<Void, Never>?
     @ObservationIgnored private var fileURL: URL?
+    @ObservationIgnored private var meteringSamples: [Float] = []
 
     var isRecording: Bool { phase == .recording }
 
@@ -50,15 +52,20 @@ final class VoiceRecorder {
             try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
             try session.setActive(true)
             let recorder = try AVAudioRecorder(url: url, settings: settings)
+            recorder.isMeteringEnabled = true
             guard recorder.record(forDuration: Self.maximumDuration) else { throw CocoaError(.fileWriteUnknown) }
             self.recorder = recorder
             fileURL = url
             elapsed = 0
+            meteringSamples = []
             phase = .recording
             ticker = Task { [weak self] in
                 while !Task.isCancelled {
-                    try? await Task.sleep(for: .milliseconds(200))
+                    try? await Task.sleep(for: .milliseconds(80))
                     guard let self, let recorder = self.recorder else { return }
+                    recorder.updateMeters()
+                    let level = WaveformResampler.normalizeMetering(decibels: recorder.averagePower(forChannel: 0))
+                    self.meteringSamples.append(level)
                     self.elapsed = recorder.currentTime > 0 ? recorder.currentTime : self.elapsed
                 }
             }
@@ -70,15 +77,17 @@ final class VoiceRecorder {
         }
     }
 
-    /// Stops and returns the recording (`nil` when shorter than half a second); the file is deleted.
-    func finish() -> (data: Data, duration: TimeInterval)? {
+    /// Stops and returns the recording with its resampled MSC1767 waveform (`nil` when shorter than half a second); the file is deleted.
+    func finish() -> (data: Data, duration: TimeInterval, waveform: [Float])? {
         guard phase == .recording, let recorder, let url = fileURL else { return nil }
         let duration = max(recorder.currentTime, elapsed)
+        let samples = meteringSamples
         recorder.stop()
         defer { cleanUp() }
         phase = .idle
         guard duration >= 0.5, let data = try? Data(contentsOf: url), !data.isEmpty else { return nil }
-        return (data, duration)
+        let waveform = WaveformResampler.resample(samples, to: WaveformResampler.outgoingSampleCount)
+        return (data, duration, waveform)
     }
 
     /// Stops and throws the recording away.
@@ -98,6 +107,7 @@ final class VoiceRecorder {
         fileURL = nil
         recorder = nil
         elapsed = 0
+        meteringSamples = []
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 }
