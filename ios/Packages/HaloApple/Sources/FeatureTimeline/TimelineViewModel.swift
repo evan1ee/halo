@@ -274,6 +274,57 @@ public final class TimelineViewModel {
         return ForwardViewModel(payload: payload, forwarder: forwarder, loadTargets: loadForwardTargets)
     }
 
+    /// Lifecycle state when the room is upgraded (tombstoned), left, banned, or pending knock (GA-23, M20-8).
+    public private(set) var lifecycleBanner: RoomBannerState?
+    public private(set) var isActingOnLifecycle = false
+    public private(set) var lifecycleError: String?
+    public private(set) var lifecycleClosedRoom = false
+    /// Queries current room lifecycle state (`membership`, `successor`); injected by composition root.
+    public var loadRoomLifecycle: (@Sendable () async -> RoomBannerState?)?
+    /// Leaves and forgets the current room (e.g. an upgraded room).
+    public var leaveAndForgetRoom: (@Sendable () async throws(HaloError) -> Void)?
+    /// Forgets the current left or banned room.
+    public var forgetCurrentRoom: (@Sendable () async throws(HaloError) -> Void)?
+    /// Cancels a pending knock request in the current room.
+    public var cancelCurrentKnock: (@Sendable () async throws(HaloError) -> Void)?
+
+    public func refreshLifecycle() async {
+        guard let loadRoomLifecycle else { return }
+        let updated = await loadRoomLifecycle()
+        if lifecycleBanner != updated {
+            lifecycleBanner = updated
+        }
+    }
+
+    public func runLeaveAndForget() async {
+        guard let leaveAndForgetRoom, !isActingOnLifecycle else { return }
+        await runLifecycleAction(verb: "leave this room", leaveAndForgetRoom)
+    }
+
+    public func runForgetRoom() async {
+        guard let forgetCurrentRoom, !isActingOnLifecycle else { return }
+        await runLifecycleAction(verb: "forget this room", forgetCurrentRoom)
+    }
+
+    public func runCancelKnock() async {
+        guard let cancelCurrentKnock, !isActingOnLifecycle else { return }
+        await runLifecycleAction(verb: "cancel your request", cancelCurrentKnock)
+    }
+
+    private func runLifecycleAction(verb: String, _ work: @Sendable () async throws(HaloError) -> Void) async {
+        isActingOnLifecycle = true
+        lifecycleError = nil
+        defer { isActingOnLifecycle = false }
+        do {
+            try await work()
+            lifecycleClosedRoom = true
+        } catch {
+            lifecycleError = error == .network(retryable: true)
+                ? "You appear to be offline. Try again."
+                : "Couldn't \(verb). Try again."
+        }
+    }
+
     /// The unsent text that was in the composer when an edit began; it comes back when the edit ends.
     var stashedDraft = ""
     var reportedOwn: EventID?

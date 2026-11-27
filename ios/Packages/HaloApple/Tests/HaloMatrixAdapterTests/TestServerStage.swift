@@ -162,6 +162,41 @@ struct TestPeer: Sendable {
         return try RoomID(try await Self.call("POST", base + "/createRoom", token, body)["room_id"] as? String ?? "")
     }
 
+    func makeKnockRoom(name: String) async throws -> RoomID {
+        let body: [String: Any] = [
+            "name": name,
+            "room_version": "10",
+            "visibility": "private",
+            "initial_state": [
+                ["type": "m.room.join_rules", "state_key": "", "content": ["join_rule": "knock"]],
+            ],
+        ]
+        return try RoomID(try await Self.call("POST", base + "/createRoom", token, body)["room_id"] as? String ?? "")
+    }
+
+    func makeInviteOnlyRoom(name: String) async throws -> RoomID {
+        let body: [String: Any] = ["preset": "private_chat", "name": name]
+        return try RoomID(try await Self.call("POST", base + "/createRoom", token, body)["room_id"] as? String ?? "")
+    }
+
+    func tombstone(_ room: RoomID, replacement: RoomID, reason: String) async throws {
+        _ = try await Self.call(
+            "PUT",
+            base + "/rooms/\(room.rawValue)/state/m.room.tombstone/",
+            token,
+            ["body": reason, "replacement_room": replacement.rawValue]
+        )
+    }
+
+    func ban(user userID: String, from room: RoomID, reason: String = "Test ban") async throws {
+        _ = try await Self.call(
+            "POST",
+            base + "/rooms/\(room.rawValue)/ban",
+            token,
+            ["user_id": userID, "reason": reason]
+        )
+    }
+
     func join(_ room: RoomID) async throws { _ = try await Self.call("POST", base + "/rooms/\(room.rawValue)/join", token, [:]) }
 
     @discardableResult

@@ -25,10 +25,16 @@ public final class MatrixRoomPort: RoomPort {
             canEdit = (try? levels.canUserSendState(userId: own, stateEvent: .roomName)) == true && (try? levels.canUserSendState(userId: own, stateEvent: .roomTopic)) == true
             canInvite = (try? levels.canUserInvite(userId: own)) == true
         }
+        let successor: RoomSuccessor? = room.successorRoom().flatMap { s in
+            (try? RoomID(s.roomId)).map { RoomSuccessor(roomID: $0, reason: s.reason) }
+        }
+        let resolvedMembership = await Self.resolvedMembership(of: room)
         return RoomDetails(
             id: id, name: room.displayName(), topic: room.topic(), isDirect: direct, isEncrypted: encrypted,
             joinedMemberCount: Int(room.joinedMembersCount()), notificationMode: Self.choice(mode), canEditDetails: canEdit, canInvite: canInvite,
-            avatar: MatrixRoomListPort.avatar(room.avatarUrl()))
+            avatar: MatrixRoomListPort.avatar(room.avatarUrl()),
+            successor: successor,
+            membership: resolvedMembership)
     }
 
     /// Upper bound on total members read across chunks in `members(_:limit:)` so huge public rooms don't block the UI thread
@@ -111,6 +117,135 @@ public final class MatrixRoomPort: RoomPort {
     public func leave(_ id: RoomID) async throws(HaloError) {
         let room = try await session.room(id)
         do { try await room.leave() } catch { throw ErrorMapper.map(error) }
+    }
+
+    public func forget(_ id: RoomID) async throws(HaloError) {
+        let room = try await session.room(id)
+        do { try await room.forget() } catch { throw ErrorMapper.map(error) }
+    }
+
+    public func previewRoom(address: String) async throws(HaloError) -> RoomLifecyclePreview {
+        let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw .invalidInput("EMPTY_ROOM_ADDRESS") }
+        let client = try await session.signedInClient()
+        do {
+            let preview: RoomPreview
+            if trimmed.hasPrefix("#") {
+                preview = try await client.getRoomPreviewFromRoomAlias(roomAlias: trimmed)
+            } else {
+                preview = try await client.getRoomPreviewFromRoomId(roomId: trimmed, viaServers: [])
+            }
+            let info = preview.info()
+            return RoomLifecyclePreview(
+                roomID: try? RoomID(info.roomId),
+                address: info.canonicalAlias ?? trimmed,
+                name: info.name,
+                topic: info.topic,
+                avatar: MatrixRoomListPort.avatar(info.avatarUrl),
+                memberCount: info.numJoinedMembers > 0 ? Int(clamping: info.numJoinedMembers) : nil,
+                membership: info.membership.map(Self.membership),
+                joinAccess: Self.joinAccess(info.joinRule)
+            )
+        } catch {
+            // If the room is already known locally (e.g. banned or left invite-only room where the server refuses preview),
+            // surface the local state honestly instead of failing silently.
+            if let localID = try? RoomID(trimmed),
+               let local = client.rooms().first(where: { $0.id() == localID.rawValue }) {
+                let resolved = await Self.resolvedMembership(of: local)
+                return RoomLifecyclePreview(
+                    roomID: localID,
+                    address: trimmed,
+                    name: local.displayName(),
+                    topic: local.topic(),
+                    avatar: MatrixRoomListPort.avatar(local.avatarUrl()),
+                    memberCount: local.joinedMembersCount() > 0 ? Int(clamping: local.joinedMembersCount()) : nil,
+                    membership: resolved,
+                    joinAccess: .unknown
+                )
+            }
+            throw ErrorMapper.map(error)
+        }
+    }
+
+    public func knock(address: String, reason: String?) async throws(HaloError) -> RoomID {
+        let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw .invalidInput("EMPTY_ROOM_ADDRESS") }
+        let cleanReason = reason?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let client = try await session.signedInClient()
+        do {
+            let room = try await client.knock(
+                roomIdOrAlias: trimmed,
+                reason: (cleanReason?.isEmpty == false) ? cleanReason : nil,
+                serverNames: []
+            )
+            return try RoomID(room.id())
+        } catch let error as HaloError {
+            throw error
+        } catch {
+            throw ErrorMapper.map(error)
+        }
+    }
+
+    public func inactiveRooms() async -> [RoomSummary] {
+        guard let client = try? await session.signedInClient() else { return [] }  // best-effort: returns empty when signed out
+        let rooms = client.rooms().filter { !$0.isSpace() && [.knocked, .left, .banned].contains($0.membership()) }
+        var summaries: [RoomSummary] = []
+        for room in rooms {
+            guard let id = try? RoomID(room.id()) else { continue }
+            let info = try? await room.roomInfo()  // best-effort: metadata falls back to room accessors
+            let successor: RoomSuccessor? = (info?.successorRoom ?? room.successorRoom()).flatMap { s in
+                (try? RoomID(s.roomId)).map { RoomSuccessor(roomID: $0, reason: s.reason) }
+            }
+            let resolved = await Self.resolvedMembership(of: room)
+            summaries.append(RoomSummary(
+                id: id,
+                name: room.displayName(),
+                isDirect: info?.isDirect ?? false,
+                isEncrypted: room.encryptionState() == .encrypted,
+                membership: resolved,
+                avatar: MatrixRoomListPort.avatar(room.avatarUrl()),
+                successor: successor
+            ))
+        }
+        return summaries.sorted { ($0.name ?? $0.id.rawValue).localizedCaseInsensitiveCompare($1.name ?? $1.id.rawValue) == .orderedAscending }
+    }
+
+    /// Classic `/v3/sync` places both left and banned rooms in `rooms.leave`; when `room.membership()` reports `.left`,
+    /// inspect the locally cached own `m.room.member` state (without a network `/members` call that 403s when banned)
+    /// to distinguish a ban from an ordinary leave.
+    private static func resolvedMembership(of room: Room) async -> HaloDomain.Membership {
+        let base = membership(room.membership())
+        guard base == .left else { return base }
+        let ownUserID = room.ownUserId()
+        if let iterator = try? await room.membersNoSync() {  // best-effort: falls back to .left if local cache is unavailable
+            while let chunk = iterator.nextChunk(chunkSize: 200) {
+                if let own = chunk.first(where: { $0.userId == ownUserID }) {
+                    return own.membership == .ban ? .banned : .left
+                }
+            }
+        }
+        return base
+    }
+
+    private static func membership(_ m: MatrixRustSDK.Membership) -> HaloDomain.Membership {
+        switch m {
+        case .joined: .joined
+        case .invited: .invited
+        case .knocked: .knocked
+        case .left: .left
+        case .banned: .banned
+        }
+    }
+
+    private static func joinAccess(_ rule: JoinRule?) -> RoomJoinAccess {
+        guard let rule else { return .unknown }
+        switch rule {
+        case .public: return .public
+        case .knock, .knockRestricted: return .knock
+        case .invite, .private: return .inviteOnly
+        case .restricted: return .restricted
+        case .custom: return .unknown
+        }
     }
 
     public func mediaGallery(in id: RoomID, limit: Int) async throws(HaloError) -> [RoomMediaItem] {

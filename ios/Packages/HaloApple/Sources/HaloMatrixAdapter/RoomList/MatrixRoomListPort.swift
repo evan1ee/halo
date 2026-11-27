@@ -337,6 +337,9 @@ public final class MatrixRoomListPort: RoomListPort {
         let inviter = await inviterInfo(room, cached: info?.inviter)
         let latest = await room.latestEvent()
         let ownReceipt = await ownReadThrough(of: room, counts: read, hasRecords: hasRecords, eventTimes: eventTimes)
+        let successor: RoomSuccessor? = (info?.successorRoom ?? room.successorRoom()).flatMap { s in
+            (try? RoomID(s.roomId)).map { RoomSuccessor(roomID: $0, reason: s.reason) }
+        }
         return try RoomSummary(
             id: RoomID(room.id()),
             name: room.displayName(),
@@ -351,7 +354,8 @@ public final class MatrixRoomListPort: RoomListPort {
             preview: preview(latest, ownUserID: room.ownUserId()),
             avatar: avatar(room.avatarUrl()),
             inviter: inviter?.name,
-            inviterID: inviter?.id
+            inviterID: inviter?.id,
+            successor: successor
         )
     }
 

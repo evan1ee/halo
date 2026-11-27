@@ -22,7 +22,7 @@ See and manage a room's details, members and notification behaviour; start new c
 - FR-8 Mark as unread / read (READ_RECEIPTS explicit actions).
 - FR-9 Report a message or room to the homeserver, with ignore offered in the same place (`report_content`, `report_room`, F-FFI-24). *Not built; App Review 1.2 needs it* (ROADMAP M20-7, Q-REPORT).
 - FR-10 Remove, ban and unban members, gated by live power levels. *Not built* (ROADMAP M20-12). Role editor, join rules, history visibility and aliases are post-launch (D122).
-- FR-11 Upgraded rooms link to their successor; knock-only, banned and invite-only rooms explain themselves. *Not built* (ROADMAP M20-8).
+- FR-11 Upgraded rooms link to their successor (`m.room.tombstone`, `RoomInfo.successorRoom`) in the timeline banner and Room Details (with Leave & Forget); knock-only, invite-only, restricted, banned, and left rooms explain their state with honest previews (`RoomPreviewSheet`), knock request / cancel, and a Left & Pending Rooms view (`InactiveRoomsView`) so no room row is stuck (ROADMAP M20-8).
 
 ## 4. Non-functional requirements
 Member lists of 10k members page smoothly.

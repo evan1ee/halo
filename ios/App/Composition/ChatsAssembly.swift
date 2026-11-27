@@ -50,6 +50,16 @@ extension AppRoot {
         )
     }
 
+    /// Preview sheet for joining, knocking on, or managing a room by ID or alias (ROOM_MANAGEMENT FR-11, M20-8).
+    func makeRoomPreview(address: String, focusEvent: EventID? = nil) -> RoomPreviewViewModel {
+        RoomPreviewViewModel(address: address, focusEvent: focusEvent, rooms: roomPort, chats: chatCreation)
+    }
+
+    /// List of `.knocked`, `.left`, and `.banned` rooms so no room can remain stuck (M20-8).
+    func makeInactiveRooms() -> InactiveRoomsViewModel {
+        InactiveRoomsViewModel(roomPort: roomPort, chats: chatCreation)
+    }
+
     /// A view model for the timeline of `room`; each screen gets its own coordinator and session.
     func makeTimeline(room: RoomID, threadRoot: EventID? = nil) -> TimelineViewModel {
         let coordinator = TimelineCoordinator(port: timelinePort, room: room, threadRoot: threadRoot)
@@ -87,6 +97,21 @@ extension AppRoot {
                     )
                 }
             return (sourceIsEncrypted, targets)
+        }
+        model.loadRoomLifecycle = { @Sendable [roomPort] in
+            guard let details = try? await roomPort.details(room) else { return nil }  // best-effort: unread lifecycle defaults to active room
+            return RoomLifecyclePolicy.banner(membership: details.membership, successor: details.successor, roomID: room)
+        }
+        model.leaveAndForgetRoom = { @Sendable [roomPort] () async throws(HaloError) in
+            try await roomPort.leave(room)
+            try? await roomPort.forget(room)  // best-effort: some servers auto-forget on leave
+        }
+        model.forgetCurrentRoom = { @Sendable [roomPort] () async throws(HaloError) in
+            try await roomPort.forget(room)
+        }
+        model.cancelCurrentKnock = { @Sendable [roomPort] () async throws(HaloError) in
+            try await roomPort.leave(room)
+            try? await roomPort.forget(room)  // best-effort: some servers auto-forget cancelled knocks
         }
         configure(model)
         return model
