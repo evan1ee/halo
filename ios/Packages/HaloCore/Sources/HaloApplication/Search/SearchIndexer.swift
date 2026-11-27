@@ -24,15 +24,18 @@ public actor SearchIndexer {
     private let source: any MessageIndexSourcePort
     private let rooms: @Sendable () async -> [RoomID]
     private let conditions: @Sendable () async -> SearchIndexPolicy.Conditions
+    private let onWrite: (@Sendable (Set<RoomID>) async -> Void)?
     private let sleep: Sleep
     private let clock: @Sendable () -> ContinuousClock.Instant
     private let log: HaloLog?
     private var broadcaster = SnapshotBroadcaster<SearchIndexStatus>()
     private var liveTask: Task<Void, Never>?
     private var historyTask: Task<Void, Never>?
+    private var settleTask: Task<Void, Never>?
     private var nap: Task<Void, Never>?
     private var isWorking = false
     private var busyUntil: ContinuousClock.Instant?
+    private var activeQuery: SearchQuery?
     private var eventsInClient = 0
     private var roomsInClient: Set<RoomID> = []
     private var failures = 0
@@ -42,15 +45,18 @@ public actor SearchIndexer {
     /// - Parameters:
     ///   - rooms: the joined rooms, most recent first.
     ///   - conditions: what speaks for or against reading history now.
+    ///   - onWrite: notified whenever new messages, edits, deletions or history slices are committed to the index.
     public init(
         index: any LocalSearchIndexPort, source: any MessageIndexSourcePort, rooms: @escaping @Sendable () async -> [RoomID],
         conditions: @escaping @Sendable () async -> SearchIndexPolicy.Conditions, log: HaloLog? = nil,
+        onWrite: (@Sendable (Set<RoomID>) async -> Void)? = nil,
         sleep: @escaping Sleep = { try await Task.sleep(for: $0) }, clock: @escaping @Sendable () -> ContinuousClock.Instant = { .now }
     ) {
         self.index = index
         self.source = source
         self.rooms = rooms
         self.conditions = conditions
+        self.onWrite = onWrite
         self.log = log
         self.sleep = sleep
         self.clock = clock
@@ -59,6 +65,7 @@ public actor SearchIndexer {
     deinit {
         liveTask?.cancel()
         historyTask?.cancel()
+        settleTask?.cancel()
         nap?.cancel()
     }
 
@@ -78,9 +85,19 @@ public actor SearchIndexer {
             guard let self else { return }
             let joined = await self.rooms()
             if !joined.isEmpty { await self.source.follow(joined) }
-            do { try await self.sleep(Self.settleDelay) } catch { return }
+            await self.waitInitialSettle()
+            guard !Task.isCancelled else { return }
             await self.runHistory()
         }
+    }
+
+    private func waitInitialSettle() async {
+        guard activeQuery == nil else { return }
+        let wait = sleep
+        let task = Task { _ = try? await wait(Self.settleDelay) }  // best-effort: cancelled early when an active search begins or indexer stops
+        settleTask = task
+        await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
+        settleTask = nil
     }
 
     /// Stops for good (sign-out, revocation). Returns when nothing is being read any more, or after two seconds: a call into the SDK can
@@ -88,8 +105,10 @@ public actor SearchIndexer {
     public func stop() async {
         liveTask?.cancel()
         historyTask?.cancel()
+        settleTask?.cancel()
         nap?.cancel()
         liveTask = nil
+        activeQuery = nil
         let history = historyTask
         historyTask = nil
         await source.stop()
@@ -107,8 +126,18 @@ public actor SearchIndexer {
         status = SearchIndexStatus()
     }
 
-    /// The person is doing something (scrolling, opening a chat, searching): history waits a moment.
+    /// The person is doing something (scrolling, opening a chat): passive history waits a moment.
     public func noteActivity() { busyUntil = clock() + Self.busyInterval }
+
+    /// Activates or clears progressive remote fetching for an active search query: skips launch/idle waits and prioritizes `query.room` when set.
+    public func setActiveQuery(_ query: SearchQuery?) {
+        activeQuery = query
+        if query != nil {
+            busyUntil = nil
+            settleTask?.cancel()
+            nudge()
+        }
+    }
 
     /// The conditions changed (the app came to the front, a setting): look at them now.
     public func conditionsChanged() { nudge() }
@@ -159,7 +188,14 @@ public actor SearchIndexer {
         if !check.isEmpty { operations.append(.check(check.sorted { $0.rawValue < $1.rawValue })) }
         if !operations.isEmpty {
             hasWritten = true
-            do { try await index.apply(operations) } catch {
+            do {
+                try await index.apply(operations)
+                let changedRooms = Set(events.map(\.room)).union(batch.left)
+                if !changedRooms.isEmpty, let onWrite {
+                    Task { await onWrite(changedRooms) }
+                }
+                await refreshStatus()
+            } catch {
                 // What sync brought is gone from here: the rooms are read again from the server later.
                 log?.error("search: writing a sync response failed", error: error)
                 missed.formUnion(events.map(\.room))
@@ -189,8 +225,9 @@ public actor SearchIndexer {
         while !Task.isCancelled {
             switch await step() {
             case .worked:
-                // Leaves the device room to breathe: history takes about as long as it waits.
-                await rest(lastDuration)
+                // Leaves the device room to breathe during passive indexing; while fulfilling an active search, paces lightly.
+                let pause = activeQuery != nil ? min(lastDuration, .milliseconds(40)) : lastDuration
+                await rest(pause)
             case .idle, .occupied: await rest(status.phase == .paused(.busy) ? Self.busyInterval : Self.idleInterval)
             case .failed: await rest(SearchIndexPolicy.backoff(afterFailures: failures))
             }
@@ -222,14 +259,14 @@ public actor SearchIndexer {
         defer { isWorking = false }
         isNudged = false
         var conditions = await conditions()
-        if let busyUntil, clock() < busyUntil { conditions.isBusy = true }
+        if activeQuery == nil, let busyUntil, clock() < busyUntil { conditions.isBusy = true }
         if let pause = SearchIndexPolicy.pause(conditions) {
             if pause != .busy { await endBatch() }
             await refreshStatus(phase: .paused(pause))
             return .idle
         }
         if !missed.isEmpty, (try? await index.apply([.check(missed.sorted { $0.rawValue < $1.rawValue })])) != nil { missed = [] }  // best-effort: the index repairs itself: the next pass redoes what is missing
-        let joined = await rooms()
+        let joined = prioritized(await rooms())
         let work: SearchHistoryWork?
         do { work = try await index.nextWork(rooms: joined, limit: 1).first } catch {
             await refreshStatus(phase: error == .storage(.unavailable) ? .unavailable : .indexing)
@@ -268,9 +305,11 @@ public actor SearchIndexer {
             // A page is usually enough; a longer gap goes on from where this one ends.
             let slice = try await read(room, from: event, pages: 1)
             try await index.apply([.slice(slice, .gap(room, before: event))])
+            notifySlice(slice, room: room)
         case .retry(let room, let event):
             let slice = try await read(room, from: event, pages: 1)
             try await index.apply([.slice(slice, .retry(room, around: event))])
+            notifySlice(slice, room: room)
         case .start(let room):
             guard let newest = try await source.newestEvent(in: room) else {
                 try await index.apply([.slice(SearchHistorySlice(reachedStart: true), .history(room))])
@@ -278,10 +317,25 @@ public actor SearchIndexer {
             }
             let slice = try await read(room, from: newest, pages: SearchIndexPolicy.pagesPerSlice)
             try await index.apply([.slice(slice, .history(room))])
+            notifySlice(slice, room: room)
         case .history(let room, let event):
             let slice = try await read(room, from: event, pages: SearchIndexPolicy.pagesPerSlice)
             try await index.apply([.slice(slice, .history(room))])
+            notifySlice(slice, room: room)
         }
+    }
+
+    private func prioritized(_ joined: [RoomID]) -> [RoomID] {
+        guard let target = activeQuery?.room, let index = joined.firstIndex(of: target), index > 0 else { return joined }
+        var ordered = joined
+        ordered.remove(at: index)
+        ordered.insert(target, at: 0)
+        return ordered
+    }
+
+    private func notifySlice(_ slice: SearchHistorySlice, room: RoomID) {
+        guard !slice.entries.isEmpty || !slice.other.isEmpty, let onWrite else { return }
+        Task { await onWrite([room]) }
     }
 
     private func read(_ room: RoomID, from event: EventID, pages: Int) async throws(HaloError) -> SearchHistorySlice {
@@ -323,10 +377,11 @@ public actor SearchIndexer {
 
     // MARK: Status
 
-    /// Counting costs a moment on a large index: only when something was written, at most every two seconds, and at every change of phase.
+    /// Counting costs a moment on a large index: only when something was written, throttled during background sweeps (faster while searching), and at every change of phase.
     private func refreshStatus(phase: SearchIndexStatus.Phase? = nil) async {
         let phase = phase ?? status.phase
-        if phase == status.phase, let statusAt, !hasWritten || clock() - statusAt < Self.statusInterval { return }
+        let interval = activeQuery != nil ? Duration.milliseconds(400) : Self.statusInterval
+        if phase == status.phase, let statusAt, !hasWritten || clock() - statusAt < interval { return }
         statusAt = clock()
         hasWritten = false
         var new = status

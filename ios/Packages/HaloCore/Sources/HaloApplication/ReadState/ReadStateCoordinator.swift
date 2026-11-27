@@ -76,6 +76,7 @@ public actor ReadStateCoordinator {
     private let sleep: Sleep
     private let now: @Sendable () -> Date
     private var isForeground = false
+    private var lowEnergyMode = false
     private var periodicAudit: Task<Void, Never>?
 
     public init(
@@ -152,6 +153,13 @@ public actor ReadStateCoordinator {
     public func setForeground(_ foreground: Bool) {
         guard foreground != isForeground else { return }
         isForeground = foreground
+        updatePeriodicAudit()
+    }
+
+    /// Pauses the periodic read-state auditor under Low Power Mode or thermal stress (M19-7, NFR-15).
+    public func setLowEnergyMode(_ enabled: Bool) {
+        guard enabled != lowEnergyMode else { return }
+        lowEnergyMode = enabled
         updatePeriodicAudit()
     }
 
@@ -315,6 +323,7 @@ public actor ReadStateCoordinator {
     }
 
     private func snapshotChanged(_ snapshot: RoomReadSnapshot) async {
+        let inputsChanged = snapshot.inputs != inputs
         inputs = snapshot.inputs
         let responses = snapshot.syncCount - appliedSyncCount
         appliedSyncCount = snapshot.syncCount
@@ -324,10 +333,21 @@ public actor ReadStateCoordinator {
             return await recompute()
         }
         guard responses > 0 else { return await recompute() }
+        let wasSynced = hasSynced
+        let presentChanged = present != syncedRooms
         hasSynced = true
         shownAtLaunch = [:]  // a later resubscription must not bring launch-time counts back
+        let previousEpoch = syncEpoch
         syncEpoch += responses
         syncedRooms = present
+        let hasPendingSentConfirmation = sentAtEpoch.values.contains { $0.epoch >= previousEpoch }
+        let hasWaiters = !syncWaiters.isEmpty
+        // An idle long-poll with no room, membership, or pending receipt changes leaves read state identical:
+        // skip re-evaluating every room and rewriting widgets (M19-7).
+        if wasSynced, !inputsChanged, !presentChanged, hasWritten, !hasPendingSentConfirmation, !hasWaiters {
+            writtenSyncEpoch = max(writtenSyncEpoch, syncEpoch)
+            return
+        }
         // Drop any carried room that the server did not report as joined/invited (R-04).
         // Rooms in `present` whose diff hasn't arrived yet remain carried until their inputs arrive.
         carried = carried.filter { present.contains($0.key) }
@@ -377,7 +397,7 @@ public actor ReadStateCoordinator {
     private func updatePeriodicAudit() {
         periodicAudit?.cancel()
         periodicAudit = nil
-        guard isForeground, audit != nil else { return }
+        guard isForeground, !lowEnergyMode, audit != nil else { return }
         let interval = auditInterval
         let sleep = sleep
         periodicAudit = Task { [weak self] in

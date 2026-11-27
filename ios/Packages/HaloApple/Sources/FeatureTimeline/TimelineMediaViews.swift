@@ -67,16 +67,17 @@ struct ThumbnailView: View {
                 .accessibilityIdentifier("show-photo")
             } else if let animated {
                 AnimatedStickerView(data: animated).allowsHitTesting(false)
-            } else if let data, let uiImage = UIImage(data: data) {
+            } else if let data {
                 // A photo fills its box (cropped when the event announced no size; the viewer shows all of it); a sticker fits.
-                let rendered = Image(uiImage: uiImage)
-                if UIDevice.current.userInterfaceIdiom == .pad,
-                   TimelineDragExtractor.allowsPhotoDrag(isSticker: isSticker, hasImageData: true) {
-                    rendered.resizable().aspectRatio(contentMode: .fill)
-                        .draggable(rendered)
-                } else {
-                    rendered.resizable().aspectRatio(contentMode: isSticker ? .fit : .fill)
-                }
+                DecodedImage(data, maxPixel: isSticker ? ImagePipeline.Size.sticker : ImagePipeline.Size.timeline) { rendered in
+                    if UIDevice.current.userInterfaceIdiom == .pad,
+                       TimelineDragExtractor.allowsPhotoDrag(isSticker: isSticker, hasImageData: true) {
+                        rendered.resizable().aspectRatio(contentMode: .fill)
+                            .draggable(rendered)
+                    } else {
+                        rendered.resizable().aspectRatio(contentMode: isSticker ? .fit : .fill)
+                    }
+                } placeholder: { Rectangle().fill(.secondary.opacity(0.2)) }
             } else if failed {
                 Button { failed = false; attempt += 1 } label: {
                     VStack(spacing: 6) {
@@ -135,6 +136,7 @@ struct FileTileView: View {
     let isOpening: Bool
     let model: TimelineViewModel
     let open: () -> Void
+    let cancel: () -> Void
 
     private var symbol: String {
         switch file.kind {
@@ -144,29 +146,74 @@ struct FileTileView: View {
         }
     }
 
+    private var openingDetail: String {
+        if let size = file.size {
+            return "Opening… · \(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))"
+        }
+        return "Opening…"
+    }
+
     var body: some View {
-        Button(action: open) {
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
             if let thumbnail = file.thumbnail {
-                ThumbnailView(image: thumbnail, model: model)
-                    .overlay { Image(systemName: "play.circle.fill").font(.largeTitle).imageScale(.large).foregroundStyle(HaloColor.mediaOverlayForeground).shadow(radius: 4) }
+                Button(action: open) {
+                    ThumbnailView(image: thumbnail, model: model)
+                        .overlay {
+                            if isOpening {
+                                ProgressView()
+                                    .tint(HaloColor.mediaOverlayForeground)
+                                    .padding(HaloSpacing.s)
+                                    .background(HaloColor.mediaOverlayBackground, in: .circle)
+                            } else {
+                                Image(systemName: "play.circle.fill")
+                                    .font(.largeTitle)
+                                    .imageScale(.large)
+                                    .foregroundStyle(HaloColor.mediaOverlayForeground)
+                                    .shadow(radius: 4)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+                .disabled(isOpening)
+                .accessibilityLabel(file.name)
+                .accessibilityHint("Opens the file")
             }
             HStack(spacing: 10) {
-                if isOpening { ProgressView() } else { Image(systemName: symbol).font(.title2) }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(file.name).font(.subheadline).lineLimit(2)
-                    if !file.detail.isEmpty { Text(file.detail).font(.caption).foregroundStyle(.secondary) }
+                Button(action: open) {
+                    HStack(spacing: 10) {
+                        if isOpening { ProgressView() } else { Image(systemName: symbol).font(.title2) }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(file.name).font(.subheadline).lineLimit(2)
+                            if isOpening {
+                                Text(openingDetail).font(.caption).foregroundStyle(.secondary)
+                            } else if !file.detail.isEmpty {
+                                Text(file.detail).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .disabled(isOpening)
+                .accessibilityLabel(file.name)
+                .accessibilityHint(isOpening ? "Opening file" : "Opens the file")
+
+                if isOpening {
+                    Spacer(minLength: 4)
+                    Button(action: cancel) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Cancel opening \(file.name)")
+                    .accessibilityIdentifier("cancel-open-file")
                 }
             }
-            }
-            .padding(10)
-            .frame(maxWidth: 260, alignment: .leading)
-            .background(.secondary.opacity(0.15), in: .rect(cornerRadius: 12))
         }
-        .buttonStyle(.plain)
-        .disabled(isOpening)
-        .accessibilityLabel(file.name)
-        .accessibilityHint("Opens the file")
+        .padding(10)
+        .frame(maxWidth: 260, alignment: .leading)
+        .background(.secondary.opacity(0.15), in: .rect(cornerRadius: 12))
         .modifier(OptionalFileDragModifier(file: file, model: model))
     }
 }

@@ -147,6 +147,32 @@ public final class RoomListViewModel {
     private var hasStarted = false
     private var roomStates: [RoomID: RoomReadState] = [:]
     private var lastStatus: RoomListCoordinator.Status = .idle
+    /// Every row matching `effectiveFilter` (before `visibleLimit`), so chat-name search finds rooms beyond the first page.
+    private var allMatchingRows: [Row] = []
+    /// O(1) room-name and room-avatar lookup across every known room (regardless of `visibleLimit` or `effectiveFilter`) without registering view observation.
+    @ObservationIgnored private var roomNamesByID: [RoomID: String] = [:]
+    @ObservationIgnored private var roomAvatarsByID: [RoomID: MediaRef] = [:]
+
+    /// The display name of `room` across all loaded rooms, or `nil` when unknown.
+    public func roomName(for room: RoomID) -> String? { roomNamesByID[room] }
+
+    /// The avatar reference of `room` across all loaded rooms, or `nil` when unknown or unset.
+    public func roomAvatar(for room: RoomID) -> MediaRef? { roomAvatarsByID[room] }
+
+    /// Rooms matching `trimmedQuery` across the full filtered room list (not just the first `visibleLimit` slice), capped at `limit` for smooth typing.
+    public func matchingRows(for trimmedQuery: String, limit: Int = 50) -> [Row] {
+        guard !trimmedQuery.isEmpty else {
+            if case .loaded(_, let rows) = content { return rows }
+            return []
+        }
+        var result: [Row] = []
+        result.reserveCapacity(min(limit, allMatchingRows.count))
+        for row in allMatchingRows where row.name.localizedCaseInsensitiveContains(trimmedQuery) {
+            result.append(row)
+            if result.count >= limit { break }
+        }
+        return result
+    }
 
     /// Set when a swipe or invitation action fails; cleared by the next successful action or when dismissed.
     public private(set) var actionError: String?
@@ -312,23 +338,36 @@ public final class RoomListViewModel {
     func listChanged(_ status: RoomListCoordinator.Status) async {
         lastStatus = status
         switch status {
-        case .idle: content = .idle
-        case .loading: content = .loading
+        case .idle:
+            allMatchingRows = []
+            roomNamesByID = [:]
+            roomAvatarsByID = [:]
+            content = .idle
+        case .loading:
+            content = .loading
         case .loaded(let count):
             let bots = botSenders()
             let currentRooms = await rooms.rooms
             let currentStates = await readState.roomStates
             roomStates = currentStates
+            var names: [RoomID: String] = Dictionary(minimumCapacity: currentRooms.count)
+            var avatars: [RoomID: MediaRef] = [:]
             let rows = currentRooms.map { room in
+                let displayName = room.name ?? "Unnamed room"
+                names[room.id] = displayName
+                if let avatar = room.avatar { avatars[room.id] = avatar }
                 let state = currentStates[room.id]
                 return Row(
-                    id: room.id, name: room.name ?? "Unnamed room",
+                    id: room.id, name: displayName,
                     display: state?.display ?? .none, hasUnread: state?.hasUnread ?? false,
                     isInvite: room.membership == .invited,
                     isFavourite: room.isFavourite, isMuted: room.read.mode == .mute, lastActivity: room.latestEvent?.timestamp,
                     preview: room.preview?.line(isDirect: room.isDirect, botSenders: bots), avatar: room.avatar, inviter: room.inviter)
             }
+            roomNamesByID = names
+            roomAvatarsByID = avatars
             let matching = zip(currentRooms, rows).filter { Self.includes(effectiveFilter, room: $0.0, row: $0.1) }.map(\.1)
+            allMatchingRows = matching
             let visible = Array(matching.prefix(visibleLimit))
             canShowMore = matching.count > visible.count
             content = .loaded(count: effectiveFilter == .all ? count : matching.count, rows: visible)

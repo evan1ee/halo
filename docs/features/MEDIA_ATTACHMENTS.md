@@ -17,13 +17,13 @@ Display every incoming media type and send photos (D16).
 - FR-4 Files: name, size, Quick Look preview, share.
 - FR-5 Photo picker (`PHPicker`) → up to 10 images → `send_image` each with progress and cancel (`abort_send`) **[VERIFIED F-FFI-8]**.
 - FR-9 Camera: take a photo or a short video from the composer, permission asked in context (*not built*, ROADMAP M20-5).
-- FR-10 Full-size media is handled as files on disk, never as one block in memory; own thumbnails aren't downloaded again after a restart (*not built*, ROADMAP M19-5).
+- FR-10 Full-size media is handled as files on disk, never as one block in memory; own thumbnails aren't downloaded again after a restart (*built*, ROADMAP M19-5: full-size viewer photos, file/video opens, drag-out and room/global gallery exports stream via `MediaPort.file` with `useCache: true`, decoded from disk via `ImagePipeline.decode(fileURL:)`, up to 300 MB; file opens show progress and can be cancelled; `ImagePreparer` attaches a 600 px thumbnail uploaded with `sendImage` and cached in the SDK's encrypted media store so own thumbnails make zero requests after a restart; room and global galleries paginate via `RoomMediaGallerySession`).
 - FR-6 Strip location EXIF; HEIC → JPEG (see [../matrix/MEDIA.md](../matrix/MEDIA.md) §2).
 - FR-7 Media display respects the SDK media preview policy (`get_media_preview_display_policy`) **[VERIFIED F-FFI-18]**.
 - FR-8 Share extension (D87): text, a link, photos and files shared from other apps are staged by the extension and sent from the app to a chat the person picks; images over `OutgoingImage.maximumBytes` and files over `OutgoingFile.maximumBytes` are refused with a plain message.
 
 ## 4. Non-functional requirements
-Thumbnail decode ≤ 16 ms on a background thread; memory cap per [../matrix/MEDIA.md](../matrix/MEDIA.md).
+Thumbnail decode ≤ 16 ms on a background thread; memory cap per [../matrix/MEDIA.md](../matrix/MEDIA.md). One pipeline (`ImagePipeline`, `DecodedImage`, M19-1): bytes are decoded off the main thread with ImageIO to the pixel size the place shows (timeline 960, grid 420, list 180, sticker 360, viewer 3072), kept in a 64 MB cost-capped cache keyed by the bytes and size, and dropped on a memory warning; a view whose picture is cached paints it on its first frame. Lint `image_pipeline` refuses a decode in a view (`// decode: <reason>` for the few off-main ones).
 
 ## 5–6. Flows and states
 Download: `NotLoaded → Loading → Loaded | Failed(retry)`. Upload: `Preparing → Uploading(progress) → Sent | Failed`.

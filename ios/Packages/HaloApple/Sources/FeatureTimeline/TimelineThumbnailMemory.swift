@@ -2,22 +2,23 @@ import Foundation
 import HaloDomain
 
 /// Thumbnails the timeline has already shown, readable without waiting, so a photo's view can paint on its first frame
-/// whenever SwiftUI rebuilds it (a list row scrolled back into view, a list reset) instead of showing a placeholder and
-/// loading again. Derived, rebuildable data (AGENTS §4.1); the bytes also stay in `MediaLoader` and, on disk, in the SDK's
+/// whenever SwiftUI builds it (a list row scrolled back into view, a list reset, the room opened again) instead of showing a
+/// placeholder and loading again. One instance serves every timeline of the app (M19-9): a re-opened room paints the pictures
+/// it showed before on its first frame, and the bytes are held once within one limit, not once per open room. Derived, rebuildable data (AGENTS §4.1); the bytes also stay in `MediaLoader` and, on disk, in the SDK's
 /// encrypted media store (docs/matrix/MEDIA.md).
 ///
 /// A photo you send is first a local echo whose source is a local-only reference; once the server has it, the same
 /// message carries the real `mxc:` reference. `adopt` makes the picture already on screen the entry for the new reference,
 /// so confirming a send never loads anything (docs/features/MEDIA_ATTACHMENTS.md §Sending).
 @MainActor
-final class TimelineThumbnailMemory {
+public final class TimelineThumbnailMemory {
     private var entries: [MediaRef: Data] = [:]
     /// References from least to most recently used.
     private var order: [MediaRef] = []
     private var bytes = 0
     private let byteLimit: Int
 
-    init(byteLimit: Int = 48 * 1024 * 1024) { self.byteLimit = byteLimit }
+    public init(byteLimit: Int = 48 * 1024 * 1024) { self.byteLimit = byteLimit }
 
     func data(for ref: MediaRef) -> Data? {
         guard let data = entries[ref] else { return nil }
@@ -44,7 +45,8 @@ final class TimelineThumbnailMemory {
         store(data, for: new)
     }
 
-    func removeAll() {
+    /// Lets go of every picture (memory pressure, sign-out).
+    public func removeAll() {
         entries.removeAll()
         order.removeAll()
         bytes = 0

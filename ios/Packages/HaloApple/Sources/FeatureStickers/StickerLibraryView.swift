@@ -468,11 +468,10 @@ private struct StickerThumbnailTile: View {
 
     var body: some View {
         Group {
-            if let data, let image = UIImage(data: data) {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .padding(4)
+            if let data {
+                DecodedImage(data, maxPixel: ImagePipeline.Size.sticker) { image in
+                    image.resizable().scaledToFit().padding(4)
+                } placeholder: { Color.clear }
             } else {
                 Text(sticker.shortcode)
                     .font(.caption2)

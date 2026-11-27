@@ -28,7 +28,7 @@ struct MessageSearchViewModelTests {
         #expect(model.rows[0].highlights == [4..<10])
         await model.loadMore()
         while model.rows.count < 2 { await Task.yield() }
-        #expect(model.rows[1].sender == "@bob:x.org" && model.rows[1].threadRoot?.rawValue == "$r" && !model.hasMore)
+        #expect(model.rows[1].sender == "bob" && model.rows[1].threadRoot?.rawValue == "$r" && !model.hasMore)
         model.filter = .files
         while model.rows.count != 1 || model.isLoading { await Task.yield() }
         #expect(model.rows[0].kind == .file)
@@ -50,5 +50,32 @@ struct MessageSearchViewModelTests {
             == "Searched back to March 2024 · 1 of 3 chats complete\nPaused in Low Power Mode.")
         let missing = text(SearchIndexStatus(phase: .done, completeRooms: 3, totalRooms: 3, statistics: .init(undecryptable: 2)), verify: true)
         #expect(missing?.text == "2 messages can't be searched: their keys aren't on this device." && missing?.canVerify == true)
+    }
+
+    @Test("rapid sequential typing and clearing preserve strict FIFO order and never leave stale rows")
+    @MainActor
+    func rapidTypingAndClearNeverLeavesStaleRows() async throws {
+        let room = try RoomID("!a:x.org")
+        let port = FakeSearchPort(corpus: [
+            MessageSearchHit(roomID: room, eventID: try EventID("$1"), senderID: "@a:x.org", senderName: "Ada", body: "alpha rocket", timestamp: Date(timeIntervalSince1970: 300)),
+            MessageSearchHit(roomID: room, eventID: try EventID("$2"), senderID: "@b:x.org", senderName: "Ben", body: "alpine trail", timestamp: Date(timeIntervalSince1970: 200)),
+        ])
+        let model = MessageSearchViewModel(
+            coordinator: SearchCoordinator(port: port, sleep: { _ in }),
+            roomName: { _ in "Lab" })
+        await model.start()
+
+        for text in ["a", "al", "alp", "alph", "alpha"] {
+            model.query = text
+        }
+        while model.searchedQuery != "alpha" || model.isLoading { await Task.yield() }
+        #expect(model.rows.map(\.eventID.rawValue) == ["$1"])
+        #expect(!model.rows[0].formattedTime.isEmpty)
+
+        // Rapidly type and immediately clear in the same turn: final state must be empty, never stale.
+        model.query = "alpine"
+        model.query = ""
+        for _ in 0..<500 { await Task.yield() }
+        #expect(model.rows.isEmpty && model.searchedQuery.isEmpty && !model.isLoading)
     }
 }

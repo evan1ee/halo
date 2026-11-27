@@ -233,6 +233,35 @@ struct SearchIndexerTests {
         _ = await wait(stage.indexer) { $0.phase == .done }
         #expect(stage.source.batchesEnded == 3)
     }
+
+    @Test("an active search wakes remote history immediately, prioritizes the queried room, and streams hits progressively")
+    func activeSearchStreamsRemoteHistoryFirst() async throws {
+        let a = try room("a"), b = try room("b")
+        let index = FakeSearchIndex(), source = FakeMessageIndexSource()
+        source.add([try FakeMessageIndexSource.entry(a, 1, "needle in room a")], to: a)
+        source.add([try FakeMessageIndexSource.entry(b, 1, "needle in room b")], to: b)
+        let coordinator = SearchCoordinator(
+            port: LocalMessageSearch(index: index, source: source, joined: { [a, b] }, ignored: { [] }),
+            sleep: { _ in })
+        let indexer = SearchIndexer(
+            index: index, source: source, rooms: { [a, b] }, conditions: { .init() },
+            onWrite: { changed in await coordinator.refresh(in: changed) },
+            sleep: { duration in
+                // Settle delay would sleep 60 s unless cancelled by `setActiveQuery`!
+                if duration == SearchIndexer.settleDelay { try await Task.sleep(for: .seconds(60)) } else { await Task.yield() }
+            })
+        await indexer.begin()
+        await indexer.noteActivity()  // simulate prior navigation busy state
+
+        // Search scoped to room `b`: local index is empty at first, then `setActiveQuery` cancels settleDelay and indexes `b` BEFORE `a`!
+        let scoped = SearchQuery(text: "needle", room: b)
+        await coordinator.search(scoped, now: true)
+        await indexer.setActiveQuery(scoped)
+
+        await until { await coordinator.snapshot.hits.map(\.body) == ["needle in room b"] }
+        #expect(source.reads.first?.room == b)
+        await indexer.stop()
+    }
 }
 
 @Suite("LocalMessageSearch", .timeLimit(.minutes(1)))
@@ -303,6 +332,22 @@ struct LocalMessageSearchTests {
     func nothing() async throws {
         let (search, _, _, _) = try await stage(3)
         for query in ["", "***", "()", "😀"] { #expect(try await search.search(SearchQuery(text: query), after: nil) == SearchPage(hits: [], next: nil)) }
+    }
+
+    @Test("searchLocal returns immediately without waiting for hanging remote rechecks, and cancelling recheck exits at once")
+    func instantLocalAndCancellableRecheck() async throws {
+        let (search, _, hung, _) = try await stage(5, sleep: { _ in try await Task.sleep(for: .seconds(60)) })
+        hung.hangRechecks()
+        // `searchLocal` never touches remote `recheck`, returning all 5 cached hits immediately.
+        let local = try await search.searchLocal(SearchQuery(text: "word"), after: nil)
+        #expect(local.hits.count == 5 && hung.rechecked.isEmpty)
+
+        // Cancelling a background `recheck` finishes immediately instead of waiting for `recheckTimeout` (60 s here).
+        let task = Task { try await search.recheck(local.hits) }
+        while hung.rechecked.isEmpty { await Task.yield() }
+        task.cancel()
+        let deltas = (try? await task.value) ?? [:]
+        #expect(deltas.isEmpty)
     }
 }
 

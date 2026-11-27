@@ -17,6 +17,7 @@ struct TestStage {
     let proxy = ProxyControl()
     let user = env["HALO_FAULT_USER"] ?? "", password = env["HALO_FAULT_PASSWORD"] ?? ""
     let direct = env["HALO_FAULT_DIRECT"] ?? ""
+    let session: MatrixSessionPort
     let peer: TestPeer
     let room: RoomID
     let sync: SyncFollower
@@ -28,6 +29,7 @@ struct TestStage {
         let session = MatrixSessionPort(baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent("halo-fault-\(UUID().uuidString)"))
         let details = try await session.loginDetails(server: env["HALO_FAULT_SERVER"] ?? "")
         _ = try await session.loginPassword(PasswordCredentials(username: user, password: password, deviceDisplayName: "fault"), on: details)
+        self.session = session
         let proxy = proxy
         Cleanup.current.add {
             try? await proxy.heal()
@@ -103,6 +105,25 @@ struct ProxyControl: Sendable {
     func fault(_ rule: [String: any Sendable]) async throws { _ = try await call("POST", "/rules", rule) }
     func heal() async throws { _ = try await call("DELETE", "/rules", nil) }
     func hits() async throws -> Int { (try await call("GET", "/rules", nil) as? [[String: Any]] ?? []).reduce(0) { $0 + ($1["hits"] as? Int ?? 0) } }
+    func resetStats() async throws { _ = try await call("DELETE", "/stats", nil) }
+
+    /// Count of HTTP GET requests to Matrix media download/thumbnail endpoints since `resetStats()`.
+    func mediaDownloadRequests() async throws -> Int {
+        guard let stats = try await call("GET", "/stats", nil) as? [String: [String: Any]] else { return 0 }
+        return stats.reduce(0) { total, entry in
+            let isMediaGet = entry.key.hasPrefix("GET ") && entry.key.contains("/media/")
+            return total + (isMediaGet ? (entry.value["requests"] as? Int ?? 0) : 0)
+        }
+    }
+
+    /// Count of HTTP GET requests to single-event endpoints (`/rooms/_/event/_`) since `resetStats()` (GA-28, M19-7).
+    func eventFetchRequests() async throws -> Int {
+        guard let stats = try await call("GET", "/stats", nil) as? [String: [String: Any]] else { return 0 }
+        return stats.reduce(0) { total, entry in
+            let isEventGet = entry.key.hasPrefix("GET ") && entry.key.contains("/event/")
+            return total + (isEventGet ? (entry.value["requests"] as? Int ?? 0) : 0)
+        }
+    }
 
     private func call(_ method: String, _ path: String, _ body: [String: any Sendable]?) async throws -> Any {
         guard let url = URL(string: (env["HALO_FAULT_CONTROL"] ?? "") + path) else { throw ContractViolation("no proxy") }
@@ -129,6 +150,16 @@ struct TestPeer: Sendable {
 
     func makeRoom() async throws -> RoomID {
         try RoomID(try await Self.call("POST", base + "/createRoom", token, ["preset": "public_chat"])["room_id"] as? String ?? "")
+    }
+
+    func makeEncryptedRoom() async throws -> RoomID {
+        let body: [String: Any] = [
+            "preset": "public_chat",
+            "initial_state": [
+                ["type": "m.room.encryption", "state_key": "", "content": ["algorithm": "m.megolm.v1.aes-sha2"]],
+            ],
+        ]
+        return try RoomID(try await Self.call("POST", base + "/createRoom", token, body)["room_id"] as? String ?? "")
     }
 
     func join(_ room: RoomID) async throws { _ = try await Self.call("POST", base + "/rooms/\(room.rawValue)/join", token, [:]) }

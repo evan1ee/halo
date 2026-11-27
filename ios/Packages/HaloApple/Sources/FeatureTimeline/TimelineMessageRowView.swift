@@ -93,7 +93,15 @@ struct RowView: View {
                                         .accessibilityLabel(row.isSticker ? row.text : "Image")
                                 }
                             }
-                            if let file = row.file { FileTileView(file: file, isOpening: model.openingRow == row.id, model: model) { Task { await model.openFile(row) } } }
+                            if let file = row.file {
+                                FileTileView(
+                                    file: file,
+                                    isOpening: model.openingRow == row.id,
+                                    model: model,
+                                    open: { Task { await model.openFile(row) } },
+                                    cancel: { model.cancelOpenFile() }
+                                )
+                            }
                             if let location = row.location {
                                 LocationCardView(location: location, isOwn: row.style == .ownMessage)
                                     .opacity(row.status == nil ? 1 : 0.6)

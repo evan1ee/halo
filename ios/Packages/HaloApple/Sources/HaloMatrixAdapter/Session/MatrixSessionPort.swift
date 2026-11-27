@@ -29,10 +29,13 @@ public actor MatrixSessionPort: SessionPort {
     private let enablesSlidingSync: Bool
     private let readStoredSession: (@Sendable () -> StoredSession?)?
     private let persistRefreshedSession: (@Sendable (StoredSession) -> Void)?
+    private let syncConditions: @Sendable () -> SyncEnergyPolicy.Conditions
     private let initialisePlatform: @Sendable (Bool) throws(HaloError) -> Void
     private var client: Client?
     private var syncTask: Task<Void, Never>?
     private var stoppingTask: Task<Void, Never>?
+    /// Waiters sleeping inside `idleRest` or `offline` in `runSync`, woken immediately when device conditions improve (M19-7).
+    private var conditionWakeups: [UUID: CheckedContinuation<Void, Never>] = [:]
     /// The background pass in progress, if any: the loop and a second pass wait for it, so two syncs never overlap.
     private var oncePass: Task<Result<Void, HaloError>, Never>?
     private var statusObservers: [UUID: @Sendable (SyncStatus) -> Void] = [:]
@@ -88,12 +91,14 @@ public actor MatrixSessionPort: SessionPort {
         lightweightRuntime: Bool = false,
         enablesSlidingSync: Bool = false,
         readStoredSession: (@Sendable () -> StoredSession?)? = nil,
-        persistRefreshedSession: (@Sendable (StoredSession) -> Void)? = nil
+        persistRefreshedSession: (@Sendable (StoredSession) -> Void)? = nil,
+        syncConditions: @escaping @Sendable () -> SyncEnergyPolicy.Conditions = { .init() }
     ) {
         self.init(
             baseDirectory: baseDirectory, holderName: holderName, sendsMessages: sendsMessages,
             lightweightRuntime: lightweightRuntime, enablesSlidingSync: enablesSlidingSync,
             readStoredSession: readStoredSession, persistRefreshedSession: persistRefreshedSession,
+            syncConditions: syncConditions,
             initialisePlatform: MatrixBootstrap.initialise(lightweightRuntime:))
     }
 
@@ -104,6 +109,7 @@ public actor MatrixSessionPort: SessionPort {
         backPaginates: Bool = true,
         readStoredSession: (@Sendable () -> StoredSession?)? = nil,
         persistRefreshedSession: (@Sendable (StoredSession) -> Void)? = nil,
+        syncConditions: @escaping @Sendable () -> SyncEnergyPolicy.Conditions = { .init() },
         initialisePlatform: @escaping @Sendable (Bool) throws(HaloError) -> Void
     ) {
         self.baseDirectory = baseDirectory
@@ -114,6 +120,7 @@ public actor MatrixSessionPort: SessionPort {
         self.enablesSlidingSync = enablesSlidingSync
         self.readStoredSession = readStoredSession
         self.persistRefreshedSession = persistRefreshedSession
+        self.syncConditions = syncConditions
         self.initialisePlatform = initialisePlatform
     }
 
@@ -349,6 +356,7 @@ public actor MatrixSessionPort: SessionPort {
         guard let task = syncTask else { return }
         syncTask = nil
         task.cancel()
+        conditionsChanged()
         stoppingTask = task
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await task.value }
@@ -358,28 +366,69 @@ public actor MatrixSessionPort: SessionPort {
         }
     }
 
-    /// The server long-poll. Cancelling the task does not interrupt the SDK call, and `client.logout()` waits for it, so a
-    /// short poll bounds how long a sign-out or a restart can wait; the cost is one empty request per interval while the app is open.
-    static let longPollMilliseconds: UInt64 = 8_000
+    /// Wakes `runSync` if it is resting between empty polls or waiting for connectivity to return (M19-7).
+    public func conditionsChanged() {
+        let waiters = conditionWakeups
+        conditionWakeups.removeAll()
+        for continuation in waiters.values { continuation.resume() }
+    }
+
+    /// Sleeps for up to `duration`, returning early if the task is cancelled or `conditionsChanged()` fires.
+    private func sleepInterruptibly(for duration: Duration) async {
+        guard duration > .zero, !Task.isCancelled else { return }
+        let id = UUID()
+        let timer = Task { [weak self] in
+            try? await Task.sleep(for: duration)
+            await self?.resumeConditionWakeup(id)
+        }
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if Task.isCancelled {
+                    continuation.resume()
+                    return
+                }
+                conditionWakeups[id] = continuation
+            }
+        } onCancel: {
+            Task { [weak self] in await self?.resumeConditionWakeup(id) }
+        }
+        timer.cancel()
+    }
+
+    private func resumeConditionWakeup(_ id: UUID) {
+        conditionWakeups.removeValue(forKey: id)?.resume()
+    }
+
+    /// The server long-poll (12 s, M19-7). Cancelling the task does not interrupt the SDK call, and `client.logout()` waits for it, so
+    /// bounding it under the 15 s request timeout balances quick sign-out/recovery with fewer empty wake-ups.
+    static let longPollMilliseconds: UInt64 = SyncEnergyPolicy.normalLongPollMilliseconds
 
     /// A request the server doesn't answer is given up after this long (the SDK's own is 30 s, so a half-open connection hid
-    /// new messages for 39 s: GA-29). The long poll above is shorter than this.
-    static let requestTimeoutMilliseconds: UInt64 = 15_000
+    /// new messages for 39 s: GA-29). The long poll above stays strictly below this.
+    static let requestTimeoutMilliseconds: UInt64 = SyncEnergyPolicy.requestTimeoutMilliseconds
     static let requestConfig = RequestConfig(retryLimit: nil, timeout: requestTimeoutMilliseconds, maxConcurrentRequests: nil, maxRetryTime: nil)
 
     private func runSync(_ client: Client, generation: UInt64) async {
-        var backoff = Duration.seconds(1)
+        var backoff = SyncEnergyPolicy.schedule(for: syncConditions()).minimumBackoff
         var first = true
         var recovering = false
         while !Task.isCancelled {
+            let conditions = syncConditions()
+            let schedule = SyncEnergyPolicy.schedule(for: conditions)
+            if conditions.offline {
+                publish(status: .offline)
+                recovering = true
+                await sleepInterruptibly(for: schedule.maximumBackoff)
+                continue
+            }
             do {
                 let signpost = HaloSignpost.begin(first ? .syncCatchUp : .syncLongPoll)
-                let response = try await client.syncOnceV2(settings: SyncSettingsV2(timeoutMs: first ? 0 : Self.longPollMilliseconds, fullState: false))
+                let response = try await client.syncOnceV2(settings: SyncSettingsV2(timeoutMs: first ? 0 : schedule.longPollMilliseconds, fullState: false))
                 signpost.end()  // a failed sync records nothing
                 if Task.isCancelled { return }
                 let caughtUp = first || recovering
                 first = false
-                backoff = .seconds(1)
+                backoff = schedule.minimumBackoff
                 // A recoverable send failure (offline) disables that room's send queue until it is enabled again (SDK
                 // `EventSendState.sendingFailed`). The server answers again, so messages that failed meanwhile go out by
                 // themselves (MESSAGING FR-3, verified by the `offlineSend` contract test); at most once per sync.
@@ -387,7 +436,15 @@ public actor MatrixSessionPort: SessionPort {
                 if sendsMessages, recovering || queueFailed { await client.enableAllSendQueues(enable: true) }
                 recovering = false
                 publish(status: .running)
-                publish(change: SyncChange(joined: Set(response.rooms.joined), invited: Set(response.rooms.invited), left: Set(response.rooms.left), isCatchUp: caughtUp))
+                let joined = Set(response.rooms.joined)
+                let invited = Set(response.rooms.invited)
+                let left = Set(response.rooms.left)
+                publish(change: SyncChange(joined: joined, invited: invited, left: left, isCatchUp: caughtUp))
+                // Under Low Power Mode or thermal stress, rest between empty polls so idle foreground stays within NFR-15.
+                // Active chats (any changed room) continue polling immediately.
+                if !caughtUp, joined.isEmpty, invited.isEmpty, left.isEmpty, schedule.idleRest > .zero {
+                    await sleepInterruptibly(for: schedule.idleRest)
+                }
             } catch {
                 if Task.isCancelled { return }
                 let mapped = ErrorMapper.map(error)
@@ -407,8 +464,8 @@ public actor MatrixSessionPort: SessionPort {
                 }
                 publish(status: .offline)
                 recovering = true
-                try? await Task.sleep(for: backoff)
-                backoff = min(backoff * 2, .seconds(60))
+                await sleepInterruptibly(for: backoff)
+                backoff = SyncEnergyPolicy.nextBackoff(current: backoff, schedule: schedule)
             }
         }
     }
@@ -454,6 +511,23 @@ public actor MatrixSessionPort: SessionPort {
                 return try await client.getMediaThumbnail(mediaSource: source, width: UInt64(thumbnail.width), height: UInt64(thumbnail.height))
             }
             return try await client.getMediaContent(mediaSource: source)
+        } catch { throw ErrorMapper.map(error) }
+    }
+
+    /// Downloads media straight to a file (decrypting it there) and moves it into `directory` (M19-5): the SDK writes the bytes to
+    /// its own temporary file as they arrive, so a 100 MB video is never one block in memory. `useCache: true` serves already-cached
+    /// files (including own uploads and previously opened files within `defaultMediaRetentionPolicy.maxFileSize`) without a network request.
+    func mediaFile(_ ref: MediaRef, name: String, mimeType: String?, in directory: URL) async throws(HaloError) -> URL {
+        guard let client else { throw .unauthorized(soft: false) }
+        let target = directory.appendingPathComponent(MatrixMediaPort.safeFileName(name))
+        do {
+            let source = try MediaSource.fromJson(json: ref.token)
+            let handle = try await client.getMediaFile(
+                mediaSource: source, filename: target.lastPathComponent, mimeType: mimeType ?? "application/octet-stream", useCache: true,
+                tempDir: directory.path)
+            if try handle.persist(path: target.path) { return target }
+            // Not moved (the file is already where it should be, or the name is taken): use the SDK's own path.
+            return URL(fileURLWithPath: try handle.path())
         } catch { throw ErrorMapper.map(error) }
     }
 

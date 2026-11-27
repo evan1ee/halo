@@ -114,16 +114,20 @@ public struct AvatarCircle: View {
     @ViewBuilder
     private func avatarContent(diameter: CGFloat) -> some View {
         ZStack {
-            if let image = Self.image(imageData) {
-                Circle().fill(.quaternary)
-                image.resizable().scaledToFill()
-            } else {
+            DecodedImage(imageData, maxPixel: ImagePipeline.Size.avatar(points: diameter)) { image in
+                ZStack {
+                    Circle().fill(.quaternary)
+                    image.resizable().scaledToFill()
+                }
+            } placeholder: {
                 let hue = AvatarTint.hue(for: name)
                 let dark = colorScheme == .dark
-                Circle().fill(color(AvatarTint.background(hue, dark: dark)))
-                Text(avatarInitial(for: name))
-                    .font(.system(size: diameter * 0.42, weight: .semibold, design: .rounded))
-                    .foregroundStyle(color(AvatarTint.letter(hue, dark: dark)))
+                ZStack {
+                    Circle().fill(color(AvatarTint.background(hue, dark: dark)))
+                    Text(avatarInitial(for: name))
+                        .font(.system(size: diameter * 0.42, weight: .semibold, design: .rounded))
+                        .foregroundStyle(color(AvatarTint.letter(hue, dark: dark)))
+                }
             }
         }
         .frame(width: diameter, height: diameter)
@@ -160,14 +164,6 @@ public struct AvatarCircle: View {
         .accessibilityHidden(true)
     }
 
-    private static func image(_ data: Data?) -> Image? {
-        #if canImport(UIKit)
-        guard let data, let ui = UIImage(data: data) else { return nil }
-        return Image(uiImage: ui)
-        #else
-        return nil
-        #endif
-    }
 }
 
 #Preview("AvatarCircle — Light") {

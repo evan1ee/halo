@@ -7,17 +7,44 @@ import HaloFoundation
 import HaloMatrixAdapter
 import HaloPersistence
 import HaloPlatform
+import Synchronization
 import UIKit
 
 /// Message search of the signed-in account (MESSAGE_SEARCH, ADR-0024): the index, what fills it and what searches it come and go with the
 /// session. Wiring only; the rules are in `SearchIndexer` and `SearchIndexPolicy`.
 @MainActor
 final class MessageSearchEngine {
+    /// Thread-safe in-memory snapshot of joined rooms and ignored senders so `LocalMessageSearch` never blocks on actor or FFI hops per keystroke.
+    private final class FilterCache: Sendable {
+        private struct Value {
+            var joined: Set<RoomID> = []
+            var ignored: Set<UserID> = []
+        }
+        private let state = Mutex(Value())
+
+        var joined: Set<RoomID> { state.withLock { $0.joined } }
+        var ignored: Set<UserID> { state.withLock { $0.ignored } }
+
+        func setJoined(_ rooms: Set<RoomID>) { state.withLock { $0.joined = rooms } }
+        func setIgnored(_ users: Set<UserID>) { state.withLock { $0.ignored = users } }
+        func reset() { state.withLock { $0 = Value() } }
+    }
+
+    private final class IndexerBox: Sendable {
+        private let state = Mutex<SearchIndexer?>(nil)
+        var current: SearchIndexer? {
+            get { state.withLock { $0 } }
+            set { state.withLock { $0 = newValue } }
+        }
+    }
+
     let coordinator: SearchCoordinator
     /// Holds the first sync back until search listens.
     let gate = SearchStartGate()
 
     private let port = CurrentSearchPort()
+    private let filterCache = FilterCache()
+    private let indexerBox = IndexerBox()
     private let source: MatrixMessageIndexSource
     private let rooms: RoomListCoordinator
     private let profiles: MatrixProfilePort
@@ -26,7 +53,9 @@ final class MessageSearchEngine {
     private let log: HaloLog
     private var account: UserID?
     private var store: SearchIndexStore?
-    private var indexer: SearchIndexer?
+    private var indexer: SearchIndexer? {
+        didSet { indexerBox.current = indexer }
+    }
     private var following: [Task<Void, Never>] = []
     private var isForeground = false
     private var isProcessing = false
@@ -37,12 +66,15 @@ final class MessageSearchEngine {
 
     init(session: MatrixSessionPort, rooms: RoomListCoordinator, profiles: MatrixProfilePort, encryption: EncryptionCoordinator, preferences: PreferencesStore, log: HaloLog) {
         source = MatrixMessageIndexSource(session: session)
-        coordinator = SearchCoordinator(port: port)
         self.rooms = rooms
         self.profiles = profiles
         self.encryption = encryption
         self.preferences = preferences
         self.log = log
+        let indexerBox = indexerBox
+        coordinator = SearchCoordinator(
+            port: port,
+            onRemoteQuery: { query in await indexerBox.current?.setActiveQuery(query) })
         device = DeviceConditions { [weak self] in Task { await self?.indexer?.conditionsChanged() } }
         protected = ProtectedData(
             willLock: { [weak self] in Task { @MainActor in await self?.phoneWillLock() } },
@@ -58,28 +90,49 @@ final class MessageSearchEngine {
         account = user
         let protected = protected
         let store = SearchIndexStore(directory: HaloShared.searchDirectory(for: user), cipher: cipher, isReadable: { protected?.isReadable ?? true })
-        let rooms = rooms, profiles = profiles
-        let joined: @Sendable () async -> [RoomID] = { await rooms.rooms.filter { $0.membership == .joined }.map(\.id) }
+        await store.resume()  // pre-warms `DatabasePool` so the very first search keystroke never pays SQLite open latency
+        let rooms = rooms, profiles = profiles, filterCache = filterCache
+        let initialRooms = Set(await rooms.rooms.filter { $0.membership == .joined }.map(\.id))
+        if !initialRooms.isEmpty {
+            filterCache.setJoined(initialRooms)
+        } else if let known = await source.joinedRooms() {
+            filterCache.setJoined(known)
+        }
+        let joined: @Sendable () async -> [RoomID] = {
+            let loaded = await rooms.rooms.filter { $0.membership == .joined }.map(\.id)
+            if !loaded.isEmpty { return loaded }
+            return Array(filterCache.joined)
+        }
+        let coordinator = self.coordinator
         let indexer = SearchIndexer(
             index: store, source: source, rooms: joined,
-            conditions: { [weak self] in await self?.conditions() ?? SearchIndexPolicy.Conditions(mayRun: false) }, log: log)
+            conditions: { [weak self] in await self?.conditions() ?? SearchIndexPolicy.Conditions(mayRun: false) }, log: log,
+            onWrite: { changedRooms in await coordinator.refresh(in: changedRooms) })
         self.store = store
         self.indexer = indexer
         port.set(LocalMessageSearch(
-            index: store, source: source, joined: { Set(await joined()) }, ignored: { Set((try? await profiles.ignoredUsers()) ?? []) }))  // best-effort: a failed read means none ignored, or a failed rebuild is reported as false
+            index: store, source: source, joined: { filterCache.joined }, ignored: { filterCache.ignored }))
         await indexer.begin()
         await gate.open()
         let statuses = await indexer.statuses(), lists = await rooms.summaryChanges(), keys = await encryption.snapshots()
         following = [
+            Task {
+                if let ignored = try? await profiles.ignoredUsers() {  // best-effort: falls back to empty until next sync/ignore refresh
+                    filterCache.setIgnored(Set(ignored))
+                }
+            },
             Task { [weak self] in
                 for await status in statuses { self?.publish(status) }
             },
             Task {
                 var known: Set<RoomID> = []
                 for await list in lists {
-                    let joined = Set(list.lazy.filter { $0.membership == .joined }.map(\.id))
-                    guard joined != known else { continue }
-                    known = joined
+                    let joinedSet = Set(list.lazy.filter { $0.membership == .joined }.map(\.id))
+                    if !joinedSet.isEmpty || !known.isEmpty {
+                        filterCache.setJoined(joinedSet)
+                    }
+                    guard joinedSet != known else { continue }
+                    known = joinedSet
                     await indexer.roomsChanged()
                 }
             },
@@ -96,6 +149,13 @@ final class MessageSearchEngine {
         ]
     }
 
+    /// Refreshes the cached ignored-user set after an ignore/unignore action and updates any open search results immediately.
+    func refreshIgnoredUsers() async {
+        let ignored = (try? await profiles.ignoredUsers()) ?? []  // best-effort: keeps none ignored on read failure
+        filterCache.setIgnored(Set(ignored))
+        await coordinator.refresh()
+    }
+
     /// Stops reading and lets go of the second SDK client; before the session's stores are deleted.
     func stop() async {
         port.set(nil)
@@ -107,6 +167,7 @@ final class MessageSearchEngine {
         for task in following { task.cancel() }
         following = []
         await stop()
+        filterCache.reset()
         indexer = nil
         account = nil
         await gate.close()
@@ -201,14 +262,15 @@ final class MessageSearchEngine {
 extension AppRoot {
     /// Message search view model for the `.searchable` room list (D85).
     func makeMessageSearch() -> MessageSearchViewModel {
-        MessageSearchViewModel(
+        let media = media
+        return MessageSearchViewModel(
             coordinator: search.coordinator,
-            roomName: { [roomList] room in
-                if case .loaded(_, let rows) = roomList.content, let row = rows.first(where: { $0.id == room }) { return row.name }
-                return "Room"
+            roomName: { [roomList] room in roomList.roomName(for: room) ?? "Room" },
+            roomAvatar: { [roomList] room in roomList.roomAvatar(for: room) },
+            thumbnail: { ref, size in
+                try? await media.thumbnail(ref, width: size, height: size)  // best-effort: missing or offline thumbnails keep their placeholder
             },
             statuses: { [search] in await search.statuses() },
-            needsVerification: { [recovery] in recovery.needsRecovery },
-            onActivity: { [search] in search.noteActivity() })
+            needsVerification: { [recovery] in recovery.needsRecovery })
     }
 }

@@ -73,7 +73,7 @@ Targets in [../REQUIREMENTS.md](../REQUIREMENTS.md) NFR-1..3; measured with sign
 |---|---|---|---|
 | NFR-1 launch → interactive list, 300 and 1,000 rooms | ≤ 1 s / record | `XCTApplicationLaunchMetric` + M17-1 signpost | small account 0.357 s (Debug) |
 | NFR-2 scrolling, mixed media | hitch ratio ≤ 5 ms/s **[ASSUMPTION]** | Instruments Animation Hitches, 3 runs | none |
-| NFR-11 room open p95 | ≤ 250 ms | signpost, 30 opens | ~150 ms after the push (observed, not measured) |
+| NFR-11 room open p95 | ≤ 250 ms | signpost, 30 opens | simulator, scale300 (M19-4, 2026-11-26): p95 0.339 s → 0.238 s after the landing waits went from 80 + 60 ms to 16 + 32 ms; the 10× D95 landing check passed 10 of 10 there; a device number is open |
 | NFR-12 memory | ≤ 200 / 300 MB, ≤ 10 % growth over 50 cycles | `XCTMemoryMetric` | 76.8–78.1 MB, one small room |
 | NFR-13 main thread | no hang ≥ 250 ms | `main-thread-hang` signpost in the scripted sessions (`scripts/perf.py`); MetricKit in the field | see `perf-baseline.json` |
 | NFR-14 sync at scale | ≤ 60 s first, ≤ 10 s after 24 h | `scripts/scale-measure.py` | table below (simulator) |

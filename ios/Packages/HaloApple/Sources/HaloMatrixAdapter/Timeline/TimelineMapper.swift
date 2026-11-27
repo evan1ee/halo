@@ -117,23 +117,23 @@ enum TimelineMapper {
             case .image(let content):
                 .media(MediaAttachment(
                     kind: .image, body: message.body, source: ref(content.source),
-                    width: content.info?.width.map(Int.init), height: content.info?.height.map(Int.init),
-                    mimeType: content.info?.mimetype, size: content.info?.size.map(Int.init),
+                    width: clampedInt(content.info?.width), height: clampedInt(content.info?.height),
+                    mimeType: content.info?.mimetype, size: clampedInt(content.info?.size),
                     thumbnail: content.info?.thumbnailSource.map(ref), blurhash: content.info?.blurhash))
             case .video(let content):
                 .media(MediaAttachment(
                     kind: .video, body: message.body, source: ref(content.source),
-                    width: content.info?.width.map(Int.init), height: content.info?.height.map(Int.init),
-                    mimeType: content.info?.mimetype, size: content.info?.size.map(Int.init), duration: content.info?.duration,
+                    width: clampedInt(content.info?.width), height: clampedInt(content.info?.height),
+                    mimeType: content.info?.mimetype, size: clampedInt(content.info?.size), duration: content.info?.duration,
                     thumbnail: content.info?.thumbnailSource.map(ref), blurhash: content.info?.blurhash))
             case .audio(let content):
                 .media(MediaAttachment(
                     kind: .audio, body: message.body, source: ref(content.source),
-                    mimeType: content.info?.mimetype, size: content.info?.size.map(Int.init), duration: content.info?.duration))
+                    mimeType: content.info?.mimetype, size: clampedInt(content.info?.size), duration: content.info?.duration))
             case .file(let content):
                 .media(MediaAttachment(
                     kind: .file, body: message.body, source: ref(content.source),
-                    mimeType: content.info?.mimetype, size: content.info?.size.map(Int.init)))
+                    mimeType: content.info?.mimetype, size: clampedInt(content.info?.size)))
             case .location(let content): .location(body: message.body, geoURI: content.geoUri)
             default: .unsupported
             }
@@ -202,6 +202,8 @@ enum TimelineMapper {
 
     /// The opaque reference the media port later turns back into an upstream `MediaSource`.
     static func ref(_ source: MediaSource) -> MediaRef { MediaRef(token: source.toJson()) }
+
+    static func clampedInt(_ value: UInt64?) -> Int? { value.map { Int(clamping: $0) } }
 
     static func date(_ timestamp: UInt64) -> Date { Date(timeIntervalSince1970: Double(timestamp) / 1000) }
 }

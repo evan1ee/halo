@@ -217,8 +217,14 @@ public final class TimelineViewModel {
     var revealedPreviews: Set<MediaRef> = []
     /// Pictures already shown (`TimelineThumbnailMemory`) and the photo reference last seen per row, to carry a sent photo
     /// from its local echo to the confirmed message.
-    let thumbnailMemory = TimelineThumbnailMemory()
+    let thumbnailMemory: TimelineThumbnailMemory
     var knownPhotoRefs: [String: MediaRef] = [:]
+    /// The row made for each item the last time, reused while the item and what the mapping reads besides it are unchanged
+    /// (M19-2): a new message maps one row, not the whole room.
+    var rowCache: [TimelineItemID: (item: TimelineItem, row: TimelineRow)] = [:]
+    var rowCacheContext = 0
+    /// How many rows `row(_:)` made through `mappedRows`; the test that pins M19-2 reads it.
+    var rowsMapped = 0
     var observation: Task<Void, Never>?
     let dateFormatter: DateFormatter
     let timeFormatter: DateFormatter
@@ -229,8 +235,16 @@ public final class TimelineViewModel {
     let room: RoomID?
     let dwell: Duration
     let sleep: @Sendable (Duration) async throws -> Void
+    let now: @Sendable () -> Date
     var readTracker = TimelineReadTracker()
     var isActive = true
+    /// `false` while the model was started ahead of its screen (`startAhead`, a warm model for the top of the chat list, M19-9):
+    /// it then reports nothing, no read receipt, no seen event, no own message as read, no `m.marked_unread` clearing.
+    public internal(set) var isPresented = true
+    /// Told once when a model started ahead of its screen is shown (`present`).
+    public var onPresented: (@MainActor () -> Void)?
+    /// The items of the last live snapshot, for what is worked out again when a model started ahead is shown.
+    var lastItems: [TimelineItem] = []
     var clearedMarkedUnread = false
     var isRestoringDraft = false
     /// The unsent text that was in the composer when an edit began; it comes back when the edit ends.
@@ -272,12 +286,15 @@ public final class TimelineViewModel {
     ///   - drafts: when given together with `room`, the unsent text is kept per room (MESSAGING FR-5).
     ///   - images: prepares picked photos for sending; without it the composer offers no photo button.
     ///   - receipts: when given together with `room`, the newest visible confirmed event is reported as read.
+    ///   - thumbnails: the pictures already shown, shared by the app's timelines; a model of its own when not given.
     public init(
         coordinator: TimelineCoordinator, media: MediaLoader? = nil, previewsAllowed: (@Sendable () async -> Bool)? = nil, receipts: ReadReceiptCoordinator? = nil, room: RoomID? = nil,
         drafts: DraftCoordinator? = nil, images: (any ImagePreparing)? = nil, readThrough: (@Sendable () async -> Date?)? = nil, dwell: Duration = TimelineViewModel.seenDwell, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
-        locale: Locale = .current, timeZone: TimeZone = .current
+        locale: Locale = .current, timeZone: TimeZone = .current, thumbnails: TimelineThumbnailMemory? = nil,
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.coordinator = coordinator
+        self.thumbnailMemory = thumbnails ?? TimelineThumbnailMemory()
         self.media = media
         self.previewsAllowed = previewsAllowed
         self.receipts = receipts
@@ -287,6 +304,7 @@ public final class TimelineViewModel {
         self.readThrough = readThrough
         self.dwell = dwell
         self.sleep = sleep
+        self.now = now
         let formatter = DateFormatter()
         formatter.locale = locale
         formatter.timeZone = timeZone
@@ -327,14 +345,14 @@ public final class TimelineViewModel {
 
     /// Opening a room clears `m.marked_unread` once the room is visible, once per opening of the screen.
     func clearMarkedUnreadIfVisible() {
-        guard isActive, !clearedMarkedUnread, observation != nil, let receipts, let room else { return }
+        guard isActive, isPresented, !clearedMarkedUnread, observation != nil, let receipts, let room else { return }
         clearedMarkedUnread = true
         Task { await receipts.roomOpened(room) }
     }
 
     func reevaluateSeen() {
         guard receipts != nil, room != nil, !isFocused, !receiptsWait else { return }
-        let candidate = readTracker.candidate(isActive: isActive)
+        let candidate = readTracker.candidate(isActive: isActive && isPresented)
         guard candidate?.event != pendingCandidate else { return }
         pendingCandidate = candidate?.event
         dwellTask?.cancel()
@@ -359,9 +377,46 @@ public final class TimelineViewModel {
         }
     }
 
-    /// Opens the timeline and follows it. Call when the screen appears.
+    /// Opens the timeline and follows it. Call when the screen appears. A start already under way (`startAhead`) is awaited, not
+    /// repeated.
     public func start() async {
+        if let starting {
+            await starting.value
+            return
+        }
         guard observation == nil else { return }
+        let task = Task { await opening() }
+        starting = task
+        await task.value
+        starting = nil
+    }
+
+    /// The start under way, so a second caller waits for it instead of opening the timeline twice.
+    var starting: Task<Void, Never>?
+    /// Told once each when a screen shown now would draw the room at once (`canShow`).
+    var showableWaiters: [@MainActor () -> Void] = []
+
+    /// A screen shown now would draw rows at the place it lands, or the failure, on its first frame (M19-9).
+    public var canShow: Bool {
+        if case .failed = content { return true }
+        return landed
+    }
+
+    /// Calls `action` once `canShow` holds (at once if it does now).
+    func whenShowable(_ action: @escaping @MainActor () -> Void) {
+        if canShow { action() } else { showableWaiters.append(action) }
+    }
+
+    func noteIfShowable() {
+        guard canShow, !showableWaiters.isEmpty else { return }
+        let waiting = showableWaiters
+        showableWaiters = []
+        for action in waiting { action() }
+    }
+    /// `present()` ran: a start ahead that only runs afterwards must not hide the screen's model again.
+    var wasPresented = false
+
+    private func opening() async {
         // The saved draft is not needed to show messages: restore it while the timeline opens.
         let draftRestored = Task { await restoreDraft() }
         readThroughAtOpen = await readThrough?()
@@ -385,6 +440,42 @@ public final class TimelineViewModel {
         clearMarkedUnreadIfVisible()
     }
 
+    /// Opens the timeline before its screen exists (M19-9, D-MOT-2): the screen pushed later shows rows on its first frame. Until
+    /// `present()` the model reports nothing about what was read; the draft is only read, never written.
+    public func startAhead() async {
+        guard observation == nil, starting == nil else { return }
+        if !wasPresented { isPresented = false }
+        await start()
+    }
+
+    /// The screen of a model started ahead is shown: from now on it is an opened room. It lands at the newest row (D95), and
+    /// what may have changed while it waited (the read position, the preview setting) is read again.
+    public func present() {
+        wasPresented = true
+        guard !isPresented else { return }
+        isPresented = true
+        let presented = onPresented
+        onPresented = nil
+        presented?()
+        if landed, !isFocused, let newest = lastRowID {
+            landingRow = newest
+            trackedTailID = newest
+            isAtBottom = true
+            newSinceDetached = 0
+        }
+        if !isFocused { reportOwnMessage(lastItems) }
+        reevaluateSeen()
+        clearMarkedUnreadIfVisible()
+        Task { [weak self] in await self?.refreshAfterPresenting() }
+    }
+
+    private func refreshAfterPresenting() async {
+        let position = await readThrough?()
+        readThroughAtOpen = position
+        if landed, !isFocused { unreadMarkerID = Self.firstUnreadItemID(lastItems, readThrough: position) }
+        if let previewsAllowed { previewsHidden = await !previewsAllowed() }
+    }
+
     func restoreDraft() async {
         guard let drafts, let room else { return }
         let text = await drafts.draft(for: room)
@@ -402,6 +493,7 @@ public final class TimelineViewModel {
 
     /// Closes the timeline. Call when the screen disappears.
     public func stop() async {
+        cancelOpenFile()
         observation?.cancel()
         observation = nil
         clearedMarkedUnread = false
@@ -564,6 +656,7 @@ public final class TimelineViewModel {
 
     // MARK: Action & media state
     var readerProfiles: [UserID: (name: String?, avatar: MediaRef?)] = [:]
+    var openFileTask: Task<Void, Never>?
     public internal(set) var openedFile: OpenedFile?
     public internal(set) var openingRow: String?
     public internal(set) var openFileError: String?

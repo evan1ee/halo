@@ -8,9 +8,23 @@ import UIKit
 
 /// Preserves the reader's scroll position when older history pages are prepended while scrolled up.
 enum PrependedAnchor {
+    static let timelineStartText = "This is the start of the conversation."
+
+    /// Returns the first stable row ID suitable for anchoring across back-pagination.
+    /// Skips synthetic date dividers, read markers, the timeline-start banner, and collapsible settings rows
+    /// because those can be deleted, recreated, or merged when earlier events on the same day prepend.
+    static func firstStableID(in rows: [TimelineRow]) -> String? {
+        rows.first { row in
+            row.style != .divider
+                && row.style != .marker
+                && row.text != TimelineViewModel.settingsText
+                && row.text != timelineStartText
+        }?.id ?? rows.first { $0.style != .divider && $0.style != .marker }?.id
+    }
+
     /// Returns the row ID to re-anchor at `.top` when older messages are prepended above the reader's position.
     /// Only fires after initial landing, when not following the bottom and not actively dragging, and only when the
-    /// previous first row was pushed down into `rowIDs` (not replaced by a full reset).
+    /// previous first stable row was pushed down into `rowIDs` (not replaced by a full reset).
     static func anchor(
         oldFirst: String?,
         newFirst: String?,

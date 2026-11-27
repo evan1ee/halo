@@ -1405,13 +1405,103 @@ struct MediaPreviewPolicyTests {
         #expect(photos[0].sender == "Alice" && photos[0].caption == "beach.jpg")
         #expect(photos[1].sender == "You" && photos[1].caption == "sunset")
 
+        let fullFile = try #require(await vm.fullImageFile(for: photos[0].image, filename: "beach.jpg"))
+        #expect(try Data(contentsOf: fullFile) == Data("beach-bytes".utf8))
+        #expect(mediaPort.fileCalls == 1 && mediaPort.contentCalls == 0, "viewer loads full photos via MediaPort.file, not content")
+        try? FileManager.default.removeItem(at: fullFile.deletingLastPathComponent())
+
         let full = await vm.fullImageData(for: photos[0].image)
         #expect(full == Data("beach-bytes".utf8))
 
         let exported = try #require(await vm.exportViewerPhoto(photos[1]))
         #expect(exported.lastPathComponent == "sunset.jpg")
         #expect(try Data(contentsOf: exported) == Data("sunset-bytes".utf8))
+        #expect(mediaPort.contentCalls == 0, "export streams via MediaPort.file, never content")
         try? FileManager.default.removeItem(at: exported.deletingLastPathComponent())
+
+        await vm.stop()
+    }
+
+    @Test("cancelling an in-flight file open clears state and reports no error (AC-MED-3, M19-5)")
+    func cancelOpenFile() async throws {
+        let room = try RoomID("!cancel-file:x.org")
+        let alice = try UserID("@alice:x.org")
+        let ref = MediaRef(token: "mxc://x.org/video")
+        let port = FakeTimelinePort()
+        port.addRoom(room, items: [
+            TimelineItem(id: TimelineItemID("v1"), content: .event(TimelineEvent(
+                eventID: try EventID("$v1"), sender: alice, senderName: "Alice",
+                timestamp: Date(timeIntervalSince1970: 100), isOwn: false,
+                kind: .media(MediaAttachment(kind: .video, body: "clip.mp4", source: ref, size: 1024 * 1024))))),
+        ])
+        let mediaPort = FakeMediaPort()
+        mediaPort.add(ref, data: Data("video-bytes".utf8))
+        mediaPort.holdNextFile()
+        let vm = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room), media: MediaLoader(port: mediaPort))
+        await vm.start()
+        for _ in 0..<200_000 { if vm.lastRowID == "v1" { break }; await Task.yield() }
+        guard case .live(let rows, _, _, _) = vm.content, let row = rows.first else {
+            Issue.record("expected video row"); return
+        }
+
+        let openTask = Task { await vm.openFile(row) }
+        for _ in 0..<10_000 { if vm.openingRow == "v1" { break }; await Task.yield() }
+        #expect(vm.openingRow == "v1")
+        vm.cancelOpenFile()
+        await openTask.value
+        #expect(vm.openingRow == nil)
+        #expect(vm.openedFile == nil)
+        #expect(vm.openFileError == nil)
+
+        await vm.stop()
+    }
+
+    @Test("timeline thumbnails prefer precomputed thumbnailRef and own cached uploads (M19-5)")
+    func thumbnailPrefersPrecomputedAndOwnCache() async throws {
+        let room = try RoomID("!thumb-cache:x.org")
+        let alice = try UserID("@alice:x.org")
+        let me = try UserID("@me:x.org")
+        let fullRef = MediaRef(token: "mxc://x.org/full")
+        let thumbRef = MediaRef(token: "mxc://x.org/thumb")
+        let ownRef = MediaRef(token: "mxc://x.org/own")
+        let otherRef = MediaRef(token: "mxc://x.org/other")
+        let port = FakeTimelinePort()
+        port.addRoom(room, items: [
+            TimelineItem(id: TimelineItemID("i1"), content: .event(TimelineEvent(
+                eventID: try EventID("$i1"), sender: alice, senderName: "Alice",
+                timestamp: Date(timeIntervalSince1970: 100), isOwn: false,
+                kind: .media(MediaAttachment(kind: .image, body: "a.jpg", source: fullRef, thumbnail: thumbRef))))),
+            TimelineItem(id: TimelineItemID("i2"), content: .event(TimelineEvent(
+                eventID: try EventID("$i2"), sender: me, senderName: "Me",
+                timestamp: Date(timeIntervalSince1970: 110), isOwn: true,
+                kind: .media(MediaAttachment(kind: .image, body: "b.jpg", source: ownRef))))),
+            TimelineItem(id: TimelineItemID("i3"), content: .event(TimelineEvent(
+                eventID: try EventID("$i3"), sender: alice, senderName: "Alice",
+                timestamp: Date(timeIntervalSince1970: 120), isOwn: false,
+                kind: .media(MediaAttachment(kind: .image, body: "c.jpg", source: otherRef))))),
+        ])
+        let mediaPort = FakeMediaPort()
+        mediaPort.add(thumbRef, data: Data("precomputed-thumb".utf8))
+        mediaPort.add(ownRef, data: Data("own-cached-file".utf8))
+        mediaPort.add(otherRef, data: Data("server-thumb".utf8))
+        let vm = TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: room), media: MediaLoader(port: mediaPort))
+        await vm.start()
+        for _ in 0..<200_000 { if vm.lastRowID == "i3" { break }; await Task.yield() }
+        guard case .live(let rows, _, _, _) = vm.content, rows.count == 3 else {
+            Issue.record("expected 3 photo rows"); return
+        }
+
+        let t1 = await vm.thumbnail(for: try #require(rows[0].image))
+        #expect(t1 == Data("precomputed-thumb".utf8))
+        #expect(mediaPort.contentCalls == 1 && mediaPort.thumbnailCalls == 0)
+
+        let t2 = await vm.thumbnail(for: try #require(rows[1].image))
+        #expect(t2 == Data("own-cached-file".utf8))
+        #expect(mediaPort.contentCalls == 2 && mediaPort.thumbnailCalls == 0)
+
+        let t3 = await vm.thumbnail(for: try #require(rows[2].image))
+        #expect(t3 == Data("server-thumb".utf8))
+        #expect(mediaPort.thumbnailCalls == 1)
 
         await vm.stop()
     }

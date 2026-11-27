@@ -33,6 +33,17 @@ public final class FakeRoomListPort: RoomListPort {
         for continuation in continuations { continuation.yield(.diff(diff)) }
     }
 
+    /// Applies the diffs to the fake's list and sends them as one batch (`.diffs`), as the adapter does for a room that moves.
+    public func emit(batch diffs: [RoomListDiff], validate: Bool = true) throws(HaloError) {
+        let continuations: [AsyncStream<RoomListUpdate>.Continuation] = try state.withLock { (state) throws(HaloError) in
+            var rooms = state.rooms
+            if validate { for diff in diffs { try RoomListReducer.apply(diff, to: &rooms) } }
+            state.rooms = rooms
+            return Array(state.continuations.values)
+        }
+        for continuation in continuations { continuation.yield(.diffs(diffs)) }
+    }
+
     /// Ends every open subscription, as when sync stops.
     public func finishSubscriptions() {
         for continuation in state.withLock({ Array($0.continuations.values) }) { continuation.finish() }

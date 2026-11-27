@@ -49,6 +49,8 @@ public final class GlobalMediaGalleryViewModel: Identifiable {
 
     public private(set) var items: [GlobalMediaItem] = []
     public private(set) var isLoading = false
+    public private(set) var isLoadingMore = false
+    public private(set) var hasMore = false
     public private(set) var error: String?
     public var filter: GlobalMediaFilter = .all
     /// When non-nil, narrows the gallery to items from a single room.
@@ -56,10 +58,20 @@ public final class GlobalMediaGalleryViewModel: Identifiable {
     /// Case-insensitive search query matching filename/caption, sender name, or room name.
     public var searchText = ""
 
+    private struct ActiveRoomSession {
+        let roomID: RoomID
+        let roomName: String
+        let session: any RoomMediaGallerySession
+    }
+
     private let rooms: RoomListCoordinator
     private let roomPort: any RoomPort
     private let media: MediaLoader?
     private let calendar: Calendar
+    private var activeSessions: [ActiveRoomSession] = []
+    private var remainingRooms: [(id: RoomID, name: String)] = []
+    private var perRoomPageSize = 20
+    private var roomBatchSize = 15
 
     public init(
         rooms: RoomListCoordinator,
@@ -132,82 +144,186 @@ public final class GlobalMediaGalleryViewModel: Identifiable {
         return buckets.map { GlobalMediaSection(id: $0.key, title: $0.title, items: $0.items) }
     }
 
-    /// Loads recent media across joined rooms with bounded concurrency (max 4 rooms in flight).
-    public func load(perRoomLimit: Int = 30, maxRooms: Int = 25) async {
+    /// Loads the first page of media across joined rooms with bounded concurrency (max 4 rooms in flight, paged in M19-5).
+    public func load(perRoomLimit: Int = 20, maxRooms: Int = 15) async {
         guard !isLoading else { return }
         isLoading = true
         error = nil
+        perRoomPageSize = perRoomLimit
+        roomBatchSize = maxRooms
         defer { isLoading = false }
 
-        let joined = Array((await rooms.rooms).filter { $0.membership == .joined }.prefix(maxRooms))
+        await closeSessions()
+        let joined = (await rooms.rooms)
+            .filter { $0.membership == .joined }
+            .map { (id: $0.id, name: $0.name ?? $0.id.rawValue) }
         guard !joined.isEmpty else {
             items = []
             selectedRoomID = nil
+            hasMore = false
             return
         }
 
-        let port = roomPort
-        let maxConcurrency = 4
+        let batch = Array(joined.prefix(maxRooms))
+        remainingRooms = Array(joined.dropFirst(maxRooms))
+
+        let outcome = await openAndFetchFirstPage(for: batch, limit: perRoomLimit)
+        activeSessions = outcome.continuingSessions
+        items = Self.mergedAndSorted(existing: [], incoming: outcome.items)
+        hasMore = !activeSessions.isEmpty || !remainingRooms.isEmpty
+
+        if let selectedRoomID, !items.contains(where: { $0.roomID == selectedRoomID }) {
+            self.selectedRoomID = nil
+        }
+        if !outcome.succeededAny, let firstError = outcome.firstError {
+            error = Self.text(firstError)
+        }
+    }
+
+    /// Loads the next page of media from active rooms and opens the next batch of rooms if any remain (M19-5).
+    public func loadMore() async {
+        guard !isLoading, !isLoadingMore, hasMore else { return }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+
+        let currentSessions = activeSessions
+        activeSessions = []
+        let nextRooms = Array(remainingRooms.prefix(roomBatchSize))
+        remainingRooms = Array(remainingRooms.dropFirst(nextRooms.count))
+
         var collected: [GlobalMediaItem] = []
-        var firstError: HaloError?
-        var succeededAny = false
+        var continuing: [ActiveRoomSession] = []
 
-        await withTaskGroup(of: Result<[GlobalMediaItem], HaloError>.self) { group in
-            var nextIndex = 0
-            let initial = min(maxConcurrency, joined.count)
-            for _ in 0..<initial {
-                let summary = joined[nextIndex]
-                let displayName = summary.name ?? summary.id.rawValue
-                nextIndex += 1
-                group.addTask {
-                    do throws(HaloError) {
-                        let roomItems = try await port.mediaGallery(in: summary.id, limit: perRoomLimit)
-                        return .success(roomItems.map { GlobalMediaItem(roomID: summary.id, roomName: displayName, item: $0) })
-                    } catch {
-                        return .failure(error)
-                    }
-                }
-            }
-
-            for await result in group {
-                switch result {
-                case .success(let batch):
-                    succeededAny = true
-                    collected.append(contentsOf: batch)
-                case .failure(let err):
-                    if firstError == nil { firstError = err }
-                }
-
-                if nextIndex < joined.count {
-                    let summary = joined[nextIndex]
-                    let displayName = summary.name ?? summary.id.rawValue
-                    nextIndex += 1
+        if !currentSessions.isEmpty {
+            let pageLimit = perRoomPageSize
+            let maxConcurrency = 4
+            typealias PageResult = (session: ActiveRoomSession, result: Result<MediaGalleryPage, HaloError>)
+            await withTaskGroup(of: PageResult.self) { group in
+                var index = 0
+                func enqueue() {
+                    guard index < currentSessions.count else { return }
+                    let entry = currentSessions[index]
+                    index += 1
                     group.addTask {
                         do throws(HaloError) {
-                            let roomItems = try await port.mediaGallery(in: summary.id, limit: perRoomLimit)
-                            return .success(roomItems.map { GlobalMediaItem(roomID: summary.id, roomName: displayName, item: $0) })
+                            let page = try await entry.session.nextPage(limit: pageLimit)
+                            return (entry, .success(page))
                         } catch {
-                            return .failure(error)
+                            return (entry, .failure(error))
                         }
                     }
+                }
+                for _ in 0..<min(maxConcurrency, currentSessions.count) { enqueue() }
+                for await outcome in group {
+                    switch outcome.result {
+                    case .success(let page):
+                        collected.append(contentsOf: page.items.map {
+                            GlobalMediaItem(roomID: outcome.session.roomID, roomName: outcome.session.roomName, item: $0)
+                        })
+                        if page.hasMore {
+                            continuing.append(outcome.session)
+                        } else {
+                            await outcome.session.session.close()
+                        }
+                    case .failure:
+                        await outcome.session.session.close()
+                    }
+                    enqueue()
                 }
             }
         }
 
-        collected.sort { lhs, rhs in
+        if !nextRooms.isEmpty {
+            let opened = await openAndFetchFirstPage(for: nextRooms, limit: perRoomPageSize)
+            collected.append(contentsOf: opened.items)
+            continuing.append(contentsOf: opened.continuingSessions)
+        }
+
+        activeSessions = continuing
+        items = Self.mergedAndSorted(existing: items, incoming: collected)
+        hasMore = !activeSessions.isEmpty || !remainingRooms.isEmpty
+    }
+
+    /// Releases all open room gallery timeline sessions when the screen disappears (AGENTS §8).
+    public func closeSessions() async {
+        let toClose = activeSessions
+        activeSessions = []
+        remainingRooms = []
+        for entry in toClose {
+            await entry.session.close()
+        }
+    }
+
+    private struct BatchOutcome {
+        var items: [GlobalMediaItem] = []
+        var continuingSessions: [ActiveRoomSession] = []
+        var firstError: HaloError?
+        var succeededAny = false
+    }
+
+    private func openAndFetchFirstPage(for batch: [(id: RoomID, name: String)], limit: Int) async -> BatchOutcome {
+        let port = roomPort
+        let maxConcurrency = 4
+        var outcome = BatchOutcome()
+
+        typealias RoomResult = (roomID: RoomID, roomName: String, result: Result<(any RoomMediaGallerySession, MediaGalleryPage), HaloError>)
+        await withTaskGroup(of: RoomResult.self) { group in
+            var nextIndex = 0
+            func enqueue() {
+                guard nextIndex < batch.count else { return }
+                let room = batch[nextIndex]
+                nextIndex += 1
+                group.addTask {
+                    do throws(HaloError) {
+                        let session = try await port.openMediaGallery(in: room.id)
+                        do throws(HaloError) {
+                            let page = try await session.nextPage(limit: limit)
+                            return (room.id, room.name, .success((session, page)))
+                        } catch {
+                            await session.close()
+                            return (room.id, room.name, .failure(error))
+                        }
+                    } catch {
+                        return (room.id, room.name, .failure(error))
+                    }
+                }
+            }
+
+            for _ in 0..<min(maxConcurrency, batch.count) { enqueue() }
+            for await entry in group {
+                switch entry.result {
+                case .success(let (session, page)):
+                    outcome.succeededAny = true
+                    outcome.items.append(contentsOf: page.items.map {
+                        GlobalMediaItem(roomID: entry.roomID, roomName: entry.roomName, item: $0)
+                    })
+                    if page.hasMore {
+                        outcome.continuingSessions.append(ActiveRoomSession(roomID: entry.roomID, roomName: entry.roomName, session: session))
+                    } else {
+                        await session.close()
+                    }
+                case .failure(let err):
+                    if outcome.firstError == nil { outcome.firstError = err }
+                }
+                enqueue()
+            }
+        }
+        return outcome
+    }
+
+    private static func mergedAndSorted(existing: [GlobalMediaItem], incoming: [GlobalMediaItem]) -> [GlobalMediaItem] {
+        var seen = Set(existing.map(\.id))
+        var combined = existing
+        for entry in incoming where seen.insert(entry.id).inserted {
+            combined.append(entry)
+        }
+        combined.sort { lhs, rhs in
             if lhs.item.timestamp != rhs.item.timestamp {
                 return lhs.item.timestamp > rhs.item.timestamp
             }
             return lhs.id < rhs.id
         }
-
-        items = collected
-        if let selectedRoomID, !items.contains(where: { $0.roomID == selectedRoomID }) {
-            self.selectedRoomID = nil
-        }
-        if !succeededAny, let firstError {
-            error = Self.text(firstError)
-        }
+        return combined
     }
 
     public func thumbnailData(_ ref: MediaRef, size: Int = 240) async -> Data? {
@@ -215,29 +331,61 @@ public final class GlobalMediaGalleryViewModel: Identifiable {
         return try? await media.thumbnail(ref, width: size, height: size)  // best-effort: a picture that can't load shows its placeholder; nothing changes
     }
 
-    public func fullImageData(_ ref: MediaRef) async -> Data? {
+    /// Loads a gallery grid thumbnail, preferring a precomputed thumbnail via the SDK file cache (M19-5).
+    public func thumbnailData(for attachment: MediaAttachment, size: Int = 400) async -> Data? {
         guard let media else { return nil }
-        return try? await media.content(ref)  // best-effort: a picture that can't load shows its placeholder; nothing changes
+        if let thumb = attachment.thumbnail, let direct = try? await media.cachedContent(thumb) {  // best-effort: falls back to server thumbnail
+            return direct
+        }
+        guard attachment.kind == .image, let source = attachment.source else { return nil }
+        return try? await media.thumbnail(source, width: size, height: size)  // best-effort: a picture that can't load shows its placeholder; nothing changes
     }
 
-    /// Downloads full bytes of a gallery item to a temporary file so the user can share/export it.
-    public func exportMediaFile(_ entry: GlobalMediaItem) async -> URL? {
+    /// Streams a gallery photo to a temporary file on disk for the full-screen viewer (M19-5), falling back to a thumbnail.
+    public func fullImageFile(_ entry: GlobalMediaItem) async -> URL? {
         guard let media, let source = entry.item.attachment.source else { return nil }
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("halo-viewer-\(UUID().uuidString)", isDirectory: true)
         do {
-            let bytes = try await media.content(source)
-            let dir = FileManager.default.temporaryDirectory
-                .appendingPathComponent("halo-global-gallery-\(UUID().uuidString)", isDirectory: true)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let rawName = entry.item.attachment.body.trimmingCharacters(in: .whitespacesAndNewlines)
-            let safeName = (rawName.isEmpty ? "media" : rawName)
-                .replacingOccurrences(of: "/", with: "_")
-                .replacingOccurrences(of: ":", with: "_")
-            let url = dir.appendingPathComponent(safeName)
-            try bytes.write(to: url, options: .atomic)
-            return url
+            let safeName = Self.safeMediaFilename(entry.item.attachment.body, defaultName: "photo.jpg")
+            if let url = try? await media.file(source, name: safeName, mimeType: entry.item.attachment.mimeType, in: dir) {  // best-effort: falls back to thumbnail preview
+                return url
+            }
+            if let thumb = try? await media.thumbnail(source, width: 1200, height: 1200) {  // best-effort: viewer shows placeholder when preview fails
+                let url = dir.appendingPathComponent(safeName)
+                try thumb.write(to: url, options: .atomic)
+                return url
+            }
+            try? FileManager.default.removeItem(at: dir)
+            return nil
         } catch {
+            try? FileManager.default.removeItem(at: dir)
             return nil
         }
+    }
+
+    /// Streams a gallery item straight to a temporary file on disk so the user can share/export it without holding it in RAM (M19-5).
+    public func exportMediaFile(_ entry: GlobalMediaItem) async -> URL? {
+        guard let media, let source = entry.item.attachment.source else { return nil }
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("halo-global-gallery-\(UUID().uuidString)", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let safeName = Self.safeMediaFilename(entry.item.attachment.body, defaultName: "media")
+            return try await media.file(source, name: safeName, mimeType: entry.item.attachment.mimeType, in: dir)
+        } catch {
+            try? FileManager.default.removeItem(at: dir)
+            return nil
+        }
+    }
+
+    private static func safeMediaFilename(_ body: String, defaultName: String) -> String {
+        let raw = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleaned = (raw.isEmpty ? defaultName : raw)
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: ":", with: "_")
+        return cleaned.isEmpty ? defaultName : cleaned
     }
 
     private static func monthTitle(for date: Date, calendar: Calendar) -> String {

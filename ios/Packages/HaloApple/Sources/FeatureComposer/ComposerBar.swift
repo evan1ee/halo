@@ -223,11 +223,11 @@ public struct ComposerBarView: View {
                         ForEach(pendingPhotos) { photo in
                             ZStack(alignment: .topTrailing) {
                                 #if canImport(UIKit)
-                                if let image = UIImage(data: photo.data) {
-                                    Image(uiImage: image).resizable().scaledToFill()
+                                DecodedImage(photo.data, maxPixel: ImagePipeline.Size.listRow) { image in
+                                    image.resizable().scaledToFill()
                                         .frame(width: 56, height: 56)
                                         .clipShape(RoundedRectangle(cornerRadius: HaloRadius.small, style: .continuous))
-                                }
+                                } placeholder: { Color.clear.frame(width: 56, height: 56) }
                                 #else
                                 RoundedRectangle(cornerRadius: HaloRadius.small)
                                     .fill(HaloColor.bgSecondary)

@@ -51,4 +51,6 @@ flowchart TB
 | Share extension | Room picker → sends from the share sheet (D92) |
 
 ## 4. Presentation rules
+**Launch:** the app always opens on the chat list (founder, 2026-11-26): the room, Settings or other page that was open when it was last closed is not restored. A notification tap, a `matrix:` link or a Spotlight result opens its room as before. (`ChatsRouter.encodePath` / `restorePath` stay, tested, but the app no longer calls them.)
+
 Sheets for short tasks (new chat, member profile, sticker panel), full-screen covers only for blocking flows (re-auth, verification). Room info is pushed as a page on the `NavigationStack` on iPhone and compact iPad, and docks as a trailing inspector column on regular-width iPad. State restoration: the navigation path (open room, room info, and Settings or Activity if they were open) is restored on relaunch (`@SceneStorage`), dropping a room that is no longer joined.

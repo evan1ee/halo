@@ -15,6 +15,7 @@ extension TimelineViewModel {
             isFocused = snapshot.focus != nil
             focusReachedEnd = snapshot.reachedEnd
             if !isFocused { readTracker.update(items: snapshot.items) }
+            lastItems = snapshot.items
             botTasks = botTracker(snapshot.items)
             if let botActivity, let room, !botSenders.isEmpty, !isFocused {
                 let items = snapshot.items, senders = botSenders
@@ -30,7 +31,7 @@ extension TimelineViewModel {
             }
             readerProfiles = profiles
             senderNames = Self.senderNames(snapshot.items)
-            let rows = Self.collapsingStateRuns(Self.groupingRuns(snapshot.items.map(row), items: snapshot.items), items: snapshot.items)
+            let rows = Self.collapsingStateRuns(Self.groupingRuns(mappedRows(snapshot.items), items: snapshot.items), items: snapshot.items)
             // A photo you sent changes its reference when the server confirms it: the picture on screen becomes the entry
             // for the new reference, so nothing is loaded again.
             for change in TimelineThumbnailMemory.changedReferences(rows: rows, known: &knownPhotoRefs) {
@@ -75,6 +76,7 @@ extension TimelineViewModel {
         case .failed(let error):
             content = .failed(error == .notFound ? "This room isn't available." : "The timeline couldn't be loaded.")
         }
+        noteIfShowable()
     }
 
     /// Counts incoming messages appended after `trackedTailID` while scrolled up; ignores back-pagination and edits.
@@ -102,7 +104,7 @@ extension TimelineViewModel {
     /// Sending a message means the user has read up to it (MESSAGING FR-6, rule E1b): once the newest own message (in
     /// timeline order, not by timestamp, R-06) has a server event ID it becomes the read position.
     func reportOwnMessage(_ items: [TimelineItem]) {
-        guard let receipts, let room else { return }
+        guard isPresented, let receipts, let room else { return }
         var newest: (id: EventID, time: Date)?
         for item in items {
             guard case .event(let event) = item.content, event.isOwn, let id = event.eventID else { continue }
@@ -165,7 +167,7 @@ extension TimelineViewModel {
         return result
     }
 
-    static let settingsText = "The room was updated"
+    nonisolated static let settingsText = "The room was updated"
 
     /// Messages from the same person within this time of their previous one form a group (one name and picture).
     static let runGap: TimeInterval = 5 * 60
@@ -210,6 +212,50 @@ extension TimelineViewModel {
     static func localpart(_ user: UserID) -> String {
         let raw = user.rawValue
         return raw.hasPrefix("@") ? String(raw.dropFirst().prefix { $0 != ":" }) : raw
+    }
+
+    /// What `row(_:)` reads besides the item: sender names, readers' profiles, the bot allowlist, and the calendar day (for `"Today"` / `"Yesterday"` dividers). A change drops every cached row.
+    private func mappingContext() -> Int {
+        var hasher = Hasher()
+        hasher.combine(senderNames)
+        hasher.combine(botSenders)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = dateFormatter.timeZone
+        hasher.combine(calendar.startOfDay(for: now()))
+        var profiles = 0
+        for (user, profile) in readerProfiles {
+            var entry = Hasher()
+            entry.combine(user)
+            entry.combine(profile.name)
+            entry.combine(profile.avatar?.token)
+            profiles &+= entry.finalize()  // a sum, so the order of the dictionary doesn't matter
+        }
+        hasher.combine(profiles)
+        return hasher.finalize()
+    }
+
+    /// The rows for `items`: a cached row is reused when its item is equal and the mapping context is the same, so one new
+    /// message makes one row (M19-2). The result is the same as `items.map(row)`.
+    func mappedRows(_ items: [TimelineItem]) -> [TimelineRow] {
+        let context = mappingContext()
+        if context != rowCacheContext {
+            rowCache.removeAll(keepingCapacity: true)
+            rowCacheContext = context
+        }
+        var next: [TimelineItemID: (item: TimelineItem, row: TimelineRow)] = [:]
+        next.reserveCapacity(items.count)
+        let rows = items.map { item -> TimelineRow in
+            if let hit = rowCache[item.id], hit.item == item {
+                next[item.id] = hit
+                return hit.row
+            }
+            rowsMapped += 1
+            let made = row(item)
+            next[item.id] = (item, made)
+            return made
+        }
+        rowCache = next
+        return rows
     }
 
     func row(_ item: TimelineItem) -> TimelineRow {
@@ -264,7 +310,7 @@ extension TimelineViewModel {
         let id = item.id.rawValue
         switch item.content {
         case .virtual(.dateDivider(let date)):
-            return TimelineRow(id: id, style: .divider, sender: nil, text: Self.dayTitle(date, now: Date(), formatter: dateFormatter))
+            return TimelineRow(id: id, style: .divider, sender: nil, text: Self.dayTitle(date, now: now(), formatter: dateFormatter))
         case .virtual(.readMarker):
             return TimelineRow(id: id, style: .marker, sender: nil, text: "New messages")
         case .virtual(.timelineStart):
@@ -298,7 +344,9 @@ extension TimelineViewModel {
                     let ratio = Self.aspectRatio(width: attachment.width, height: attachment.height)
                     return TimelineRow(
                         id: id, style: style, sender: name, text: attachment.body,
-                        image: .init(ref: source, aspectRatio: ratio, blurhash: attachment.blurhash),
+                        image: .init(
+                            ref: source, aspectRatio: ratio, blurhash: attachment.blurhash,
+                            thumbnailRef: attachment.thumbnail, isOwn: event.isOwn),
                         eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions), source: plainSource(event, attachment.body))
                 }
                 let label = "[\(Self.label(attachment.kind))] \(attachment.body)"

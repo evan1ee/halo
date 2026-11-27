@@ -479,6 +479,10 @@ struct RoomListWarmTests {
         if case .loaded(let count, let rows) = model.content {
             #expect(count == 4 && rows.count == 2 && model.canShowMore && model.visibleLimit == 2)
         }
+        // Even with visibleLimit == 2 and filter == .rooms, roomName(for:) resolves all rooms in O(1) and matchingRows searches beyond the first page!
+        #expect(model.roomName(for: try RoomID("!r4:x.org")) != nil)
+        let beyondFirstPage = model.matchingRows(for: model.roomName(for: try RoomID("!r4:x.org")) ?? "")
+        #expect(beyondFirstPage.contains { $0.id.rawValue == "!r4:x.org" })
     }
 }
 

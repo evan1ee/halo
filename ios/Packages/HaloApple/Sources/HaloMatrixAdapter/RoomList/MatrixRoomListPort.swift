@@ -22,34 +22,105 @@ public final class MatrixRoomListPort: RoomListPort {
     }
 
     final class EventTimeCache: Sendable {
-        private let entries = Mutex<[String: Date]>([:])
+        private struct State {
+            var entries: [String: Date] = [:]
+            var pendingFlush: Task<Void, Never>?
+        }
+
+        private let state = Mutex(State())
         private let limit: Int
+        private let file: URL?
 
-        init(limit: Int = 2_000) { self.limit = limit }
-
-        func get(_ key: String) -> Date? { entries.withLock { $0[key] } }
-
-        func set(_ key: String, _ value: Date) {
-            entries.withLock { cache in
-                if cache.count >= limit { cache.removeAll(keepingCapacity: true) }
-                cache[key] = value
+        init(limit: Int = 5_000, file: URL? = nil) {
+            self.limit = limit
+            self.file = file
+            if let file, let loaded = Self.load(from: file) {
+                state.withLock { $0.entries = loaded }
             }
         }
 
-        func clear() { entries.withLock { $0.removeAll() } }
+        func get(_ key: String) -> Date? { state.withLock { $0.entries[key] } }
+
+        func set(_ key: String, _ value: Date) {
+            let shouldScheduleFlush = state.withLock { state -> Bool in
+                if state.entries[key] == value { return false }
+                if state.entries[key] == nil, state.entries.count >= limit {
+                    let keepCount = max(1, limit / 2)
+                    let newest = state.entries.sorted { $0.value > $1.value }.prefix(keepCount)
+                    state.entries = Dictionary(uniqueKeysWithValues: newest.map { ($0.key, $0.value) })
+                }
+                state.entries[key] = value
+                guard file != nil, state.pendingFlush == nil else { return false }
+                return true
+            }
+            if shouldScheduleFlush {
+                let task = Task { [weak self] in
+                    try? await Task.sleep(for: .milliseconds(500))
+                    self?.flushNow()
+                }
+                state.withLock { $0.pendingFlush = task }
+            }
+        }
+
+        /// Writes current entries to disk immediately (used by tests and debounced flush). Derived, rebuildable cache (AGENTS §4.1).
+        func flushNow() {
+            let snapshot: [String: Date] = state.withLock { state in
+                state.pendingFlush = nil
+                return state.entries
+            }
+            guard let file else { return }
+            Self.save(snapshot, to: file)
+        }
+
+        func clear() {
+            let task = state.withLock { state -> Task<Void, Never>? in
+                state.entries.removeAll()
+                defer { state.pendingFlush = nil }
+                return state.pendingFlush
+            }
+            task?.cancel()
+            if let file { try? FileManager.default.removeItem(at: file) }
+        }
+
+        private static func load(from file: URL) -> [String: Date]? {
+            guard let data = try? Data(contentsOf: file),
+                  let raw = try? JSONDecoder().decode([String: Int64].self, from: data) else { return nil }
+            return raw.mapValues { Date(timeIntervalSince1970: Double($0) / 1000) }
+        }
+
+        private static func save(_ entries: [String: Date], to file: URL) {
+            let raw = entries.mapValues { Int64(($0.timeIntervalSince1970 * 1000).rounded()) }
+            guard let data = try? JSONEncoder().encode(raw) else { return }
+            let dir = file.deletingLastPathComponent()
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try? data.write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            var target = file
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try? target.setResourceValues(values)
+        }
     }
 
     private let session: MatrixSessionPort
     private let hasRecords: @Sendable (RoomID) -> Bool
     private let current = Mutex<Subscription?>(nil)
     private let leftObservers = Mutex<[UUID: AsyncStream<Set<RoomID>>.Continuation]>([:])
-    /// Instance-scoped, bounded event id → time cache for resolved receipt targets (R-27); cleared on stream end.
-    private let eventTimes = EventTimeCache()
+    /// Derived, rebuildable event id → origin_server_ts cache for resolved receipt targets (GA-28, M19-7); persisted across launches and cleared on sign-out.
+    private let eventTimes: EventTimeCache
 
-    public init(session: MatrixSessionPort, pageSize: UInt32 = 50, hasRecords: @escaping @Sendable (RoomID) -> Bool = { _ in false }) {
+    public init(
+        session: MatrixSessionPort,
+        pageSize: UInt32 = 50,
+        hasRecords: @escaping @Sendable (RoomID) -> Bool = { _ in false },
+        eventTimeCacheFile: URL? = nil
+    ) {
         self.session = session
         self.hasRecords = hasRecords
+        self.eventTimes = EventTimeCache(file: eventTimeCacheFile)
     }
+
+    /// Drops cached receipt event timestamps from memory and disk (called on sign-out / account switch).
+    public func clearEventTimeCache() { eventTimes.clear() }
 
     public func updates(filter: RoomListFilter) -> AsyncStream<RoomListUpdate> {
         let (output, continuation) = AsyncStream<RoomListUpdate>.makeStream(bufferingPolicy: .unbounded)
@@ -102,7 +173,14 @@ public final class MatrixRoomListPort: RoomListPort {
                         list.append(summary)
                     }
                     list.sort(by: Self.order)
-                    if list != last {
+                    if let previous = last {
+                        // Only what changed (M19-3): a changed room is one `set`, a moved one a remove and an insert.
+                        let diffs = RoomListDiffer.diffs(from: previous, to: list)
+                        if !diffs.isEmpty {
+                            last = list
+                            continuation.yield(diffs.count == 1 ? .diff(diffs[0]) : .diffs(diffs))
+                        }
+                    } else {
                         last = list
                         continuation.yield(.diff(.reset(list)))
                     }
@@ -111,8 +189,8 @@ public final class MatrixRoomListPort: RoomListPort {
                 // Subscribed before the first load: a response that arrives while it runs is buffered, not lost (its rooms
                 // would keep their old counts until something else changed in them).
                 let changes = await session.syncChanges()
-                try await publish(changed: nil, forceAll: true)
-                enum Event: Sendable { case sync(Set<String>), refresh }
+                var lastPresent = try await publish(changed: nil, forceAll: true)
+                enum Event: Sendable { case sync(changed: Set<String>, isCatchUp: Bool), refresh }
                 // Sync responses and filter changes feed one loop, so the list is rebuilt one change at a time.
                 let (events, eventContinuation) = AsyncStream<Event>.makeStream(bufferingPolicy: .unbounded)
                 let forward = Task { [weak self] in
@@ -121,18 +199,24 @@ public final class MatrixRoomListPort: RoomListPort {
                             let leftIDs = Set(change.left.compactMap { try? RoomID($0) })
                             self?.publishLeft(leftIDs)
                         }
-                        eventContinuation.yield(.sync(change.joined.union(change.invited).union(change.left)))
+                        eventContinuation.yield(.sync(changed: change.joined.union(change.invited).union(change.left), isCatchUp: change.isCatchUp))
                     }
                 }
                 let refreshes = Task { for await _ in refresh { eventContinuation.yield(.refresh) } }
                 defer { forward.cancel(); refreshes.cancel(); eventContinuation.finish() }
                 for await event in events {
                     switch event {
-                    case .sync(let changed):
-                        let present = try await publish(changed: changed)
-                        continuation.yield(.synced(present))
+                    case .sync(let changed, let isCatchUp):
+                        // An idle long-poll with no room changes after catch-up needs no 1,000-room FFI scan or diff (M19-7).
+                        if changed.isEmpty && !isCatchUp && last != nil {
+                            continuation.yield(.synced(lastPresent))
+                        } else {
+                            let present = try await publish(changed: changed)
+                            lastPresent = present
+                            continuation.yield(.synced(present))
+                        }
                     case .refresh:
-                        try await publish(changed: nil, forceAll: true)
+                        lastPresent = try await publish(changed: nil, forceAll: true)
                     }
                 }
             } catch {
@@ -144,7 +228,6 @@ public final class MatrixRoomListPort: RoomListPort {
         continuation.onTermination = { [weak self] _ in
             task.cancel()
             refreshContinuation.finish()
-            self?.eventTimes.clear()
             self?.current.withLock { if $0?.id == id { $0 = nil } }
         }
         return output

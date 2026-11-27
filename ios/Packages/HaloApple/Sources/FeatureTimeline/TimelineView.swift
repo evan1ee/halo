@@ -16,6 +16,12 @@ public struct TimelineView: View {
     private let onOpenThread: (@MainActor (EventID) -> Void)?
     private let onSaveAsSticker: (@MainActor (Data, String) -> Void)?
     private let onFirstRows: (@MainActor () -> Void)?
+    private let onRowsDrawn: (@MainActor () -> Void)?
+    /// How long the landing check waits for the first layout, and between its two looks at the newest row (M19-4: both were 80 and
+    /// 60 ms, about the whole of the ~150 ms between the push and the room appearing). Each is about a frame or two: the list has
+    /// already opened at the bottom (`defaultScrollAnchor`), so the second look only guards against row heights settling.
+    static let firstLayoutWait = 16
+    static let confirmationGap = 32
     /// Keyboard vs. Halo's panels under the composer (COMPOSER_PANELS §3, D97).
     @State private var input = ComposerInputController()
     @State private var choosingFile = false
@@ -34,9 +40,15 @@ public struct TimelineView: View {
     @State private var bottomFollow = BottomFollowState()
     /// In-flight programmatic jump-to-bottom task, cancelled on user touch or conflicting jump.
     @State private var jumpToBottomTask: Task<Void, Never>?
+    /// Short follow-up re-anchoring task after history prepends so lazy row height layout doesn't jump to the top (M19-9, D-MOT-3).
+    @State private var prependAnchorTask: Task<Void, Never>?
     /// The list is drawn once it has been placed at the newest row (a frame or two), so it never shows its top first and then
     /// jumps. No spinner: a short fallback timer shows it anyway if that never happens.
     @State private var listPlaced = false
+    /// A short list whose messages are already there when it first appears is drawn at once (M19-9, D-MOT-1): `defaultScrollAnchor`
+    /// opens it at the bottom and there are too few rows for their estimated heights to move it. Kept once set.
+    @State private var revealedAtOnce = false
+    static let immediateRevealRows = 40
     /// The list is being scrolled (a drag, a fling, an animated scroll): it is not following the newest row then.
     @State private var scrollMoving = false
     /// The user's finger is actively dragging the list (never re-anchor mid-drag).
@@ -56,6 +68,7 @@ public struct TimelineView: View {
     ///   feature never imports another feature). Without it the panel has no Stickers tab.
     /// - Parameter gifPanel: the GIFs tab (KLIPY, D98); without it the panel has no GIFs tab.
     /// - Parameter onFirstRows: the rows are visible at the newest message for the first time (`room-open` signpost).
+    /// - Parameter onRowsDrawn: the list draws rows for the first time, before its landing is confirmed (`room-first-rows` signpost).
     /// - Parameter onOpenThread: opens a focused thread sheet for the chosen root event (M10 Threads).
     public init(
         model: TimelineViewModel,
@@ -63,7 +76,8 @@ public struct TimelineView: View {
         gifPanel: (@MainActor () -> AnyView)? = nil,
         onOpenThread: (@MainActor (EventID) -> Void)? = nil,
         onSaveAsSticker: (@MainActor (Data, String) -> Void)? = nil,
-        onFirstRows: (@MainActor () -> Void)? = nil
+        onFirstRows: (@MainActor () -> Void)? = nil,
+        onRowsDrawn: (@MainActor () -> Void)? = nil
     ) {
         self.model = model
         self.stickerPanel = stickerPanel
@@ -71,10 +85,16 @@ public struct TimelineView: View {
         self.onOpenThread = onOpenThread
         self.onSaveAsSticker = onSaveAsSticker
         self.onFirstRows = onFirstRows
+        self.onRowsDrawn = onRowsDrawn
     }
 
     public var body: some View {
         bodyContent.modifier(TimelineDropModifier(model: model))
+    }
+
+    /// The room has what it lands on and few enough rows to show them at once (see `revealedAtOnce`).
+    private func startsPlaced(_ rows: [TimelineRow]) -> Bool {
+        model.landed && !model.isFocused && !rows.isEmpty && rows.count <= Self.immediateRevealRows
     }
 
     private var bodyContent: some View {
@@ -160,7 +180,11 @@ public struct TimelineView: View {
                 .scrollDismissesKeyboard(.never)
                 // A tap on the conversation closes the keyboard or panel; the gesture only exists while one is open.
                 .simultaneousGesture(TapGesture().onEnded { input.dismiss() }, including: input.state.mode == .idle && input.state.displayedPanel == nil ? .subviews : .all)
-                .opacity(listPlaced || rows.isEmpty ? 1 : 0)
+                .opacity(listPlaced || revealedAtOnce || rows.isEmpty || startsPlaced(rows) ? 1 : 0)
+                .onChange(of: !rows.isEmpty && (listPlaced || revealedAtOnce || startsPlaced(rows)), initial: true) { _, drawn in
+                    if drawn { onRowsDrawn?() }
+                }
+                .onChange(of: startsPlaced(rows), initial: true) { _, now in if now { revealedAtOnce = true } }
                 .onChange(of: listPlaced && !rows.isEmpty, initial: true) { _, visible in if visible { onFirstRows?() } }
                 .task {
                     try? await Task.sleep(for: .milliseconds(600))
@@ -217,6 +241,8 @@ public struct TimelineView: View {
                     if phase == .interacting {
                         jumpToBottomTask?.cancel()
                         jumpToBottomTask = nil
+                        prependAnchorTask?.cancel()
+                        prependAnchorTask = nil
                         bottomFollow.onUserInteractionStarted(atBottom: bottomVisible)
                         if !landed {
                             landed = true
@@ -225,7 +251,7 @@ public struct TimelineView: View {
                         }
                     }
                 }
-                .onChange(of: rows.first?.id) { oldFirst, newFirst in
+                .onChange(of: PrependedAnchor.firstStableID(in: rows)) { oldFirst, newFirst in
                     if let anchor = PrependedAnchor.anchor(
                         oldFirst: oldFirst,
                         newFirst: newFirst,
@@ -234,7 +260,27 @@ public struct TimelineView: View {
                         pinnedToBottom: bottomFollow.pinnedToBottom,
                         interacting: scrollInteracting
                     ) {
-                        proxy.scrollTo(anchor, anchor: .top)
+                        prependAnchorTask?.cancel()
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) {
+                            proxy.scrollTo(anchor, anchor: .top)
+                        }
+                        prependAnchorTask = Task { @MainActor in
+                            for delay in [0, 16, 48] {
+                                if delay == 0 {
+                                    await Task.yield()
+                                } else {
+                                    try? await Task.sleep(for: .milliseconds(delay))
+                                }
+                                guard !Task.isCancelled, !scrollInteracting else { return }
+                                var followUp = Transaction()
+                                followUp.disablesAnimations = true
+                                withTransaction(followUp) {
+                                    proxy.scrollTo(anchor, anchor: .top)
+                                }
+                            }
+                        }
                     }
                 }
                 .accessibilityIdentifier("timeline")
@@ -243,7 +289,7 @@ public struct TimelineView: View {
                 // `.task(id:)` also runs for a value that was already set when this list first appeared (onChange wouldn't).
                 .task(id: model.landingRow) {
                     guard let landing = model.landingRow else { return }
-                    try? await Task.sleep(for: .milliseconds(80))  // let the list lay the rows out first
+                    try? await Task.sleep(for: .milliseconds(Self.firstLayoutWait))  // let the list lay the rows out first
                     // A lazy list estimates the height of rows it hasn't laid out, so one jump to a row far below the visible
                     // part lands short; jumping again after each layout converges (at most ~2 s).
                     var confirmed = 0
@@ -254,7 +300,7 @@ public struct TimelineView: View {
                         if model.landingIsUnread ? markerVisible : bottomVisible {
                             confirmed += 1
                             if confirmed >= 2 { break }
-                            try? await Task.sleep(for: .milliseconds(60))
+                            try? await Task.sleep(for: .milliseconds(Self.confirmationGap))
                             continue
                         }
                         confirmed = 0
@@ -286,6 +332,8 @@ public struct TimelineView: View {
                     guard let target else { return }
                     jumpToBottomTask?.cancel()
                     jumpToBottomTask = nil
+                    prependAnchorTask?.cancel()
+                    prependAnchorTask = nil
                     landed = true
                     listPlaced = true
                     bottomFollow.detach()  // a reply/pin jump leaves the bottom: new rows must not pull the reader back down
@@ -506,11 +554,15 @@ public struct TimelineView: View {
         .sheet(isPresented: Binding(get: { model.reactionTarget != nil }, set: { if !$0 { model.cancelReactionPicker() } })) {
             ReactionPicker(model: model).presentationDetents([.medium])
         }
+        // A model started ahead of this screen (M19-9) becomes an opened room now; for any other model this does nothing.
+        .onAppear { model.present() }
         .task { await model.start() }
         .onChange(of: scenePhase, initial: true) { _, phase in model.setActive(phase == .active) }
         .onDisappear {
             jumpToBottomTask?.cancel()
             jumpToBottomTask = nil
+            prependAnchorTask?.cancel()
+            prependAnchorTask = nil
             model.setActive(false)
             Task { await model.stop() }
         }
@@ -526,9 +578,9 @@ public struct TimelineView: View {
         return PagedPhotoViewer(
             items: items,
             initialID: initial.id,
-            loadImageData: { item in
+            loadImageFile: { item in
                 guard let target = byID[item.id] else { return nil }
-                return await model.fullImageData(for: target.image)
+                return await model.fullImageFile(for: target.image, filename: target.caption ?? "photo.jpg")
             },
             exportItem: { item in
                 guard let target = byID[item.id] else { return nil }

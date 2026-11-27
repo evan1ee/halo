@@ -13,6 +13,16 @@ public final class CurrentSearchPort: SearchPort {
         guard let port = current.withLock({ $0 }) else { throw .storage(.unavailable) }
         return try await port.search(query, after: cursor)
     }
+
+    public func searchLocal(_ query: SearchQuery, after cursor: SearchCursor?) async throws(HaloError) -> SearchPage {
+        guard let port = current.withLock({ $0 }) else { throw .storage(.unavailable) }
+        return try await port.searchLocal(query, after: cursor)
+    }
+
+    public func recheck(_ hits: [MessageSearchHit]) async throws(HaloError) -> [String: SearchRecheck] {
+        guard let port = current.withLock({ $0 }) else { return [:] }
+        return try await port.recheck(hits)
+    }
 }
 
 /// Holds the first sync of a session back until search listens, but never for long: what it misses is read from the server later.

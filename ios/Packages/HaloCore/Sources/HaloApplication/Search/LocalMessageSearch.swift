@@ -2,13 +2,15 @@ import Foundation
 import HaloDomain
 import HaloFoundation
 
-/// `SearchPort` over Halo's own index (ADR-0024). Every page is checked against the SDK before it is shown (MESSAGE_SEARCH FR-11): deleted
-/// messages leave the index and the page, edited ones show their new text. Ignored people and rooms that aren't joined are left out.
+/// `SearchPort` over Halo's own index (ADR-0024). Local index hits are returned immediately by `searchLocal` for instant display, while
+/// `recheck` (and full `search`) verify stale hits against the server (`GET /event`, MESSAGE_SEARCH FR-11): deleted messages leave the
+/// index and the page, edited ones show their new text. Ignored people and rooms that aren't joined are left out.
 public actor LocalMessageSearch: SearchPort {
     public static let pageSize = 25
     /// A slow or missing network doesn't hold results back longer than this; what wasn't checked by then is shown as the index has it.
     public static let recheckTimeout: Duration = .milliseconds(1_200)
     static let concurrentRechecks = 6
+    private static let maxTrackedRechecks = 2_048
 
     private let index: any LocalSearchIndexPort
     private let source: any MessageIndexSourcePort
@@ -16,6 +18,7 @@ public actor LocalMessageSearch: SearchPort {
     private let ignored: @Sendable () async -> Set<UserID>
     private let now: @Sendable () -> Date
     private let sleep: SearchCoordinator.Sleep
+    private var pendingRechecks: Set<Key> = []
 
     public init(
         index: any LocalSearchIndexPort, source: any MessageIndexSourcePort, joined: @escaping @Sendable () async -> Set<RoomID>,
@@ -28,6 +31,59 @@ public actor LocalMessageSearch: SearchPort {
         self.ignored = ignored
         self.now = now
         self.sleep = sleep
+    }
+
+    public func searchLocal(_ query: SearchQuery, after cursor: SearchCursor?) async throws(HaloError) -> SearchPage {
+        guard let match = SearchTokeniser.matchExpression(query.text) else { return SearchPage(hits: [], next: nil) }
+        let hidden = await ignored(), rooms = await joined()
+        let due = now().addingTimeInterval(-SearchIndexPolicy.recheckInterval)
+        if pendingRechecks.count > Self.maxTrackedRechecks { pendingRechecks.removeAll(keepingCapacity: true) }
+        var cursor = cursor
+        for _ in 0..<10 {
+            if Task.isCancelled { throw .cancelled }
+            let found = try await index.hits(
+                match: match, room: query.room, kinds: query.filter.kinds, excluding: hidden, after: cursor, limit: Self.pageSize)
+            let next = found.count == Self.pageSize ? found.last?.cursor : nil
+            let visible = found.filter { rooms.contains($0.entry.room) }
+            for hit in visible {
+                let key = Key(room: hit.entry.room, event: hit.entry.event)
+                if hit.checkedAt < due {
+                    pendingRechecks.insert(key)
+                } else {
+                    pendingRechecks.remove(key)
+                }
+            }
+            let shown = visible.map { Self.makeHit($0.entry, content: $0.entry.content) }
+            if !shown.isEmpty || next == nil { return SearchPage(hits: shown, next: next) }
+            cursor = next
+        }
+        return SearchPage(hits: [], next: cursor)
+    }
+
+    public func recheck(_ hits: [MessageSearchHit]) async throws(HaloError) -> [String: SearchRecheck] {
+        if Task.isCancelled { throw .cancelled }
+        let dueEvents: [(RoomID, EventID)] = hits.compactMap { hit in
+            let key = Key(room: hit.roomID, event: hit.eventID)
+            guard pendingRechecks.contains(key) else { return nil }
+            return (hit.roomID, hit.eventID)
+        }
+        guard !dueEvents.isEmpty else { return [:] }
+        let results = await recheck(dueEvents)
+        if Task.isCancelled { throw .cancelled }
+        if !results.isEmpty {
+            for key in results.keys { pendingRechecks.remove(key) }
+            try? await index.record(results.map { ($0.key.room, $0.key.event, $0.value) })  // best-effort: the index repairs itself: the next pass redoes what is missing
+        }
+        var deltas: [String: SearchRecheck] = [:]
+        for (key, value) in results {
+            switch value {
+            case .gone, .edited:
+                deltas["\(key.room.rawValue)::\(key.event.rawValue)"] = value
+            case .unchanged, .unchecked:
+                break
+            }
+        }
+        return deltas
     }
 
     public func search(_ query: SearchQuery, after cursor: SearchCursor?) async throws(HaloError) -> SearchPage {
@@ -52,7 +108,10 @@ public actor LocalMessageSearch: SearchPort {
         let results = await recheck(found.filter { $0.checkedAt < due }.map { ($0.entry.room, $0.entry.event) })
         if Task.isCancelled { throw .cancelled }
         // Not shown any more either way; a failed write only means asking again.
-        if !results.isEmpty { try? await index.record(results.map { ($0.key.room, $0.key.event, $0.value) }) }  // best-effort: the index repairs itself: the next pass redoes what is missing
+        if !results.isEmpty {
+            for key in results.keys { pendingRechecks.remove(key) }
+            try? await index.record(results.map { ($0.key.room, $0.key.event, $0.value) })  // best-effort: the index repairs itself: the next pass redoes what is missing
+        }
         return found.compactMap { hit in
             let entry = hit.entry
             var content = entry.content
@@ -61,10 +120,15 @@ public actor LocalMessageSearch: SearchPort {
             case .edited(let new): content = new
             case .unchanged, .unchecked, nil: break
             }
-            return MessageSearchHit(
-                roomID: entry.room, eventID: entry.event, threadRoot: entry.threadRoot, senderID: entry.sender.rawValue, senderName: entry.senderName,
-                body: content.body, timestamp: entry.timestamp, kind: content.kind)
+            return Self.makeHit(entry, content: content)
         }
+    }
+
+    private static func makeHit(_ entry: SearchIndexEntry, content: SearchableContent) -> MessageSearchHit {
+        MessageSearchHit(
+            roomID: entry.room, eventID: entry.event, threadRoot: entry.threadRoot,
+            senderID: entry.sender.rawValue, senderName: entry.senderName,
+            body: content.body, timestamp: entry.timestamp, kind: content.kind, attachment: content.attachment)
     }
 
     private struct Key: Hashable, Sendable {
@@ -73,7 +137,7 @@ public actor LocalMessageSearch: SearchPort {
     }
 
     /// The answers that arrive in time; errors count as no answer. Not a task group: that would wait for calls into the SDK that can't
-    /// be cancelled (it retries for a long time while offline).
+    /// be cancelled (it retries for a long time while offline). Cancelling the caller finishes `answers` immediately and cancels all lanes.
     private func recheck(_ events: [(RoomID, EventID)]) async -> [Key: SearchRecheck] {
         guard !events.isEmpty else { return [:] }
         let source = source, wait = sleep
@@ -94,12 +158,16 @@ public actor LocalMessageSearch: SearchPort {
         defer { for task in lanes + [deadline] { task.cancel() } }
         var results: [Key: SearchRecheck] = [:]
         var answered = 0
-        for await answer in answers {
-            if answer.result != .unchecked { results[answer.key] = answer.result }
-            answered += 1
-            if answered == keys.count { break }
+        await withTaskCancellationHandler {
+            for await answer in answers {
+                if answer.result != .unchecked { results[answer.key] = answer.result }
+                answered += 1
+                if answered == keys.count { break }
+            }
+        } onCancel: {
+            continuation.finish()
         }
-        return results
+        return Task.isCancelled ? [:] : results
     }
 
     private static func answer(_ source: any MessageIndexSourcePort, _ key: Key) async -> SearchRecheck {

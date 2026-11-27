@@ -44,3 +44,9 @@ custom_rules:
       - keyword
     message: "A failure that changes nothing the person sees may be dropped, but say why: end the line with `// best-effort: <reason>`. Otherwise report it (HaloErrorCopy) (AGENTS.md §10, M18-8, AC-REL-4)."
     severity: error
+  image_pipeline:
+    name: "Images are decoded by ImagePipeline"
+    regex: 'UIImage\(data:(?![^\n]*//\s*decode:)'
+    excluded: ".*Tests/.*"
+    message: "Decode with ImagePipeline / DecodedImage (off the main thread, sized, cached; M19-1, NFR-12/13). A decode that is off the main thread by design ends with `// decode: <reason>`."
+    severity: error

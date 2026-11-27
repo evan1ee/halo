@@ -1,3 +1,4 @@
+import Dispatch
 import Foundation
 import GRDB
 import HaloDomain
@@ -9,7 +10,7 @@ import Synchronization
 /// While the phone is locked the file can't be opened; writes then go, encrypted, to the holding file and move over at the next opening.
 public final class SearchIndexStore: LocalSearchIndexPort {
     /// Any other version is deleted (MIGRATIONS §1b).
-    static let schemaVersion = 1
+    static let schemaVersion = 2
 
     private struct State {
         var pool: DatabasePool?
@@ -109,7 +110,9 @@ public final class SearchIndexStore: LocalSearchIndexPort {
     private func openFile() throws -> DatabasePool {
         var configuration = Configuration()
         configuration.label = "search-index"
-        configuration.qos = .utility
+        // Interactive search queries run on `.userInitiated` reader connections while background indexing writes stay on `.utility`.
+        configuration.qos = .userInitiated
+        configuration.writeTargetQueue = DispatchQueue(label: "one.mbm.halo.search-index.write", qos: .utility)
         configuration.busyMode = .timeout(5)
         configuration.prepareDatabase { db in
             try db.execute(sql: "PRAGMA synchronous = NORMAL")
@@ -134,7 +137,7 @@ public final class SearchIndexStore: LocalSearchIndexPort {
             CREATE TABLE sender (id INTEGER PRIMARY KEY, user_id TEXT NOT NULL UNIQUE, name TEXT);
             CREATE TABLE event (
               id INTEGER PRIMARY KEY, room INTEGER NOT NULL, sender INTEGER NOT NULL, event_id TEXT NOT NULL, thread_root TEXT,
-              ts INTEGER NOT NULL, kind INTEGER NOT NULL, body TEXT NOT NULL, searchable TEXT NOT NULL, checked_at INTEGER NOT NULL,
+              ts INTEGER NOT NULL, kind INTEGER NOT NULL, body TEXT NOT NULL, attachment TEXT, searchable TEXT NOT NULL, checked_at INTEGER NOT NULL,
               UNIQUE (room, event_id));
             CREATE INDEX event_room ON event(room, ts DESC);
             CREATE INDEX event_kind ON event(kind, ts DESC);
@@ -152,7 +155,7 @@ public final class SearchIndexStore: LocalSearchIndexPort {
         // row out of the full-text index costs 3 ms (secure-delete), so it only happens when the words change.
         try db.execute(sql: """
             CREATE VIRTUAL TABLE event_fts USING fts5(
-              searchable, content='event', content_rowid='id', prefix='2 3', tokenize="unicode61 remove_diacritics 0 categories 'L* N* M* Co'");
+              searchable, content='event', content_rowid='id', prefix='1 2 3', tokenize="unicode61 remove_diacritics 0 categories 'L* N* M* Co'");
             INSERT INTO event_fts(event_fts, rank) VALUES ('secure-delete', 1);
             CREATE TRIGGER event_added AFTER INSERT ON event BEGIN
               INSERT INTO event_fts(rowid, searchable) VALUES (new.id, new.searchable);
@@ -293,10 +296,10 @@ public final class SearchIndexStore: LocalSearchIndexPort {
             guard let id = try roomRow(room, create: false, db) else { return }
             try db.execute(
                 sql: """
-                    UPDATE event SET body = ?, kind = ?, checked_at = ?, searchable = ? || ' ' || coalesce((SELECT name FROM sender WHERE id = event.sender), '')
+                    UPDATE event SET body = ?, kind = ?, attachment = ?, checked_at = ?, searchable = ? || ' ' || coalesce((SELECT name FROM sender WHERE id = event.sender), '')
                     WHERE room = ? AND event_id = ? AND sender = (SELECT id FROM sender WHERE user_id = ?)
                     """,
-                arguments: [content.body, content.kind.rawValue, stamp, SearchTokeniser.indexText([content.body] + content.extra), id, target.rawValue, sender.rawValue])
+                arguments: [content.body, content.kind.rawValue, encodeAttachment(content.attachment), stamp, SearchTokeniser.indexText([content.body] + content.extra), id, target.rawValue, sender.rawValue])
         case .undecryptable(let room, let event): try pend(event, room: try roomRow(room, db), stamp: stamp, db)
         case .removed(let room, let event):
             guard let id = try roomRow(room, create: false, db) else { return }
@@ -349,11 +352,11 @@ public final class SearchIndexStore: LocalSearchIndexPort {
         // A wrong clock must not put a message on top forever.
         let timestamp = min(milliseconds(entry.timestamp), stamp)
         try db.cachedStatement(sql: """
-            INSERT INTO event (room, sender, event_id, thread_root, ts, kind, body, searchable, checked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO event (room, sender, event_id, thread_root, ts, kind, body, attachment, searchable, checked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (room, event_id) DO UPDATE SET
-              thread_root = excluded.thread_root, ts = excluded.ts, kind = excluded.kind, body = excluded.body, searchable = excluded.searchable, checked_at = excluded.checked_at
+              thread_root = excluded.thread_root, ts = excluded.ts, kind = excluded.kind, body = excluded.body, attachment = excluded.attachment, searchable = excluded.searchable, checked_at = excluded.checked_at
             """).execute(arguments: [
-                room, sender, entry.event.rawValue, entry.threadRoot?.rawValue, timestamp, entry.content.kind.rawValue, entry.content.body, entry.indexText, stamp,
+                room, sender, entry.event.rawValue, entry.threadRoot?.rawValue, timestamp, entry.content.kind.rawValue, entry.content.body, encodeAttachment(entry.content.attachment), entry.indexText, stamp,
             ])
         try db.cachedStatement(sql: "DELETE FROM pending WHERE room = ? AND event_id = ?").execute(arguments: [room, entry.event.rawValue])
     }
@@ -400,6 +403,14 @@ public final class SearchIndexStore: LocalSearchIndexPort {
 
     private static func milliseconds(_ date: Date) -> Int64 { Int64((date.timeIntervalSince1970 * 1000).rounded()) }
     private static func date(_ milliseconds: Int64) -> Date { Date(timeIntervalSince1970: Double(milliseconds) / 1000) }
+    private static func encodeAttachment(_ attachment: SearchAttachment?) -> String? {
+        guard let attachment, let data = try? JSONEncoder().encode(attachment) else { return nil }
+        return String(decoding: data, as: UTF8.self)
+    }
+    private static func decodeAttachment(_ json: String?) -> SearchAttachment? {
+        guard let json, !json.isEmpty else { return nil }
+        return try? JSONDecoder().decode(SearchAttachment.self, from: Data(json.utf8))
+    }
 
     public func record(_ rechecks: [(room: RoomID, event: EventID, result: SearchRecheck)]) async throws(HaloError) {
         let pool = try await database()
@@ -415,10 +426,10 @@ public final class SearchIndexStore: LocalSearchIndexPort {
                     case .edited(let content):
                         try db.execute(
                             sql: """
-                                UPDATE event SET body = ?, kind = ?, checked_at = ?, searchable = ? || ' ' || coalesce((SELECT name FROM sender WHERE id = event.sender), '')
+                                UPDATE event SET body = ?, kind = ?, attachment = ?, checked_at = ?, searchable = ? || ' ' || coalesce((SELECT name FROM sender WHERE id = event.sender), '')
                                 WHERE room = ? AND event_id = ?
                                 """,
-                            arguments: [content.body, content.kind.rawValue, stamp, SearchTokeniser.indexText([content.body] + content.extra), room, recheck.event.rawValue])
+                            arguments: [content.body, content.kind.rawValue, Self.encodeAttachment(content.attachment), stamp, SearchTokeniser.indexText([content.body] + content.extra), room, recheck.event.rawValue])
                     case .gone:
                         try db.execute(sql: "DELETE FROM event WHERE room = ? AND event_id = ?", arguments: [room, recheck.event.rawValue])
                     }
@@ -443,40 +454,55 @@ public final class SearchIndexStore: LocalSearchIndexPort {
 
     public func hits(match: String, room: RoomID?, kinds: Set<SearchKind>, excluding: Set<UserID>, after cursor: SearchCursor?, limit: Int) async throws(HaloError) -> [SearchIndexHit] {
         let pool = try await database()
-        var sql = """
-            SELECT e.id, r.room_id, s.user_id, s.name, e.event_id, e.thread_root, e.ts, e.kind, e.body, e.checked_at
-            FROM event_fts f JOIN event e ON e.id = f.rowid JOIN room r ON r.id = e.room JOIN sender s ON s.id = e.sender
-            WHERE event_fts MATCH ?
-            """
+        // Deferred join: filter, sort and limit on row IDs first so `room`, `sender` and message bodies are read only for the `limit` winning rows.
+        var filterSQL = "WHERE event_fts MATCH ?"
         var arguments: [(any DatabaseValueConvertible)?] = [match]
         if let room {
-            sql += " AND r.room_id = ?"
+            filterSQL += " AND e.room = (SELECT id FROM room WHERE room_id = ?)"
             arguments.append(room.rawValue)
         }
         if kinds.count < SearchKind.allCases.count {
-            sql += " AND e.kind IN (\(kinds.map { String($0.rawValue) }.sorted().joined(separator: ",")))"
+            filterSQL += " AND e.kind IN (\(kinds.map { String($0.rawValue) }.sorted().joined(separator: ",")))"
         }
         if !excluding.isEmpty {
-            sql += " AND s.user_id NOT IN (\(databaseQuestionMarks(count: excluding.count)))"
+            filterSQL += " AND e.sender NOT IN (SELECT id FROM sender WHERE user_id IN (\(databaseQuestionMarks(count: excluding.count))))"
             for user in excluding { arguments.append(user.rawValue) }
         }
         if let cursor {
-            sql += " AND (e.ts, e.id) < (?, ?)"
+            filterSQL += " AND (e.ts, e.id) < (?, ?)"
             arguments.append(cursor.timestamp)
             arguments.append(cursor.row)
         }
-        sql += " ORDER BY e.ts DESC, e.id DESC LIMIT ?"
         arguments.append(limit)
-        let statement = sql, values = StatementArguments(arguments)
+        let statement = """
+            WITH matched AS (
+                SELECT e.id
+                FROM event_fts f JOIN event e ON e.id = f.rowid
+                \(filterSQL)
+                ORDER BY e.ts DESC, e.id DESC
+                LIMIT ?
+            )
+            SELECT e.id, r.room_id, s.user_id, s.name, e.event_id, e.thread_root, e.ts, e.kind, e.body, e.attachment, e.checked_at
+            FROM matched m
+            JOIN event e ON e.id = m.id
+            JOIN room r ON r.id = e.room
+            JOIN sender s ON s.id = e.sender
+            ORDER BY e.ts DESC, e.id DESC
+            """
+        let values = StatementArguments(arguments)
         do {
             return try await pool.read { db in
                 try Row.fetchAll(db, sql: statement, arguments: values).compactMap { row -> SearchIndexHit? in
                     guard let room = try? RoomID(row["room_id"]), let event = try? EventID(row["event_id"]), let sender = try? UserID(row["user_id"]) else { return nil }
                     let thread: String? = row["thread_root"]
+                    let attachmentJSON: String? = row["attachment"]
                     return SearchIndexHit(
                         entry: SearchIndexEntry(
                             room: room, event: event, sender: sender, senderName: row["name"], threadRoot: thread.flatMap { try? EventID($0) }, timestamp: Self.date(row["ts"]),
-                            content: SearchableContent(kind: SearchKind(rawValue: row["kind"]) ?? .message, body: row["body"])),
+                            content: SearchableContent(
+                                kind: SearchKind(rawValue: row["kind"]) ?? .message,
+                                body: row["body"],
+                                attachment: Self.decodeAttachment(attachmentJSON))),
                         cursor: SearchCursor(timestamp: row["ts"], row: row["id"]), checkedAt: Self.date(row["checked_at"]))
                 }
             }

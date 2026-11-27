@@ -6,7 +6,7 @@
 - The SDK's media store caches downloaded media **[ASSUMPTION V-MEDIA-1: cache policy configurable via `set_media_retention_policy` (method exists, F-FFI-4)]**.
 - Decoding: ImageIO (`CGImageSource`) off the main thread, downsampled to the display size; animated WebP/GIF/APNG via `CGAnimateImageAtURLWithBlock` / frame extraction **[ASSUMPTION V-APPLE-1: ImageIO decodes animated GIF, APNG and WebP on iOS 26]**.
 - Memory: an in-memory LRU of decoded thumbnails (cap 64 MB), evicted on memory warnings.
-- **Status (2026-11-25): the two lines above aren't met.** Thumbnails are kept as encoded bytes (48 MB, `TimelineThumbnailMemory`), decoded with `UIImage(data:)` on the main thread in several view bodies, and nothing reacts to memory warnings; full-size content is loaded as one `Data`. ROADMAP M19-1, M19-5.
+- **Status (2026-11-27, M19-1 & M19-5):** built. `ImagePipeline` decodes and downsamples off the main thread via ImageIO (from `Data` or directly from file URLs) into a 64 MB cost-capped `NSCache` evicted on memory warnings; full-size viewer photos, file/video opens, drag-out and gallery exports stream via `MediaPort.file` (`get_media_file`, `useCache: true`), and own photos upload a 600 px thumbnail served from the SDK's encrypted media store across restarts without a network request. Open: 100 MB video memory measurement on a physical iPhone 📱.
 
 ## 2. Upload
 - Images: `Timeline.send_image(...)` with progress (`MediaUploadProgress`) **[VERIFIED F-FFI-8, F-FFI-22]**; strip location EXIF by default; convert HEIC → JPEG for compatibility **[DECISION D56]**; max dimension 4096 px, quality 0.85.

@@ -25,7 +25,7 @@ public enum StickerImage {
 
     private static func frames(_ data: Data, animated: Bool) -> UIImage? {
         guard animated, let source = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(source) > 1 else {
-            return UIImage(data: data)
+            return UIImage(data: data)  // decode: callers run this off the main thread and keep the result
         }
         var frames: [UIImage] = []
         var duration = 0.0
@@ -34,7 +34,7 @@ public enum StickerImage {
             frames.append(UIImage(cgImage: frame))
             duration += delay(source, index)
         }
-        guard frames.count > 1 else { return UIImage(data: data) }
+        guard frames.count > 1 else { return UIImage(data: data) }  // decode: same
         return UIImage.animatedImage(with: frames, duration: max(duration, 0.1))
     }
 

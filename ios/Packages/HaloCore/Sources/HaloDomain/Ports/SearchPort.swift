@@ -11,12 +11,13 @@ public struct MessageSearchHit: Sendable, Equatable, Identifiable {
     public let body: String
     public let timestamp: Date
     public let kind: SearchKind
+    public let attachment: SearchAttachment?
 
     public var id: String { "\(roomID.rawValue)::\(eventID.rawValue)" }
 
     public init(
         roomID: RoomID, eventID: EventID, threadRoot: EventID? = nil, senderID: String, senderName: String?,
-        body: String, timestamp: Date, kind: SearchKind = .message
+        body: String, timestamp: Date, kind: SearchKind = .message, attachment: SearchAttachment? = nil
     ) {
         self.roomID = roomID
         self.eventID = eventID
@@ -26,6 +27,7 @@ public struct MessageSearchHit: Sendable, Equatable, Identifiable {
         self.body = body
         self.timestamp = timestamp
         self.kind = kind
+        self.attachment = attachment
     }
 }
 
@@ -46,6 +48,22 @@ public struct SearchPage: Sendable, Equatable {
 public protocol SearchPort: Sendable {
     /// `query.text` without a searchable word gives an empty page. Throws `.storage(.unavailable)` while the index can't be read.
     func search(_ query: SearchQuery, after cursor: SearchCursor?) async throws(HaloError) -> SearchPage
+
+    /// Immediate results from the local on-device index without waiting on remote server verification.
+    func searchLocal(_ query: SearchQuery, after cursor: SearchCursor?) async throws(HaloError) -> SearchPage
+
+    /// Re-checks `hits` against the remote server in the background when due, updating the index and returning hits whose state changed (`.edited` or `.gone`), keyed by `MessageSearchHit.id`.
+    func recheck(_ hits: [MessageSearchHit]) async throws(HaloError) -> [String: SearchRecheck]
+}
+
+extension SearchPort {
+    public func searchLocal(_ query: SearchQuery, after cursor: SearchCursor?) async throws(HaloError) -> SearchPage {
+        try await search(query, after: cursor)
+    }
+
+    public func recheck(_ hits: [MessageSearchHit]) async throws(HaloError) -> [String: SearchRecheck] {
+        [:]
+    }
 }
 
 /// Halo's own full-text index of one account (D123, ADR-0024). Implemented by `HaloPersistence`; derived data, never truth.

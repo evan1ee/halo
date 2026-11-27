@@ -8,6 +8,7 @@ public struct RoomMediaGalleryView: View {
     @State private var filter: MediaFilter = .all
     @State private var exportingItemID: String?
     @State private var exportedURL: URL?
+    @State private var isVisible = true
 
     private enum MediaFilter: String, CaseIterable, Identifiable {
         case all = "All"
@@ -52,7 +53,7 @@ public struct RoomMediaGalleryView: View {
             Section {
                 ForEach(filteredItems) { item in
                     HStack(spacing: 12) {
-                        GalleryThumbnail(item: item) { await model.avatarData($0) }
+                        GalleryThumbnail(item: item) { await model.galleryThumbnailData(for: item) }
                         VStack(alignment: .leading, spacing: 2) {
                             Text(item.attachment.body).font(.subheadline).lineLimit(1)
                             HStack(spacing: 6) {
@@ -68,7 +69,15 @@ public struct RoomMediaGalleryView: View {
                             Button {
                                 exportingItemID = item.id
                                 Task {
-                                    exportedURL = await model.exportMediaFile(item)
+                                    let nextURL = await model.exportMediaFile(item)
+                                    if !isVisible {
+                                        if let nextURL { PagedPhotoViewer.removeTemporaryFolder(of: nextURL) }
+                                    } else {
+                                        if let previous = exportedURL, previous != nextURL {
+                                            PagedPhotoViewer.removeTemporaryFolder(of: previous)
+                                        }
+                                        exportedURL = nextURL
+                                    }
                                     exportingItemID = nil
                                 }
                             } label: {
@@ -81,6 +90,24 @@ public struct RoomMediaGalleryView: View {
                             .buttonStyle(.borderless)
                             .accessibilityLabel("Export \(item.attachment.body)")
                         }
+                    }
+                }
+                if model.hasMoreGallery {
+                    HStack {
+                        Spacer()
+                        if model.isLoadingMoreGallery {
+                            ProgressView()
+                                .accessibilityLabel("Loading more media")
+                        } else {
+                            Button("Load more") {
+                                Task { await model.loadMoreGallery() }
+                            }
+                            .accessibilityIdentifier("room-gallery-load-more")
+                        }
+                        Spacer()
+                    }
+                    .onAppear {
+                        Task { await model.loadMoreGallery() }
                     }
                 }
             }
@@ -101,17 +128,28 @@ public struct RoomMediaGalleryView: View {
         .refreshable {
             await model.loadGallery()
         }
+        .onAppear {
+            isVisible = true
+        }
+        .onDisappear {
+            isVisible = false
+            if let url = exportedURL {
+                PagedPhotoViewer.removeTemporaryFolder(of: url)
+                exportedURL = nil
+            }
+            Task { await model.closeGallery() }
+        }
     }
 }
 
 private struct GalleryThumbnail: View {
     let item: RoomMediaItem
-    let load: @MainActor (MediaRef) async -> Data?
+    let load: @MainActor () async -> Data?
     @State private var data: Data?
 
     private var previewRef: MediaRef? {
         switch item.attachment.kind {
-        case .image: return item.attachment.source
+        case .image: return item.attachment.thumbnail ?? item.attachment.source
         case .video: return item.attachment.thumbnail
         case .audio, .file: return nil
         }
@@ -129,23 +167,21 @@ private struct GalleryThumbnail: View {
     var body: some View {
         Group {
             #if canImport(UIKit)
-            if let data, let image = UIImage(data: data) {
-                Image(uiImage: image)
+            DecodedImage(data, maxPixel: ImagePipeline.Size.listRow) { image in
+                image
                     .resizable()
                     .scaledToFill()
                     .frame(width: 44, height: 44)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
-            } else {
-                placeholder
-            }
+            } placeholder: { placeholder }
             #else
             placeholder
             #endif
         }
         .task(id: previewRef) {
             data = nil
-            guard let previewRef else { return }
-            data = await load(previewRef)
+            guard previewRef != nil else { return }
+            data = await load()
         }
     }
 

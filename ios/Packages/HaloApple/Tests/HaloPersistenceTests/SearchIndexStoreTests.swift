@@ -49,6 +49,16 @@ struct SearchIndexStoreTests {
         #expect(try await find(store, "今天").first?.entry.threadRoot?.rawValue == "$root")
         #expect(ids(try await find(store, "cafe", room: roomA)) == ["$1"])
         #expect(ids(try await find(store, "cafe", excluding: [try UserID("@eve:x.org")])) == ["$1"])
+        let pic = SearchIndexEntry(
+            room: try RoomID(roomA), event: try EventID("$pic"), sender: try UserID("@bob:x.org"), senderName: "Bob", threadRoot: nil,
+            timestamp: Date(timeIntervalSince1970: 40),
+            content: SearchableContent(
+                kind: .media, body: "The only way", extra: ["shot.png"],
+                attachment: SearchAttachment(mediaKind: .image, filename: "shot.png", mimeType: "image/png", sizeBytes: 1_400_000, thumbnail: MediaRef(token: #"{"url":"mxc://x.org/t"}"#))))
+        try await store.apply(live(pic))
+        let foundPic = try #require(try await find(store, "only").first)
+        #expect(foundPic.entry.content.attachment?.subtitle == "PNG (1.4 MB)")
+        #expect(foundPic.entry.content.attachment?.thumbnail == MediaRef(token: #"{"url":"mxc://x.org/t"}"#))
     }
 
     @Test("no query is an error (AC-SRCH-7)", arguments: ["\"", "*", "a OR b", "NEAR(", "col:x", "-", "😀", "﷽", "x\" OR \"y", "ʰ", "ﾞ", "\u{0}", "²", "a AND", "{a b}", "^a", "a + b", "ඞ", "㍿", "\u{1E900}"])

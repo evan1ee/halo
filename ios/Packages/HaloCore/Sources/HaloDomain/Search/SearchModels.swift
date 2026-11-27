@@ -26,17 +26,146 @@ public enum SearchFilter: String, Sendable, CaseIterable, Codable {
     }
 }
 
+/// Attachment details shown inside a search result card (thumbnail, format and file size).
+public struct SearchAttachment: Sendable, Equatable, Codable {
+    public let mediaKind: MediaKind
+    public let filename: String?
+    public let mimeType: String?
+    public let sizeBytes: Int?
+    /// Thumbnail (or image) reference for inline preview; `nil` when none is available.
+    public let thumbnail: MediaRef?
+
+    public init(
+        mediaKind: MediaKind, filename: String? = nil, mimeType: String? = nil,
+        sizeBytes: Int? = nil, thumbnail: MediaRef? = nil
+    ) {
+        self.mediaKind = mediaKind
+        self.filename = filename
+        self.mimeType = mimeType
+        self.sizeBytes = sizeBytes
+        self.thumbnail = thumbnail
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case mediaKind, filename, mimeType, sizeBytes, thumbnailToken
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let rawKind = try container.decode(String.self, forKey: .mediaKind)
+        mediaKind = switch rawKind {
+        case "image": .image
+        case "video": .video
+        case "audio": .audio
+        default: .file
+        }
+        filename = try container.decodeIfPresent(String.self, forKey: .filename)
+        mimeType = try container.decodeIfPresent(String.self, forKey: .mimeType)
+        sizeBytes = try container.decodeIfPresent(Int.self, forKey: .sizeBytes)
+        thumbnail = try container.decodeIfPresent(String.self, forKey: .thumbnailToken).map(MediaRef.init(token:))
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        let rawKind: String = switch mediaKind {
+        case .image: "image"
+        case .video: "video"
+        case .audio: "audio"
+        case .file: "file"
+        }
+        try container.encode(rawKind, forKey: .mediaKind)
+        try container.encodeIfPresent(filename, forKey: .filename)
+        try container.encodeIfPresent(mimeType, forKey: .mimeType)
+        try container.encodeIfPresent(sizeBytes, forKey: .sizeBytes)
+        try container.encodeIfPresent(thumbnail?.token, forKey: .thumbnailToken)
+    }
+
+    /// Compact metadata line such as `"PNG (1.4 MB)"`, `"PDF (240 KB)"`, or `"Photo"`.
+    public var subtitle: String {
+        let format = Self.formatLabel(mediaKind: mediaKind, mimeType: mimeType, filename: filename)
+        guard let sizeBytes, sizeBytes > 0 else { return format }
+        return "\(format) (\(Self.sizeLabel(sizeBytes)))"
+    }
+
+    private static func formatLabel(mediaKind: MediaKind, mimeType: String?, filename: String?) -> String {
+        if let mime = mimeType?.lowercased().split(separator: ";").first.map(String.init) {
+            switch mime {
+            case "image/jpeg", "image/jpg": return "JPEG"
+            case "image/png": return "PNG"
+            case "image/webp": return "WEBP"
+            case "image/gif": return "GIF"
+            case "image/heic": return "HEIC"
+            case "image/heif": return "HEIF"
+            case "video/mp4": return "MP4"
+            case "video/quicktime": return "MOV"
+            case "video/webm": return "WEBM"
+            case "audio/mp4", "audio/x-m4a", "audio/m4a": return "M4A"
+            case "audio/mpeg", "audio/mp3": return "MP3"
+            case "audio/ogg", "audio/opus": return "OGG"
+            case "audio/wav", "audio/x-wav": return "WAV"
+            case "application/pdf": return "PDF"
+            case "application/zip": return "ZIP"
+            case "text/plain": return "TXT"
+            case "text/markdown": return "MD"
+            default:
+                if let subtype = mime.split(separator: "/").last,
+                   !subtype.contains("octet-stream"),
+                   subtype.count <= 6,
+                   subtype.allSatisfy({ $0.isLetter || $0.isNumber }) {
+                    return subtype.uppercased()
+                }
+            }
+        }
+        if let name = filename, let dot = name.lastIndex(of: ".") {
+            let ext = name[name.index(after: dot)...]
+            if !ext.isEmpty, ext.count <= 6, ext.allSatisfy({ $0.isLetter || $0.isNumber }) {
+                return ext.uppercased()
+            }
+        }
+        return switch mediaKind {
+        case .image: "Photo"
+        case .video: "Video"
+        case .audio: "Audio"
+        case .file: "File"
+        }
+    }
+
+    private static func sizeLabel(_ bytes: Int) -> String {
+        if bytes < 1_000 { return "\(bytes) B" }
+        if bytes < 1_000_000 {
+            let kb = max(1, Int((Double(bytes) / 1_000).rounded()))
+            return "\(kb) KB"
+        }
+        if bytes < 1_000_000_000 {
+            return String(format: "%.1f MB", Double(bytes) / 1_000_000)
+        }
+        return String(format: "%.2f GB", Double(bytes) / 1_000_000_000)
+    }
+}
+
 /// The words of one message and what is shown of it.
 public struct SearchableContent: Sendable, Equatable, Codable {
     public let kind: SearchKind
     public let body: String
     /// Found by, but not shown: file names, link addresses, poll options.
     public let extra: [String]
+    /// Present when the message is an image, video, audio or file attachment.
+    public let attachment: SearchAttachment?
 
-    public init(kind: SearchKind, body: String, extra: [String] = []) {
+    public init(kind: SearchKind, body: String, extra: [String] = [], attachment: SearchAttachment? = nil) {
         self.kind = kind
         self.body = body
         self.extra = extra
+        self.attachment = attachment
+    }
+
+    public func withThumbnail(_ thumbnail: MediaRef?) -> SearchableContent {
+        guard let current = attachment, let thumbnail else { return self }
+        return SearchableContent(
+            kind: kind, body: body, extra: extra,
+            attachment: SearchAttachment(
+                mediaKind: current.mediaKind, filename: current.filename,
+                mimeType: current.mimeType, sizeBytes: current.sizeBytes, thumbnail: thumbnail))
     }
 }
 

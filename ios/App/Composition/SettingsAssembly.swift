@@ -369,6 +369,7 @@ extension AppRoot {
         let port = profilePort
         let media = media
         let rooms = roomCoordinator
+        let search = search
         return ProfileSettingsActions(
             loadName: { try? await port.ownDisplayName() },  // best-effort: the closure's nil or false is the failure the Settings screen shows
             saveName: { name in (try? await port.setOwnDisplayName(name)) != nil },  // best-effort: the closure's nil or false is the failure the Settings screen shows
@@ -376,6 +377,7 @@ extension AppRoot {
             unignore: { raw in
                 guard let user = try? UserID(raw), (try? await port.unignore(user)) != nil else { return false }  // best-effort: the closure's nil or false is the failure the Settings screen shows
                 await rooms.refreshIgnoredUsers()
+                await search.refreshIgnoredUsers()
                 return true
             },
             loadAvatar: {

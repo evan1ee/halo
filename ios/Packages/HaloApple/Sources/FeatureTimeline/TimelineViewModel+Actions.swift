@@ -15,8 +15,8 @@ extension TimelineViewModel {
     }
 
     /// The id of the row whose file is downloading.
-    /// Files are read into memory whole for now (`MediaPort.content`); bigger ones wait for a file-based download.
-    public nonisolated static let openSizeLimit = 50 * 1024 * 1024
+    /// A file is written to disk as it arrives (M19-5), so the limit is disk and patience, not memory.
+    public nonisolated static let openSizeLimit = 300 * 1024 * 1024
 
     public func openFile(_ row: TimelineRow) async {
         guard let file = row.file, media != nil, openingRow == nil else { return }
@@ -26,29 +26,59 @@ extension TimelineViewModel {
             return
         }
         openingRow = row.id
-        defer { openingRow = nil }
-        do {
-            let url = try await downloadFileToTemp(file)
-            openedFile = OpenedFile(url: url)
-        } catch {
-            openFileError = (error as? HaloError) == .network(retryable: true) ? "Can't reach the server. The file wasn't opened." : "The file couldn't be opened."
+        let rowID = row.id
+        let task = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                if self.openingRow == rowID {
+                    self.openingRow = nil
+                    self.openFileTask = nil
+                }
+            }
+            do {
+                let url = try await self.downloadFileToTemp(file)
+                if Task.isCancelled || self.openingRow != rowID {
+                    try? FileManager.default.removeItem(at: url.deletingLastPathComponent())  // best-effort: cancelled download temp folder
+                    return
+                }
+                self.openedFile = OpenedFile(url: url)
+            } catch is CancellationError {
+                return
+            } catch HaloError.cancelled {
+                return
+            } catch {
+                guard !Task.isCancelled, self.openingRow == rowID else { return }
+                self.openFileError = (error as? HaloError) == .network(retryable: true)
+                    ? "Can't reach the server. The file wasn't opened."
+                    : "The file couldn't be opened."
+            }
         }
+        openFileTask = task
+        await task.value
+    }
+
+    /// Cancels an in-flight file download (AC-MED-3, M19-5); leaves no error and cleans up any temporary folder.
+    public func cancelOpenFile() {
+        openFileTask?.cancel()
+        openFileTask = nil
+        openingRow = nil
     }
 
     /// Downloads a file attachment into a sanitized temporary directory (used by Quick Look and drag-out).
     public func downloadFileToTemp(_ file: TimelineRow.FileTile) async throws -> URL {
         guard let media else { throw HaloError.notFound }
         if let size = file.size, size > Self.openSizeLimit {
-            throw HaloError.invalidInput("File exceeds the 50 MB size limit")
+            throw HaloError.invalidInput("File exceeds the size limit")
         }
-        let data = try await media.content(file.ref)
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("halo-open-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        // The name comes from the sender: keep only its last path component so it can't leave the folder.
-        let last = URL(fileURLWithPath: file.name).lastPathComponent
-        let url = directory.appendingPathComponent(last.isEmpty || last == "." || last == ".." ? "file" : last)
-        try data.write(to: url, options: .atomic)
-        return url
+        // The name comes from the sender: the port keeps only its last path component so it can't leave the folder.
+        do {
+            return try await media.file(file.ref, name: file.name, mimeType: nil, in: directory)
+        } catch {
+            try? FileManager.default.removeItem(at: directory)  // best-effort: a half-made temporary folder; the system clears the rest
+            throw error
+        }
     }
 
     /// Quick Look was dismissed: the temporary copy is deleted.
@@ -190,9 +220,7 @@ extension TimelineViewModel {
             return trimmed.isEmpty ? nil : trimmed
         }()
         while let photo = pendingPhotos.first {
-            let outgoing = OutgoingImage(
-                data: photo.data, filename: photo.filename, mimeType: photo.mimeType,
-                width: photo.width, height: photo.height, caption: caption)
+            let outgoing = photo.with(caption: caption)
             do {
                 try await coordinator.sendImage(outgoing)
                 pendingPhotos.removeFirst()
@@ -547,9 +575,20 @@ extension TimelineViewModel {
     }
 
     /// Thumbnail bytes for an image row, or `nil` if it can't be loaded (the row then shows a placeholder).
+    /// Prefers a precomputed thumbnail (`thumbnailRef`) or own cached upload (`MediaFormat::File` in the SDK's encrypted store)
+    /// so own thumbnails aren't downloaded again after a restart (M19-5).
     public func thumbnail(for image: TimelineRow.Image) async -> Data? {
         if let known = thumbnailMemory.data(for: image.ref) { return known }
-        guard let media, let loaded = try? await media.thumbnail(image.ref, width: 600, height: 600) else { return nil }  // best-effort: a picture that can't load shows its placeholder; nothing changes
+        guard let media else { return nil }
+        let loaded: Data?
+        if let thumbRef = image.thumbnailRef, let direct = try? await media.cachedContent(thumbRef) {  // best-effort: falls back to server thumbnail
+            loaded = direct
+        } else if image.isOwn, let ownCached = try? await media.cachedContent(image.ref) {  // best-effort: SDK caches own uploads under MediaFormat::File (M19-5)
+            loaded = ownCached
+        } else {
+            loaded = try? await media.thumbnail(image.ref, width: 600, height: 600)  // best-effort: a picture that can't load shows its placeholder; nothing changes
+        }
+        guard let loaded else { return nil }
         thumbnailMemory.store(loaded, for: image.ref)
         return loaded
     }
@@ -582,32 +621,69 @@ extension TimelineViewModel {
         }
     }
 
-    /// Full-resolution bytes for the full-screen photo viewer, falling back to thumbnail if full download fails.
-    public func fullImageData(for image: TimelineRow.Image) async -> Data? {
+    /// Streams a full-resolution photo straight to a temporary file on disk for the viewer (M19-5),
+    /// falling back to a thumbnail written to disk if the full download fails.
+    public func fullImageFile(for image: TimelineRow.Image, filename: String = "photo.jpg") async -> URL? {
         guard let media else { return nil }
-        if let full = try? await media.content(image.ref) { return full }  // best-effort: a picture that can't load shows its placeholder; nothing changes
-        return try? await media.thumbnail(image.ref, width: 1200, height: 1200)  // best-effort: a picture that can't load shows its placeholder; nothing changes
-    }
-
-    /// Exports a photo from the full-screen viewer to a temporary file for ShareLink / Save Image.
-    public func exportViewerPhoto(_ item: PhotoViewerItem) async -> URL? {
-        guard let data = await fullImageData(for: item.image) else { return nil }
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("halo-viewer-\(UUID().uuidString)", isDirectory: true)
         do {
-            let dir = FileManager.default.temporaryDirectory
-                .appendingPathComponent("halo-photo-\(UUID().uuidString)", isDirectory: true)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let raw = (item.caption ?? "photo.jpg")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .replacingOccurrences(of: "/", with: "_")
-                .replacingOccurrences(of: ":", with: "_")
-            let base = raw.isEmpty ? "photo.jpg" : raw
-            let filename = base.contains(".") ? base : "\(base).jpg"
-            let url = dir.appendingPathComponent(filename)
-            try data.write(to: url, options: .atomic)
-            return url
+            let safeName = Self.photoFilename(from: filename)
+            if let url = try? await media.file(image.ref, name: safeName, mimeType: nil, in: dir) {  // best-effort: falls back to thumbnail
+                return url
+            }
+            if let thumb = try? await media.thumbnail(image.ref, width: 1200, height: 1200) {  // best-effort: fallback preview
+                let url = dir.appendingPathComponent(safeName)
+                try thumb.write(to: url, options: .atomic)
+                return url
+            }
+            try? FileManager.default.removeItem(at: dir)
+            return nil
         } catch {
+            try? FileManager.default.removeItem(at: dir)
             return nil
         }
+    }
+
+    /// Full-resolution bytes for on-demand actions such as Save as Sticker; streams via `fullImageFile` so the SDK file cache is reused.
+    public func fullImageData(for image: TimelineRow.Image) async -> Data? {
+        guard let url = await fullImageFile(for: image) else { return nil }
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        return try? Data(contentsOf: url)
+    }
+
+    /// Streams a photo from the full-screen viewer directly to a temporary file on disk for ShareLink / Save Image (M19-5).
+    public func exportViewerPhoto(_ item: PhotoViewerItem) async -> URL? {
+        guard let media else { return nil }
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("halo-photo-\(UUID().uuidString)", isDirectory: true)
+        let filename = Self.photoFilename(from: item.caption ?? "photo.jpg")
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            if let url = try? await media.file(item.image.ref, name: filename, mimeType: nil, in: dir) {  // best-effort: falls back to thumbnail export
+                return url
+            }
+            if let thumb = try? await media.thumbnail(item.image.ref, width: 1200, height: 1200) {  // best-effort: caller handles nil export URL
+                let url = dir.appendingPathComponent(filename)
+                try thumb.write(to: url, options: .atomic)
+                return url
+            }
+            try? FileManager.default.removeItem(at: dir)
+            return nil
+        } catch {
+            try? FileManager.default.removeItem(at: dir)
+            return nil
+        }
+    }
+
+    private static func photoFilename(from rawName: String) -> String {
+        let raw = rawName
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: ":", with: "_")
+        let base = raw.isEmpty ? "photo.jpg" : raw
+        return base.contains(".") ? base : "\(base).jpg"
     }
 
 }

@@ -265,11 +265,11 @@ struct Composer: View {
                     ForEach(Array(model.pendingPhotos.enumerated()), id: \.offset) { index, photo in
                         ZStack(alignment: .topTrailing) {
                             #if canImport(UIKit)
-                            if let image = UIImage(data: photo.data) {
-                                Image(uiImage: image).resizable().scaledToFill()
+                            DecodedImage(photo.data, maxPixel: ImagePipeline.Size.listRow) { image in
+                                image.resizable().scaledToFill()
                                     .frame(width: 56, height: 56)
                                     .clipShape(.rect(cornerRadius: HaloRadius.small, style: .continuous))
-                            }
+                            } placeholder: { Color.clear.frame(width: 56, height: 56) }
                             #endif
                             Button { model.removePendingPhoto(at: index) } label: {
                                 Image(systemName: "xmark.circle.fill")

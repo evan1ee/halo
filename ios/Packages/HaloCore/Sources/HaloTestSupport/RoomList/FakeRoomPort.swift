@@ -124,9 +124,44 @@ public final class FakeRoomPort: RoomPort {
         return Array(items.prefix(limit))
     }
 
+    public func openMediaGallery(in room: RoomID) async throws(HaloError) -> any RoomMediaGallerySession {
+        let (items, error) = state.withLock { ($0.gallery, $0.error) }
+        if let error { throw error }
+        return FakeRoomMediaGallerySession(items: items, errorProvider: { [weak self] in
+            self?.state.withLock { $0.error }
+        })
+    }
+
     public func exportMessages(in room: RoomID, limit: Int) async throws(HaloError) -> [RoomExportMessage] {
         let (items, error) = state.withLock { ($0.exportedMessages, $0.error) }
         if let error { throw error }
         return Array(items.suffix(limit))
+    }
+}
+
+private actor FakeRoomMediaGallerySession: RoomMediaGallerySession {
+    private let items: [RoomMediaItem]
+    private let errorProvider: @Sendable () -> HaloError?
+    private var offset = 0
+    private var isClosed = false
+
+    init(items: [RoomMediaItem], errorProvider: @escaping @Sendable () -> HaloError?) {
+        self.items = items
+        self.errorProvider = errorProvider
+    }
+
+    func nextPage(limit: Int) async throws(HaloError) -> MediaGalleryPage {
+        if let error = errorProvider() { throw error }
+        guard !isClosed, offset < items.count, limit > 0 else {
+            return MediaGalleryPage(items: [], hasMore: false)
+        }
+        let end = min(items.count, offset + limit)
+        let slice = Array(items[offset..<end])
+        offset = end
+        return MediaGalleryPage(items: slice, hasMore: offset < items.count)
+    }
+
+    func close() async {
+        isClosed = true
     }
 }

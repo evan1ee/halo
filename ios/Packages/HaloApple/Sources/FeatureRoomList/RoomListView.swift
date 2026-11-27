@@ -7,6 +7,7 @@ import SwiftUI
 public struct RoomListView<SearchResults: View>: View {
     @Bindable private var model: RoomListViewModel
     private let searchQuery: String
+    private let showsRoomMatches: Bool
     private let onSelect: (RoomID) -> Void
     private let onRoomInfo: ((RoomID) -> Void)?
     private let onMediaGallery: (() -> Void)?
@@ -19,6 +20,7 @@ public struct RoomListView<SearchResults: View>: View {
     public init(
         model: RoomListViewModel,
         searchQuery: String = "",
+        showsRoomMatches: Bool = true,
         onRoomInfo: ((RoomID) -> Void)? = nil,
         onMediaGallery: (() -> Void)? = nil,
         onSelect: @escaping (RoomID) -> Void = { _ in },
@@ -26,6 +28,7 @@ public struct RoomListView<SearchResults: View>: View {
     ) {
         self.model = model
         self.searchQuery = searchQuery
+        self.showsRoomMatches = showsRoomMatches
         self.onRoomInfo = onRoomInfo
         self.onMediaGallery = onMediaGallery
         self.onSelect = onSelect
@@ -58,88 +61,97 @@ public struct RoomListView<SearchResults: View>: View {
                 let trimmedQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
                 let visibleRows = trimmedQuery.isEmpty
                     ? rows
-                    : rows.filter { $0.name.localizedCaseInsensitiveContains(trimmedQuery) }
+                    : (showsRoomMatches ? model.matchingRows(for: trimmedQuery) : [])
                 let showMediaGallery = onMediaGallery != nil
                     && model.effectiveFilter == .all
+                    && showsRoomMatches
                     && (trimmedQuery.isEmpty || "Media Gallery".localizedCaseInsensitiveContains(trimmedQuery))
+                let hasRoomSection = trimmedQuery.isEmpty || !visibleRows.isEmpty || showMediaGallery
                 List {
-                    Section {
-                        if let onMediaGallery, showMediaGallery {
-                            Button { onMediaGallery() } label: {
-                                HStack(alignment: .top, spacing: HaloSpacing.m) {
-                                    Image(systemName: "photo.on.rectangle.angled")
-                                        .font(HaloTypography.headline)
-                                        .foregroundStyle(HaloColor.onAccent)
-                                        .frame(width: 52, height: 52)
-                                        .background(HaloColor.accent, in: Circle())
-                                    VStack(alignment: .leading, spacing: HaloSpacing.xs) {
-                                        HStack {
-                                            Text("Media Gallery")
-                                                .font(HaloTypography.bodyEmphasis)
-                                            Spacer()
-                                            Image(systemName: "chevron.right")
-                                                .font(HaloTypography.captionEmphasis)
-                                                .foregroundStyle(.tertiary)
-                                        }
-                                        // No line limit on either text: at large Dynamic Type they wrap instead of clipping.
-                                        Text("Photos, videos & files across rooms")
-                                            .font(HaloTypography.meta)
-                                            .foregroundStyle(HaloColor.textSecondary)
-                                    }
-                                    .alignmentGuide(.listRowSeparatorLeading) { dimensions in
-                                        dimensions[.leading]
-                                    }
-                                }
-                                .padding(.vertical, HaloSpacing.xs)
-                                .frame(minHeight: 56, alignment: .top)
-                            }
-                            .foregroundStyle(HaloColor.textPrimary)
-                            .accessibilityIdentifier("preset-media-gallery")
-                        }
-                        ForEach(visibleRows) { row in
-                            if row.isInvite {
-                                HStack(alignment: .top, spacing: HaloSpacing.m) {
-                                    AvatarView(name: row.name, ref: model.invitePreviews[row.id]?.avatar ?? row.avatar, size: 52, showsOuterFrame: false) { [model] in await model.avatarData($0) }
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text(row.name).fontWeight(.bold).lineLimit(1)
-                                        Text(row.inviter.map { "Invitation from \($0)" } ?? "Invitation").font(.caption).foregroundStyle(.secondary)
-                                        if let preview = model.invitePreviews[row.id] {
-                                            if let topic = preview.topic, !topic.isEmpty { Text(topic).font(.caption) }
-                                            if let members = preview.memberCount {
-                                                Text(members == 1 ? "1 member" : "\(members) members").font(.caption).foregroundStyle(.secondary)
+                    if hasRoomSection {
+                        Section {
+                            if let onMediaGallery, showMediaGallery {
+                                Button { onMediaGallery() } label: {
+                                    HStack(alignment: .top, spacing: HaloSpacing.m) {
+                                        Image(systemName: "photo.on.rectangle.angled")
+                                            .font(HaloTypography.headline)
+                                            .foregroundStyle(HaloColor.onAccent)
+                                            .frame(width: 52, height: 52)
+                                            .background(HaloColor.accent, in: Circle())
+                                        VStack(alignment: .leading, spacing: HaloSpacing.xs) {
+                                            HStack {
+                                                Text("Media Gallery")
+                                                    .font(HaloTypography.bodyEmphasis)
+                                                Spacer()
+                                                Image(systemName: "chevron.right")
+                                                    .font(HaloTypography.captionEmphasis)
+                                                    .foregroundStyle(.tertiary)
                                             }
-                                        } else {
-                                            Button("Show details") { Task { await model.previewInvite(row.id) } }.font(.caption)
-                                                .accessibilityIdentifier("previewInvite-\(row.name)")
+                                            // No line limit on either text: at large Dynamic Type they wrap instead of clipping.
+                                            Text("Photos, videos & files across rooms")
+                                                .font(HaloTypography.meta)
+                                                .foregroundStyle(HaloColor.textSecondary)
                                         }
-                                        HStack {
-                                            Button("Accept") { Task { await model.acceptInvite(row.id) } }.buttonStyle(.borderedProminent)
-                                            Button("Decline", role: .destructive) { Task { await model.declineInvite(row.id) } }.buttonStyle(.bordered)
+                                        .alignmentGuide(.listRowSeparatorLeading) { dimensions in
+                                            dimensions[.leading]
                                         }
                                     }
-                                    .alignmentGuide(.listRowSeparatorLeading) { dimensions in
-                                        dimensions[.leading]
-                                    }
+                                    .padding(.vertical, HaloSpacing.xs)
+                                    .frame(minHeight: 56, alignment: .top)
                                 }
-                                .padding(.vertical, HaloSpacing.xs)
-                                .accessibilityIdentifier("invite-\(row.name)")
-                            } else {
-                                joinedRoomRow(row)
+                                .foregroundStyle(HaloColor.textPrimary)
+                                .accessibilityIdentifier("preset-media-gallery")
+                            }
+                            ForEach(visibleRows) { row in
+                                if row.isInvite {
+                                    HStack(alignment: .top, spacing: HaloSpacing.m) {
+                                        AvatarView(name: row.name, ref: model.invitePreviews[row.id]?.avatar ?? row.avatar, size: 52, showsOuterFrame: false) { [model] in await model.avatarData($0) }
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            Text(row.name).fontWeight(.bold).lineLimit(1)
+                                            Text(row.inviter.map { "Invitation from \($0)" } ?? "Invitation").font(.caption).foregroundStyle(.secondary)
+                                            if let preview = model.invitePreviews[row.id] {
+                                                if let topic = preview.topic, !topic.isEmpty { Text(topic).font(.caption) }
+                                                if let members = preview.memberCount {
+                                                    Text(members == 1 ? "1 member" : "\(members) members").font(.caption).foregroundStyle(.secondary)
+                                                }
+                                            } else {
+                                                Button("Show details") { Task { await model.previewInvite(row.id) } }.font(.caption)
+                                                    .accessibilityIdentifier("previewInvite-\(row.name)")
+                                            }
+                                            HStack {
+                                                Button("Accept") { Task { await model.acceptInvite(row.id) } }.buttonStyle(.borderedProminent)
+                                                Button("Decline", role: .destructive) { Task { await model.declineInvite(row.id) } }.buttonStyle(.bordered)
+                                            }
+                                        }
+                                        .alignmentGuide(.listRowSeparatorLeading) { dimensions in
+                                            dimensions[.leading]
+                                        }
+                                    }
+                                    .padding(.vertical, HaloSpacing.xs)
+                                    .accessibilityIdentifier("invite-\(row.name)")
+                                } else {
+                                    joinedRoomRow(row)
+                                }
+                            }
+                            if model.canShowMore && trimmedQuery.isEmpty {
+                                Button("Show more rooms") {
+                                    Task { await model.showMore() }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .accessibilityIdentifier("show-more-rooms")
+                                .onAppear { Task { await model.showMore() } }
+                            }
+                        } header: {
+                            if !trimmedQuery.isEmpty {
+                                Text("Chats")
                             }
                         }
-                        if model.canShowMore && trimmedQuery.isEmpty {
-                            Button("Show more rooms") {
-                                Task { await model.showMore() }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .accessibilityIdentifier("show-more-rooms")
-                            .onAppear { Task { await model.showMore() } }
-                        }
+                        .listSectionSeparator(.hidden, edges: .top)
                     }
-                    .listSectionSeparator(.hidden, edges: .top)
                     searchResults
                 }
                 .listStyle(.plain)
+                .scrollDismissesKeyboard(.interactively)
                 .scrollEdgeEffectHidden(true, for: .top)
                 .contentMargins(.top, 8, for: .scrollContent)
                 .refreshable { await model.refresh() }

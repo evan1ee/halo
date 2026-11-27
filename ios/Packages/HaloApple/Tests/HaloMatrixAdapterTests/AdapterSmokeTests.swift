@@ -92,6 +92,63 @@ struct RoomListMappingTests {
         #expect(MatrixRoomListPort.membership(.joined) == .joined)
         #expect(MatrixRoomListPort.membership(.banned) == .banned)
     }
+
+    @Test("EventTimeCache persists derived timestamps across instances, ignores corrupt files, and deletes on clear (GA-28, M19-7)")
+    func eventTimeCachePersistence() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("halo-etc-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("times.json")
+
+        let first = MatrixRoomListPort.EventTimeCache(file: file)
+        let ts = Date(timeIntervalSince1970: 1_700_000_123.456)
+        first.set("$ev1", ts)
+        first.flushNow()
+        #expect(FileManager.default.fileExists(atPath: file.path))
+
+        let restored = MatrixRoomListPort.EventTimeCache(file: file)
+        let loaded = try #require(restored.get("$ev1"))
+        #expect(abs(loaded.timeIntervalSince1970 - ts.timeIntervalSince1970) < 0.002)
+
+        restored.clear()
+        #expect(restored.get("$ev1") == nil)
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+
+        try Data("not json".utf8).write(to: file)
+        let corrupt = MatrixRoomListPort.EventTimeCache(file: file)
+        #expect(corrupt.get("$ev1") == nil)
+
+        // Bounded eviction retains the newest half of timestamps rather than wiping the whole cache.
+        let bounded = MatrixRoomListPort.EventTimeCache(limit: 4)
+        for step in 1...5 {
+            bounded.set("$e\(step)", Date(timeIntervalSince1970: Double(step * 100)))
+        }
+        #expect(bounded.get("$e5") != nil && bounded.get("$e4") != nil && bounded.get("$e3") != nil)
+        #expect(bounded.get("$e1") == nil && bounded.get("$e2") == nil)
+    }
+
+    @Test("GalleryCollector.settle awaits asynchronous listener delivery before returning media items (M19-5)")
+    func galleryCollectorSettlesAsyncDiffs() async throws {
+        let collector = GalleryCollector(ownUserID: "@me:x.org", sleep: { _ in await Task.yield() })
+        let mediaEvent = HaloDomain.TimelineItem(
+            id: TimelineItemID("g1"),
+            content: .event(HaloDomain.TimelineEvent(
+                eventID: try EventID("$img1:x.org"),
+                sender: try UserID("@alice:x.org"),
+                senderName: "Alice",
+                timestamp: Date(timeIntervalSince1970: 1_000),
+                isOwn: false,
+                kind: .media(MediaAttachment(kind: .image, body: "sunset.jpg", source: MediaRef(token: "m1"))))))
+
+        let delivery = Task {
+            for _ in 0..<5 { await Task.yield() }
+            collector.applyMapped([.reset([mediaEvent])])
+        }
+        await collector.settle(after: 0)
+        await delivery.value
+        let items = collector.mediaItemsNewestFirst()
+        #expect(items.map(\.attachment.body) == ["sunset.jpg"])
+    }
 }
 
 @Suite("MatrixBootstrap (R-09 / §7)")

@@ -42,11 +42,45 @@ public protocol RoomPort: Sendable {
     /// Recent media items (photos, videos, audio, files) in `room`, newest first (M9 Gallery + Export).
     func mediaGallery(in room: RoomID, limit: Int) async throws(HaloError) -> [RoomMediaItem]
 
+    /// Opens a paged media gallery session for `room` (M19-5) so scrolling loads older pages without re-fetching from the start.
+    func openMediaGallery(in room: RoomID) async throws(HaloError) -> any RoomMediaGallerySession
+
     /// Recent messages in `room` in chronological order (oldest first) for on-demand encrypted export (D32, R-P2-EXPORT).
     func exportMessages(in room: RoomID, limit: Int) async throws(HaloError) -> [RoomExportMessage]
 }
 
+/// A live, paged reader for one room's media gallery (M19-5).
+public protocol RoomMediaGallerySession: Sendable {
+    /// Returns the next page of up to `limit` media items (newest first within the page, older than previous pages).
+    func nextPage(limit: Int) async throws(HaloError) -> MediaGalleryPage
+    /// Releases the underlying timeline and subscriptions.
+    func close() async
+}
+
+private actor SinglePageMediaGallerySession: RoomMediaGallerySession {
+    private let port: any RoomPort
+    private let room: RoomID
+    private var loaded = false
+
+    init(port: any RoomPort, room: RoomID) {
+        self.port = port
+        self.room = room
+    }
+
+    func nextPage(limit: Int) async throws(HaloError) -> MediaGalleryPage {
+        guard !loaded else { return MediaGalleryPage(items: [], hasMore: false) }
+        loaded = true
+        let items = try await port.mediaGallery(in: room, limit: limit)
+        return MediaGalleryPage(items: items, hasMore: false)
+    }
+
+    func close() async {}
+}
+
 extension RoomPort {
     public func mediaGallery(in room: RoomID, limit: Int) async throws(HaloError) -> [RoomMediaItem] { [] }
+    public func openMediaGallery(in room: RoomID) async throws(HaloError) -> any RoomMediaGallerySession {
+        SinglePageMediaGallerySession(port: self, room: room)
+    }
     public func exportMessages(in room: RoomID, limit: Int) async throws(HaloError) -> [RoomExportMessage] { [] }
 }

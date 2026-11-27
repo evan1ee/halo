@@ -109,7 +109,7 @@ private struct ItemRow: View {
 
     /// Decodes a small thumbnail off the main actor once per picked photo, so typing shortcodes never re-decodes full images.
     @concurrent private static func makeThumbnail(_ data: Data) async -> UIImage? {
-        guard let image = UIImage(data: data) else { return nil }
+        guard let image = UIImage(data: data) else { return nil }  // decode: off the main actor (@concurrent), once per picked photo
         return image.preparingThumbnail(of: CGSize(width: 88, height: 88)) ?? image
     }
 }

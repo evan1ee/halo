@@ -45,7 +45,7 @@ struct HaloApp: App {
             RootView(root: root)
         }
         .backgroundTask(.appRefresh(BackgroundRefreshScheduler.identifier())) { [root] in
-            BackgroundRefreshScheduler.schedule()
+            BackgroundRefreshScheduler.schedule(interval: root.backgroundRefreshInterval)
             _ = await root.refreshInBackground()
         }
     }
@@ -54,11 +54,9 @@ struct HaloApp: App {
 private struct RootView: View {
     let root: AppRoot
     @Environment(\.scenePhase) private var scenePhase
-    @SceneStorage("halo.navigation.path") private var savedPath: Data?
     @State private var router = ChatsRouter(replacesDetail: UIDevice.current.userInterfaceIdiom == .pad)
     @State private var compactColumn: NavigationSplitViewColumn = .sidebar
     @State private var searchPresented = false
-    @State private var pathRestored = false
     @State private var searchModel: MessageSearchViewModel
     @State private var newChat: NewChatViewModel?
     @State private var showingNotificationPriming = false
@@ -160,9 +158,14 @@ private struct RootView: View {
                     RoomListView(
                         model: root.roomList,
                         searchQuery: searchModel.query,
+                        showsRoomMatches: searchModel.filter == .all,
                         onRoomInfo: { router.openRoomInfo($0) },
                         onMediaGallery: { router.push(.globalMediaGallery) },
-                        onSelect: { router.openRoom($0) }
+                        onSelect: { room in
+                            root.beginRoomOpen(chosen: room)
+                            // The room's rows are made first, then its screen is pushed with them (M19-9).
+                            root.openWhenReady(room) { router.openRoom(room) }
+                        }
                     ) {
                         MessageSearchResultsSection(model: searchModel, onVerify: { router.push(.settings) }) { row in
                             if let thread = row.threadRoot {
@@ -219,22 +222,19 @@ private struct RootView: View {
                         root.coldStart = nil
                     }
                     .onChange(of: root.roomList.content) {
-                        if !pathRestored, case .loaded = root.roomList.content {
-                            pathRestored = true
-                            // Only when nothing was opened yet: restoring (and pruning rooms the list hasn't shown yet)
-                            // after the user already opened a room would pop it.
-                            if router.path.isEmpty {
-                                router.restorePath(from: savedPath)
-                                router.pruneInvalidRooms(joinedRoomIDs: root.roomList.joinedRoomIDs)
-                            }
-                        }
+                        // A launch always shows the chat list (the founder's rule, 2026-11-26): the room or page that was open
+                        // when the app was last closed is not brought back. Notification taps and links still open their room.
                         Task { await root.scanBotRooms() }
+                    }
+                    .onChange(of: router.path, initial: true) { _, new in
+                        // A room on screen isn't prepared again behind it (M19-9).
+                        root.preparedTimelines.screensChanged(Set(new.compactMap { if case .room(let room, _) = $0 { room } else { nil } }))
                     }
                     .onChange(of: router.path) { old, new in
                         root.search.noteActivity()
-                        savedPath = router.encodePath()
-                        if new.count > old.count || Self.isPad, case .room = new.last, new.last != old.last {
-                            root.roomOpen = HaloSignpost.begin(.roomOpen)
+                        if new.count > old.count || Self.isPad, case .room(let room, _) = new.last, new.last != old.last {
+                            // A tap on a chat-list row began timing at the tap (`onSelect`); any other way in begins here.
+                            if root.roomChosen == room { root.roomChosen = nil } else { root.beginRoomOpen() }
                         }
                     }
                     .sheet(item: $newChat) { NewChatView(model: $0) }
@@ -431,7 +431,7 @@ private struct RootView: View {
                 await root.receipts.flush()
                 await root.renewForeground()
             case .background:
-                BackgroundRefreshScheduler.schedule(log: root.log)
+                BackgroundRefreshScheduler.schedule(log: root.log, interval: root.backgroundRefreshInterval)
                 let lease = BackgroundTaskLease(name: "halo.receipts.flush", onEnd: { HaloDatabase.suspendAll() })
                 defer { lease.end() }
                 await root.setForeground(false)
@@ -596,8 +596,7 @@ private struct TimelineScreen: View {
         self.openThread = openThread
         self.root = root
         self.room = room
-        let timeline = root.makeTimeline(room: room)
-        timeline.initialEvent = jumpTo
+        let timeline = root.makeRoomTimeline(room: room, jumpTo: jumpTo)
         _model = State(initialValue: timeline)
         _stickers = State(initialValue: root.makeStickerPanel(room: room, timeline: timeline))
         _klipyGIFs = State(initialValue: root.makeKlipyPanel(.gifs, timeline: timeline))
@@ -660,6 +659,10 @@ private struct TimelineScreen: View {
             onFirstRows: {
                 root.roomOpen?.end()
                 root.roomOpen = nil
+            },
+            onRowsDrawn: {
+                root.roomFirstRows?.end()
+                root.roomFirstRows = nil
             }
         )
         .sheet(item: $stickerToSave) { pending in

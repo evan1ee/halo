@@ -102,6 +102,9 @@ extension AppRoot {
         await botActivity.reset()
         await stickers.reset()
         await klipy.reset()
+        preparedTimelines.dropAll()
+        thumbnailMemory.removeAll()  // another account's pictures must not paint
+        roomListPort.clearEventTimeCache()
         await timelinePort.dropWarm()
         await search.detach(deletingIndex: true)
         preferences.botSenders = []

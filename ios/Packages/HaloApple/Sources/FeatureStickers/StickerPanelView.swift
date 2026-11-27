@@ -178,7 +178,7 @@ private struct StickerCell: View {
             Group {
                 #if canImport(UIKit)
                 // A UIKit view inside a button label takes the touch for itself, so the button never fired for animated stickers.
-                if let animated { AnimatedStickerView(data: animated).allowsHitTesting(false) } else if let data, let image = UIImage(data: data) { Image(uiImage: image).resizable().scaledToFit() } else { placeholder }
+                if let animated { AnimatedStickerView(data: animated).allowsHitTesting(false) } else { DecodedImage(data, maxPixel: ImagePipeline.Size.sticker) { $0.resizable().scaledToFit() } placeholder: { placeholder } }
                 #else
                 placeholder
                 #endif

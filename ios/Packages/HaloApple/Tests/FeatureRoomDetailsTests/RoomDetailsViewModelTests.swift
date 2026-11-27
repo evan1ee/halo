@@ -205,7 +205,35 @@ extension RoomDetailsViewModelTests {
         let exported = try #require(await model.exportMediaFile(item))
         #expect(exported.lastPathComponent == "sunset.png")
         #expect(try Data(contentsOf: exported) == Data([9, 8, 7, 6]))
+        #expect(mediaPort.fileCalls == 1 && mediaPort.contentCalls == 0, "gallery export streams via MediaPort.file")
         try? FileManager.default.removeItem(at: exported.deletingLastPathComponent())
+    }
+
+    @Test("room media gallery paginates across pages and closes when exhausted (M19-5)")
+    func roomMediaGalleryPaging() async throws {
+        let id = try RoomID("!gal-page:x.org")
+        let items = try (1...5).map { index in
+            RoomMediaItem(
+                eventID: try EventID("$m\(index)"),
+                senderName: "Alice",
+                timestamp: Date(timeIntervalSince1970: TimeInterval(600 - index)),
+                attachment: MediaAttachment(kind: .image, body: "photo\(index).jpg", source: MediaRef(token: "p\(index)")))
+        }
+        let details = RoomDetails(id: id, name: "Trips", topic: nil, isDirect: false, isEncrypted: true, joinedMemberCount: 2, notificationMode: .allMessages)
+        let port = FakeRoomPort(details: details, gallery: items)
+        let model = RoomDetailsViewModel(port: port, room: id)
+
+        await model.loadGallery(limit: 2)
+        #expect(model.galleryItems.map(\.eventID.rawValue) == ["$m1", "$m2"])
+        #expect(model.hasMoreGallery)
+
+        await model.loadMoreGallery(limit: 2)
+        #expect(model.galleryItems.map(\.eventID.rawValue) == ["$m1", "$m2", "$m3", "$m4"])
+        #expect(model.hasMoreGallery)
+
+        await model.loadMoreGallery(limit: 2)
+        #expect(model.galleryItems.map(\.eventID.rawValue) == ["$m1", "$m2", "$m3", "$m4", "$m5"])
+        #expect(!model.hasMoreGallery)
     }
 
     @Test("exportEncryptedRoom validates passphrase, encrypts RoomExportDocument, and writes .halo-export.json (D32)")

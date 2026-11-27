@@ -8,8 +8,10 @@ import os
 public enum SignpostInterval: String, Sendable, CaseIterable {
     /// Process start-up (first line of `HaloApp.init`) → the room list has rows. Not recorded for background launches or signed-out starts.
     case coldStart = "cold-start"
-    /// A room was put on the navigation path → its rows are visible at the newest message.
+    /// A room was chosen (its chat-list row tapped, or put on the navigation path) → its rows are visible at the newest message.
     case roomOpen = "room-open"
+    /// The same start → the first frame that draws the room's rows (M19-9): the message area is no longer empty.
+    case roomFirstRows = "room-first-rows"
     /// One immediate `/sync` (no long poll): request, response processing and store writes in the SDK.
     case syncCatchUp = "sync-catch-up"
     /// One long-poll `/sync`; includes the server's waiting time, so only its processing tail says anything about speed.
@@ -73,6 +75,7 @@ extension SignpostInterval {
         switch self {
         case .coldStart: "cold-start"
         case .roomOpen: "room-open"
+        case .roomFirstRows: "room-first-rows"
         case .syncCatchUp: "sync-catch-up"
         case .syncLongPoll: "sync-long-poll"
         case .imageDecode: "image-decode"

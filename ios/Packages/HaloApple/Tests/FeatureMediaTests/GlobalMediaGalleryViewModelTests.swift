@@ -33,20 +33,57 @@ private actor StubMultiRoomGalleryPort: RoomPort {
         case .failure(let error): throw error
         }
     }
+
+    func openMediaGallery(in room: RoomID) async throws(HaloError) -> any RoomMediaGallerySession {
+        guard let result = galleries[room] else { return StubGallerySession(items: []) }
+        switch result {
+        case .success(let items): return StubGallerySession(items: items)
+        case .failure(let error): throw error
+        }
+    }
+}
+
+private actor StubGallerySession: RoomMediaGallerySession {
+    private let items: [RoomMediaItem]
+    private var offset = 0
+
+    init(items: [RoomMediaItem]) { self.items = items }
+
+    func nextPage(limit: Int) async throws(HaloError) -> MediaGalleryPage {
+        guard offset < items.count, limit > 0 else { return MediaGalleryPage(items: [], hasMore: false) }
+        let end = min(items.count, offset + limit)
+        let slice = Array(items[offset..<end])
+        offset = end
+        return MediaGalleryPage(items: slice, hasMore: offset < items.count)
+    }
+
+    func close() async {}
 }
 
 private actor StubMediaPort: MediaPort {
     var downloads: [MediaRef: Data] = [:]
+    var contentCalls = 0
+    var fileCalls = 0
 
     func set(_ data: Data, for ref: MediaRef) { downloads[ref] = data }
 
     func content(_ ref: MediaRef) async throws(HaloError) -> Data {
+        contentCalls += 1
         guard let data = downloads[ref] else { throw HaloError.notFound }
         return data
     }
 
     func thumbnail(_ ref: MediaRef, width: Int, height: Int) async throws(HaloError) -> Data {
-        try await content(ref)
+        guard let data = downloads[ref] else { throw HaloError.notFound }
+        return data
+    }
+
+    func file(_ ref: MediaRef, name: String, mimeType: String?, in directory: URL) async throws(HaloError) -> URL {
+        fileCalls += 1
+        guard let data = downloads[ref] else { throw HaloError.notFound }
+        let url = directory.appendingPathComponent(Self.safeFileName(name))
+        do { try data.write(to: url, options: .atomic) } catch { throw .storage(.unavailable) }
+        return url
     }
 }
 
@@ -157,13 +194,53 @@ struct GlobalMediaGalleryViewModelTests {
         #expect(model.filteredItems.map(\.item.eventID.rawValue) == ["$e2"])
         model.searchText = ""
 
-        // Export writes bytes to a temp file.
+        // Full viewer file and export both stream via MediaPort.file (not content).
+        let viewerFile = try #require(await model.fullImageFile(model.items[0]))
+        #expect(try Data(contentsOf: viewerFile) == Data("jpeg-bytes".utf8))
+        try? FileManager.default.removeItem(at: viewerFile.deletingLastPathComponent())
+
         let exported = await model.exportMediaFile(model.items[0])
         #expect(exported != nil)
         if let exported {
             #expect(exported.lastPathComponent == "sunset.jpg")
             #expect(try Data(contentsOf: exported) == Data("jpeg-bytes".utf8))
+            try? FileManager.default.removeItem(at: exported.deletingLastPathComponent())
         }
+        let fileCalls = await mediaPort.fileCalls
+        let contentCalls = await mediaPort.contentCalls
+        #expect(fileCalls == 2 && contentCalls == 0)
+    }
+
+    @Test func paginatesAcrossRoomPagesAndRoomBatches() async throws {
+        let roomA = try RoomID("!pageA:example.org")
+        let roomB = try RoomID("!pageB:example.org")
+        let listPort = FakeRoomListPort(rooms: [
+            RoomSummary(id: roomA, name: "Alpha", isDirect: false, isEncrypted: true, membership: .joined),
+            RoomSummary(id: roomB, name: "Beta", isDirect: false, isEncrypted: true, membership: .joined),
+        ])
+        let coordinator = RoomListCoordinator(port: listPort)
+        await coordinator.start()
+        for await status in await coordinator.statuses() {
+            if case .loaded = status { break }
+        }
+
+        let a1 = RoomMediaItem(eventID: try EventID("$a1"), senderName: "Ann", timestamp: Self.date(2026, 11, 20), attachment: MediaAttachment(kind: .image, body: "a1.jpg", source: nil))
+        let a2 = RoomMediaItem(eventID: try EventID("$a2"), senderName: "Ann", timestamp: Self.date(2026, 11, 10), attachment: MediaAttachment(kind: .image, body: "a2.jpg", source: nil))
+        let b1 = RoomMediaItem(eventID: try EventID("$b1"), senderName: "Bob", timestamp: Self.date(2026, 11, 15), attachment: MediaAttachment(kind: .image, body: "b1.jpg", source: nil))
+
+        let roomPort = StubMultiRoomGalleryPort()
+        await roomPort.set(.success([a1, a2]), for: roomA)
+        await roomPort.set(.success([b1]), for: roomB)
+
+        let model = GlobalMediaGalleryViewModel(rooms: coordinator, roomPort: roomPort, calendar: Self.makeCalendar())
+        await model.load(perRoomLimit: 1, maxRooms: 1)
+        #expect(model.items.map(\.item.eventID.rawValue) == ["$a1"])
+        #expect(model.hasMore)
+
+        await model.loadMore()
+        #expect(model.items.map(\.item.eventID.rawValue) == ["$a1", "$b1", "$a2"])
+        #expect(!model.hasMore)
+        await model.closeSessions()
     }
 
     @Test func handlesPartialAndTotalRoomFailures() async throws {

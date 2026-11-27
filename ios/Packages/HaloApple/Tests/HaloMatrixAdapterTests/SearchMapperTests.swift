@@ -22,4 +22,20 @@ struct SearchMapperTests {
         #expect(try answer(#"{"sender":"@a:x","content":{"body":"x"},"unsigned":{"m.relations":{"m.replace":{"type":"m.room.message","sender":"@eve:x",\#(edit)}}}}"#) == .result(.unchanged))
         #expect(try answer(#"{"sender":"@a:x","content":{"ciphertext":"x"},"unsigned":{"m.relations":{"m.replace":{"type":"m.room.encrypted","sender":"@a:x","content":{"ciphertext":"y"}}}}}"#) == .encryptedEdit)
     }
+
+    @Test("live image attachment JSON resolves a valid SDK MediaRef thumbnail token")
+    func liveThumbnailRef() {
+        let plain = MatrixMessageIndexSource.thumbnailRef(in: #"{"msgtype":"m.image","body":"The only way","url":"mxc://x.org/pic1","info":{"mimetype":"image/png","size":1400000}}"#)
+        #expect(plain != nil)
+        let doc = MatrixMessageIndexSource.thumbnailRef(in: #"{"msgtype":"m.file","body":"doc.pdf","url":"mxc://x.org/doc1"}"#)
+        #expect(doc == nil, "a plain file without thumbnail_url uses its format icon tile")
+    }
+
+    @Test("clampedInt prevents trapping on out-of-range UInt64 sizes and dimensions")
+    func clampedUnsignedIntegers() {
+        #expect(SearchMapper.clampedInt(nil) == nil)
+        #expect(SearchMapper.clampedInt(1_400_000) == 1_400_000)
+        #expect(SearchMapper.clampedInt(UInt64.max) == Int.max)
+        #expect(TimelineMapper.clampedInt(UInt64.max) == Int.max)
+    }
 }

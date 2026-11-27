@@ -29,7 +29,10 @@ extension AppRoot {
         return UserProfileViewModel(
             profiles: profilePort, chats: chatCreation, user: user, roomDisplayName: member.displayName,
             isMe: member.isMe, avatar: member.avatar, media: media,
-            onIgnoreChanged: { [roomCoordinator] in await roomCoordinator.refreshIgnoredUsers() },
+            onIgnoreChanged: { [roomCoordinator, search] in
+                await roomCoordinator.refreshIgnoredUsers()
+                await search.refreshIgnoredUsers()
+            },
             onOpenRoom: onOpenRoom
         )
     }
@@ -61,13 +64,31 @@ extension AppRoot {
             room: room,
             drafts: threadRoot == nil ? drafts : nil,
             images: ImagePreparer(),
-            readThrough: readThroughClosure
+            readThrough: readThroughClosure,
+            thumbnails: thumbnailMemory
         )
-        model.botSenders = Set(preferences.botSenders)
         model.unrecognisedBotMessages = unrecognisedBots
         model.botActivity = threadRoot == nil ? botActivity : nil
         model.sendsTypingNotices = { [preferences] in preferences.sendTypingNotices }
+        configure(model)
+        return model
+    }
+
+    /// The settings a model reads when it is shown; set again on a model started ahead, as they may have changed meanwhile.
+    private func configure(_ model: TimelineViewModel) {
+        model.botSenders = Set(preferences.botSenders)
         model.klipy = klipy.isAvailable ? klipy : nil
+    }
+
+    /// The view model of a room screen: the one started when the room was chosen in the chat list (M19-9, D-MOT-2), so the first
+    /// frame has rows; otherwise a new one. A room opened at a message always gets a new one.
+    func makeRoomTimeline(room: RoomID, jumpTo: EventID?) -> TimelineViewModel {
+        if jumpTo == nil, let started = preparedTimelines.take(room) {
+            configure(started)
+            return started
+        }
+        let model = makeTimeline(room: room)
+        model.initialEvent = jumpTo
         return model
     }
 

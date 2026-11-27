@@ -2,6 +2,7 @@ import AppIntents
 import FeatureBotActivity
 import FeatureOnboarding
 import FeatureRoomList
+import FeatureTimeline
 import Foundation
 import HaloApplication
 import HaloDomain
@@ -10,6 +11,7 @@ import HaloMatrixAdapter
 import HaloPersistence
 import HaloPlatform
 import Synchronization
+import UIKit
 
 /// Composition root object graph (ADR-0022 step 2, TD-10).
 ///
@@ -48,11 +50,22 @@ final class AppRoot {
         botSenders: { [preferencesPort] in Set(preferencesPort.load().botSenders) }
     )
 
+    /// The timeline of a room chosen in the chat list, started before its screen is pushed (M19-9, D-MOT-2).
+    lazy var preparedTimelines = PreparedTimelines { [unowned self] room in makeTimeline(room: room) }
+    /// The pictures the timelines have shown, one bounded store for all of them (M19-9): a re-opened room paints them at once.
+    let thumbnailMemory = TimelineThumbnailMemory(byteLimit: 32 * 1024 * 1024)
+    private var memoryWarning: (any NSObjectProtocol)?
+
     let attentionCache: AttentionCache
     let activeRecords = ActiveRecordsBox()
     let timelinePort: MatrixTimelinePort
+    let roomListPort: MatrixRoomListPort
     let sessionCoordinator: SessionCoordinator
     let matrixSession: MatrixSessionPort
+    /// Tracks Low Power Mode, thermal state, and network reachability for sync and background scheduling (M19-7).
+    private let deviceConditionsBox = DeviceConditionsBox()
+    private var deviceConditions: DeviceConditions?
+    private var conditionUpdateTask: Task<Void, Never>?
     let media: MediaLoader
     let unrecognisedBots = UnrecognisedBotMessages()
     let previewPolicy: any MediaPreviewPolicyPort
@@ -96,6 +109,11 @@ final class AppRoot {
     /// Running performance signposts (LOGGING_AND_DIAGNOSTICS §5); dropped, not ended, when the measured path didn't happen.
     var coldStart: HaloSignpost.Running?
     var roomOpen: HaloSignpost.Running?
+    var roomFirstRows: HaloSignpost.Running?
+    /// The room whose chat-list row was just tapped: its timing began at the tap, not when it reached the navigation path.
+    var roomChosen: RoomID?
+    /// The chat-list tap waiting for its room's rows before pushing the screen (`openWhenReady`); a newer tap replaces it.
+    private var pendingOpen: Task<Void, Never>?
     private(set) var hasBegun = false
 
     init() {
@@ -117,11 +135,13 @@ final class AppRoot {
         // Shared with the notification extension: the Keychain access group and the App Group container.
         let keychain = HaloShared.keychain()
         AccountDataEraser.prepareStoreFolders(.standard())  // stores stay out of backups from the first byte
+        let conditionsBox = deviceConditionsBox
         let session = MatrixSessionPort(
             baseDirectory: HaloShared.storeDirectory(),
             readStoredSession: {
                 (try? keychain.readSync(.session)).flatMap { try? JSONDecoder().decode(StoredSession.self, from: $0) }
-            }
+            },
+            syncConditions: { conditionsBox.syncConditions }
         )
         matrixSession = session
         let sessionCoordinator = SessionCoordinator(port: session, keychain: keychain)
@@ -140,10 +160,16 @@ final class AppRoot {
         UserDefaults(suiteName: suite)?.removeObject(forKey: legacyStorageName)
 
         let recordsBox = activeRecords
-        let roomCoordinator = RoomListCoordinator(
-            port: MatrixRoomListPort(session: session, hasRecords: { room in
+        let roomListPort = MatrixRoomListPort(
+            session: session,
+            hasRecords: { room in
                 recordsBox.current?.all().contains { $0.roomID == room } ?? false
-            }),
+            },
+            eventTimeCacheFile: HaloShared.eventTimeCacheFile()
+        )
+        self.roomListPort = roomListPort
+        let roomCoordinator = RoomListCoordinator(
+            port: roomListPort,
             loadsAllPages: true, hiddenRooms: MatrixHiddenRoomsPort(session: session), profiles: profilePort
         )
         self.roomCoordinator = roomCoordinator
@@ -210,18 +236,84 @@ final class AppRoot {
         AppDependencyManager.shared.add(dependency: OpenChatRequestBox(self.openChat))
         AppDependencyManager.shared.add(dependency: FocusFilterStateBox(self.focus))
         AppDependencyManager.shared.add(dependency: siriSend)
-        roomList.warm = { [timelinePort] rooms in await timelinePort.warm(rooms) }
         roomList.botSenders = { [preferences] in Set(preferences.botSenders) }
 
         #if DEBUG
         Self.exportNSEMetrics(namespace: namespace)
         #endif
         self.log = log
+        // The adapter keeps the SDK timelines of the top rooms ready; skipped under Low Power Mode or thermal stress (M19-7, M19-9).
+        roomList.warm = { [timelinePort, conditionsBox] rooms in
+            guard !SyncEnergyPolicy.schedule(for: conditionsBox.syncConditions).pauseAuxiliaryWork else { return }
+            await timelinePort.warm(rooms)
+        }
+        let readStateRef = readState
+        let device = DeviceConditions { [weak self, session, readStateRef, conditionsBox] in
+            Task { @MainActor in
+                self?.applyDeviceConditions(session: session, readState: readStateRef, conditionsBox: conditionsBox)
+            }
+        }
+        deviceConditions = device
+        conditionsBox.current = device
+        applyDeviceConditions(session: session, readState: readStateRef, conditionsBox: conditionsBox)
+        // Under memory pressure a timeline started for a room not yet pushed goes first.
+        memoryWarning = NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.preparedTimelines.dropAll()
+                self?.thumbnailMemory.removeAll()
+            }
+        }
         log.info("app launched")
     }
 }
 
 extension AppRoot {
+    /// Opens `room`, chosen in the chat list: its timeline starts now and `push` runs once the screen would draw its rows on the
+    /// first frame, or after `PreparedTimelines.openingWait` (M19-9). A newer choice cancels this one: only the last room is pushed,
+    /// and the abandoned room lets go of its timeline.
+    func openWhenReady(_ room: RoomID, push: @escaping @MainActor () -> Void) {
+        pendingOpen?.cancel()
+        pendingOpen = Task { [weak self] in
+            guard let self else { return }
+            await preparedTimelines.prepare(room)
+            guard !Task.isCancelled else {
+                preparedTimelines.abandon(room)
+                return
+            }
+            pendingOpen = nil
+            push()
+        }
+    }
+
+    /// Begins the `room-open` and `room-first-rows` signposts (a room is being opened); `chosen` when a chat-list row was tapped.
+    func beginRoomOpen(chosen: RoomID? = nil) {
+        roomChosen = chosen
+        roomOpen = HaloSignpost.begin(.roomOpen)
+        roomFirstRows = HaloSignpost.begin(.roomFirstRows)
+    }
+
+    /// Background refresh interval adapted to Low Power Mode and thermal state (M19-7).
+    nonisolated var backgroundRefreshInterval: TimeInterval {
+        SyncEnergyPolicy.schedule(for: deviceConditionsBox.syncConditions).backgroundRefreshInterval
+    }
+
+    /// Serialises device-condition notifications so rapid transitions never apply stale low-energy flags out of order.
+    fileprivate func applyDeviceConditions(
+        session: MatrixSessionPort,
+        readState: ReadStateCoordinator,
+        conditionsBox: DeviceConditionsBox
+    ) {
+        let previous = conditionUpdateTask
+        conditionUpdateTask = Task {
+            await previous?.value
+            await session.conditionsChanged()
+            let pause = SyncEnergyPolicy.schedule(for: conditionsBox.syncConditions).pauseAuxiliaryWork
+            await readState.setLowEnergyMode(pause)
+        }
+    }
+
     /// Starts everything that must run whenever the process runs, with or without a window: iOS launches the app in the
     /// background for a silent push or an app refresh without connecting a scene. Call it as often as you like.
     func begin() async {
@@ -242,5 +334,18 @@ final class ActiveRecordsBox: Sendable {
     var current: (any NotificationRecordPort)? {
         get { value.withLock { $0 } }
         set { value.withLock { $0 = newValue } }
+    }
+}
+
+final class DeviceConditionsBox: Sendable {
+    private let value = Mutex<DeviceConditions?>(nil)
+    var current: DeviceConditions? {
+        get { value.withLock { $0 } }
+        set { value.withLock { $0 = newValue } }
+    }
+
+    var syncConditions: SyncEnergyPolicy.Conditions {
+        guard let snap = current?.snapshot else { return .init() }
+        return SyncEnergyPolicy.Conditions(lowPower: snap.lowPower, isHot: snap.isHot, offline: snap.offline)
     }
 }

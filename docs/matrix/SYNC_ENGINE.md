@@ -19,8 +19,13 @@ stateDiagram-v2
   Stopped --> Idle
 ```
 
-- First request uses `timeoutMs: 0` (immediate catch-up); subsequent requests use an 8 s long poll (`MatrixSessionPort.longPollMilliseconds`).
-- Recoverable offline errors (and the SDK's generic unreachable-host error) transition to `.offline` and back off in-loop (1 s → 60 s); upon recovery, send queues are re-enabled (`enableAllSendQueues(enable: true)`).
+- First request uses `timeoutMs: 0` (immediate catch-up); subsequent requests use a 12 s long poll (`SyncEnergyPolicy.normalLongPollMilliseconds`, keeping 3 s headroom below the 15 s request timeout for GA-29).
+- **Energy and wake-ups (M19-7, NFR-15):** `SyncEnergyPolicy` adapts the sync loop and background work to `DeviceConditions`:
+  - Under Low Power Mode (`lowPower`) or thermal stress (`.serious`/`.critical`), empty long-poll responses rest interruptibly (`15 s` / `25 s`) before polling again, retry backoff stretches (`3 s` / `5 s` → `120 s`), `BGAppRefreshTask` stretches (`45 min` / `60 min` vs `15 min`), and non-essential auxiliary work (speculative room-timeline warming, periodic read-state auditor) pauses; incoming room changes continue polling without delay.
+  - When `NWPathMonitor` reports no network path (`offline`), the loop sleeps interruptibly instead of spinning HTTP retries and wakes immediately when connectivity returns.
+  - Empty idle long-poll responses (after catch-up, with no changed rooms, membership changes, pending receipt confirmations, or background sync waiters) skip the 1,000-room FFI scan/diff in `MatrixRoomListPort` and skip redundant read-state re-evaluation/widget writes in `ReadStateCoordinator`.
+  - Resolved receipt event timestamps are cached in a derived, rebuildable `EventTimeCache` (`halo-event-times.json`, excluded from backup and erased on sign-out) so relaunches make zero repeat `GET /event` calls for unread rooms (GA-28).
+- Recoverable offline errors (and the SDK's generic unreachable-host error) transition to `.offline` and back off in-loop (1 s → 60 s normal, 3–5 s → 120 s under Low Power / thermal stress); upon recovery, send queues are re-enabled (`enableAllSendQueues(enable: true)`).
 - Auth errors (`M_UNKNOWN_TOKEN`, hard or soft logout) stop sync immediately and emit `.loggedOut` / `.softLoggedOut` via `ClientDelegate` and `runSync` (R-10), so `SyncCoordinator` never retries a revoked session.
 
 ## 2. SyncCoordinator rules
