@@ -105,6 +105,16 @@ struct ProxyControl: Sendable {
     func fault(_ rule: [String: any Sendable]) async throws { _ = try await call("POST", "/rules", rule) }
     func heal() async throws { _ = try await call("DELETE", "/rules", nil) }
     func hits() async throws -> Int { (try await call("GET", "/rules", nil) as? [[String: Any]] ?? []).reduce(0) { $0 + ($1["hits"] as? Int ?? 0) } }
+    func resetStats() async throws { _ = try await call("DELETE", "/stats", nil) }
+
+    /// Count of HTTP GET requests to Matrix media download/thumbnail endpoints since `resetStats()`.
+    func mediaDownloadRequests() async throws -> Int {
+        guard let stats = try await call("GET", "/stats", nil) as? [String: [String: Any]] else { return 0 }
+        return stats.reduce(0) { total, entry in
+            let isMediaGet = entry.key.hasPrefix("GET ") && entry.key.contains("/media/")
+            return total + (isMediaGet ? (entry.value["requests"] as? Int ?? 0) : 0)
+        }
+    }
 
     private func call(_ method: String, _ path: String, _ body: [String: any Sendable]?) async throws -> Any {
         guard let url = URL(string: (env["HALO_FAULT_CONTROL"] ?? "") + path) else { throw ContractViolation("no proxy") }
@@ -131,6 +141,16 @@ struct TestPeer: Sendable {
 
     func makeRoom() async throws -> RoomID {
         try RoomID(try await Self.call("POST", base + "/createRoom", token, ["preset": "public_chat"])["room_id"] as? String ?? "")
+    }
+
+    func makeEncryptedRoom() async throws -> RoomID {
+        let body: [String: Any] = [
+            "preset": "public_chat",
+            "initial_state": [
+                ["type": "m.room.encryption", "state_key": "", "content": ["algorithm": "m.megolm.v1.aes-sha2"]],
+            ],
+        ]
+        return try RoomID(try await Self.call("POST", base + "/createRoom", token, body)["room_id"] as? String ?? "")
     }
 
     func join(_ room: RoomID) async throws { _ = try await Self.call("POST", base + "/rooms/\(room.rawValue)/join", token, [:]) }

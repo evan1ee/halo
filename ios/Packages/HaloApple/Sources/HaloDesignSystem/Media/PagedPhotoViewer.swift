@@ -27,6 +27,7 @@ public struct PagedMediaItem: Identifiable, Hashable, Sendable {
 /// Shared full-screen paged photo & media viewer used by both Timeline and Global Media Gallery (ADR-0022 step 3).
 /// Supports VisionKit Live Text / Subject Lift / Visual Look Up, swipe-down dismiss, tap-to-hide chrome,
 /// Save to Photos, Copy, Share, and optional Halo-native actions (Reply, React, Save as Sticker, Jump to Message).
+/// Full-size photos are read and decoded straight from disk (M19-5) so viewing or swiping never holds whole files in memory.
 public struct PagedPhotoViewer: View {
     private let items: [PagedMediaItem]
     @State private var currentID: String
@@ -35,12 +36,12 @@ public struct PagedPhotoViewer: View {
     @State private var showsChrome = true
     @State private var isZoomed = false
     @State private var dragOffset: CGFloat = 0
-    @State private var loadedDataByID: [String: Data] = [:]
+    @State private var loadedFileByID: [String: URL] = [:]
     @State private var toastMessage: String?
     @State private var toastTask: Task<Void, Never>?
     @Environment(\.dismiss) private var dismiss
 
-    private let loadImageData: @Sendable (PagedMediaItem) async -> Data?
+    private let loadImageFile: @Sendable (PagedMediaItem) async -> URL?
     private let exportItem: @Sendable (PagedMediaItem) async -> URL?
     private let onJumpToMessage: ((PagedMediaItem) -> Void)?
     private let onReply: ((PagedMediaItem) -> Void)?
@@ -52,7 +53,7 @@ public struct PagedPhotoViewer: View {
     public init(
         items: [PagedMediaItem],
         initialID: String,
-        loadImageData: @escaping @Sendable (PagedMediaItem) async -> Data?,
+        loadImageFile: @escaping @Sendable (PagedMediaItem) async -> URL?,
         exportItem: @escaping @Sendable (PagedMediaItem) async -> URL?,
         onJumpToMessage: ((PagedMediaItem) -> Void)? = nil,
         onReply: ((PagedMediaItem) -> Void)? = nil,
@@ -61,7 +62,7 @@ public struct PagedPhotoViewer: View {
     ) {
         self.items = items
         _currentID = State(initialValue: initialID)
-        self.loadImageData = loadImageData
+        self.loadImageFile = loadImageFile
         self.exportItem = exportItem
         self.onJumpToMessage = onJumpToMessage
         self.onReply = onReply
@@ -78,9 +79,9 @@ public struct PagedPhotoViewer: View {
         return items[currentIndex]
     }
 
-    private var currentImageData: Data? {
+    private var currentFileURL: URL? {
         guard let id = currentItem?.id else { return nil }
-        return loadedDataByID[id]
+        return loadedFileByID[id]
     }
 
     private var dismissProgress: CGFloat {
@@ -98,9 +99,9 @@ public struct PagedPhotoViewer: View {
                     ForEach(items) { item in
                         PagedPhotoPage(
                             item: item,
-                            loadImageData: loadImageData,
-                            onLoaded: { data in
-                                loadedDataByID[item.id] = data
+                            loadImageFile: loadImageFile,
+                            onLoaded: { url in
+                                loadedFileByID[item.id] = url
                             },
                             onSingleTap: {
                                 withAnimation(.easeInOut(duration: 0.2)) {
@@ -171,8 +172,8 @@ public struct PagedPhotoViewer: View {
                         }
                         .accessibilityLabel("Jump to message")
                     }
-                    if let exportedURL {
-                        ShareLink(item: exportedURL) {
+                    if let shareURL = exportedURL ?? currentFileURL {
+                        ShareLink(item: shareURL) {
                             Image(systemName: "square.and.arrow.up")
                         }
                         .accessibilityLabel("Share media")
@@ -196,18 +197,20 @@ public struct PagedPhotoViewer: View {
                         .accessibilityLabel("Export media")
                     }
                     #if canImport(UIKit)
-                    if currentItem?.isImage == true, currentImageData != nil {
+                    if currentItem?.isImage == true, currentFileURL != nil {
                         Menu {
                             Button("Save to Photos", systemImage: "square.and.arrow.down") {
                                 Task { await saveCurrentToPhotos() }
                             }
                             Button("Copy Photo", systemImage: "doc.on.doc") {
-                                copyCurrentPhoto()
+                                Task { await copyCurrentPhoto() }
                             }
-                            if let onSaveAsSticker, let data = currentImageData, let item = currentItem {
+                            if let onSaveAsSticker, let url = currentFileURL, let item = currentItem {
                                 Divider()
                                 Button("Save as Sticker", systemImage: "face.smiling") {
-                                    onSaveAsSticker(data, item.caption ?? item.title)
+                                    if let data = try? Data(contentsOf: url) {
+                                        onSaveAsSticker(data, item.caption ?? item.title)
+                                    }
                                 }
                             }
                         } label: {
@@ -219,13 +222,18 @@ public struct PagedPhotoViewer: View {
                 }
             }
             .onChange(of: currentID) {
+                if let url = exportedURL { Self.removeTemporaryFolder(of: url) }
                 exportedURL = nil
                 isExporting = false
                 isZoomed = false
             }
         }
         .presentationDragIndicator(.visible)
-        .onDisappear { toastTask?.cancel() }
+        .onDisappear {
+            toastTask?.cancel()
+            for url in loadedFileByID.values { Self.removeTemporaryFolder(of: url) }
+            if let url = exportedURL { Self.removeTemporaryFolder(of: url) }
+        }
     }
 
     @ViewBuilder
@@ -262,7 +270,7 @@ public struct PagedPhotoViewer: View {
                     }
 
                     #if canImport(UIKit)
-                    if currentItem.isImage, currentImageData != nil {
+                    if currentItem.isImage, let url = currentFileURL {
                         Button {
                             Task { await saveCurrentToPhotos() }
                         } label: {
@@ -272,9 +280,11 @@ public struct PagedPhotoViewer: View {
                         }
                         .accessibilityLabel("Save to Photos")
 
-                        if let onSaveAsSticker, let data = currentImageData {
+                        if let onSaveAsSticker {
                             Button {
-                                onSaveAsSticker(data, currentItem.caption ?? currentItem.title)
+                                if let data = try? Data(contentsOf: url) {
+                                    onSaveAsSticker(data, currentItem.caption ?? currentItem.title)
+                                }
                             } label: {
                                 Image(systemName: "sparkles.rectangle.stack")
                                     .font(.body.weight(.medium))
@@ -329,14 +339,15 @@ public struct PagedPhotoViewer: View {
     }
 
     #if canImport(UIKit)
-    private func copyCurrentPhoto() {
-        guard let data = currentImageData, let image = UIImage(data: data) else { return }  // decode: the full photo, once, on the person's request
+    private func copyCurrentPhoto() async {
+        guard let url = currentFileURL,
+              let image = await ImagePipeline.decode(fileURL: url, maxPixel: ImagePipeline.Size.viewer) else { return }
         UIPasteboard.general.image = image
         showToast("Copied")
     }
 
     private func saveCurrentToPhotos() async {
-        guard let data = currentImageData else { return }
+        guard let url = currentFileURL else { return }
         #if canImport(Photos)
         let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
         guard status == .authorized || status == .limited else {
@@ -346,7 +357,7 @@ public struct PagedPhotoViewer: View {
         do {
             try await PHPhotoLibrary.shared().performChanges {
                 let request = PHAssetCreationRequest.forAsset()
-                request.addResource(with: .photo, data: data, options: nil)
+                request.addResource(with: .photo, fileURL: url, options: nil)
             }
             showToast("Saved to Photos")
         } catch {
@@ -355,6 +366,13 @@ public struct PagedPhotoViewer: View {
         #endif
     }
     #endif
+
+    private static func removeTemporaryFolder(of url: URL) {
+        let folder = url.deletingLastPathComponent()
+        let name = folder.lastPathComponent
+        guard name.hasPrefix("halo-viewer-") || name.hasPrefix("halo-photo-") || name.hasPrefix("halo-global-gallery-") else { return }
+        try? FileManager.default.removeItem(at: folder)  // best-effort: temporary viewer copy
+    }
 
     private func showToast(_ message: String) {
         toastTask?.cancel()
@@ -373,15 +391,15 @@ public struct PagedPhotoViewer: View {
 
 private struct PagedPhotoPage: View {
     let item: PagedMediaItem
-    let loadImageData: @Sendable (PagedMediaItem) async -> Data?
-    let onLoaded: @MainActor (Data) -> Void
+    let loadImageFile: @Sendable (PagedMediaItem) async -> URL?
+    let onLoaded: @MainActor (URL) -> Void
     let onSingleTap: () -> Void
     let onZoomChange: (Bool) -> Void
 
-    @State private var data: Data?
+    @State private var fileURL: URL?
     @State private var isLoading = false
     #if canImport(UIKit)
-    /// The photo decoded off the main thread, at most `ImagePipeline.Size.viewer` on the long side.
+    /// The photo decoded off the main thread straight from disk, at most `ImagePipeline.Size.viewer` on the long side.
     @State private var viewerImage: UIImage?
     #endif
 
@@ -409,14 +427,14 @@ private struct PagedPhotoPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: item.id) {
-            guard item.isImage, data == nil else { return }
+            guard item.isImage, fileURL == nil else { return }
             isLoading = true
-            let loaded = await loadImageData(item)
-            data = loaded
+            let loaded = await loadImageFile(item)
+            fileURL = loaded
             if let loaded {
                 onLoaded(loaded)
                 #if canImport(UIKit)
-                viewerImage = await ImagePipeline.decode(loaded, maxPixel: ImagePipeline.Size.viewer)
+                viewerImage = await ImagePipeline.decode(fileURL: loaded, maxPixel: ImagePipeline.Size.viewer)
                 #endif
             }
             isLoading = false

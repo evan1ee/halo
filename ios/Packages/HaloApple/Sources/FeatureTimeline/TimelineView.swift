@@ -550,9 +550,9 @@ public struct TimelineView: View {
         return PagedPhotoViewer(
             items: items,
             initialID: initial.id,
-            loadImageData: { item in
+            loadImageFile: { item in
                 guard let target = byID[item.id] else { return nil }
-                return await model.fullImageData(for: target.image)
+                return await model.fullImageFile(for: target.image, filename: target.caption ?? "photo.jpg")
             },
             exportItem: { item in
                 guard let target = byID[item.id] else { return nil }

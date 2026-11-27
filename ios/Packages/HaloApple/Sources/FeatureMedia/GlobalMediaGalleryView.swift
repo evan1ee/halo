@@ -106,9 +106,9 @@ public struct GlobalMediaGalleryView: View {
             PagedPhotoViewer(
                 items: items,
                 initialID: entry.id,
-                loadImageData: { media in
-                    guard let target = byID[media.id], let source = target.item.attachment.source else { return nil }
-                    return await model.fullImageData(source)
+                loadImageFile: { media in
+                    guard let target = byID[media.id] else { return nil }
+                    return await model.fullImageFile(target)
                 },
                 exportItem: { media in
                     guard let target = byID[media.id] else { return nil }
@@ -134,6 +134,9 @@ public struct GlobalMediaGalleryView: View {
         }
         .refreshable {
             await model.load()
+        }
+        .onDisappear {
+            Task { await model.closeSessions() }
         }
     }
 
@@ -248,8 +251,8 @@ public struct GlobalMediaGalleryView: View {
                                 Button {
                                     selectedItem = entry
                                 } label: {
-                                    GlobalMediaGridTile(entry: entry) { ref in
-                                        await model.thumbnailData(ref, size: 400)
+                                    GlobalMediaGridTile(entry: entry) {
+                                        await model.thumbnailData(for: entry.item.attachment, size: 400)
                                     }
                                 }
                                 .buttonStyle(.plain)
@@ -263,6 +266,25 @@ public struct GlobalMediaGalleryView: View {
                         } else {
                             visibleSectionIDs.remove(section.id)
                         }
+                    }
+                }
+                if model.hasMore {
+                    HStack {
+                        Spacer()
+                        if model.isLoadingMore {
+                            ProgressView()
+                                .accessibilityLabel("Loading more media")
+                        } else {
+                            Button("Load more") {
+                                Task { await model.loadMore() }
+                            }
+                            .accessibilityIdentifier("global-media-load-more")
+                        }
+                        Spacer()
+                    }
+                    .padding(.vertical, HaloSpacing.m)
+                    .onAppear {
+                        Task { await model.loadMore() }
                     }
                 }
             }
@@ -325,6 +347,26 @@ public struct GlobalMediaGalleryView: View {
                     }
                 }
             }
+            if model.hasMore {
+                Section {
+                    HStack {
+                        Spacer()
+                        if model.isLoadingMore {
+                            ProgressView()
+                                .accessibilityLabel("Loading more media")
+                        } else {
+                            Button("Load more") {
+                                Task { await model.loadMore() }
+                            }
+                            .accessibilityIdentifier("global-media-files-load-more")
+                        }
+                        Spacer()
+                    }
+                    .onAppear {
+                        Task { await model.loadMore() }
+                    }
+                }
+            }
         }
         #if os(iOS)
         .scrollEdgeEffectHidden(true, for: .top)
@@ -335,7 +377,7 @@ public struct GlobalMediaGalleryView: View {
 
 private struct GlobalMediaGridTile: View {
     let entry: GlobalMediaItem
-    let load: @MainActor (MediaRef) async -> Data?
+    let load: @MainActor () async -> Data?
     @State private var data: Data?
 
     private var previewRef: MediaRef? {
@@ -381,8 +423,8 @@ private struct GlobalMediaGridTile: View {
             }
             .task(id: previewRef) {
                 data = nil
-                guard let previewRef else { return }
-                data = await load(previewRef)
+                guard previewRef != nil else { return }
+                data = await load()
             }
     }
 

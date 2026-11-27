@@ -31,6 +31,18 @@ public enum ImagePipeline {
         return "\(hasher.finalize())-\(maxPixel)"
     }
 
+    /// Cache key for a picture decoded straight from disk (M19-5): path, byte size, modification time and pixel size.
+    static func fileKey(_ url: URL, maxPixel: Int) -> String {
+        var hasher = Hasher()
+        let path = url.standardizedFileURL.path
+        hasher.combine(path)
+        if let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey]) {
+            hasher.combine(values.fileSize)
+            hasher.combine(values.contentModificationDate?.timeIntervalSinceReferenceDate)
+        }
+        return "file-\(hasher.finalize())-\(maxPixel)"
+    }
+
     #if canImport(UIKit)
     /// `NSCache` is thread-safe; the wrapper says so to the compiler and empties it on a memory warning.
     private final class Store: @unchecked Sendable {
@@ -52,6 +64,11 @@ public enum ImagePipeline {
         return cache.object(forKey: key(data, maxPixel: maxPixel) as NSString)
     }
 
+    /// The picture if this file was decoded before at `maxPixel`.
+    public static func cached(fileURL: URL, maxPixel: Int) -> UIImage? {
+        return cache.object(forKey: fileKey(fileURL, maxPixel: maxPixel) as NSString)
+    }
+
     /// Decodes off the main thread, at most `maxPixel` on the long side, orientation applied, and keeps the result.
     @concurrent public static func decode(_ data: Data, maxPixel: Int) async -> UIImage? {
         if let hit = cached(data, maxPixel: maxPixel) { return hit }
@@ -60,8 +77,25 @@ public enum ImagePipeline {
         return image
     }
 
+    /// Decodes directly from a file on disk off the main thread, never loading the full encoded bytes into memory (M19-5).
+    @concurrent public static func decode(fileURL: URL, maxPixel: Int) async -> UIImage? {
+        if let hit = cached(fileURL: fileURL, maxPixel: maxPixel) { return hit }
+        guard let image = HaloSignpost.measure(.imageDecode, { thumbnail(fileURL: fileURL, maxPixel: maxPixel) }) else { return nil }
+        store(image, for: fileKey(fileURL, maxPixel: maxPixel))
+        return image
+    }
+
     static func thumbnail(_ data: Data, maxPixel: Int) -> UIImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        return thumbnail(source: source, maxPixel: maxPixel)
+    }
+
+    static func thumbnail(fileURL: URL, maxPixel: Int) -> UIImage? {
+        guard let source = CGImageSourceCreateWithURL(fileURL as CFURL, nil) else { return nil }
+        return thumbnail(source: source, maxPixel: maxPixel)
+    }
+
+    private static func thumbnail(source: CGImageSource, maxPixel: Int) -> UIImage? {
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,

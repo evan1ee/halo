@@ -174,13 +174,22 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
 
     public struct Image: Equatable, Sendable {
         public let ref: MediaRef
+        /// Precomputed inline thumbnail reference (`info.thumbnail_file` / `info.thumbnail_url`), when the sender included one.
+        public let thumbnailRef: MediaRef?
+        /// Whether this photo was sent by the signed-in user (cached locally under `MediaFormat::File` by the SDK, M19-5).
+        public let isOwn: Bool
         /// Width / height, when the sender gave dimensions; the view falls back to 4:3.
         public let aspectRatio: Double?
         /// Optional BlurHash placeholder string (`xyz.amorgan.blurhash`), when provided by the sender.
         public let blurhash: String?
 
-        public init(ref: MediaRef, aspectRatio: Double?, blurhash: String? = nil) {
+        public init(
+            ref: MediaRef, aspectRatio: Double?, blurhash: String? = nil,
+            thumbnailRef: MediaRef? = nil, isOwn: Bool = false
+        ) {
             self.ref = ref
+            self.thumbnailRef = thumbnailRef
+            self.isOwn = isOwn
             self.aspectRatio = aspectRatio
             self.blurhash = blurhash
         }

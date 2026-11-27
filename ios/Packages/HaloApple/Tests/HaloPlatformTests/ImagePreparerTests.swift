@@ -69,4 +69,17 @@ struct ImagePreparerTests {
         #expect(ImagePreparer.name("", ext: "jpg") == "image.jpg")
         #expect(ImagePreparer.name("a.b.png", ext: "jpg") == "a.b.jpg")
     }
+
+    @Test("photos larger than the thumbnail size carry a precomputed thumbnail without GPS metadata (M19-5)")
+    func generatesThumbnailForLargePhotos() throws {
+        let big = try ImagePreparer(maximumDimension: 1200, thumbnailDimension: 300).prepare(data: make(1000, 500, gps: true), filename: "large.jpg")
+        let thumb = try #require(big.thumbnail)
+        #expect(thumb.width == 300 && thumb.height == 150)
+        #expect(thumb.mimeType == "image/jpeg")
+        #expect(!thumb.data.isEmpty)
+        #expect(properties(thumb.data)?[kCGImagePropertyGPSDictionary] == nil)
+
+        let small = try ImagePreparer(maximumDimension: 1200, thumbnailDimension: 300).prepare(data: make(200, 100), filename: "small.jpg")
+        #expect(small.thumbnail == nil)
+    }
 }

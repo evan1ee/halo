@@ -122,3 +122,15 @@ public struct RoomMediaItem: Sendable, Equatable, Identifiable {
         self.attachment = attachment
     }
 }
+
+/// One page of media items from a room's gallery (M19-5).
+public struct MediaGalleryPage: Sendable, Equatable {
+    public let items: [RoomMediaItem]
+    /// `true` when older media items may still be available via another `nextPage(limit:)` call.
+    public let hasMore: Bool
+
+    public init(items: [RoomMediaItem], hasMore: Bool) {
+        self.items = items
+        self.hasMore = hasMore
+    }
+}

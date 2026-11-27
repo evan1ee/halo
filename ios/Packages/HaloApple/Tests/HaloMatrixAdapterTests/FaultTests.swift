@@ -256,6 +256,168 @@ struct FaultTests {
         print("FAULT fileToDisk: \(try FileManager.default.contentsOfDirectory(atPath: directory.path))")
     }
 
+    @Test("An encrypted room's file comes down to disk byte for byte, and cached media makes zero network requests (M19-5)", .timeLimit(.minutes(3)))
+    func encryptedFileAndCacheMakesNoRequest() async throws {
+        let stage = try await TestStage()
+        let encRoom = try await stage.peer.makeEncryptedRoom()
+        let joined = try await TestPeer(server: stage.direct, user: stage.user, password: stage.password)
+        try await joined.join(encRoom)
+        await joined.logout()
+        var opened: (any TimelineSession)?
+        for _ in 0..<60 where opened == nil {
+            opened = try? await MatrixTimelinePort(session: stage.session).open(room: encRoom)
+            if opened == nil { try await Task.sleep(for: .milliseconds(500)) }
+        }
+        let encTimeline = try #require(opened)
+        Cleanup.current.add { await encTimeline.close() }
+        let encMirror = TimelineMirror(encTimeline.items())
+
+        // Encrypted file sent by Halo and streamed straight to disk.
+        let payload = Data((0..<(256 * 1024)).map { UInt8(truncatingIfNeeded: $0 &* 17 &+ 5) })
+        try await encTimeline.sendFile(OutgoingFile(data: payload, filename: "secret.bin", mimeType: "application/octet-stream"))
+        let encRef: MediaRef = try await encMirror.wait(seconds: 60, "the encrypted file event") { mirror in
+            mirror.mediaRef(named: "secret.bin")
+        }
+        let dir1 = FileManager.default.temporaryDirectory.appendingPathComponent("halo-enc-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir1, withIntermediateDirectories: true)
+        Cleanup.current.add { try? FileManager.default.removeItem(at: dir1) }
+        let encURL = try await MatrixMediaPort(session: stage.session).file(encRef, name: "secret.bin", mimeType: "application/octet-stream", in: dir1)
+        #expect(try Data(contentsOf: encURL) == payload)
+
+        // File sent by peer: first open downloads once, second open comes from the SDK cache with zero HTTP media requests.
+        let peerBytes = Data("peer-cached-payload".utf8)
+        let mxc = try await stage.peer.upload(peerBytes, type: "application/octet-stream")
+        _ = try await stage.peer.send(["msgtype": "m.file", "body": "cached.bin", "url": mxc, "info": ["mimetype": "application/octet-stream", "size": peerBytes.count]], to: stage.room)
+        let peerRef: MediaRef = try await stage.mirror.wait(seconds: 60, "peer file event") { mirror in
+            mirror.mediaRef(named: "cached.bin")
+        }
+        let mediaPort = MatrixMediaPort(session: stage.session)
+        let dir2 = FileManager.default.temporaryDirectory.appendingPathComponent("halo-cache1-\(UUID().uuidString)", isDirectory: true)
+        let dir3 = FileManager.default.temporaryDirectory.appendingPathComponent("halo-cache2-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir2, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: dir3, withIntermediateDirectories: true)
+        Cleanup.current.add {
+            try? FileManager.default.removeItem(at: dir2)
+            try? FileManager.default.removeItem(at: dir3)
+        }
+        try await stage.proxy.resetStats()
+        let firstURL = try await mediaPort.file(peerRef, name: "cached.bin", mimeType: "application/octet-stream", in: dir2)
+        #expect(try Data(contentsOf: firstURL) == peerBytes)
+        let firstRequests = try await stage.proxy.mediaDownloadRequests()
+        #expect(firstRequests >= 1, "first open downloads from the server")
+
+        try await stage.proxy.resetStats()
+        let secondURL = try await mediaPort.file(peerRef, name: "cached.bin", mimeType: "application/octet-stream", in: dir3)
+        #expect(try Data(contentsOf: secondURL) == peerBytes)
+        let secondRequests = try await stage.proxy.mediaDownloadRequests()
+        #expect(secondRequests == 0, "cached media must make zero network requests")
+        print("FAULT encryptedFileAndCacheMakesNoRequest: first=\(firstRequests), second=\(secondRequests)")
+    }
+
+    @Test("Own photo thumbnail is served from the SDK cache after a restart with zero network requests (M19-5)", .timeLimit(.minutes(3)))
+    func ownThumbnailAfterRestartMakesNoRequest() async throws {
+        let proxy = ProxyControl()
+        try await proxy.heal()
+        let user = ProcessInfo.processInfo.environment["HALO_FAULT_USER"] ?? ""
+        let password = ProcessInfo.processInfo.environment["HALO_FAULT_PASSWORD"] ?? ""
+        let direct = ProcessInfo.processInfo.environment["HALO_FAULT_DIRECT"] ?? ""
+        let server = ProcessInfo.processInfo.environment["HALO_FAULT_SERVER"] ?? ""
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("halo-thumb-restart-\(UUID().uuidString)")
+        Cleanup.current.add { try? FileManager.default.removeItem(at: directory) }
+
+        let peer = try await TestPeer(server: direct, user: user + "peer", password: password)
+        Cleanup.current.add { await peer.logout() }
+        let room = try await peer.makeEncryptedRoom()
+        let joined = try await TestPeer(server: direct, user: user, password: password)
+        try await joined.join(room)
+        await joined.logout()
+
+        // 1x1 PNG bytes for photo and thumbnail.
+        let png = Data([
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+            0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0xF8, 0xCF, 0xC0, 0xF0,
+            0x1F, 0x00, 0x05, 0x00, 0x01, 0xFF, 0x89, 0x99, 0x3D, 0x1D, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
+            0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+        ])
+        let stored: StoredSession
+        do {
+            let session = MatrixSessionPort(baseDirectory: directory)
+            let details = try await session.loginDetails(server: server)
+            stored = try await session.loginPassword(PasswordCredentials(username: user, password: password, deviceDisplayName: "thumb-restart"), on: details)
+            let sync = SyncFollower(MatrixSyncPort(session: session))
+            try await sync.start()
+            var opened: (any TimelineSession)?
+            for _ in 0..<60 where opened == nil {
+                opened = try? await MatrixTimelinePort(session: session).open(room: room)
+                if opened == nil { try await Task.sleep(for: .milliseconds(500)) }
+            }
+            let timeline = try #require(opened)
+            let mirror = TimelineMirror(timeline.items())
+            let thumb = OutgoingImage.Thumbnail(data: png, mimeType: "image/png", width: 1, height: 1)
+            try await timeline.sendImage(OutgoingImage(data: png, filename: "own.png", mimeType: "image/png", width: 1, height: 1, thumbnail: thumb))
+            _ = try await mirror.wait(seconds: 60, "own photo confirmed") { mirror in
+                mirror.ownMedia(named: "own.png", confirmedOnly: true)
+            }
+            await sync.stop()
+            await timeline.close()
+        }
+
+        // Simulate a fresh app launch against the same persisted store directory.
+        let restarted = MatrixSessionPort(baseDirectory: directory)
+        Cleanup.current.add { try? await restarted.logout() }
+        try await restarted.restore(stored)
+        let sync2 = SyncFollower(MatrixSyncPort(session: restarted))
+        Cleanup.current.add { await sync2.stop() }
+        try await sync2.start()
+        var opened2: (any TimelineSession)?
+        for _ in 0..<60 where opened2 == nil {
+            opened2 = try? await MatrixTimelinePort(session: restarted).open(room: room)
+            if opened2 == nil { try await Task.sleep(for: .milliseconds(500)) }
+        }
+        let timeline2 = try #require(opened2)
+        Cleanup.current.add { await timeline2.close() }
+        let mirror2 = TimelineMirror(timeline2.items())
+        let attachment: MediaAttachment = try await mirror2.wait(seconds: 60, "own photo after restart") { mirror in
+            mirror.ownMedia(named: "own.png")
+        }
+
+        try await proxy.resetStats()
+        let mediaPort = MatrixMediaPort(session: restarted)
+        let chosenRef = try #require(attachment.thumbnail ?? attachment.source)
+        let bytes = try await mediaPort.content(chosenRef)
+        #expect(bytes == png)
+        let mediaRequests = try await proxy.mediaDownloadRequests()
+        #expect(mediaRequests == 0, "own thumbnail after restart must not be downloaded again")
+        print("FAULT ownThumbnailAfterRestartMakesNoRequest: hasThumb=\(attachment.thumbnail != nil), mediaRequests=\(mediaRequests)")
+    }
+
+    @Test("Room media gallery paginates across multiple pages without duplicates (M19-5)", .timeLimit(.minutes(3)))
+    func roomGalleryPaging() async throws {
+        let stage = try await TestStage()
+        for index in 1...5 {
+            let bytes = Data("gallery-file-\(index)".utf8)
+            let mxc = try await stage.peer.upload(bytes, type: "application/octet-stream")
+            _ = try await stage.peer.send(["msgtype": "m.file", "body": "g\(index).bin", "url": mxc, "info": ["mimetype": "application/octet-stream", "size": bytes.count]], to: stage.room)
+        }
+        _ = try await stage.mirror.wait(seconds: 60, "fifth gallery file") { mirror in
+            mirror.mediaRef(named: "g5.bin")
+        }
+        let session = try await MatrixRoomPort(session: stage.session).openMediaGallery(in: stage.room)
+        Cleanup.current.add { await session.close() }
+
+        let page1 = try await session.nextPage(limit: 2)
+        let page2 = try await session.nextPage(limit: 2)
+        let page3 = try await session.nextPage(limit: 2)
+        let allNames = (page1.items + page2.items + page3.items).map(\.attachment.body)
+        #expect(page1.items.count == 2 && page1.hasMore)
+        #expect(page2.items.count == 2 && page2.hasMore)
+        #expect(page3.items.count == 1)
+        #expect(allNames == ["g5.bin", "g4.bin", "g3.bin", "g2.bin", "g1.bin"])
+        await session.close()
+        print("FAULT roomGalleryPaging: pages=\([page1.items.count, page2.items.count, page3.items.count])")
+    }
+
     struct Broken: Sendable, CustomTestStringConvertible {
         let name: String
         let rule: [String: any Sendable]

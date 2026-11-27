@@ -400,13 +400,19 @@ final class MatrixTimelineSession: TimelineSession {
 
     func sendImage(_ image: OutgoingImage) async throws(HaloError) {
         try image.validate()
+        let thumbInfo = image.thumbnail.map {
+            ThumbnailInfo(height: UInt64($0.height), width: UInt64($0.width), mimetype: $0.mimeType, size: UInt64($0.data.count))
+        }
+        let thumbSource = image.thumbnail.map {
+            UploadSource.data(bytes: $0.data, filename: "thumb-\(image.filename)")
+        }
         let info = ImageInfo(
             height: image.height.map(UInt64.init), width: image.width.map(UInt64.init), mimetype: image.mimeType, size: UInt64(image.data.count),
-            thumbnailInfo: nil, thumbnailSource: nil, blurhash: nil, isAnimated: image.mimeType == "image/gif")
+            thumbnailInfo: thumbInfo, thumbnailSource: nil, blurhash: nil, isAnimated: image.mimeType == "image/gif")
         let params = UploadParameters(
             source: .data(bytes: image.data, filename: image.filename), caption: image.caption, formattedCaption: nil, mentions: nil, inReplyTo: nil)
         do {
-            let handle = try timeline.sendAttachment(params: params, attachment: .image(imageInfo: info, thumbnailSource: nil))
+            let handle = try timeline.sendAttachment(params: params, attachment: .image(imageInfo: info, thumbnailSource: thumbSource))
             try await handle.join()
         } catch { throw ErrorMapper.map(error) }
     }

@@ -490,6 +490,7 @@ public final class TimelineViewModel {
 
     /// Closes the timeline. Call when the screen disappears.
     public func stop() async {
+        cancelOpenFile()
         observation?.cancel()
         observation = nil
         clearedMarkedUnread = false
@@ -652,6 +653,7 @@ public final class TimelineViewModel {
 
     // MARK: Action & media state
     var readerProfiles: [UserID: (name: String?, avatar: MediaRef?)] = [:]
+    var openFileTask: Task<Void, Never>?
     public internal(set) var openedFile: OpenedFile?
     public internal(set) var openingRow: String?
     public internal(set) var openFileError: String?

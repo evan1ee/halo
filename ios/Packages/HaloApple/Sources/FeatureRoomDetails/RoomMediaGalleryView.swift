@@ -52,7 +52,7 @@ public struct RoomMediaGalleryView: View {
             Section {
                 ForEach(filteredItems) { item in
                     HStack(spacing: 12) {
-                        GalleryThumbnail(item: item) { await model.avatarData($0) }
+                        GalleryThumbnail(item: item) { await model.galleryThumbnailData(for: item) }
                         VStack(alignment: .leading, spacing: 2) {
                             Text(item.attachment.body).font(.subheadline).lineLimit(1)
                             HStack(spacing: 6) {
@@ -83,6 +83,24 @@ public struct RoomMediaGalleryView: View {
                         }
                     }
                 }
+                if model.hasMoreGallery {
+                    HStack {
+                        Spacer()
+                        if model.isLoadingMoreGallery {
+                            ProgressView()
+                                .accessibilityLabel("Loading more media")
+                        } else {
+                            Button("Load more") {
+                                Task { await model.loadMoreGallery() }
+                            }
+                            .accessibilityIdentifier("room-gallery-load-more")
+                        }
+                        Spacer()
+                    }
+                    .onAppear {
+                        Task { await model.loadMoreGallery() }
+                    }
+                }
             }
         }
         .overlay {
@@ -101,17 +119,20 @@ public struct RoomMediaGalleryView: View {
         .refreshable {
             await model.loadGallery()
         }
+        .onDisappear {
+            Task { await model.closeGallery() }
+        }
     }
 }
 
 private struct GalleryThumbnail: View {
     let item: RoomMediaItem
-    let load: @MainActor (MediaRef) async -> Data?
+    let load: @MainActor () async -> Data?
     @State private var data: Data?
 
     private var previewRef: MediaRef? {
         switch item.attachment.kind {
-        case .image: return item.attachment.source
+        case .image: return item.attachment.thumbnail ?? item.attachment.source
         case .video: return item.attachment.thumbnail
         case .audio, .file: return nil
         }
@@ -142,8 +163,8 @@ private struct GalleryThumbnail: View {
         }
         .task(id: previewRef) {
             data = nil
-            guard let previewRef else { return }
-            data = await load(previewRef)
+            guard previewRef != nil else { return }
+            data = await load()
         }
     }
 

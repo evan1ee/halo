@@ -37,4 +37,23 @@ struct MediaLoaderFileTests {
         }
         #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path).isEmpty)
     }
+
+    @Test("cachedContent serves repeat reads and concurrent callers from one fetch (M19-5)")
+    func cachedContentDeduplicatesAndCaches() async throws {
+        let port = FakeMediaPort()
+        let ref = MediaRef(token: "thumb-1")
+        port.add(ref, data: Data("thumb-bytes".utf8))
+        let loader = MediaLoader(port: port)
+
+        async let first = loader.cachedContent(ref)
+        async let second = loader.cachedContent(ref)
+        let (a, b) = try await (first, second)
+        #expect(a == Data("thumb-bytes".utf8))
+        #expect(b == Data("thumb-bytes".utf8))
+        #expect(port.contentCalls == 1)
+
+        let third = try await loader.cachedContent(ref)
+        #expect(third == Data("thumb-bytes".utf8))
+        #expect(port.contentCalls == 1)
+    }
 }

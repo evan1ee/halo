@@ -1642,6 +1642,18 @@ final class TimelineMirror: Sendable {
         }
     }
 
+    /// The own media attachment with this file name (optionally requiring server confirmation).
+    func ownMedia(named name: String, confirmedOnly: Bool = false) -> MediaAttachment? {
+        items.withLock { items in
+            for item in items.reversed() {
+                guard case .event(let event) = item.content, event.isOwn,
+                      case .media(let attachment) = event.kind, attachment.body == name else { continue }
+                if !confirmedOnly || event.sendState == .sent { return attachment }
+            }
+            return nil
+        }
+    }
+
     /// Polls `probe` until it returns a value; fails after `seconds`.
     func wait<T: Sendable>(seconds: Double, _ what: String, _ probe: (TimelineMirror) -> T?) async throws -> T {
         let deadline = ContinuousClock.now + .seconds(seconds)

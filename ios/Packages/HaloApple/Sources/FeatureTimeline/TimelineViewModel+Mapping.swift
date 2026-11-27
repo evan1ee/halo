@@ -341,7 +341,9 @@ extension TimelineViewModel {
                     let ratio = Self.aspectRatio(width: attachment.width, height: attachment.height)
                     return TimelineRow(
                         id: id, style: style, sender: name, text: attachment.body,
-                        image: .init(ref: source, aspectRatio: ratio, blurhash: attachment.blurhash),
+                        image: .init(
+                            ref: source, aspectRatio: ratio, blurhash: attachment.blurhash,
+                            thumbnailRef: attachment.thumbnail, isOwn: event.isOwn),
                         eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions), source: plainSource(event, attachment.body))
                 }
                 let label = "[\(Self.label(attachment.kind))] \(attachment.body)"

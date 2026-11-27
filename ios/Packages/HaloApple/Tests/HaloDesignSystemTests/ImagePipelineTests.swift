@@ -46,5 +46,22 @@ struct ImagePipelineTests {
         let decoded = try #require(await ImagePipeline.decode(png(width: 50, height: 50), maxPixel: 900))
         #expect(decoded.size.width * decoded.scale <= 900)
     }
+
+    @Test("decoding directly from a file URL shrinks off the main thread and caches per size (M19-5)")
+    func decodesFromFileURL() async throws {
+        ImagePipeline.evictAll()
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("halo-pipe-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("big.png")
+        try png(width: 1600, height: 800).write(to: file)
+
+        #expect(ImagePipeline.cached(fileURL: file, maxPixel: 400) == nil)
+        let decoded = try #require(await ImagePipeline.decode(fileURL: file, maxPixel: 400))
+        #expect(max(decoded.size.width * decoded.scale, decoded.size.height * decoded.scale) == 400)
+        #expect(decoded.size.width > decoded.size.height)
+        #expect(ImagePipeline.cached(fileURL: file, maxPixel: 400) === decoded)
+        #expect(ImagePipeline.cached(fileURL: file, maxPixel: 800) == nil)
+    }
 }
 #endif

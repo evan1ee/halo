@@ -29,37 +29,85 @@ public final class RoomDetailsViewModel: Identifiable {
     public var confirmsLeave = false
     /// Bytes of a photo just uploaded during this sheet visit, shown immediately before the next sync delivers a new `MediaRef`.
     public private(set) var localAvatar: Data?
-    /// Recent media items loaded for the room's Media & Files gallery (M9 Gallery + Export).
+    /// Recent media items loaded for the room's Media & Files gallery (M9 Gallery + Export, paged in M19-5).
     public private(set) var galleryItems: [RoomMediaItem] = []
     public private(set) var isLoadingGallery = false
+    public private(set) var isLoadingMoreGallery = false
+    public private(set) var hasMoreGallery = false
     public private(set) var galleryError: String?
+    private var gallerySession: (any RoomMediaGallerySession)?
 
-    /// Loads recent photos, videos, audio and files for this room (M9).
-    public func loadGallery(limit: Int = 50) async {
+    /// Loads the first page of photos, videos, audio and files for this room (M9, M19-5).
+    public func loadGallery(limit: Int = 30) async {
         guard !isLoadingGallery else { return }
         isLoadingGallery = true
         galleryError = nil
         defer { isLoadingGallery = false }
+        await closeGallery()
         do throws(HaloError) {
-            galleryItems = try await port.mediaGallery(in: room, limit: limit)
+            let session = try await port.openMediaGallery(in: room)
+            let page = try await session.nextPage(limit: limit)
+            galleryItems = page.items
+            hasMoreGallery = page.hasMore
+            if page.hasMore {
+                gallerySession = session
+            } else {
+                await session.close()
+            }
         } catch {
             galleryError = Self.text(error)
         }
     }
 
-    /// Downloads full bytes of a gallery item to a temporary file so the user can share/export it (M9).
+    /// Loads the next older page of media items from the open gallery session (M19-5).
+    public func loadMoreGallery(limit: Int = 30) async {
+        guard !isLoadingGallery, !isLoadingMoreGallery, hasMoreGallery, let session = gallerySession else { return }
+        isLoadingMoreGallery = true
+        galleryError = nil
+        defer { isLoadingMoreGallery = false }
+        do throws(HaloError) {
+            let page = try await session.nextPage(limit: limit)
+            let existing = Set(galleryItems.map(\.eventID))
+            let fresh = page.items.filter { !existing.contains($0.eventID) }
+            galleryItems.append(contentsOf: fresh)
+            hasMoreGallery = page.hasMore
+            if !page.hasMore {
+                await closeGallery()
+            }
+        } catch {
+            galleryError = Self.text(error)
+        }
+    }
+
+    /// Releases the open gallery timeline session when the gallery view disappears (AGENTS §8).
+    public func closeGallery() async {
+        if let session = gallerySession {
+            gallerySession = nil
+            await session.close()
+        }
+    }
+
+    /// Thumbnail bytes for a room gallery row; prefers a precomputed thumbnail via the SDK file cache (M19-5).
+    public func galleryThumbnailData(for item: RoomMediaItem) async -> Data? {
+        guard let media else { return nil }
+        if let thumb = item.attachment.thumbnail, let direct = try? await media.cachedContent(thumb) {  // best-effort: falls back to server thumbnail
+            return direct
+        }
+        guard item.attachment.kind == .image, let source = item.attachment.source else { return nil }
+        return try? await media.thumbnail(source, width: 96, height: 96)  // best-effort: a picture that can't load shows its placeholder; nothing changes
+    }
+
+    /// Streams a gallery item straight to a temporary file on disk so the user can share/export it without holding it in RAM (M19-5).
     public func exportMediaFile(_ item: RoomMediaItem) async -> URL? {
         guard let media, let ref = item.attachment.source else { return nil }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("halo-gallery-\(UUID().uuidString)", isDirectory: true)
         do {
-            let data = try await media.content(ref)
-            let dir = FileManager.default.temporaryDirectory.appendingPathComponent("halo-gallery-\(UUID().uuidString)", isDirectory: true)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             let rawName = URL(fileURLWithPath: item.attachment.body).lastPathComponent
             let name = rawName.isEmpty || rawName == "." || rawName == ".." ? "attachment" : rawName
-            let url = dir.appendingPathComponent(name)
-            try data.write(to: url, options: .atomic)
-            return url
+            return try await media.file(ref, name: name, mimeType: item.attachment.mimeType, in: dir)
         } catch {
+            try? FileManager.default.removeItem(at: dir)
             return nil
         }
     }

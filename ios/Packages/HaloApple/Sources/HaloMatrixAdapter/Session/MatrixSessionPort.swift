@@ -458,14 +458,15 @@ public actor MatrixSessionPort: SessionPort {
     }
 
     /// Downloads media straight to a file (decrypting it there) and moves it into `directory` (M19-5): the SDK writes the bytes to
-    /// its own temporary file as they arrive, so a 100 MB video is never one block in memory.
+    /// its own temporary file as they arrive, so a 100 MB video is never one block in memory. `useCache: true` serves already-cached
+    /// files (including own uploads and previously opened files within `defaultMediaRetentionPolicy.maxFileSize`) without a network request.
     func mediaFile(_ ref: MediaRef, name: String, mimeType: String?, in directory: URL) async throws(HaloError) -> URL {
         guard let client else { throw .unauthorized(soft: false) }
         let target = directory.appendingPathComponent(MatrixMediaPort.safeFileName(name))
         do {
             let source = try MediaSource.fromJson(json: ref.token)
             let handle = try await client.getMediaFile(
-                mediaSource: source, filename: target.lastPathComponent, mimeType: mimeType ?? "application/octet-stream", useCache: false,
+                mediaSource: source, filename: target.lastPathComponent, mimeType: mimeType ?? "application/octet-stream", useCache: true,
                 tempDir: directory.path)
             if try handle.persist(path: target.path) { return target }
             // Not moved (the file is already where it should be, or the name is taken): use the SDK's own path.
