@@ -63,6 +63,8 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     public let location: Location?
     /// An interactive poll (`m.poll.start`, MESSAGING FR-10, M20-4).
     public let poll: PollDetails?
+    /// Forwardable content for this message (`nil` for polls, redacted, UTD, state, or unconfirmed items; MESSAGING FR-8, M20-6).
+    public let forwardPayload: ForwardPayload?
 
     /// What "View source" shows for a text message (BOT_MESSAGES FR-1): the sender, the event and both bodies, untouched.
     public struct Source: Equatable, Sendable {
@@ -210,6 +212,9 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     /// Whether the user can edit this row's text (own confirmed text message; never photos, files, audio, video, polls, locations or stickers).
     public var canEdit: Bool { isOwn && style == .ownMessage && eventID != nil && image == nil && file == nil && audio == nil && video == nil && location == nil && poll == nil && !isSticker }
 
+    /// Whether this confirmed message can be forwarded to another chat (MESSAGING FR-8, M20-6).
+    public var canForward: Bool { eventID != nil && forwardPayload != nil }
+
     static func looksLikeFilename(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !trimmed.contains(where: \.isWhitespace), let dot = trimmed.lastIndex(of: "."), dot != trimmed.startIndex else { return false }
@@ -258,10 +263,11 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     init(
         id: String, style: Style, sender: String?, text: String, image: Image? = nil, status: String? = nil,
         eventID: EventID? = nil, isOwn: Bool = false, reactions: [Chip] = [], reply: Reply? = nil, styled: AttributedString? = nil,
-        failedLocalID: String? = nil, isSticker: Bool = false, file: FileTile? = nil, audio: Audio? = nil, video: Video? = nil, location: Location? = nil, poll: PollDetails? = nil, source: Source? = nil, card: BotCard? = nil
+        failedLocalID: String? = nil, isSticker: Bool = false, file: FileTile? = nil, audio: Audio? = nil, video: Video? = nil, location: Location? = nil, poll: PollDetails? = nil, forwardPayload: ForwardPayload? = nil, source: Source? = nil, card: BotCard? = nil
     ) {
         self.card = card
         self.source = source
+        self.forwardPayload = forwardPayload
         self.poll = poll
         self.location = location
         self.video = video

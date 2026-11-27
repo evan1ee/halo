@@ -326,6 +326,7 @@ extension TimelineViewModel {
                     reactions: Self.chips(event.reactions), reply: Self.reply(event.replyTo),
                     styled: event.formattedBody.map { HTMLText.attributed($0) + AttributedString(edited ? " (edited)" : "") },
                     failedLocalID: Self.failedID(event),
+                    forwardPayload: .text(body),
                     source: .init(sender: event.sender?.rawValue, eventID: event.eventID?.rawValue, body: body, formattedBody: event.formattedBody),
                     card: botCard(event))
             case .notice(let body, let edited):
@@ -333,22 +334,30 @@ extension TimelineViewModel {
                     id: id, style: .notice, sender: name, text: edited ? "\(body) (edited)" : body,
                     eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions),
                     styled: event.formattedBody.map { HTMLText.attributed($0) + AttributedString(edited ? " (edited)" : "") },
+                    forwardPayload: .text(body),
                     source: plainSource(event, body), card: botCard(event))
             case .emote(let body, let edited):
                 return TimelineRow(
                     id: id, style: .emote, sender: nil, text: edited ? "\(name) \(body) (edited)" : "\(name) \(body)",
                     eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions),
+                    forwardPayload: .text(body),
                     source: plainSource(event, body))
             case .media(let attachment):
                 let style: TimelineRow.Style = event.isOwn ? .ownMessage : .message
                 if attachment.kind == .image, let source = attachment.source {
                     let ratio = Self.aspectRatio(width: attachment.width, height: attachment.height)
+                    let caption = TimelineRow.looksLikeFilename(attachment.body) ? nil : attachment.body
+                    let filename = TimelineRow.looksLikeFilename(attachment.body) ? attachment.body : "photo.jpg"
                     return TimelineRow(
                         id: id, style: style, sender: name, text: attachment.body,
                         image: .init(
                             ref: source, aspectRatio: ratio, blurhash: attachment.blurhash,
                             thumbnailRef: attachment.thumbnail, isOwn: event.isOwn),
-                        eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions), source: plainSource(event, attachment.body))
+                        eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions),
+                        forwardPayload: .image(
+                            ref: source, filename: filename, mimeType: attachment.mimeType,
+                            width: attachment.width, height: attachment.height, caption: caption),
+                        source: plainSource(event, attachment.body))
                 }
                 if attachment.kind == .audio, let source = attachment.source {
                     let label = attachment.isVoice ? "[Voice message]" : "[Audio] \(attachment.body)"
@@ -357,6 +366,9 @@ extension TimelineViewModel {
                         reactions: Self.chips(event.reactions),
                         audio: .init(
                             ref: source, name: attachment.body, mimeType: attachment.mimeType, size: attachment.size,
+                            duration: attachment.duration, isVoice: attachment.isVoice, waveform: attachment.waveform),
+                        forwardPayload: .audio(
+                            ref: source, filename: attachment.body, mimeType: attachment.mimeType,
                             duration: attachment.duration, isVoice: attachment.isVoice, waveform: attachment.waveform),
                         source: plainSource(event, attachment.body))
                 }
@@ -374,6 +386,10 @@ extension TimelineViewModel {
                             ref: source, filename: attachment.body, caption: caption, mimeType: attachment.mimeType,
                             size: attachment.size, duration: attachment.duration, aspectRatio: ratio,
                             thumbnail: poster, blurhash: attachment.blurhash, isOwn: event.isOwn),
+                        forwardPayload: .video(
+                            ref: source, filename: attachment.body, mimeType: attachment.mimeType,
+                            duration: attachment.duration, width: attachment.width, height: attachment.height,
+                            caption: caption, thumbnailRef: attachment.thumbnail),
                         source: plainSource(event, attachment.body))
                 }
                 let label = "[\(Self.label(attachment.kind))] \(attachment.body)"
@@ -383,16 +399,20 @@ extension TimelineViewModel {
                     file: .init(kind: attachment.kind, name: attachment.body, detail: Self.fileDetail(attachment), ref: source, size: attachment.size,
                         thumbnail: attachment.kind == .video ? attachment.thumbnail.map {
                             .init(ref: $0, aspectRatio: Self.aspectRatio(width: attachment.width, height: attachment.height), blurhash: attachment.blurhash)
-                        } : nil), source: plainSource(event, attachment.body))
-            case .sticker(let body, let source):
+                        } : nil),
+                    forwardPayload: .file(ref: source, filename: attachment.body, mimeType: attachment.mimeType),
+                    source: plainSource(event, attachment.body))
+            case .sticker(let body, let source, let url, let info):
                 guard let source else {
                     return TimelineRow(
                         id: id, style: event.isOwn ? .ownMessage : .message, sender: name,
                         text: body.isEmpty ? "Sticker (can't be shown)" : "[Sticker] \(body)", eventID: event.eventID, isOwn: event.isOwn)
                 }
+                let forward: ForwardPayload? = url.flatMap { $0.hasPrefix("mxc://") ? .sticker(body: body, url: $0, info: info) : nil }
                 return TimelineRow(
                     id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: body, image: .init(ref: source, aspectRatio: 1),
-                    eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions), isSticker: true, source: plainSource(event, body))
+                    eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions), isSticker: true,
+                    forwardPayload: forward, source: plainSource(event, body))
             case .redacted:
                 return TimelineRow(id: id, style: .placeholder, sender: name, text: "Message deleted", isOwn: event.isOwn)
             case .undecryptable(let reason):
@@ -405,7 +425,8 @@ extension TimelineViewModel {
                 let url = Self.mapsURL(geoURI: geoURI)
                 var styled = AttributedString(text)
                 if let url { styled.link = url }
-                let locationCard: TimelineRow.Location? = Self.parseCoordinates(geoURI: geoURI).map { coords in
+                let parsedCoords = Self.parseCoordinates(geoURI: geoURI)
+                let locationCard: TimelineRow.Location? = parsedCoords.map { coords in
                     TimelineRow.Location(
                         latitude: coords.latitude,
                         longitude: coords.longitude,
@@ -414,9 +435,17 @@ extension TimelineViewModel {
                         mapsURL: url
                     )
                 }
+                let locationForward: ForwardPayload? = parsedCoords.map { coords in
+                    .location(OutgoingLocation(
+                        latitude: coords.latitude,
+                        longitude: coords.longitude,
+                        description: body.isEmpty ? nil : body,
+                        isOwnLocation: false
+                    ))
+                }
                 return TimelineRow(
                     id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: text, eventID: event.eventID, isOwn: event.isOwn,
-                    reactions: Self.chips(event.reactions), styled: styled, location: locationCard, source: plainSource(event, body))
+                    reactions: Self.chips(event.reactions), styled: styled, location: locationCard, forwardPayload: locationForward, source: plainSource(event, body))
             case .poll(let details):
                 let lines = details.options.map { "• \($0.text) — \($0.votes) \($0.votes == 1 ? "vote" : "votes")" }
                 let text = (["📊 \(details.question)"] + lines + (details.ended ? ["Poll ended"] : [])).joined(separator: "\n")

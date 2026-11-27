@@ -461,7 +461,7 @@ final class MatrixTimelineSession: TimelineSession {
         try location.validate()
         do {
             try await timeline.sendLocation(
-                body: location.body, geoUri: location.geoURI, description: nil, zoomLevel: 15,
+                body: location.body, geoUri: location.geoURI, description: location.description, zoomLevel: 15,
                 assetType: location.isOwnLocation ? .sender : .pin, repliedToEventId: nil)
         } catch { throw ErrorMapper.map(error) }
     }

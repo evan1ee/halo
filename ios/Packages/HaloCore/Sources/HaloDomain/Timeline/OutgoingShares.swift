@@ -10,11 +10,14 @@ public struct OutgoingLocation: Sendable, Equatable {
     public let accuracy: Double?
     /// `true` for the user's own position, `false` for a dropped pin.
     public let isOwnLocation: Bool
+    /// Optional human-readable place name (e.g. when forwarding a named location).
+    public let description: String?
 
-    public init(latitude: Double, longitude: Double, accuracy: Double? = nil, isOwnLocation: Bool) {
+    public init(latitude: Double, longitude: Double, accuracy: Double? = nil, description: String? = nil, isOwnLocation: Bool) {
         self.latitude = latitude
         self.longitude = longitude
         self.accuracy = accuracy
+        self.description = description
         self.isOwnLocation = isOwnLocation
     }
 
@@ -27,7 +30,10 @@ public struct OutgoingLocation: Sendable, Equatable {
 
     /// The fallback text other clients show.
     public var body: String {
-        (isOwnLocation ? "Location" : "Pinned location") + ": " + Self.coordinate(latitude) + ", " + Self.coordinate(longitude)
+        if let description, !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return description
+        }
+        return (isOwnLocation ? "Location" : "Pinned location") + ": " + Self.coordinate(latitude) + ", " + Self.coordinate(longitude)
     }
 
     public func validate() throws(HaloError) {

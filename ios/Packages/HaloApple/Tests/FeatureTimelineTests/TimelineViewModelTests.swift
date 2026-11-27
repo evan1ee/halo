@@ -27,7 +27,7 @@ struct TimelineViewModelTests {
     func messages() throws {
         let model = try model()
         let source = TimelineRow.Source(sender: "@alice:x.org", eventID: nil, body: "hi", formattedBody: nil)
-        var expected = TimelineRow(id: "id", style: .message, sender: "Alice", text: "hi", source: source)
+        var expected = TimelineRow(id: "id", style: .message, sender: "Alice", text: "hi", forwardPayload: .text("hi"), source: source)
         expected.time = model.row(event(.text("hi", isEdited: false))).time
         #expect(model.row(event(.text("hi", isEdited: false))) == expected && expected.time?.hasPrefix("12:00") == true)
         #expect(model.row(event(.text("hi", isEdited: true), own: true)).text == "hi (edited)")

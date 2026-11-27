@@ -141,7 +141,7 @@ public enum TimelineEventKind: Sendable, Equatable {
     case emote(String, isEdited: Bool)
     /// Image, video, audio or file. Only images are displayed in M1; the others show their name.
     case media(MediaAttachment)
-    case sticker(body: String, source: MediaRef?)
+    case sticker(body: String, source: MediaRef?, url: String? = nil, info: StickerInfo? = nil)
     case redacted
     /// Can't be decrypted (yet). The reason is shown honestly, never hidden (R-P0-3).
     case undecryptable(UTDReason)
