@@ -158,11 +158,17 @@ struct RowView: View {
                                     .opacity(row.status == nil ? 1 : 0.6)
                                     .modifier(OptionalTextDragModifier(text: TimelineDragExtractor.text(for: row)))
                             } else if row.showsText {
-                                Text(row.styled ?? AttributedString(row.text))
-                                    .padding(HaloSpacing.s)
-                                    .background(row.style == .ownMessage ? HaloColor.bubbleOwn : HaloColor.bubbleOther, in: RoundedRectangle(cornerRadius: HaloRadius.bubble, style: .continuous))
-                                    .opacity(row.status == nil ? 1 : 0.6)
-                                    .modifier(OptionalTextDragModifier(text: TimelineDragExtractor.text(for: row)))
+                                Group {
+                                    if let richText = row.richText {
+                                        RichTextMessageView(document: richText, isOwn: row.style == .ownMessage)
+                                    } else {
+                                        Text(row.styled ?? AttributedString(row.text))
+                                    }
+                                }
+                                .padding(HaloSpacing.s)
+                                .background(row.style == .ownMessage ? HaloColor.bubbleOwn : HaloColor.bubbleOther, in: RoundedRectangle(cornerRadius: HaloRadius.bubble, style: .continuous))
+                                .opacity(row.status == nil ? 1 : 0.6)
+                                .modifier(OptionalTextDragModifier(text: TimelineDragExtractor.text(for: row)))
                                 if row.card != nil { Button("Show card") { showingOriginal = false }.font(.caption2) }
                             }
                         }
@@ -243,8 +249,14 @@ struct RowView: View {
                                 tick: { id in Task { await model.tickBotTask(bot: row.source?.sender, id: id) } })
                             Button("Show original") { showingOriginal = true }.font(.caption2)
                         } else {
-                            Text(row.styled ?? AttributedString(row.text)).font(.callout).foregroundStyle(.secondary)
-                                .modifier(OptionalTextDragModifier(text: TimelineDragExtractor.text(for: row)))
+                            if let richText = row.richText {
+                                RichTextMessageView(document: richText, isOwn: false)
+                                    .font(.callout)
+                                    .modifier(OptionalTextDragModifier(text: TimelineDragExtractor.text(for: row)))
+                            } else {
+                                Text(row.styled ?? AttributedString(row.text)).font(.callout).foregroundStyle(.secondary)
+                                    .modifier(OptionalTextDragModifier(text: TimelineDragExtractor.text(for: row)))
+                            }
                             if row.card != nil { Button("Show card") { showingOriginal = false }.font(.caption2) }
                         }
                     }

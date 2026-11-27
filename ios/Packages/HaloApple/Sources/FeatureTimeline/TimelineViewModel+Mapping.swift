@@ -330,20 +330,24 @@ extension TimelineViewModel {
             let name = event.senderName ?? event.sender.map { $0.rawValue } ?? "Unknown"
             switch event.kind {
             case .text(let body, let edited):
+                let parsedRich = event.formattedBody.map { RichTextParser.parse($0, edited: edited) }
                 return TimelineRow(
                     id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: edited ? "\(body) (edited)" : body,
                     status: Self.status(of: event.sendState), eventID: event.eventID, isOwn: event.isOwn,
                     reactions: Self.chips(event.reactions), reply: Self.reply(event.replyTo),
                     styled: event.formattedBody.map { HTMLText.attributed($0) + AttributedString(edited ? " (edited)" : "") },
+                    richText: parsedRich?.needsRichRendering == true ? parsedRich : nil,
                     failedLocalID: Self.failedID(event),
                     forwardPayload: .text(body),
                     source: .init(sender: event.sender?.rawValue, eventID: event.eventID?.rawValue, body: body, formattedBody: event.formattedBody),
                     card: botCard(event))
             case .notice(let body, let edited):
+                let parsedRich = event.formattedBody.map { RichTextParser.parse($0, edited: edited) }
                 return TimelineRow(
                     id: id, style: .notice, sender: name, text: edited ? "\(body) (edited)" : body,
                     eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions),
                     styled: event.formattedBody.map { HTMLText.attributed($0) + AttributedString(edited ? " (edited)" : "") },
+                    richText: parsedRich?.needsRichRendering == true ? parsedRich : nil,
                     forwardPayload: .text(body),
                     source: plainSource(event, body), card: botCard(event))
             case .emote(let body, let edited):

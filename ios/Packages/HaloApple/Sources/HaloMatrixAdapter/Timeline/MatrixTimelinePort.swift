@@ -263,11 +263,15 @@ final class MatrixTimelineSession: TimelineSession {
         } catch { throw ErrorMapper.map(error) }
     }
 
-    /// The message content: mentions as `matrix.to` links in the formatted body plus `m.mentions`.
+    /// The message content: mentions as `matrix.to` links in `formatted_body` plus `m.mentions`, while keeping the
+    /// plain-text `body` free of raw Markdown link syntax (`hello @Peer`, fixing GA-30 / M20-10).
     private static func content(_ text: String, _ mentions: [Mention]) -> RoomMessageEventContentWithoutRelation {
-        let formatted = MentionFormatter.apply(text, mentions: mentions)
-        let content = messageEventContentFromMarkdown(md: formatted.markdown)
-        return formatted.users.isEmpty ? content : content.withMentions(mentions: Mentions(userIds: formatted.users.map(\.rawValue), room: false))
+        let formatted = MentionFormatter.html(text, mentions: mentions)
+        if !formatted.users.isEmpty {
+            let content = messageEventContentFromHtml(body: text, htmlBody: formatted.html)
+            return content.withMentions(mentions: Mentions(userIds: formatted.users.map(\.rawValue), room: false))
+        }
+        return messageEventContentFromMarkdown(md: text)
     }
 
     /// Upper bound on `@`-mention autocomplete candidates scanned in `members()` so a 10,000-member room doesn't

@@ -24,7 +24,7 @@ Show a room's history correctly and smoothly, and report what the user has actua
 - FR-10 Bot messages from allowlisted senders go through `BotMessageRenderer` ([BOT_MESSAGES.md](BOT_MESSAGES.md)); all messages get "View source".
 - FR-11 Threads: thread replies inline as replies (D17); a thread screen opens from its root (M10, built).
 - FR-12 A changed identity of a contact shows as a notice (ENCRYPTION_AND_DEVICES FR-7, *not built*, ROADMAP M18-1).
-- FR-13 Code blocks with copy, spoilers (`data-mx-spoiler`), and safe rendering of tables and lists (*not built*, ROADMAP M20-10).
+- FR-13 Code blocks with one-tap copy (`<pre><code class="language-…">`), tap-to-reveal spoilers (`<span data-mx-spoiler>` with optional reason), and safe rendering of HTML tables, blockquotes, headings, and nested ordered/unordered lists (`RichTextParser` + `RichTextMessageView`, pure linear-time Swift parser with strict caps on size, nesting depth, and table dimensions; never executes scripts or fetches external URLs; ROADMAP M20-10). Outgoing mentions send clean plain-text `body` alongside HTML `matrix.to` pills and `m.mentions` (GA-30 fixed).
 
 ## 4. Non-functional requirements
 60 fps scrolling (NFR-2); a diff batch is applied within one frame; image decoding off the main thread; animated stickers pause off-screen. *Not met today:* a change rebuilds every row on the main actor, and photos are decoded in view bodies (ROADMAP M19-1, M19-2).

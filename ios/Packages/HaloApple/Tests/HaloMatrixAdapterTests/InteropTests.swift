@@ -64,7 +64,7 @@ struct InteropTests {
         let plain = try message("plain")
         #expect(plain["msgtype"] as? String == "m.text")
         let mention = try #require(events.compactMap(contents).first(where: { ($0["body"] as? String)?.hasPrefix("hello ") == true }))
-        withKnownIssue("GA-30: the plain text of a mention carries the Markdown link") { #expect(mention["body"] as? String == "hello @Peer") }
+        #expect(mention["body"] as? String == "hello @Peer")
         #expect((mention["m.mentions"] as? [String: Any])?["user_ids"] as? [String] == [peerID.rawValue])
         #expect((mention["formatted_body"] as? String)?.contains("matrix.to/#/") == true)
         let formatted = try message("**bold** and `code`")
@@ -183,6 +183,18 @@ struct InteropTests {
             Incoming(name: "formatted", content: [
                 "msgtype": "m.text", "body": "bold", "format": "org.matrix.custom.html", "formatted_body": "<strong>bold</strong>"
             ]) { isText($0, "bold") && $0.formattedBody == "<strong>bold</strong>" },
+            Incoming(name: "code block", content: [
+                "msgtype": "m.text", "body": "```swift\nlet x = 1\n```", "format": "org.matrix.custom.html",
+                "formatted_body": "<pre><code class=\"language-swift\">let x = 1\n</code></pre>"
+            ]) { $0.formattedBody?.contains("<pre><code class=\"language-swift\">") == true },
+            Incoming(name: "spoiler", content: [
+                "msgtype": "m.text", "body": "[Spoiler](secret)", "format": "org.matrix.custom.html",
+                "formatted_body": "<span data-mx-spoiler=\"Plot\">secret</span>"
+            ]) { $0.formattedBody?.contains("data-mx-spoiler=\"Plot\"") == true },
+            Incoming(name: "table", content: [
+                "msgtype": "m.text", "body": "A | B", "format": "org.matrix.custom.html",
+                "formatted_body": "<table><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table>"
+            ]) { $0.formattedBody?.contains("<table>") == true },
             Incoming(name: "notice", content: ["msgtype": "m.notice", "body": "from a bot"]) { $0.kind == .notice("from a bot", isEdited: false) },
             Incoming(name: "emote", content: ["msgtype": "m.emote", "body": "waves"]) { $0.kind == .emote("waves", isEdited: false) },
             Incoming(name: "image", content: [

@@ -47,4 +47,20 @@ struct MentionFormatterTests {
         let historical = try UserID("@a(b):x.org")
         #expect(MentionFormatter.matrixToURL(for: historical)?.absoluteString == "https://matrix.to/#/@a%28b%29:x.org")
     }
+
+    @Test("html() builds safe matrix.to pill HTML while keeping plain text separate (GA-30, M20-10)")
+    func htmlFormattingForCleanPlainBody() throws {
+        let simple = MentionFormatter.html("hello @Alice", mentions: [alice])
+        #expect(simple.users == [alice.user])
+        #expect(simple.html == #"hello <a href="https://matrix.to/#/@alice:x.org">@Alice</a>"#)
+
+        let rich = MentionFormatter.html("**Heads up** @Alice check `status`\nnow", mentions: [alice])
+        #expect(rich.html == #"<strong>Heads up</strong> <a href="https://matrix.to/#/@alice:x.org">@Alice</a> check <code>status</code><br/>now"#)
+
+        let evil = Mention(user: try UserID("@e:x.org"), name: "x</a><script>alert(1)</script>")
+        let safe = MentionFormatter.html("hi @\(evil.name)", mentions: [evil])
+        #expect(safe.users == [evil.user])
+        #expect(!safe.html.contains("<script>"))
+        #expect(safe.html == #"hi <a href="https://matrix.to/#/@e:x.org">@x&lt;/a&gt;&lt;script&gt;alert(1)&lt;/script&gt;</a>"#)
+    }
 }
