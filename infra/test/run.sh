@@ -36,7 +36,7 @@ fi
 
 password="$(openssl rand -hex 12)"
 user="fault$(openssl rand -hex 3)"
-for name in "$user" "${user}peer"; do
+for name in "$user" "${user}peer" "${user}third"; do
   printf %s "$password" | docker exec -i halo-test-synapse-1 register_new_matrix_user -c /data/homeserver.yaml -u "$name" --password-file /dev/stdin --no-admin http://localhost:8008 >/dev/null
 done
 export TEST_RUNNER_HALO_FAULT_SERVER="$HALO_TEST_PROXY" TEST_RUNNER_HALO_FAULT_DIRECT="$HALO_TEST_SERVER" TEST_RUNNER_HALO_FAULT_CONTROL="$HALO_TEST_CONTROL"

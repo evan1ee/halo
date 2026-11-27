@@ -98,6 +98,9 @@ extension AppRoot {
                 }
             return (sourceIsEncrypted, targets)
         }
+        model.loadRoomEncrypted = { @Sendable [roomCoordinator] in
+            await roomCoordinator.rooms.first { $0.id == room }?.isEncrypted
+        }
         model.loadRoomLifecycle = { @Sendable [roomPort] in
             guard let details = try? await roomPort.details(room) else { return nil }  // best-effort: unread lifecycle defaults to active room
             return RoomLifecyclePolicy.banner(membership: details.membership, successor: details.successor, roomID: room)

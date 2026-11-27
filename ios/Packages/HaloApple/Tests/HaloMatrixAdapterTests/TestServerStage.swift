@@ -141,6 +141,11 @@ struct TestPeer: Sendable {
     let base: String
     let token: String
 
+    init(base: String, token: String) {
+        self.base = base
+        self.token = token
+    }
+
     init(server: String, user: String, password: String) async throws {
         base = server + "/_matrix/client/v3"
         let login = try await Self.call("POST", base + "/login", nil, [
@@ -211,6 +216,10 @@ struct TestPeer: Sendable {
 
     func redact(_ event: String, in room: RoomID) async throws {
         _ = try await Self.call("PUT", base + "/rooms/\(room.rawValue)/redact/\(event)/\(UUID().uuidString)", token, [:])
+    }
+
+    func sendReadReceipt(for eventID: String, in room: RoomID) async throws {
+        _ = try await Self.call("POST", base + "/rooms/\(room.rawValue)/receipt/m.read/\(eventID)", token, [:])
     }
 
     /// The room's newest events as the server has them, oldest first.

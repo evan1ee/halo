@@ -232,6 +232,7 @@ public final class TimelineViewModel {
     let dateFormatter: DateFormatter
     let timeFormatter: DateFormatter
     let editTimeFormatter: DateFormatter
+    let infoTimeFormatter: DateFormatter
     let receipts: ReadReceiptCoordinator?
     let drafts: DraftCoordinator?
     let imagePreparer: (any ImagePreparing)?
@@ -279,8 +280,12 @@ public final class TimelineViewModel {
     public private(set) var isActingOnLifecycle = false
     public private(set) var lifecycleError: String?
     public private(set) var lifecycleClosedRoom = false
+    /// Whether this room is end-to-end encrypted, for Message Info (M20-9); `nil` while unknown.
+    public private(set) var isRoomEncrypted: Bool?
     /// Queries current room lifecycle state (`membership`, `successor`); injected by composition root.
     public var loadRoomLifecycle: (@Sendable () async -> RoomBannerState?)?
+    /// Queries whether this room is encrypted; injected by composition root (M20-9).
+    public var loadRoomEncrypted: (@Sendable () async -> Bool?)?
     /// Leaves and forgets the current room (e.g. an upgraded room).
     public var leaveAndForgetRoom: (@Sendable () async throws(HaloError) -> Void)?
     /// Forgets the current left or banned room.
@@ -289,6 +294,12 @@ public final class TimelineViewModel {
     public var cancelCurrentKnock: (@Sendable () async throws(HaloError) -> Void)?
 
     public func refreshLifecycle() async {
+        if let loadRoomEncrypted {
+            let encrypted = await loadRoomEncrypted()
+            if isRoomEncrypted != encrypted {
+                isRoomEncrypted = encrypted
+            }
+        }
         guard let loadRoomLifecycle else { return }
         let updated = await loadRoomLifecycle()
         if lifecycleBanner != updated {
@@ -404,6 +415,17 @@ public final class TimelineViewModel {
         edit.dateStyle = .medium
         edit.timeStyle = .short
         editTimeFormatter = edit
+        let info = DateFormatter()
+        info.locale = time.locale
+        info.timeZone = time.timeZone
+        info.dateStyle = .medium
+        info.timeStyle = .medium
+        infoTimeFormatter = info
+    }
+
+    /// Exact date and time with seconds for Message Info and read-receipt timestamps (M20-9).
+    public func formatInfoTimestamp(_ date: Date) -> String {
+        infoTimeFormatter.string(from: date)
     }
 
     isolated deinit { observation?.cancel(); dwellTask?.cancel() }

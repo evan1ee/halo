@@ -263,22 +263,32 @@ extension TimelineViewModel {
         var row = baseRow(item)
         if case .event(let event) = item.content {
             if !event.isOwn { row.avatar = event.senderAvatar }
+            row.senderID = event.sender?.rawValue
+            row.timestamp = event.timestamp
+            row.eventType = event.eventType
             switch event.kind {
             case .text(_, true), .notice(_, true), .emote(_, true): row.isEdited = true
             default: break
             }
+            let normalizedReceipts = ReadReceiptPolicy.normalize(event.readReceipts, ownUserID: nil, sender: event.sender)
             if event.isOwn, row.style == .ownMessage {
                 // Every kind of own message (text, photo, file, sticker, location, poll) reports its send state the same way.
-                row.delivery = TimelineRow.Delivery(sendState: event.sendState, readCount: event.readBy.count)
+                row.delivery = TimelineRow.Delivery(sendState: event.sendState, readCount: normalizedReceipts.count)
                 row.status = Self.status(of: event.sendState, failure: event.sendFailure, names: senderNames)
                 row.failedLocalID = Self.failedID(event)
                 row.canSendAnyway = event.sendFailure?.canSendAnyway == true && row.failedLocalID != nil
             }
-            if event.isOwn, row.style == .ownMessage, event.sendState == .sent {
-                row.seenBy = event.readBy.count
-                row.allReaders = event.readBy.map { user in
-                    let known = readerProfiles[user]
-                    return TimelineRow.Reader(id: user.rawValue, name: known?.name ?? Self.localpart(user), avatar: known?.avatar)
+            // Read receipts appear under BOTH own and others' confirmed messages (TIMELINE FR-6, M20-9).
+            if [.ownMessage, .message, .notice, .emote].contains(row.style), event.sendState == .sent {
+                row.seenBy = normalizedReceipts.count
+                row.allReaders = normalizedReceipts.map { entry in
+                    let known = readerProfiles[entry.userID]
+                    return TimelineRow.Reader(
+                        id: entry.userID.rawValue,
+                        name: known?.name ?? Self.localpart(entry.userID),
+                        avatar: known?.avatar,
+                        readAt: entry.timestamp
+                    )
                 }
             }
             if row.style == .message || row.style == .ownMessage { row.time = timeFormatter.string(from: event.timestamp) }

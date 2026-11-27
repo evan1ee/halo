@@ -46,18 +46,30 @@ public struct TimelineEvent: Sendable, Equatable {
     public let localID: String?
     /// The sender's profile picture, if they have one and the SDK has resolved it.
     public let senderAvatar: MediaRef?
-    /// Other people whose newest read receipt is on this event (never the signed-in user); TIMELINE FR-6.
+    /// Other people whose newest read receipt is on this event (never the signed-in user or message sender); TIMELINE FR-6.
     public let readBy: [UserID]
+    /// Full read receipt entries including optional timestamps, matching `readBy` order (TIMELINE FR-6, M20-9).
+    public let readReceipts: [ReadReceiptEntry]
+    /// Raw Matrix event type string when known (e.g. `"m.room.message"`, `"m.sticker"`), for Message Info (M20-9).
+    public let eventType: String?
     /// Why a failed own message wasn't sent, when the SDK says; `nil` otherwise.
     public let sendFailure: SendFailure?
 
     public init(
         eventID: EventID?, sender: UserID?, senderName: String?, timestamp: Date, isOwn: Bool, kind: TimelineEventKind,
         sendState: SendState = .sent, reactions: [ReactionSummary] = [], replyTo: ReplyPreview? = nil, formattedBody: String? = nil,
-        localID: String? = nil, senderAvatar: MediaRef? = nil, readBy: [UserID] = [], sendFailure: SendFailure? = nil
+        localID: String? = nil, senderAvatar: MediaRef? = nil, readBy: [UserID] = [], readReceipts: [ReadReceiptEntry] = [],
+        eventType: String? = nil, sendFailure: SendFailure? = nil
     ) {
         self.sendFailure = sendFailure
-        self.readBy = readBy
+        if !readReceipts.isEmpty {
+            self.readReceipts = readReceipts
+            self.readBy = readBy.isEmpty ? readReceipts.map(\.userID) : readBy
+        } else {
+            self.readBy = readBy
+            self.readReceipts = readBy.map { ReadReceiptEntry(userID: $0) }
+        }
+        self.eventType = eventType
         self.senderAvatar = senderAvatar
         self.localID = localID
         self.formattedBody = formattedBody
