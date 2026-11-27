@@ -65,6 +65,7 @@ final class AppRoot {
     /// Tracks Low Power Mode, thermal state, and network reachability for sync and background scheduling (M19-7).
     private let deviceConditionsBox = DeviceConditionsBox()
     private var deviceConditions: DeviceConditions?
+    private var conditionUpdateTask: Task<Void, Never>?
     let media: MediaLoader
     let unrecognisedBots = UnrecognisedBotMessages()
     let previewPolicy: any MediaPreviewPolicyPort
@@ -247,19 +248,14 @@ final class AppRoot {
             await timelinePort.warm(rooms)
         }
         let readStateRef = readState
-        let device = DeviceConditions { [session, readStateRef, conditionsBox] in
-            let schedule = SyncEnergyPolicy.schedule(for: conditionsBox.syncConditions)
-            Task {
-                await session.conditionsChanged()
-                await readStateRef.setLowEnergyMode(schedule.pauseAuxiliaryWork)
+        let device = DeviceConditions { [weak self, session, readStateRef, conditionsBox] in
+            Task { @MainActor in
+                self?.applyDeviceConditions(session: session, readState: readStateRef, conditionsBox: conditionsBox)
             }
         }
         deviceConditions = device
         conditionsBox.current = device
-        Task {
-            let schedule = SyncEnergyPolicy.schedule(for: conditionsBox.syncConditions)
-            await readStateRef.setLowEnergyMode(schedule.pauseAuxiliaryWork)
-        }
+        applyDeviceConditions(session: session, readState: readStateRef, conditionsBox: conditionsBox)
         // Under memory pressure a timeline started for a room not yet pushed goes first.
         memoryWarning = NotificationCenter.default.addObserver(
             forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main
@@ -301,6 +297,21 @@ extension AppRoot {
     /// Background refresh interval adapted to Low Power Mode and thermal state (M19-7).
     nonisolated var backgroundRefreshInterval: TimeInterval {
         SyncEnergyPolicy.schedule(for: deviceConditionsBox.syncConditions).backgroundRefreshInterval
+    }
+
+    /// Serialises device-condition notifications so rapid transitions never apply stale low-energy flags out of order.
+    fileprivate func applyDeviceConditions(
+        session: MatrixSessionPort,
+        readState: ReadStateCoordinator,
+        conditionsBox: DeviceConditionsBox
+    ) {
+        let previous = conditionUpdateTask
+        conditionUpdateTask = Task {
+            await previous?.value
+            await session.conditionsChanged()
+            let pause = SyncEnergyPolicy.schedule(for: conditionsBox.syncConditions).pauseAuxiliaryWork
+            await readState.setLowEnergyMode(pause)
+        }
     }
 
     /// Starts everything that must run whenever the process runs, with or without a window: iOS launches the app in the

@@ -63,5 +63,27 @@ struct ImagePipelineTests {
         #expect(ImagePipeline.cached(fileURL: file, maxPixel: 400) === decoded)
         #expect(ImagePipeline.cached(fileURL: file, maxPixel: 800) == nil)
     }
+
+    @Test("PagedPhotoViewer.removeTemporaryFolder deletes viewer and gallery temp folders while sparing unrelated paths")
+    func temporaryFolderCleanup() throws {
+        let fm = FileManager.default
+        let prefixes = ["halo-viewer-", "halo-photo-", "halo-global-gallery-", "halo-gallery-"]
+        for prefix in prefixes {
+            let folder = fm.temporaryDirectory.appendingPathComponent("\(prefix)\(UUID().uuidString)", isDirectory: true)
+            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+            let file = folder.appendingPathComponent("item.jpg")
+            try Data([1, 2, 3]).write(to: file)
+            PagedPhotoViewer.removeTemporaryFolder(of: file)
+            #expect(!fm.fileExists(atPath: folder.path), "expected \(prefix) folder to be removed")
+        }
+
+        let unrelated = fm.temporaryDirectory.appendingPathComponent("other-folder-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: unrelated, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: unrelated) }
+        let kept = unrelated.appendingPathComponent("keep.jpg")
+        try Data([4, 5]).write(to: kept)
+        PagedPhotoViewer.removeTemporaryFolder(of: kept)
+        #expect(fm.fileExists(atPath: kept.path), "unrelated folders must never be deleted")
+    }
 }
 #endif

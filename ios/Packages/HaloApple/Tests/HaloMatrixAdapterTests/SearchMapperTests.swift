@@ -30,4 +30,12 @@ struct SearchMapperTests {
         let doc = MatrixMessageIndexSource.thumbnailRef(in: #"{"msgtype":"m.file","body":"doc.pdf","url":"mxc://x.org/doc1"}"#)
         #expect(doc == nil, "a plain file without thumbnail_url uses its format icon tile")
     }
+
+    @Test("clampedInt prevents trapping on out-of-range UInt64 sizes and dimensions")
+    func clampedUnsignedIntegers() {
+        #expect(SearchMapper.clampedInt(nil) == nil)
+        #expect(SearchMapper.clampedInt(1_400_000) == 1_400_000)
+        #expect(SearchMapper.clampedInt(UInt64.max) == Int.max)
+        #expect(TimelineMapper.clampedInt(UInt64.max) == Int.max)
+    }
 }

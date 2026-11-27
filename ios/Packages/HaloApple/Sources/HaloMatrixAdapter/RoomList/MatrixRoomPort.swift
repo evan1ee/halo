@@ -238,23 +238,49 @@ private final class GalleryListener: TimelineListener {
 }
 
 /// Maps gallery timeline diffs directly into domain items on the SDK callback without blocking or re-entering FFI (AGENTS §8).
-private final class GalleryCollector: TimelineListener, Sendable {
+final class GalleryCollector: TimelineListener, Sendable {
     private let ownUserID: String
-    private let items = Mutex<[HaloDomain.TimelineItem]>([])
+    private let sleep: @Sendable (Duration) async -> Void
+    private let state = Mutex<(items: [HaloDomain.TimelineItem], updates: Int)>(([], 0))
 
-    init(ownUserID: String) { self.ownUserID = ownUserID }
+    init(ownUserID: String, sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
+        self.ownUserID = ownUserID
+        self.sleep = sleep
+    }
+
+    var updates: Int { state.withLock { $0.updates } }
 
     func onUpdate(diff: [MatrixRustSDK.TimelineDiff]) {
         let mapped = diff.map { TimelineMapper.map($0, ownUserID: ownUserID) }
-        items.withLock { list in
+        applyMapped(mapped)
+    }
+
+    func applyMapped(_ mapped: [HaloDomain.TimelineDiff]) {
+        state.withLock { current in
             for update in mapped {
-                try? ListReducer.apply(update, to: &list)
+                try? ListReducer.apply(update, to: &current.items)
             }
+            current.updates += 1
+        }
+    }
+
+    /// Waits briefly for the SDK's asynchronous listener task to deliver diffs after `addListener` or `paginateBackwards`.
+    func settle(after count: Int, waitTicks: Int = 50, quietTicks: Int = 20) async {
+        for _ in 0..<waitTicks where updates <= count {
+            await sleep(.milliseconds(1))
+        }
+        guard updates > count else { return }
+        var last = updates
+        for _ in 0..<quietTicks {
+            await sleep(.milliseconds(10))
+            let current = updates
+            if current == last { return }
+            last = current
         }
     }
 
     func mediaItemsNewestFirst() -> [RoomMediaItem] {
-        let snapshot = items.withLock { $0 }
+        let snapshot = state.withLock { $0.items }
         var result: [RoomMediaItem] = []
         result.reserveCapacity(snapshot.count)
         for item in snapshot.reversed() {
@@ -277,6 +303,7 @@ private actor MatrixRoomMediaGallerySession: RoomMediaGallerySession {
     private let collector: GalleryCollector
     private var handle: TaskHandle?
     private var deliveredIDs: Set<EventID> = []
+    private var settledInitial = false
     private var reachedStart = false
     private var isClosed = false
 
@@ -295,14 +322,20 @@ private actor MatrixRoomMediaGallerySession: RoomMediaGallerySession {
 
     func nextPage(limit: Int) async throws(HaloError) -> MediaGalleryPage {
         guard !isClosed, limit > 0 else { return MediaGalleryPage(items: [], hasMore: false) }
+        if !settledInitial {
+            settledInitial = true
+            await collector.settle(after: 0)
+        }
         var unseen = collector.mediaItemsNewestFirst().filter { !deliveredIDs.contains($0.eventID) }
         var steps = 0
         while unseen.count < limit && !reachedStart && steps < Self.maxStepsPerPage {
+            let seen = collector.updates
             do {
                 reachedStart = try await timeline.paginateBackwards(numEvents: Self.eventsPerStep)
             } catch {
                 throw ErrorMapper.map(error)
             }
+            await collector.settle(after: seen)
             steps += 1
             unseen = collector.mediaItemsNewestFirst().filter { !deliveredIDs.contains($0.eventID) }
         }

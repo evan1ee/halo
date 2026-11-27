@@ -44,7 +44,11 @@ public final class MatrixRoomListPort: RoomListPort {
         func set(_ key: String, _ value: Date) {
             let shouldScheduleFlush = state.withLock { state -> Bool in
                 if state.entries[key] == value { return false }
-                if state.entries.count >= limit { state.entries.removeAll(keepingCapacity: true) }
+                if state.entries[key] == nil, state.entries.count >= limit {
+                    let keepCount = max(1, limit / 2)
+                    let newest = state.entries.sorted { $0.value > $1.value }.prefix(keepCount)
+                    state.entries = Dictionary(uniqueKeysWithValues: newest.map { ($0.key, $0.value) })
+                }
                 state.entries[key] = value
                 guard file != nil, state.pendingFlush == nil else { return false }
                 return true

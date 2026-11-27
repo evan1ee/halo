@@ -8,6 +8,7 @@ public struct RoomMediaGalleryView: View {
     @State private var filter: MediaFilter = .all
     @State private var exportingItemID: String?
     @State private var exportedURL: URL?
+    @State private var isVisible = true
 
     private enum MediaFilter: String, CaseIterable, Identifiable {
         case all = "All"
@@ -68,7 +69,15 @@ public struct RoomMediaGalleryView: View {
                             Button {
                                 exportingItemID = item.id
                                 Task {
-                                    exportedURL = await model.exportMediaFile(item)
+                                    let nextURL = await model.exportMediaFile(item)
+                                    if !isVisible {
+                                        if let nextURL { PagedPhotoViewer.removeTemporaryFolder(of: nextURL) }
+                                    } else {
+                                        if let previous = exportedURL, previous != nextURL {
+                                            PagedPhotoViewer.removeTemporaryFolder(of: previous)
+                                        }
+                                        exportedURL = nextURL
+                                    }
                                     exportingItemID = nil
                                 }
                             } label: {
@@ -119,7 +128,15 @@ public struct RoomMediaGalleryView: View {
         .refreshable {
             await model.loadGallery()
         }
+        .onAppear {
+            isVisible = true
+        }
         .onDisappear {
+            isVisible = false
+            if let url = exportedURL {
+                PagedPhotoViewer.removeTemporaryFolder(of: url)
+                exportedURL = nil
+            }
             Task { await model.closeGallery() }
         }
     }

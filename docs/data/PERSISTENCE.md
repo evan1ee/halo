@@ -12,6 +12,7 @@ Decisions: D46, ADR-0006.
 | `search-index.sqlite` (D123) | HaloPersistence (GRDB, FTS5) | App's private Application Support `search/<hash>/`, excluded from backups | Text of decrypted messages, per-room coverage | Yes (from the SDK and the server; slow for full history) |
 | Search history client's event cache | matrix-rust-sdk | App's private Caches `search-history/<store>/`, passphrase-encrypted like the app's | Scratch; a folder per client, deleted when the next one opens and on sign-out | Yes |
 | Search holding file and plan | HaloPersistence | Beside the index, `completeUntilFirstUserAuthentication` | What was read or synced while locked, and what to read next, AES-GCM (the drafts' key), at most 50 MB, until it moves into the index | Yes |
+| `halo-event-times.json` (M19-7) | HaloMatrixAdapter | App's private Caches, `completeUntilFirstUserAuthentication`, excluded from backups | Derived receipt `event_id → origin_server_ts` cache so relaunches avoid repeat `GET /event` calls for unread rooms; erased on sign-out | Yes (from the server) |
 | Keychain (shared access group) | HaloPlatform | — | Session tokens, SDK store passphrase, Halo DB field key | No |
 | UserDefaults (App Group suite) | Features | — | UI preferences | Yes (defaults) |
 
@@ -47,6 +48,7 @@ that opens both]**.
 | SDK media store (disk) | SDK retention policy (`set_media_retention_policy`), default 1 GB / 30 days **[DECISION D55; V-MEDIA-1]** |
 | `sticker_pack_cache` | Refreshed on account-data/room-state change and at most every 6 h; served stale while refreshing |
 | `bot_task` | Derived; rebuild on demand |
+| `halo-event-times.json` | Bounded to 5,000 receipt timestamps (retaining the newest half on overflow); erased on sign-out |
 | `search-index.sqlite` | Kept until sign-out, account removal or "Delete" in Settings; a new schema version deletes and rebuilds it; not in Caches, because iOS would delete hours of indexing |
 
 ## 6. Offline behaviour and conflict resolution

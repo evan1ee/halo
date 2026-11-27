@@ -214,11 +214,14 @@ extension TimelineViewModel {
         return raw.hasPrefix("@") ? String(raw.dropFirst().prefix { $0 != ":" }) : raw
     }
 
-    /// What `row(_:)` reads besides the item: sender names, readers' profiles and the bot allowlist. A change drops every cached row.
+    /// What `row(_:)` reads besides the item: sender names, readers' profiles, the bot allowlist, and the calendar day (for `"Today"` / `"Yesterday"` dividers). A change drops every cached row.
     private func mappingContext() -> Int {
         var hasher = Hasher()
         hasher.combine(senderNames)
         hasher.combine(botSenders)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = dateFormatter.timeZone
+        hasher.combine(calendar.startOfDay(for: now()))
         var profiles = 0
         for (user, profile) in readerProfiles {
             var entry = Hasher()
@@ -307,7 +310,7 @@ extension TimelineViewModel {
         let id = item.id.rawValue
         switch item.content {
         case .virtual(.dateDivider(let date)):
-            return TimelineRow(id: id, style: .divider, sender: nil, text: Self.dayTitle(date, now: Date(), formatter: dateFormatter))
+            return TimelineRow(id: id, style: .divider, sender: nil, text: Self.dayTitle(date, now: now(), formatter: dateFormatter))
         case .virtual(.readMarker):
             return TimelineRow(id: id, style: .marker, sender: nil, text: "New messages")
         case .virtual(.timelineStart):

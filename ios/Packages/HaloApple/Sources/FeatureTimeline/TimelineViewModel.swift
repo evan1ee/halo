@@ -235,6 +235,7 @@ public final class TimelineViewModel {
     let room: RoomID?
     let dwell: Duration
     let sleep: @Sendable (Duration) async throws -> Void
+    let now: @Sendable () -> Date
     var readTracker = TimelineReadTracker()
     var isActive = true
     /// `false` while the model was started ahead of its screen (`startAhead`, a warm model for the top of the chat list, M19-9):
@@ -289,7 +290,8 @@ public final class TimelineViewModel {
     public init(
         coordinator: TimelineCoordinator, media: MediaLoader? = nil, previewsAllowed: (@Sendable () async -> Bool)? = nil, receipts: ReadReceiptCoordinator? = nil, room: RoomID? = nil,
         drafts: DraftCoordinator? = nil, images: (any ImagePreparing)? = nil, readThrough: (@Sendable () async -> Date?)? = nil, dwell: Duration = TimelineViewModel.seenDwell, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
-        locale: Locale = .current, timeZone: TimeZone = .current, thumbnails: TimelineThumbnailMemory? = nil
+        locale: Locale = .current, timeZone: TimeZone = .current, thumbnails: TimelineThumbnailMemory? = nil,
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.coordinator = coordinator
         self.thumbnailMemory = thumbnails ?? TimelineThumbnailMemory()
@@ -302,6 +304,7 @@ public final class TimelineViewModel {
         self.readThrough = readThrough
         self.dwell = dwell
         self.sleep = sleep
+        self.now = now
         let formatter = DateFormatter()
         formatter.locale = locale
         formatter.timeZone = timeZone

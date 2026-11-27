@@ -52,8 +52,9 @@ public enum ImagePipeline {
             cache.totalCostLimit = ImagePipeline.costLimit
             cache.name = "halo.decoded-images"
             observer = NotificationCenter.default.addObserver(
-                forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: nil) { [cache] _ in cache.removeAllObjects() }
+                forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: nil) { [weak self] _ in self?.clear() }
         }
+        func clear() { cache.removeAllObjects() }
     }
 
     private static let store = Store()

@@ -3,6 +3,7 @@ import HaloApplication
 import HaloDomain
 import HaloFoundation
 import HaloTestSupport
+import Synchronization
 import Testing
 @testable import FeatureTimeline
 
@@ -73,6 +74,28 @@ struct IncrementalTimelineTests {
         show(items, in: model)
         #expect(model.rowsMapped == 50)
         #expect(rows(model) == fullRebuild(items, in: model))
+    }
+
+    @Test("crossing midnight refreshes cached date-divider rows from Today to Yesterday")
+    func midnightRolloverUpdatesDateDivider() throws {
+        let day1 = Date(timeIntervalSince1970: 1_700_049_600)  // 2023-11-15 12:00:00 UTC
+        let day2 = day1.addingTimeInterval(86_400)
+        let currentNow = Mutex(day1)
+        let model = TimelineViewModel(
+            coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: try RoomID("!r:x.org")),
+            locale: Locale(identifier: "en_US"),
+            timeZone: TimeZone(identifier: "UTC") ?? .gmt,
+            now: { currentNow.withLock { $0 } })
+        let items: [TimelineItem] = [
+            TimelineItem(id: TimelineItemID("div-1"), content: .virtual(.dateDivider(day1))),
+            message(1),
+        ]
+        show(items, in: model)
+        #expect(rows(model).first?.text == "Today")
+
+        currentNow.withLock { $0 = day2 }
+        show(items, in: model)
+        #expect(rows(model).first?.text == "Yesterday")
     }
 
     @Test("randomised changes always give the rows a full rebuild gives")

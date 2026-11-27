@@ -66,21 +66,21 @@ enum SearchMapper {
         case .image(let content):
             SearchContent.attachment(
                 .image, filename: content.filename, caption: content.caption,
-                mimeType: content.info?.mimetype, sizeBytes: content.info?.size.map(Int.init),
+                mimeType: content.info?.mimetype, sizeBytes: clampedInt(content.info?.size),
                 thumbnail: TimelineMapper.ref(content.info?.thumbnailSource ?? content.source))
         case .video(let content):
             SearchContent.attachment(
                 .video, filename: content.filename, caption: content.caption,
-                mimeType: content.info?.mimetype, sizeBytes: content.info?.size.map(Int.init),
+                mimeType: content.info?.mimetype, sizeBytes: clampedInt(content.info?.size),
                 thumbnail: content.info?.thumbnailSource.map(TimelineMapper.ref))
         case .audio(let content):
             SearchContent.attachment(
                 .audio, filename: content.filename, caption: content.caption,
-                mimeType: content.info?.mimetype, sizeBytes: content.info?.size.map(Int.init))
+                mimeType: content.info?.mimetype, sizeBytes: clampedInt(content.info?.size))
         case .file(let content):
             SearchContent.attachment(
                 .file, filename: content.filename, caption: content.caption,
-                mimeType: content.info?.mimetype, sizeBytes: content.info?.size.map(Int.init),
+                mimeType: content.info?.mimetype, sizeBytes: clampedInt(content.info?.size),
                 thumbnail: content.info?.thumbnailSource.map(TimelineMapper.ref))
         case .gallery(let content):
             gallery(
@@ -99,17 +99,19 @@ enum SearchMapper {
                     case .image(let c):
                         SearchAttachment(
                             mediaKind: .image, filename: c.filename, mimeType: c.info?.mimetype,
-                            sizeBytes: c.info?.size.map(Int.init), thumbnail: TimelineMapper.ref(c.info?.thumbnailSource ?? c.source))
+                            sizeBytes: clampedInt(c.info?.size), thumbnail: TimelineMapper.ref(c.info?.thumbnailSource ?? c.source))
                     case .video(let c):
                         SearchAttachment(
                             mediaKind: .video, filename: c.filename, mimeType: c.info?.mimetype,
-                            sizeBytes: c.info?.size.map(Int.init), thumbnail: c.info?.thumbnailSource.map(TimelineMapper.ref))
+                            sizeBytes: clampedInt(c.info?.size), thumbnail: c.info?.thumbnailSource.map(TimelineMapper.ref))
                     default: nil
                     }
                 }.first)
         case .location, .other: nil
         }
     }
+
+    static func clampedInt(_ value: UInt64?) -> Int? { value.map { Int(clamping: $0) } }
 
     private static func gallery(body: String, names: [String], firstPreview: SearchAttachment? = nil) -> SearchableContent? {
         let shown = body.isEmpty ? names.joined(separator: ", ") : body

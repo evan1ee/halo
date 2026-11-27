@@ -37,6 +37,7 @@ public struct PagedPhotoViewer: View {
     @State private var isZoomed = false
     @State private var dragOffset: CGFloat = 0
     @State private var loadedFileByID: [String: URL] = [:]
+    @State private var isDismissed = false
     @State private var toastMessage: String?
     @State private var toastTask: Task<Void, Never>?
     @Environment(\.dismiss) private var dismiss
@@ -99,8 +100,16 @@ public struct PagedPhotoViewer: View {
                     ForEach(items) { item in
                         PagedPhotoPage(
                             item: item,
+                            existingFileURL: loadedFileByID[item.id],
                             loadImageFile: loadImageFile,
                             onLoaded: { url in
+                                if isDismissed {
+                                    Self.removeTemporaryFolder(of: url)
+                                    return
+                                }
+                                if let previous = loadedFileByID[item.id], previous != url {
+                                    Self.removeTemporaryFolder(of: previous)
+                                }
                                 loadedFileByID[item.id] = url
                             },
                             onSingleTap: {
@@ -183,7 +192,14 @@ public struct PagedPhotoViewer: View {
                             isExporting = true
                             Task {
                                 let url = await exportItem(target)
-                                if currentID == target.id { exportedURL = url }
+                                if isDismissed || currentID != target.id {
+                                    if let url { Self.removeTemporaryFolder(of: url) }
+                                } else {
+                                    if let previous = exportedURL, previous != url {
+                                        Self.removeTemporaryFolder(of: previous)
+                                    }
+                                    exportedURL = url
+                                }
                                 isExporting = false
                             }
                         } label: {
@@ -229,10 +245,16 @@ public struct PagedPhotoViewer: View {
             }
         }
         .presentationDragIndicator(.visible)
+        .onAppear {
+            isDismissed = false
+        }
         .onDisappear {
+            isDismissed = true
             toastTask?.cancel()
             for url in loadedFileByID.values { Self.removeTemporaryFolder(of: url) }
+            loadedFileByID.removeAll()
             if let url = exportedURL { Self.removeTemporaryFolder(of: url) }
+            exportedURL = nil
         }
     }
 
@@ -367,11 +389,15 @@ public struct PagedPhotoViewer: View {
     }
     #endif
 
-    private static func removeTemporaryFolder(of url: URL) {
+    nonisolated public static func removeTemporaryFolder(of url: URL) {
         let folder = url.deletingLastPathComponent()
         let name = folder.lastPathComponent
-        guard name.hasPrefix("halo-viewer-") || name.hasPrefix("halo-photo-") || name.hasPrefix("halo-global-gallery-") else { return }
-        try? FileManager.default.removeItem(at: folder)  // best-effort: temporary viewer copy
+        guard name.hasPrefix("halo-viewer-")
+            || name.hasPrefix("halo-photo-")
+            || name.hasPrefix("halo-global-gallery-")
+            || name.hasPrefix("halo-gallery-")
+        else { return }
+        try? FileManager.default.removeItem(at: folder)  // best-effort: temporary viewer/gallery copy
     }
 
     private func showToast(_ message: String) {
@@ -391,6 +417,7 @@ public struct PagedPhotoViewer: View {
 
 private struct PagedPhotoPage: View {
     let item: PagedMediaItem
+    let existingFileURL: URL?
     let loadImageFile: @Sendable (PagedMediaItem) async -> URL?
     let onLoaded: @MainActor (URL) -> Void
     let onSingleTap: () -> Void
@@ -427,9 +454,25 @@ private struct PagedPhotoPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: item.id) {
-            guard item.isImage, fileURL == nil else { return }
+            guard item.isImage else { return }
+            if let cachedURL = fileURL ?? existingFileURL {
+                fileURL = cachedURL
+                #if canImport(UIKit)
+                if viewerImage == nil {
+                    isLoading = true
+                    viewerImage = await ImagePipeline.decode(fileURL: cachedURL, maxPixel: ImagePipeline.Size.viewer)
+                    isLoading = false
+                }
+                #endif
+                return
+            }
             isLoading = true
             let loaded = await loadImageFile(item)
+            if Task.isCancelled {
+                if let loaded { PagedPhotoViewer.removeTemporaryFolder(of: loaded) }
+                isLoading = false
+                return
+            }
             fileURL = loaded
             if let loaded {
                 onLoaded(loaded)

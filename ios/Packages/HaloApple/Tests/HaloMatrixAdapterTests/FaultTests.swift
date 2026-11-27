@@ -178,7 +178,7 @@ struct FaultTests {
             let mirror = TimelineMirror(timeline.items())
             try await proxy.fault(broken.rule)
             for number in 1...3 { try await timeline.send(text: "k\(number)", mentions: []) }
-            try await mirror.wait(seconds: 30, "the three local echoes") { mirror in (1...3).allSatisfy { mirror.own("k\($0)") != nil } ? true : nil }
+            _ = try await mirror.wait(seconds: 30, "the three local echoes") { mirror in (1...3).allSatisfy { mirror.own("k\($0)") != nil } ? true : nil }
             await sync.stop()
             await timeline.close()
         }
