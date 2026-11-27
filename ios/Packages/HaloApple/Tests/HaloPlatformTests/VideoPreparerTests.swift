@@ -9,14 +9,24 @@ import Testing
 
 @Suite("VideoPreparer (M20-3)")
 struct VideoPreparerTests {
-    /// Writes a tiny real H.264 `.mp4` with the given raw dimensions and track transform (for testing portrait rotation).
-    private func makeMP4(width: Int, height: Int, transform: CGAffineTransform = .identity) async throws -> URL {
+    /// Writes a tiny real H.264 `.mp4`/`.mov` with the given raw dimensions, track transform, and optional ISO6709 GPS metadata.
+    private func makeMP4(
+        width: Int, height: Int, transform: CGAffineTransform = .identity,
+        fileType: AVFileType = .mp4, filename: String = "sample.mp4", gpsISO6709: String? = nil
+    ) async throws -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("halo-vidprep-test-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let url = dir.appendingPathComponent("sample.mp4")
+        let url = dir.appendingPathComponent(filename)
 
-        let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
+        let writer = try AVAssetWriter(outputURL: url, fileType: fileType)
+        if let gpsISO6709 {
+            let item = AVMutableMetadataItem()
+            item.identifier = .quickTimeMetadataLocationISO6709
+            item.value = gpsISO6709 as NSString
+            item.dataType = kCMMetadataBaseDataType_UTF8 as String
+            writer.metadata = [item]
+        }
         let settings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoWidthKey: width,
@@ -97,5 +107,34 @@ struct VideoPreparerTests {
         await #expect(throws: HaloError.invalidInput("EMPTY_FILE")) {
             _ = try await VideoPreparer().prepare(fileURL: empty, filename: "empty.mp4", mimeType: "video/mp4")
         }
+    }
+
+    @Test("strips QuickTime ISO6709 GPS location metadata from captured or picked videos (D56, M20-5)")
+    func stripsVideoLocationMetadata() async throws {
+        let rawURL = try await makeMP4(
+            width: 320, height: 180,
+            transform: CGAffineTransform(rotationAngle: .pi / 2),
+            fileType: .mov,
+            filename: "camera-clip.mov",
+            gpsISO6709: "+37.7749-122.4194+010.000/"
+        )
+        defer { try? FileManager.default.removeItem(at: rawURL.deletingLastPathComponent()) }
+
+        // Confirm the source video actually contains GPS metadata before preparation.
+        let sourceHasGPS = await VideoPreparer.hasLocationMetadata(in: AVURLAsset(url: rawURL))
+        #expect(sourceHasGPS)
+
+        let prepared = try await VideoPreparer().prepare(fileURL: rawURL, filename: "camera-clip.mov", mimeType: "video/quicktime")
+        let cleanURL = try #require(prepared.fileURL)
+        defer {
+            if cleanURL != rawURL {
+                try? FileManager.default.removeItem(at: cleanURL.deletingLastPathComponent())
+            }
+        }
+        #expect(cleanURL != rawURL)
+        #expect(prepared.width == 180 && prepared.height == 320)
+        #expect(prepared.thumbnail != nil)
+        let cleanedHasGPS = await VideoPreparer.hasLocationMetadata(in: AVURLAsset(url: cleanURL))
+        #expect(!cleanedHasGPS)
     }
 }
