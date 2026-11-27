@@ -679,4 +679,10 @@ public final class TimelineViewModel {
     public internal(set) var isSendingVideo = false
     public internal(set) var pendingVideos: [OutgoingFile] = []
     public internal(set) var isSendingFile = false
+    /// Poll votes sent by this device and waiting for the server echo (AC-M5, M20-4).
+    public internal(set) var pendingPollVotes: [EventID: [String]] = [:]
+    /// Own polls whose `m.poll.end` is waiting for server confirmation (M20-4).
+    public internal(set) var endingPolls: Set<EventID> = []
+    /// Per-poll inline error message when a vote or end fails (M20-4).
+    public internal(set) var pollErrors: [EventID: String] = [:]
 }

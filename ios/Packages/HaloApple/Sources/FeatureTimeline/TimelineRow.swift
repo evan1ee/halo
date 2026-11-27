@@ -61,6 +61,8 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     public let video: Video?
     /// A shared location (`m.location`), shown as a static map snapshot card that opens in Apple Maps.
     public let location: Location?
+    /// An interactive poll (`m.poll.start`, MESSAGING FR-10, M20-4).
+    public let poll: PollDetails?
 
     /// What "View source" shows for a text message (BOT_MESSAGES FR-1): the sender, the event and both bodies, untouched.
     public struct Source: Equatable, Sendable {
@@ -190,13 +192,13 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
         }
     }
 
-    /// Whether the row shows its `text` in a bubble. A sticker never does, nor does a file tile, audio bubble, video poster or location card, and neither does an image whose
+    /// Whether the row shows its `text` in a bubble. A sticker never does, nor does a file tile, audio bubble, video poster, poll card or location card, and neither does an image whose
     /// body is just its file name ("photo.jpg", which clients put in `body` when there is no caption); a real caption is shown.
-    public var showsText: Bool { !isSticker && file == nil && audio == nil && video == nil && location == nil && !(image != nil && Self.looksLikeFilename(text)) }
+    public var showsText: Bool { !isSticker && file == nil && audio == nil && video == nil && location == nil && poll == nil && !(image != nil && Self.looksLikeFilename(text)) }
 
     /// Whether a plain text message consists solely of 1–3 native Unicode emoji and renders jumbo-sized without a bubble fill.
     public var isJumboEmoji: Bool {
-        showsText && image == nil && file == nil && audio == nil && video == nil && location == nil && card == nil && NativeEmoji.isEmojiOnly(text, maxCount: 3)
+        showsText && image == nil && file == nil && audio == nil && video == nil && location == nil && poll == nil && card == nil && NativeEmoji.isEmojiOnly(text, maxCount: 3)
     }
 
     /// The KLIPY GIF or sticker this message is, when its whole text is one KLIPY media link (COMPOSER_PANELS §6, D98).
@@ -205,8 +207,8 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
         return KlipyLink.mediaURL(in: text)
     }
 
-    /// Whether the user can edit this row's text (own confirmed text message; never photos, files, audio, video, locations or stickers).
-    public var canEdit: Bool { isOwn && style == .ownMessage && eventID != nil && image == nil && file == nil && audio == nil && video == nil && location == nil && !isSticker }
+    /// Whether the user can edit this row's text (own confirmed text message; never photos, files, audio, video, polls, locations or stickers).
+    public var canEdit: Bool { isOwn && style == .ownMessage && eventID != nil && image == nil && file == nil && audio == nil && video == nil && location == nil && poll == nil && !isSticker }
 
     static func looksLikeFilename(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -256,10 +258,11 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     init(
         id: String, style: Style, sender: String?, text: String, image: Image? = nil, status: String? = nil,
         eventID: EventID? = nil, isOwn: Bool = false, reactions: [Chip] = [], reply: Reply? = nil, styled: AttributedString? = nil,
-        failedLocalID: String? = nil, isSticker: Bool = false, file: FileTile? = nil, audio: Audio? = nil, video: Video? = nil, location: Location? = nil, source: Source? = nil, card: BotCard? = nil
+        failedLocalID: String? = nil, isSticker: Bool = false, file: FileTile? = nil, audio: Audio? = nil, video: Video? = nil, location: Location? = nil, poll: PollDetails? = nil, source: Source? = nil, card: BotCard? = nil
     ) {
         self.card = card
         self.source = source
+        self.poll = poll
         self.location = location
         self.video = video
         self.audio = audio

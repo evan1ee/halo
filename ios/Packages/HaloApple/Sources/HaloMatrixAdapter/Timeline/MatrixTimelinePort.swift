@@ -475,6 +475,18 @@ final class MatrixTimelineSession: TimelineSession {
         } catch { throw ErrorMapper.map(error) }
     }
 
+    func votePoll(pollEventID: EventID, answers: [String]) async throws(HaloError) {
+        do {
+            try await timeline.sendPollResponse(pollStartEventId: pollEventID.rawValue, answers: answers)
+        } catch { throw ErrorMapper.map(error) }
+    }
+
+    func endPoll(pollEventID: EventID, fallbackText: String) async throws(HaloError) {
+        do {
+            try await timeline.endPoll(pollStartEventId: pollEventID.rawValue, text: fallbackText)
+        } catch { throw ErrorMapper.map(error) }
+    }
+
     func pinnedEventIDs() async -> [EventID] {
         var result: [EventID] = []
         var seen: Set<EventID> = []

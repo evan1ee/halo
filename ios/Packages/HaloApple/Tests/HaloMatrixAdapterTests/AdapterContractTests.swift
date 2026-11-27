@@ -1654,6 +1654,21 @@ final class TimelineMirror: Sendable {
         }
     }
 
+    /// The poll matching `question`, if the timeline holds it with a server event ID.
+    func poll(question: String) -> (eventID: EventID, details: PollDetails)? {
+        items.withLock { items in
+            for item in items.reversed() {
+                if case .event(let event) = item.content,
+                   let id = event.eventID,
+                   case .poll(let details) = event.kind,
+                   details.question == question {
+                    return (id, details)
+                }
+            }
+            return nil
+        }
+    }
+
     /// Polls `probe` until it returns a value; fails after `seconds`.
     func wait<T: Sendable>(seconds: Double, _ what: String, _ probe: (TimelineMirror) -> T?) async throws -> T {
         let deadline = ContinuousClock.now + .seconds(seconds)

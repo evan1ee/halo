@@ -148,8 +148,8 @@ public enum TimelineEventKind: Sendable, Equatable {
     case membership(user: UserID?, displayName: String?, change: MembershipChange)
     /// A shared place (`m.location`): the sender's description and the raw `geo:` URI (TIMELINE FR-2, static, no map).
     case location(body: String, geoURI: String)
-    /// A poll, read-only (TIMELINE FR-2): the question, each answer with its vote count, and whether it has ended.
-    case poll(question: String, options: [PollOption], ended: Bool)
+    /// A poll (TIMELINE FR-2, MESSAGING FR-10, M20-4): question, options with counts and own selection, visibility, and ended state.
+    case poll(PollDetails)
     /// A call started or rang in the room; display only, Halo has no calling (D43).
     case call
     case otherState
@@ -237,13 +237,106 @@ public enum VirtualItem: Sendable, Equatable {
 
 public typealias TimelineDiff = ListDiff<TimelineItem>
 
-/// One answer of a poll with the number of people who chose it.
-public struct PollOption: Sendable, Equatable {
+/// Whether a poll reveals live vote counts before it ends (MSC3381 `m.poll.disclosed` / `m.poll.undisclosed`).
+public enum PollVisibility: Sendable, Equatable {
+    case disclosed
+    case undisclosed
+}
+
+/// One answer of a poll with its MSC3381 identifier, vote count, and whether the signed-in user voted for it.
+public struct PollOption: Sendable, Equatable, Identifiable {
+    public let id: String
     public let text: String
     public let votes: Int
-    public init(text: String, votes: Int) {
+    public let selectedByMe: Bool
+
+    public init(id: String = "", text: String, votes: Int = 0, selectedByMe: Bool = false) {
+        self.id = id.isEmpty ? text : id
         self.text = text
-        self.votes = votes
+        self.votes = max(0, votes)
+        self.selectedByMe = selectedByMe
+    }
+}
+
+/// Full state of an MSC3381 poll in a timeline (MESSAGING FR-10, AC-M5, M20-4).
+public struct PollDetails: Sendable, Equatable {
+    public let question: String
+    public let options: [PollOption]
+    public let visibility: PollVisibility
+    public let maxSelections: Int
+    public let totalVoters: Int
+    public let ended: Bool
+
+    public init(
+        question: String,
+        options: [PollOption],
+        visibility: PollVisibility = .disclosed,
+        maxSelections: Int = 1,
+        totalVoters: Int? = nil,
+        ended: Bool = false
+    ) {
+        self.question = question
+        self.options = options
+        self.visibility = visibility
+        self.maxSelections = max(1, maxSelections)
+        self.totalVoters = max(0, totalVoters ?? options.reduce(0) { $0 + $1.votes })
+        self.ended = ended
+    }
+
+    /// Disclosed polls show live results immediately; undisclosed polls reveal counts only once ended.
+    public var showsResults: Bool { visibility == .disclosed || ended }
+
+    /// Answer IDs currently confirmed for the signed-in user, in option order.
+    public var ownSelectedIDs: [String] { options.filter(\.selectedByMe).map(\.id) }
+
+    /// Total votes across all options.
+    public var totalVotes: Int { options.reduce(0) { $0 + $1.votes } }
+
+    /// Highest vote count among options (`0` when no votes exist).
+    public var highestVotes: Int { options.map(\.votes).max() ?? 0 }
+
+    /// Whether `option` is tied for or holds the top vote count on an ended poll.
+    public func isWinner(_ option: PollOption) -> Bool {
+        ended && option.votes > 0 && option.votes == highestVotes
+    }
+
+    /// Normalised `[0, 1]` share of votes for `option`.
+    public func voteFraction(for option: PollOption) -> Double {
+        let denominator = maxSelections > 1 ? totalVoters : totalVotes
+        guard denominator > 0 else { return 0 }
+        return min(1, max(0, Double(option.votes) / Double(denominator)))
+    }
+
+    /// Rounded whole percentage (`0...100`) for `option`.
+    public func votePercentage(for option: PollOption) -> Int {
+        Int((voteFraction(for: option) * 100).rounded())
+    }
+
+    /// Computes the next answer-ID list when the user taps `optionID` given their `current` selection.
+    /// Returns `nil` when the tap is a no-op (poll ended, option unknown, single-choice already selected, or at `maxSelections`).
+    public func nextSelection(tapping optionID: String, current: [String]) -> [String]? {
+        guard !ended, options.contains(where: { $0.id == optionID }) else { return nil }
+        if maxSelections <= 1 {
+            return current == [optionID] ? nil : [optionID]
+        }
+        var next = current.filter { id in options.contains(where: { $0.id == id }) }
+        if let existing = next.firstIndex(of: optionID) {
+            next.remove(at: existing)
+            return next
+        }
+        guard next.count < maxSelections else { return nil }
+        next.append(optionID)
+        return next
+    }
+
+    /// Plain-text summary sent in `m.poll.end` for clients that do not render MSC3381 polls.
+    public func endFallbackText() -> String {
+        let top = highestVotes
+        guard top > 0 else { return "Poll ended. No votes were cast." }
+        let winners = options.filter { $0.votes == top }.map(\.text)
+        let list = winners.joined(separator: ", ")
+        let noun = top == 1 ? "vote" : "votes"
+        return "Poll ended. Top result: \(list) (\(top) \(noun))."
     }
 }
 

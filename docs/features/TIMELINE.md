@@ -12,7 +12,7 @@ Show a room's history correctly and smoothly, and report what the user has actua
 
 ## 3. Functional requirements
 - FR-1 Items from `Timeline.add_listener` diffs **[VERIFIED F-FFI-8]**, applied to an identity-stable array.
-- FR-2 Item types: text (HTML subset rendered), notice, emote, image, video, audio, file, sticker, location (static: description + Maps link, built), poll (read-only, built: counts per answer; voting: MESSAGING FR-10), redacted, UTD, state events (grouped, collapsible), call events (display only, D43; built), unknown (fallback "Unsupported event").
+- FR-2 Item types: text (HTML subset rendered), notice, emote, image, video, audio, file, sticker, location (static: description + Maps link, built), poll (interactive card, built: vote, change vote, live results / undisclosed until end, end own poll; MESSAGING FR-10), redacted, UTD, state events (grouped, collapsible), call events (display only, D43; built), unknown (fallback "Unsupported event").
 - FR-3 Back pagination on reaching the top (`paginate_backwards(20)`), with a status indicator.
 - FR-4 Read-marker line at `m.fully_read`; "Jump to unread" pill when the line is above the viewport.
 - FR-5 **Visibility tracking** → `ReadStateCoordinator.markRead` per D6 ([../matrix/READ_RECEIPTS.md](../matrix/READ_RECEIPTS.md) §1).

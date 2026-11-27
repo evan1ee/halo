@@ -125,6 +125,14 @@ struct RowView: View {
                                 LocationCardView(location: location, isOwn: row.style == .ownMessage)
                                     .opacity(row.status == nil ? 1 : 0.6)
                             }
+                            if let poll = row.poll {
+                                PollCardView(
+                                    row: row,
+                                    poll: poll,
+                                    model: model,
+                                    isOwn: row.style == .ownMessage
+                                )
+                            }
                             if let card = row.card, !showingOriginal {
                                 BotCardView(
                                     card: card,
@@ -303,6 +311,7 @@ private struct MessageActionsSheet: View {
 
     private var previewText: String {
         if let location = row.location { return location.title }
+        if let poll = row.poll { return "📊 \(poll.question)" }
         if let video = row.video { return video.caption ?? "Video" }
         if let audio = row.audio { return audio.isVoice ? "Voice message" : audio.name }
         if let file = row.file { return file.name }

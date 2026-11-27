@@ -211,8 +211,8 @@ public final class MatrixRoomPort: RoomPort {
             return RoomExportMessage(eventID: eventID.rawValue, senderID: senderID, senderName: senderName, timestamp: event.timestamp, kind: "sticker", body: body)
         case .location(let body, let geoURI):
             return RoomExportMessage(eventID: eventID.rawValue, senderID: senderID, senderName: senderName, timestamp: event.timestamp, kind: "location", body: "\(body) (\(geoURI))")
-        case .poll(let question, _, _):
-            return RoomExportMessage(eventID: eventID.rawValue, senderID: senderID, senderName: senderName, timestamp: event.timestamp, kind: "poll", body: question)
+        case .poll(let details):
+            return RoomExportMessage(eventID: eventID.rawValue, senderID: senderID, senderName: senderName, timestamp: event.timestamp, kind: "poll", body: details.question)
         case .redacted:
             return RoomExportMessage(eventID: eventID.rawValue, senderID: senderID, senderName: senderName, timestamp: event.timestamp, kind: "redacted", body: "[Message deleted]")
         case .undecryptable:
