@@ -1,5 +1,6 @@
 import Foundation
 import HaloApplication
+import HaloBotRendering
 import HaloDomain
 import HaloFoundation
 import Observation
@@ -47,6 +48,9 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     public let reply: Reply?
     /// Styled text for a message that came with an HTML body; the view shows `text` otherwise.
     public let styled: AttributedString?
+    /// Structured rich blocks (code blocks, spoilers, tables, nested lists, quotes) when `formatted_body` needs them (TIMELINE FR-13, M20-10);
+    /// `nil` for plain text and simple inline formatting so the common path stays a single `Text`.
+    public let richText: RichTextDocument?
     /// The local ID of an own message whose sending failed; the user can retry or delete it.
     public var failedLocalID: String?
     /// What the person can do about a failed message beyond retrying: send it anyway after accepting the risk (AC-SEC-2).
@@ -278,6 +282,7 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     init(
         id: String, style: Style, sender: String?, text: String, image: Image? = nil, status: String? = nil,
         eventID: EventID? = nil, isOwn: Bool = false, reactions: [Chip] = [], reply: Reply? = nil, styled: AttributedString? = nil,
+        richText: RichTextDocument? = nil,
         failedLocalID: String? = nil, isSticker: Bool = false, file: FileTile? = nil, audio: Audio? = nil, video: Video? = nil, location: Location? = nil, poll: PollDetails? = nil, forwardPayload: ForwardPayload? = nil, source: Source? = nil, card: BotCard? = nil
     ) {
         self.card = card
@@ -290,6 +295,7 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
         self.file = file
         self.failedLocalID = failedLocalID
         self.isSticker = isSticker
+        self.richText = richText
         self.styled = styled
         self.reply = reply
         self.eventID = eventID

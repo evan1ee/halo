@@ -37,6 +37,12 @@ public enum MentionFormatter {
         public let users: [UserID]
     }
 
+    public struct HTMLResult: Equatable, Sendable {
+        public let html: String
+        /// The users actually present in the text, in order of first appearance, each once.
+        public let users: [UserID]
+    }
+
     public static func apply(_ text: String, mentions: [Mention]) -> Result {
         // Longest names first, so "@Alice B" wins over "@Alice".
         let candidates = mentions.sorted { $0.name.count > $1.name.count }
@@ -54,6 +60,86 @@ public enum MentionFormatter {
             }
         }
         return Result(markdown: output, users: users)
+    }
+
+    /// Builds Matrix HTML `formatted_body` with `matrix.to` mention pills while leaving the caller's plain-text `body`
+    /// free of raw Markdown link syntax (`hello @Peer`, fixing GA-30 / M20-10).
+    /// All literal text and display names are HTML-escaped first so hostile display names cannot inject markup.
+    public static func html(_ text: String, mentions: [Mention]) -> HTMLResult {
+        let candidates = mentions.sorted { $0.name.count > $1.name.count }
+        var output = ""
+        var users: [UserID] = []
+        var plainBuffer = ""
+
+        func flushPlain() {
+            guard !plainBuffer.isEmpty else { return }
+            output += renderSafeInlineHTML(plainBuffer)
+            plainBuffer.removeAll(keepingCapacity: true)
+        }
+
+        var index = text.startIndex
+        while index < text.endIndex {
+            if text[index] == "@", let (mention, end) = match(candidates, in: text, at: index) {
+                flushPlain()
+                let escapedName = htmlEscape(mention.name)
+                output += "<a href=\"https://matrix.to/#/\(link(mention.user))\">@\(escapedName)</a>"
+                if !users.contains(mention.user) { users.append(mention.user) }
+                index = end
+            } else {
+                plainBuffer.append(text[index])
+                index = text.index(after: index)
+            }
+        }
+        flushPlain()
+        return HTMLResult(html: output, users: users)
+    }
+
+    /// Escapes raw HTML entities and converts lightweight inline formatting (`` `code` ``, `**bold**`, newlines)
+    /// in non-mention text segments so messages mixing mentions and basic formatting render cleanly.
+    private static func renderSafeInlineHTML(_ raw: String) -> String {
+        let escaped = htmlEscape(raw)
+        var out = ""
+        var i = escaped.startIndex
+        while i < escaped.endIndex {
+            if escaped[i] == "\n" {
+                out += "<br/>"
+                i = escaped.index(after: i)
+            } else if escaped[i] == "`",
+                      let close = escaped[escaped.index(after: i)...].firstIndex(of: "`"),
+                      close > escaped.index(after: i) {
+                out += "<code>\(escaped[escaped.index(after: i)..<close])</code>"
+                i = escaped.index(after: close)
+            } else if escaped[i...].hasPrefix("**") {
+                let start = escaped.index(i, offsetBy: 2)
+                if let close = escaped[start...].range(of: "**"), close.lowerBound > start {
+                    out += "<strong>\(escaped[start..<close.lowerBound])</strong>"
+                    i = close.upperBound
+                } else {
+                    out.append(escaped[i])
+                    i = escaped.index(after: i)
+                }
+            } else {
+                out.append(escaped[i])
+                i = escaped.index(after: i)
+            }
+        }
+        return out
+    }
+
+    static func htmlEscape(_ text: String) -> String {
+        var out = ""
+        out.reserveCapacity(text.count)
+        for ch in text {
+            switch ch {
+            case "&": out += "&amp;"
+            case "<": out += "&lt;"
+            case ">": out += "&gt;"
+            case "\"": out += "&quot;"
+            case "'": out += "&#x27;"
+            default: out.append(ch)
+            }
+        }
+        return out
     }
 
     /// The mention whose `@name` starts at `index` and isn't followed by a letter or digit.
