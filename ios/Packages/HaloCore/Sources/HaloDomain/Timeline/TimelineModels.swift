@@ -196,11 +196,15 @@ public struct MediaAttachment: Sendable, Equatable {
     public let thumbnail: MediaRef?
     /// Optional BlurHash placeholder string (`xyz.amorgan.blurhash`), when provided by the sender (MEDIA_ATTACHMENTS FR-1).
     public let blurhash: String?
+    /// `true` for MSC3245 voice messages (`org.matrix.msc3245.voice`), `false` for ordinary audio files (MEDIA_ATTACHMENTS FR-3).
+    public let isVoice: Bool
+    /// Normalised `[0, 1]` amplitude samples from MSC1767 `org.matrix.msc1767.audio.waveform`, when provided by the sender.
+    public let waveform: [Float]?
 
     public init(
         kind: MediaKind, body: String, source: MediaRef?, width: Int? = nil, height: Int? = nil,
         mimeType: String? = nil, size: Int? = nil, duration: TimeInterval? = nil, thumbnail: MediaRef? = nil,
-        blurhash: String? = nil
+        blurhash: String? = nil, isVoice: Bool = false, waveform: [Float]? = nil
     ) {
         self.blurhash = blurhash
         self.thumbnail = thumbnail
@@ -212,6 +216,8 @@ public struct MediaAttachment: Sendable, Equatable {
         self.mimeType = mimeType
         self.size = size
         self.duration = duration
+        self.isVoice = isVoice
+        self.waveform = waveform
     }
 }
 

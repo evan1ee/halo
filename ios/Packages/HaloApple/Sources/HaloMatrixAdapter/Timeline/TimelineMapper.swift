@@ -129,7 +129,10 @@ enum TimelineMapper {
             case .audio(let content):
                 .media(MediaAttachment(
                     kind: .audio, body: message.body, source: ref(content.source),
-                    mimeType: content.info?.mimetype, size: clampedInt(content.info?.size), duration: content.info?.duration))
+                    mimeType: content.info?.mimetype, size: clampedInt(content.info?.size),
+                    duration: content.info?.duration ?? content.audio?.duration,
+                    isVoice: content.voice != nil,
+                    waveform: content.audio.flatMap { WaveformResampler.fromMSC1767($0.waveform) }))
             case .file(let content):
                 .media(MediaAttachment(
                     kind: .file, body: message.body, source: ref(content.source),

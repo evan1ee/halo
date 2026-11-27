@@ -349,6 +349,16 @@ extension TimelineViewModel {
                             thumbnailRef: attachment.thumbnail, isOwn: event.isOwn),
                         eventID: event.eventID, isOwn: event.isOwn, reactions: Self.chips(event.reactions), source: plainSource(event, attachment.body))
                 }
+                if attachment.kind == .audio, let source = attachment.source {
+                    let label = attachment.isVoice ? "[Voice message]" : "[Audio] \(attachment.body)"
+                    return TimelineRow(
+                        id: id, style: style, sender: name, text: label, eventID: event.eventID, isOwn: event.isOwn,
+                        reactions: Self.chips(event.reactions),
+                        audio: .init(
+                            ref: source, name: attachment.body, mimeType: attachment.mimeType, size: attachment.size,
+                            duration: attachment.duration, isVoice: attachment.isVoice, waveform: attachment.waveform),
+                        source: plainSource(event, attachment.body))
+                }
                 let label = "[\(Self.label(attachment.kind))] \(attachment.body)"
                 guard let source = attachment.source else { return TimelineRow(id: id, style: style, sender: name, text: label) }
                 return TimelineRow(

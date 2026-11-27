@@ -13,11 +13,23 @@ public struct OutgoingFile: Sendable, Equatable {
     public let data: Data
     public let filename: String
     public let mimeType: String
+    /// Duration in seconds for audio or video clips, when known.
+    public let duration: TimeInterval?
+    /// Normalised `[0, 1]` amplitude samples for voice messages (MSC1767).
+    public let waveform: [Float]?
+    /// `true` when recorded as a voice note (MSC3245 `org.matrix.msc3245.voice`).
+    public let isVoiceMessage: Bool
 
-    public init(data: Data, filename: String, mimeType: String) {
+    public init(
+        data: Data, filename: String, mimeType: String,
+        duration: TimeInterval? = nil, waveform: [Float]? = nil, isVoiceMessage: Bool = false
+    ) {
         self.data = data
         self.filename = filename
         self.mimeType = mimeType
+        self.duration = duration
+        self.waveform = waveform
+        self.isVoiceMessage = isVoiceMessage
     }
 
     /// `m.audio` and `m.video` for those media types, `m.file` for everything else.

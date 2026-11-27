@@ -102,6 +102,14 @@ struct RowView: View {
                                     cancel: { model.cancelOpenFile() }
                                 )
                             }
+                            if let audio = row.audio {
+                                AudioBubbleView(
+                                    row: row,
+                                    audio: audio,
+                                    model: model,
+                                    isOwn: row.style == .ownMessage
+                                )
+                            }
                             if let location = row.location {
                                 LocationCardView(location: location, isOwn: row.style == .ownMessage)
                                     .opacity(row.status == nil ? 1 : 0.6)
@@ -284,6 +292,7 @@ private struct MessageActionsSheet: View {
 
     private var previewText: String {
         if let location = row.location { return location.title }
+        if let audio = row.audio { return audio.isVoice ? "Voice message" : audio.name }
         if let file = row.file { return file.name }
         if row.isSticker { return "Sticker" }
         if row.image != nil, !row.showsText { return "Photo" }
@@ -364,13 +373,19 @@ private struct MessageActionsSheet: View {
                             }
                         }
                         #if canImport(UIKit)
-                        if row.file == nil, !row.isSticker, let text = row.source?.body ?? (row.showsText ? row.text : nil) {
+                        if row.file == nil, row.audio == nil, !row.isSticker, let text = row.source?.body ?? (row.showsText ? row.text : nil) {
                             actionRow("Copy", systemImage: "doc.on.doc") {
                                 UIPasteboard.general.string = text
                                 dismiss()
                             }
                         }
                         #endif
+                        if row.audio != nil {
+                            actionRow("Open file", systemImage: "square.and.arrow.up") {
+                                dismiss()
+                                Task { await model.openFile(row) }
+                            }
+                        }
                         if let image = row.image, let onSaveAsSticker {
                             actionRow("Add to Stickers", systemImage: "face.smiling") {
                                 let isSticker = row.isSticker

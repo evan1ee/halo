@@ -13,7 +13,7 @@ Display every incoming media type and send photos (D16).
 ## 3. Functional requirements
 - FR-1 Inline thumbnails (blurhash placeholder when provided), full-screen viewer with zoom and swipe between media.
 - FR-2 Video: poster inline, full-screen playback streamed from a file. *Today videos open in Quick Look* (ROADMAP M20-3).
-- FR-3 Audio and voice play in the bubble with waveform, scrubbing and 1×/1.5×/2×. *Today they open in Quick Look; no in-app player* (ROADMAP M20-2).
+- FR-3 Audio and voice play in the bubble with waveform, scrubbing and 1×/1.5×/2× (*built*, ROADMAP M20-2: `AudioBubbleView` + `AudioPlaybackController` on `TimelineViewModel` backed by `AVAudioPlayerEngine` streaming from disk via `MediaPort.file`, so playback survives scrolling; MSC3245 voice flag + MSC1767 waveform parsed on incoming voice notes including Element `audio/ogg` Opus and sent on recorded voice messages via `VoiceRecorder` + `AttachmentKind.voice`; off-main `AVAssetReader` waveform extraction when metadata is absent; pauses on calls/interruptions and headphone unplugging; VoiceOver adjustable seek; long-press keeps "Open file" for Quick Look/export).
 - FR-4 Files: name, size, Quick Look preview, share.
 - FR-5 Photo picker (`PHPicker`) → up to 10 images → `send_image` each with progress and cancel (`abort_send`) **[VERIFIED F-FFI-8]**.
 - FR-9 Camera: take a photo or a short video from the composer, permission asked in context (*not built*, ROADMAP M20-5).

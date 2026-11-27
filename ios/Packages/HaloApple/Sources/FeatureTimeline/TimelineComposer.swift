@@ -147,6 +147,7 @@ struct Composer: View {
         if input.state.panel != nil {
             input.toggleExpanded()
         } else {
+            model.audioPlayer.stop()
             Task { await voice.start() }
         }
     }
@@ -174,7 +175,7 @@ struct Composer: View {
     private func sendVoice() {
         guard let recording = voice.finish() else { return }
         sendTrigger += 1
-        Task { await model.sendFile(data: recording.data, filename: "Voice message.m4a", mimeType: "audio/mp4") }
+        Task { await model.sendVoice(data: recording.data, duration: recording.duration, waveform: recording.waveform) }
     }
 
     // MARK: Accessory rows (typing, errors, edit/reply, suggestions, pending photos)
