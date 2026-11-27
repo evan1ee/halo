@@ -1,10 +1,10 @@
 # Motion audit (ROADMAP M19-9, AC-MOT-1)
 
 `scripts/motion_audit.py` films the simulator while `HaloUITests.testMotionAudit` plays one transition (scenarios: `launch`,
-`room-open-close`, `room-open-other` (the fifth chat, outside the rooms started ahead), `keyboard`, `send`, `reaction`, `appearance`, `background`, `scroll-up`), asks ffmpeg for the difference between
+`room-open-close`, `room-open-other` (the fifth chat, outside the rooms started ahead), `keyboard`, `send`, `reaction`, `edit`, `appearance`, `background`, `scroll-up`, `history-prepend`, `reconnect`), asks ffmpeg for the difference between
 neighbouring frames at 30 fps, and writes a strip of frames per burst of change (`build/motion-audit/<scenario>-burst-N.png`, read
-left to right, top to bottom) and a table of burst lengths. It needs the signed-in `Halo Perf` simulator (`scripts/perf.py` makes it)
-and the scale server (`infra/dev/scale-fixtures.py up`). The strips are read by eye; nothing here is pass/fail yet.
+left to right, top to bottom) and a table of burst lengths and flat-blank frame counts. `--assert` fails on any test failure or blank frame in a no-blank transition. It needs the signed-in `Halo Perf` simulator (`scripts/perf.py` makes it)
+and the scale server (`infra/dev/scale-fixtures.py up`).
 
 ## Result of the first pass (2026-11-26, simulator)
 
@@ -160,8 +160,32 @@ of the simulator; idle CPU was higher in both of these runs too).
 | Visible-room sliding-sync subscriptions | Classic sync (D73/D125): every joined room's events arrive anyway; the adapter prepares the top rooms' SDK timelines | Not applicable |
 | Cache of recent rows across visits | None | Not built: rows are on the device within ms of the tap; a second copy of timeline state would need reconciling for edits, redactions and decryption (AGENTS §4.1) |
 
-## To do
-1. The first room of a launch: ~200 ms between the tap and the slide (once-per-process SwiftUI and runtime setup); paying it ahead needs a host accessibility can't reach and a moment no open falls into. Room open on the iPhone 📱 (`scripts/room_open_bench.py` needs a simulator); the newest own rows appearing two frames late on the first chat; a room with photos filmed on a re-open.
-2. Make the window exact: have the test draw a marker the film can find (for example a one-frame colour flash in a corner at each mark), then read the strips of send, reaction, scroll up, room close and the two appearance flips.
-3. Scenarios for edit, reconnect and history prepend.
-4. Turn what can be measured into UI tests (for example: no frame with an empty message area after a warm push, from the film's frame differences).
+## Third pass — exact window, all 12 transitions, and D-MOT-3 fix (2026-11-27, simulator, optimised build)
+- **Exact window calibration:** `testMotionAudit` emits `mark("calibrate")` immediately after `mark("end")` while Halo is still open in light mode, and waits for a `"calibrated"` handshake written by `motion_audit.py` after its `dark` (0.35 s) → `light` pulse (global brightness step 157–237, detected via `CALIBRATION_STEP = 140.0`, distinct from the ~120 Home Screen teardown step). `motion_audit.py` also checks per-frame central-region luma range (`blank_flags`) and supports `--assert`.
+- **New scenarios:** added `edit` (send → long-press → Edit → revise → send), `history-prepend` (scroll to top → back-paginate older messages), and `reconnect` (chat list → `docker pause halo-scale-synapse-1` until `"Offline — waiting to reconnect"` appears → `docker unpause` until banner clears). Fixed `send`/`edit` simulator text input (clipboard paste fallback) and `reaction` target selection (visible hittable message bubble in viewport).
+- **Defect D-MOT-3 (found in `history-prepend`, fixed with SwiftUI `List` residual):**
+  - *Before:* when back-pagination prepended earlier events on the same day, `PrependedAnchor` watched `rows.first?.id` — which was a synthetic `.dateDivider` (`Wednesday`) that `matrix-rust-sdk` deletes and recreates at the top. `PrependedAnchor.anchor` returned `nil`, so SwiftUI `List` teleported ~50 rows up to `"This is the start of the conversation."` / join events.
+  - *Fix:* `PrependedAnchor.firstStableID(in:)` (`FeatureTimeline/TimelineScrollHelpers.swift`) skips synthetic `.divider`, `.marker`, timeline-start, and collapsible settings rows so the anchor is always the prior oldest real event row; `TimelineView` re-anchors without animation (`withTransaction`, `disablesAnimations = true`) synchronously and on short follow-up layout passes (cancelled immediately on user touch). Covered by `PrependedAnchorTests.skipsVirtualDividersWhenSameDayEventsPrepend`.
+  - *After (`history-prepend-burst-2.png`, `dbg-prepend-after.png`):* the prior oldest message (`away 0`) stays visible on screen instead of teleporting to room creation (0 blank frames, no bounce-back). Residual: `away 0` shifts down by ~1 viewport height on the prepend frame because SwiftUI `List` estimates heights for newly inserted multi-line rows above it.
+- **Measurable UI test:** added `HaloUITests.testRoomOpenShowsRowsAtNewestWithoutSpinner` (verifies warm open, re-open, and 5th-room open render `timeline` with no loading spinner and no `jump-to-bottom`, D95 / AC-MOT-1).
+
+| Transition | Scenario | Strips inspected | Result |
+|---|---|---|---|
+| Launch → chat list | `launch` | Yes | White launch screen (~0.66 s) → structured skeleton (2 frames, 67 ms) → chat list in 1 crisp swap; 0 flicker, 0 jump. |
+| Room open (top room, warm & re-open) | `room-open-close` | Yes | Rows visible on frame 1 of push; 0 blank frames, 0 jumps (D126). |
+| Room open (5th room, outside top 3) | `room-open-other` | Yes | Rows visible on frame 1 of push on first open and re-open; 0 blank frames, 0 jumps (D126). |
+| Room close → chat list | `room-open-close`, `room-open-other` | Yes | Smooth pop back to chat list; 0 blank frames, 0 jumps. |
+| Keyboard up & down | `keyboard` | Yes | Composer and messages ride smoothly with keyboard both ways; 0 blank frames, 0 jumps. |
+| Send → confirm | `send` | Yes | Bubble enters cleanly at bottom and transitions sending → confirmed check in place; 0 blank frames, 0 jumps. |
+| Reaction (double-tap 👍) | `reaction` | Yes | `👍 1` chip appears in place under the tapped message; 0 blank frames, 0 scroll jumps. |
+| Edit message | `edit` | Yes | Action sheet slides cleanly → Edit loads composer + banner without jump → Send updates bubble in place with `(edited)`; 0 blank frames. |
+| Appearance (light ↔ dark) | `appearance` | Yes | Instant 1-frame flip both directions (step 236.6); 0 intermediate frames, 0 flicker, 0 jump. |
+| Return from background | `background` | Yes | System zoom shows room content from frame 1; 0 blank frames, 0 jumps. |
+| Scroll up | `scroll-up` | Yes | Smooth scroll through history; 0 blank frames. |
+| History prepend | `history-prepend` | Yes | **D-MOT-3 fixed (with SwiftUI `List` residual):** no longer teleports ~50 rows to room start; prior oldest row stays on screen with ~1-viewport shift from estimated heights of newly prepended multi-line rows; 0 blank frames. |
+| Offline → reconnect | `reconnect` | Yes | `"Offline — waiting to reconnect"` banner appears and clears cleanly in 1 crisp frame on the chat list; 0 blank frames, 0 flicker. |
+
+## Remaining device-only / follow-up items
+1. **Physical iPhone 📱:** measure room open (`scripts/room_open_bench.py` needs a simulator; measure on iPhone 16) and film a re-opened room containing photos (the scale accounts have text-only rooms).
+2. **Once-per-launch first-room setup:** ~200 ms between tap and push on the first room screen of a launch (SwiftUI/runtime setup; hidden warm-up tried twice and not kept).
+3. **D-MOT-3 SwiftUI `List` residual:** ~1-viewport height shift on history prepend when multi-line messages prepend above the reader; revisit only if SwiftUI `List` is replaced by a custom scroll container.

@@ -864,86 +864,195 @@ final class HaloUITests: XCTestCase {
         if !chatsRoot(app).waitForExistence(timeout: 4) { returnToChatList(app) }
         guard chatsRoot(app).waitForExistence(timeout: 15) else { throw XCTSkip("App is signed out.") }
         if app.buttons["focus-show-all"].exists { app.buttons["focus-show-all"].tap() }
-        hold(2)
-        mark("begin")
-        defer { mark("end") }
+        hold(1.5)
+        func enterText(_ text: String, into field: XCUIElement) {
+            field.tap()
+            hold(0.4)
+            // Use clipboard paste when software keyboard is hidden/truncated on the simulator so full text always lands.
+            UIPasteboard.general.string = text
+            field.press(forDuration: 0.8)
+            let paste = app.menuItems["Paste"].firstMatch
+            if paste.waitForExistence(timeout: 2) {
+                paste.tap()
+            } else {
+                field.typeText(text)
+            }
+            hold(0.4)
+        }
+        defer {
+            mark("end")
+            mark("calibrate")
+            if let marks {
+                let deadline = Date().addingTimeInterval(4)
+                while Date() < deadline {
+                    if let contents = try? String(contentsOfFile: marks, encoding: .utf8), contents.contains("calibrated ") {
+                        break
+                    }
+                    hold(0.05)
+                }
+            }
+            hold(0.3)
+        }
         switch scenario {
         case "launch":
             app.terminate()
             hold(1)
+            mark("begin")
             app.launch()
             _ = chatsRoot(app).waitForExistence(timeout: 15)
-            hold(3)
+            hold(2.5)
         case "room-open-close":
+            mark("begin")
             try openFirstChat(app)
-            hold(2)
+            hold(1.5)
             returnToChatList(app)
-            hold(2)
+            hold(1.5)
             try openFirstChat(app)
-            hold(2)
+            hold(1.5)
             returnToChatList(app)
-            hold(2)
+            hold(1.5)
         case "room-open-other":
             // A room below the top three of the chat list (M19-9, D-MOT-2): the fifth chat row, opened twice.
             let row = app.collectionViews.firstMatch.cells.element(boundBy: 5)
             guard row.waitForExistence(timeout: 5) else { throw XCTSkip("Fewer than five chats.") }
+            mark("begin")
             for _ in 0..<2 {
                 row.tap()
                 XCTAssertTrue(app.buttons["sticker-button"].waitForExistence(timeout: 8), "the room opened")
-                hold(2)
+                hold(1.5)
                 returnToChatList(app)
-                hold(2)
+                hold(1.5)
             }
-            hold(3)  // the film's window is matched to the marks only roughly: keep the last close inside it
         case "keyboard":
             try openFirstChat(app)
-            hold(2)
+            hold(1.5)
+            mark("begin")
             app.descendants(matching: .any)["composer"].firstMatch.tap()
-            hold(2.5)
+            hold(2)
             app.descendants(matching: .any)["timeline"].firstMatch.swipeDown(velocity: .slow)
-            hold(2.5)
+            hold(2)
         case "send":
             try openFirstChat(app)
-            hold(2)
-            let composer = app.descendants(matching: .any)["composer"].firstMatch
-            composer.tap()
             hold(1.5)
-            composer.typeText("motion audit \(Int(Date().timeIntervalSince1970) % 1000)")
-            hold(1)
+            let composer = app.descendants(matching: .any)["composer"].firstMatch
+            enterText("motion audit \(Int(Date().timeIntervalSince1970) % 1000)", into: composer)
+            hold(0.8)
+            mark("begin")
             app.buttons["send-button"].tap()
-            hold(5)
+            hold(3.5)
         case "reaction":
             try openFirstChat(app)
-            hold(2)
-            let message = app.descendants(matching: .any)["timeline"].firstMatch.staticTexts.element(boundBy: 2)
+            hold(1.5)
+            let timeline = app.descendants(matching: .any)["timeline"].firstMatch
+            let visible = timeline.staticTexts.allElementsBoundByIndex.last { element in
+                element.isHittable && element.frame.midY > 220 && element.frame.midY < 720 && element.label.count >= 2
+            }
+            let message = try XCTUnwrap(visible, "a visible message bubble should be on screen")
+            mark("begin")
             message.doubleTap()
-            hold(4)
+            hold(3)
+        case "edit":
+            try openFirstChat(app)
+            hold(1.5)
+            let token = "motion-edit-\(Int(Date().timeIntervalSince1970) % 10000)"
+            let composer = app.descendants(matching: .any)["composer"].firstMatch
+            enterText(token, into: composer)
+            app.buttons["send-button"].tap()
+            let sent = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", token)).firstMatch
+            XCTAssertTrue(sent.waitForExistence(timeout: 10), "sent message to edit should appear")
+            hold(1.5)
+            mark("begin")
+            sent.press(forDuration: 0.8)
+            let editButton = app.buttons["Edit"].firstMatch
+            XCTAssertTrue(editButton.waitForExistence(timeout: 5), "Edit action should appear")
+            editButton.tap()
+            hold(0.6)
+            enterText("\(token) revised", into: composer)
+            app.buttons["send-button"].tap()
+            hold(3)
         case "appearance":
             try openFirstChat(app)
-            hold(2)
-            // The script switches the simulator (`xcrun simctl ui … appearance`) when it sees these marks: the runner's own
-            // `XCUIDevice.appearance` did not change what the film shows.
+            hold(1.5)
+            mark("begin")
+            // The script switches the simulator (`xcrun simctl ui … appearance`) when it sees these marks.
             mark("dark")
-            hold(4)
+            hold(2.5)
             mark("light")
-            hold(4)
+            hold(2.5)
         case "background":
             try openFirstChat(app)
-            hold(2)
+            hold(1.5)
+            mark("begin")
             XCUIDevice.shared.press(.home)
-            hold(4)
+            hold(2.5)
             app.activate()
-            hold(3.5)
+            hold(2.5)
         case "scroll-up":
             try openFirstChat(app)
-            hold(2)
+            hold(1.5)
             let timeline = app.descendants(matching: .any)["timeline"].firstMatch
+            mark("begin")
             timeline.swipeDown(velocity: .fast)
             hold(1)
             timeline.swipeDown(velocity: .fast)
-            hold(3)
+            hold(2)
+        case "history-prepend":
+            try openFirstChat(app)
+            hold(1.5)
+            let timeline = app.descendants(matching: .any)["timeline"].firstMatch
+            mark("begin")
+            timeline.swipeDown(velocity: .fast)
+            hold(2.5)
+            timeline.swipeDown(velocity: .fast)
+            hold(2.5)
+        case "reconnect":
+            // Stay on the chat list where the sync status banner appears on offline/retry and clears on reconnect.
+            mark("begin")
+            mark("offline")
+            _ = app.descendants(matching: .any)["sync-indicator"].firstMatch.waitForExistence(timeout: 22)
+            hold(1.5)
+            mark("online")
+            _ = app.descendants(matching: .any)["sync-indicator"].firstMatch.waitForNonExistence(timeout: 12)
+            hold(2)
         default:
             XCTFail("unknown scenario \(scenario)")
+        }
+    }
+
+    /// Measurable motion invariant (ROADMAP M19-9, AC-MOT-1): opening the top room, re-opening it, and opening a
+    /// non-top room each render timeline content with no loading spinner and land at the newest message (no jump-to-bottom).
+    @MainActor
+    func testRoomOpenShowsRowsAtNewestWithoutSpinner() throws {
+        let app = XCUIApplication()
+        app.launch()
+        dismissFirstRunSheets(app)
+        if !chatsRoot(app).waitForExistence(timeout: 4) { returnToChatList(app) }
+        guard chatsRoot(app).waitForExistence(timeout: 10) else { throw XCTSkip("App is signed out.") }
+        if app.buttons["focus-show-all"].exists { app.buttons["focus-show-all"].tap() }
+
+        func verifyOpenedRoom(_ label: String) {
+            XCTAssertTrue(app.buttons["sticker-button"].waitForExistence(timeout: 8), "\(label): room should open")
+            let timeline = app.descendants(matching: .any)["timeline"].firstMatch
+            XCTAssertTrue(timeline.waitForExistence(timeout: 3), "\(label): timeline list should appear immediately")
+            XCTAssertFalse(app.staticTexts["Loading messages…"].exists, "\(label): no loading spinner on warm push")
+            XCTAssertFalse(app.buttons["jump-to-bottom"].exists, "\(label): room should land at newest message (D95)")
+        }
+
+        try openFirstChat(app)
+        verifyOpenedRoom("first open")
+        returnToChatList(app)
+        XCTAssertTrue(chatsRoot(app).waitForExistence(timeout: 5))
+
+        try openFirstChat(app)
+        verifyOpenedRoom("re-open")
+        returnToChatList(app)
+        XCTAssertTrue(chatsRoot(app).waitForExistence(timeout: 5))
+
+        let fifthRow = app.collectionViews.firstMatch.cells.element(boundBy: 5)
+        if fifthRow.waitForExistence(timeout: 2), fifthRow.isHittable {
+            fifthRow.tap()
+            verifyOpenedRoom("fifth room")
+            returnToChatList(app)
         }
     }
 

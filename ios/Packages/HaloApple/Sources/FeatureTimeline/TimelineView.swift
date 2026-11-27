@@ -40,6 +40,8 @@ public struct TimelineView: View {
     @State private var bottomFollow = BottomFollowState()
     /// In-flight programmatic jump-to-bottom task, cancelled on user touch or conflicting jump.
     @State private var jumpToBottomTask: Task<Void, Never>?
+    /// Short follow-up re-anchoring task after history prepends so lazy row height layout doesn't jump to the top (M19-9, D-MOT-3).
+    @State private var prependAnchorTask: Task<Void, Never>?
     /// The list is drawn once it has been placed at the newest row (a frame or two), so it never shows its top first and then
     /// jumps. No spinner: a short fallback timer shows it anyway if that never happens.
     @State private var listPlaced = false
@@ -239,6 +241,8 @@ public struct TimelineView: View {
                     if phase == .interacting {
                         jumpToBottomTask?.cancel()
                         jumpToBottomTask = nil
+                        prependAnchorTask?.cancel()
+                        prependAnchorTask = nil
                         bottomFollow.onUserInteractionStarted(atBottom: bottomVisible)
                         if !landed {
                             landed = true
@@ -247,7 +251,7 @@ public struct TimelineView: View {
                         }
                     }
                 }
-                .onChange(of: rows.first?.id) { oldFirst, newFirst in
+                .onChange(of: PrependedAnchor.firstStableID(in: rows)) { oldFirst, newFirst in
                     if let anchor = PrependedAnchor.anchor(
                         oldFirst: oldFirst,
                         newFirst: newFirst,
@@ -256,7 +260,27 @@ public struct TimelineView: View {
                         pinnedToBottom: bottomFollow.pinnedToBottom,
                         interacting: scrollInteracting
                     ) {
-                        proxy.scrollTo(anchor, anchor: .top)
+                        prependAnchorTask?.cancel()
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) {
+                            proxy.scrollTo(anchor, anchor: .top)
+                        }
+                        prependAnchorTask = Task { @MainActor in
+                            for delay in [0, 16, 48] {
+                                if delay == 0 {
+                                    await Task.yield()
+                                } else {
+                                    try? await Task.sleep(for: .milliseconds(delay))
+                                }
+                                guard !Task.isCancelled, !scrollInteracting else { return }
+                                var followUp = Transaction()
+                                followUp.disablesAnimations = true
+                                withTransaction(followUp) {
+                                    proxy.scrollTo(anchor, anchor: .top)
+                                }
+                            }
+                        }
                     }
                 }
                 .accessibilityIdentifier("timeline")
@@ -308,6 +332,8 @@ public struct TimelineView: View {
                     guard let target else { return }
                     jumpToBottomTask?.cancel()
                     jumpToBottomTask = nil
+                    prependAnchorTask?.cancel()
+                    prependAnchorTask = nil
                     landed = true
                     listPlaced = true
                     bottomFollow.detach()  // a reply/pin jump leaves the bottom: new rows must not pull the reader back down
@@ -535,6 +561,8 @@ public struct TimelineView: View {
         .onDisappear {
             jumpToBottomTask?.cancel()
             jumpToBottomTask = nil
+            prependAnchorTask?.cancel()
+            prependAnchorTask = nil
             model.setActive(false)
             Task { await model.stop() }
         }

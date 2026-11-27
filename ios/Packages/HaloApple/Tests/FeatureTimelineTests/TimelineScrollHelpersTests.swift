@@ -49,6 +49,36 @@ struct PrependedAnchorTests {
             landed: true, pinnedToBottom: false, interacting: false
         ) == nil)
     }
+
+    @Test("ignores replaced date dividers and timeline-start banners when choosing the prepend anchor")
+    func skipsVirtualDividersWhenSameDayEventsPrepend() {
+        let before = [
+            TimelineRow(id: "div-wed-old", style: .divider, sender: nil, text: "Wednesday"),
+            TimelineRow(id: "msg-1", style: .message, sender: "Alice", text: "away 0"),
+            TimelineRow(id: "msg-2", style: .message, sender: "Alice", text: "away 1"),
+        ]
+        let after = [
+            TimelineRow(id: "start", style: .state, sender: nil, text: "This is the start of the conversation."),
+            TimelineRow(id: "div-wed-new", style: .divider, sender: nil, text: "Wednesday"),
+            TimelineRow(id: "settings-1", style: .state, sender: nil, text: "The room was updated"),
+            TimelineRow(id: "join-1", style: .state, sender: nil, text: "m-6610 joined"),
+            TimelineRow(id: "msg-1", style: .message, sender: "Alice", text: "away 0"),
+            TimelineRow(id: "msg-2", style: .message, sender: "Alice", text: "away 1"),
+        ]
+        let oldFirst = PrependedAnchor.firstStableID(in: before)
+        let newFirst = PrependedAnchor.firstStableID(in: after)
+        #expect(oldFirst == "msg-1")
+        #expect(newFirst == "join-1")
+        let anchor = PrependedAnchor.anchor(
+            oldFirst: oldFirst,
+            newFirst: newFirst,
+            rowIDs: after.map(\.id),
+            landed: true,
+            pinnedToBottom: false,
+            interacting: false
+        )
+        #expect(anchor == "msg-1")
+    }
 }
 
 @Suite("ShortRoomAlignment")

@@ -167,7 +167,7 @@ extension TimelineViewModel {
         return result
     }
 
-    static let settingsText = "The room was updated"
+    nonisolated static let settingsText = "The room was updated"
 
     /// Messages from the same person within this time of their previous one form a group (one name and picture).
     static let runGap: TimeInterval = 5 * 60
