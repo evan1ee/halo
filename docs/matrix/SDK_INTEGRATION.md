@@ -25,7 +25,7 @@ in `ios/SDKVERSION.md` at each bump: the components repo's release commit names 
 | `Room` handles | Resolved on demand via `client.getRoom(roomId:)` | Per operation | ARC release |
 | `Timeline` | `MatrixTimelinePort` (warm cache up to 6) | `room.timeline()` | Cache eviction / room close / logout |
 | `NotificationClient` | `MatrixNotificationPort` (NSE) | `client.notificationClient(processSetup: .multipleProcesses)` | After each push |
-| `TaskHandle`s | Owned by port actors / `SubscriptionToken` | `setDelegate`, `subscribeToSendQueueStatus`, `addListener`, etc. | Tear-down / stream end → `cancel()` |
+| `TaskHandle`s | Owned by the scope or stream that created them (D128) | `setDelegate`, `subscribeToSendQueueStatus`, `addListener`, etc. | Tear-down / stream end → `cancel()` |
 
 ## 3. Client initialisation
 `ClientBuilder()` → `.serverNameOrHomeserverUrl(...)` → `.sessionPaths(dataPath, cachePath)` (App Group

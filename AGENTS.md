@@ -71,7 +71,7 @@ Edition 2024, rustfmt, `clippy -D warnings`, `forbid(unsafe_code)` in Halo crate
 
 ## 8. FFI conventions
 - Map upstream → domain immediately in listener callbacks; never block the callback thread; never call back into the FFI synchronously from a callback.
-- Every upstream `TaskHandle` is owned by a `SubscriptionToken` and cancelled on teardown.
+- Every upstream `TaskHandle` is cancelled on teardown: by a `defer` in the scope that created it or by the `onTermination` of the stream it feeds; never stored past its stream (D128).
 - All upstream errors go through `ErrorMapper` → `HaloError`.
 - SDK bumps: compile fixes only inside the adapter; follow [docs/development/BUILD_AND_RELEASE.md](docs/development/BUILD_AND_RELEASE.md) §3.
 

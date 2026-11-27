@@ -7,7 +7,7 @@ Decision: D36 (Linux CI for everything that can run on Linux; Apple builds on th
 | Workflow | Trigger | Runner | Steps | Status |
 |---|---|---|---|---|
 | `docs.yml` | PR, push to main | ubuntu | `scripts/validate-docs.sh` | **Phase 0** (script exists) |
-| `swift-linux.yml` | PR | ubuntu + Docker `swift` image | build + test (warnings as errors) `HaloFoundation`, `HaloDomain`, `HaloTestSupport`, `HaloApplication`; `HaloPersistence` joins with its first table (M3) | **M0 (in place)** |
+| `swift-linux.yml` | PR | ubuntu + Docker `swift` image | build + test (warnings as errors) `HaloFoundation`, `HaloDomain`, `HaloTestSupport`, `HaloApplication` (the `HaloCore` package); `HaloPersistence` is in `HaloApple` (ADR-0022) and runs in the iOS Simulator tests | **M0 (in place)** |
 | `boundaries.yml` | PR | ubuntu | `scripts/check-boundaries.sh` (forbidden imports, upstream types in public API) | **M0 (in place)** |
 | `scenarios.yml` | PR touching read state, the adapter or `infra/test`; nightly; by hand | ubuntu + Docker Compose (`infra/test`) | fault proxy unit tests → `infra/test/run.sh scenarios` (S01–S22, F01–F06) → a client broken on purpose must fail F02–F06 | **in place** (M17-6) |
 | `handoff.yml` | PR (every push to it) | ubuntu | `scripts/check_handoff.py commit <head sha>`: the tip commit updates `HANDOFF.md`, which has every required section (AGENTS.md §18) | **in place** |
