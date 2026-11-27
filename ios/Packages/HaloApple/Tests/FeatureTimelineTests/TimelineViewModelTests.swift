@@ -28,6 +28,8 @@ struct TimelineViewModelTests {
         let model = try model()
         let source = TimelineRow.Source(sender: "@alice:x.org", eventID: nil, body: "hi", formattedBody: nil)
         var expected = TimelineRow(id: "id", style: .message, sender: "Alice", text: "hi", forwardPayload: .text("hi"), source: source)
+        expected.senderID = "@alice:x.org"
+        expected.timestamp = Date(timeIntervalSince1970: 0)
         expected.time = model.row(event(.text("hi", isEdited: false))).time
         #expect(model.row(event(.text("hi", isEdited: false))) == expected && expected.time?.hasPrefix("12:00") == true)
         #expect(model.row(event(.text("hi", isEdited: true), own: true)).text == "hi (edited)")
@@ -762,7 +764,7 @@ struct TimelineViewModelTests {
         #expect(await vm.avatarData(MediaRef(token: "missing")) == nil)
     }
 
-    @Test("an own sent message shows Seen / Seen by N from other people's receipts; others' and unsent messages do not")
+    @Test("confirmed own and others' messages show Seen / Seen by N from other people's receipts; unsent messages do not (M20-9)")
     func seenLabels() throws {
         let vm = TimelineViewModel(
             coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: try RoomID("!r:x.org")),
@@ -778,7 +780,8 @@ struct TimelineViewModelTests {
         #expect(vm.row(try item(own: true, readers: 0)).seenLabel == nil)
         #expect(vm.row(try item(own: true, readers: 1)).seenLabel == "Seen")
         #expect(vm.row(try item(own: true, readers: 3)).seenLabel == "Seen by 3")
-        #expect(vm.row(try item(own: false, readers: 2)).seenLabel == nil)
+        #expect(vm.row(try item(own: false, readers: 2)).seenLabel == "Seen by 2")
+        #expect(vm.row(try item(own: false, readers: 0)).seenLabel == nil)
         #expect(vm.row(try item(own: true, state: .sending, readers: 2)).seenLabel == nil)
     }
 

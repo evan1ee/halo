@@ -96,21 +96,36 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     public var endsRun = true
     /// When it was sent, as a short time ("9:41 AM"); set for messages.
     public var time: String?
+    /// Full sent timestamp for Message Info (M20-9).
+    public var timestamp: Date?
+    /// Matrix user ID of the sender (`@alice:example.org`), for Message Info (M20-9).
+    public var senderID: String?
+    /// Raw Matrix event type (`m.room.message`, `m.sticker`, …), for Message Info (M20-9).
+    public var eventType: String?
     /// The text was edited; "View edit history" is offered.
     public var isEdited = false
-    /// How many other people's newest read receipt is on this own message (TIMELINE FR-6); 0 for anything else.
+    /// How many other people's newest read receipt is on this confirmed message (TIMELINE FR-6, M20-9); 0 for unsent/room events.
     public var seenBy = 0
-    /// All of them, for the list behind the avatars; the name is theirs if they wrote in this timeline, else their Matrix ID's name part.
+    /// All of them, for the list behind the avatars and Message Info; ordered newest-read first (matching Element Web).
     public var allReaders: [Reader] = []
     /// The first three, for the avatars under the message.
     public var readers: [Reader] { Array(allReaders.prefix(3)) }
-    /// "Seen" / "Seen by 3" for the footer of an own message someone has read; `nil` otherwise.
+    /// "Seen" / "Seen by 3" for the footer of a confirmed message someone has read; `nil` otherwise.
     public var seenLabel: String? { seenBy == 0 ? nil : seenBy == 1 ? "Seen" : "Seen by \(seenBy)" }
 
     public struct Reader: Equatable, Sendable, Identifiable {
         public let id: String
         public let name: String
         public let avatar: MediaRef?
+        /// Exact time the server recorded this read receipt, when available (M20-9).
+        public let readAt: Date?
+
+        public init(id: String, name: String, avatar: MediaRef? = nil, readAt: Date? = nil) {
+            self.id = id
+            self.name = name
+            self.avatar = avatar
+            self.readAt = readAt
+        }
     }
 
     public struct FileTile: Equatable, Sendable {

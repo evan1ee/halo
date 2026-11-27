@@ -18,6 +18,7 @@ struct RowView: View {
     let onSaveAsSticker: ((Data, String) -> Void)?
     @State private var showingSource = false
     @State private var showingReaders = false
+    @State private var showingInfo = false
     @State private var showingActions = false
     /// A sent message is removed for everyone and can't be brought back: ask first.
     @State private var confirmingDelete = false
@@ -182,8 +183,14 @@ struct RowView: View {
                                 }
                                 if let delivery = row.delivery {
                                     DeliveryIndicator(delivery: delivery, row: row, model: model) { showingReaders = true }
+                                } else if row.style == .message, row.endsRun, row.seenBy > 0 {
+                                    // Read receipts under others' end-of-run messages sit in the reserved 16 pt footer so height never jumps (TIMELINE FR-6, M20-9).
+                                    Button { showingReaders = true } label: { ReceiptAvatars(row: row, model: model) }
+                                        .buttonStyle(.plain)
+                                        .accessibilityIdentifier("incoming-receipts")
                                 }
                             }
+                            .frame(minHeight: 16)
                         }
                         reactionBar
                     }
@@ -194,6 +201,7 @@ struct RowView: View {
                             if row.canForward, model.canForward {
                                 Button("Forward") { model.beginForward(row) }
                             }
+                            Button("Message info") { showingInfo = true }
                             Button("React thumbs up") { Task { await model.toggleReaction(on: row, key: "👍") } }
                             Button("More reactions") { model.beginReactionPicker(row) }
                             if row.isOwn {
@@ -201,6 +209,7 @@ struct RowView: View {
                                 Button("Delete") { confirmingDelete = true }
                             }
                         } else if row.failedLocalID != nil {
+                            Button("Message info") { showingInfo = true }
                             if row.canSendAnyway { Button("Send anyway") { Task { await model.sendAnyway(row) } } }
                             Button("Try again") { Task { await model.retry(row) } }
                             Button("Delete") { Task { await model.discard(row) } }
@@ -208,6 +217,14 @@ struct RowView: View {
                     }
                 }
                 .padding(row.style == .ownMessage ? .leading : .trailing, 48)
+                .overlay(alignment: .bottomTrailing) {
+                    // Mid-run incoming messages have no footer; placing receipts in the existing 48 pt trailing gutter keeps row height strictly constant (0 pt jump).
+                    if row.style == .message, !row.endsRun, row.seenBy > 0 {
+                        Button { showingReaders = true } label: { ReceiptAvatars(row: row, model: model) }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("incoming-receipts")
+                    }
+                }
             case .notice:
                 VStack(alignment: .leading, spacing: 2) {
                     Group {
@@ -236,6 +253,13 @@ struct RowView: View {
                     reactionBar
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .bottomTrailing) {
+                    if row.seenBy > 0 {
+                        Button { showingReaders = true } label: { ReceiptAvatars(row: row, model: model) }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("incoming-receipts")
+                    }
+                }
             case .emote:
                 VStack(alignment: .leading, spacing: 2) {
                     Text(row.text).italic()
@@ -245,6 +269,13 @@ struct RowView: View {
                     reactionBar
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .bottomTrailing) {
+                    if row.seenBy > 0 {
+                        Button { showingReaders = true } label: { ReceiptAvatars(row: row, model: model) }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("incoming-receipts")
+                    }
+                }
             case .placeholder:
                 // A deleted, unreadable or unknown message still belongs to its sender: a quiet outlined bubble on their side,
                 // with their name, instead of a full-width line of italics.
@@ -268,12 +299,28 @@ struct RowView: View {
                 row: row,
                 model: model,
                 onOpenThread: onOpenThread,
+                onViewInfo: { showingInfo = true },
                 onViewSource: { showingSource = true },
                 onRequestDelete: { confirmingDelete = true },
                 onSaveAsSticker: onSaveAsSticker
             )
         }
-        .sheet(isPresented: $showingReaders) { ReadersView(row: row, model: model) }
+        .sheet(isPresented: $showingReaders) {
+            ReadersView(row: row, model: model) {
+                showingReaders = false
+                showingInfo = true
+            }
+        }
+        .sheet(isPresented: $showingInfo) {
+            MessageInfoView(
+                row: row,
+                model: model,
+                isPinned: model.isPinned(row),
+                isRoomEncrypted: model.isRoomEncrypted,
+                onViewEditHistory: row.isEdited ? { Task { await model.showEditHistory(row) } } : nil,
+                onViewSource: row.source != nil ? { showingSource = true } : nil
+            )
+        }
         .sheet(isPresented: $showingSource) { if let source = row.source { MessageSourceView(source: source) } }
         .onTapGesture(count: 2) {
             guard row.eventID != nil else { return }
@@ -305,6 +352,7 @@ private struct MessageActionsSheet: View {
     let row: TimelineRow
     let model: TimelineViewModel
     let onOpenThread: ((EventID) -> Void)?
+    let onViewInfo: () -> Void
     let onViewSource: () -> Void
     let onRequestDelete: () -> Void
     let onSaveAsSticker: ((Data, String) -> Void)?
@@ -448,6 +496,10 @@ private struct MessageActionsSheet: View {
                             dismiss()
                             Task { await model.togglePin(row) }
                         }
+                        actionRow("Message info", systemImage: "info.circle") {
+                            dismiss()
+                            onViewInfo()
+                        }
                         if row.isEdited {
                             actionRow("View edit history", systemImage: "clock.arrow.circlepath") {
                                 dismiss()
@@ -477,6 +529,10 @@ private struct MessageActionsSheet: View {
                 }
             } else if row.failedLocalID != nil {
                 VStack(spacing: 0) {
+                    actionRow("Message info", systemImage: "info.circle") {
+                        dismiss()
+                        onViewInfo()
+                    }
                     if row.canSendAnyway {
                         actionRow("Send anyway", systemImage: "paperplane") {
                             dismiss()
@@ -540,25 +596,40 @@ struct SenderAvatar: View {
             }
     }
 }
-/// Everyone who has read up to a message (TIMELINE FR-6), behind a tap on the avatars.
+/// Everyone who has read up to a message (TIMELINE FR-6, M20-9), behind a tap on the avatars.
 struct ReadersView: View {
     let row: TimelineRow
     let model: TimelineViewModel
+    let onOpenInfo: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
+
+    init(row: TimelineRow, model: TimelineViewModel, onOpenInfo: (() -> Void)? = nil) {
+        self.row = row
+        self.model = model
+        self.onOpenInfo = onOpenInfo
+    }
 
     var body: some View {
         NavigationStack {
             List(row.allReaders) { reader in
-                HStack(spacing: 12) {
-                    SenderAvatar(name: reader.name, ref: reader.avatar, model: model, size: 32)
-                    Text(reader.name)
-                }
-                .accessibilityElement(children: .combine)
+                MessageInfoReaderRow(
+                    reader: reader,
+                    model: model,
+                    formattedReadAt: reader.readAt.map(model.formatInfoTimestamp)
+                )
             }
             .navigationTitle("Seen by")
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if let onOpenInfo {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Message info") { onOpenInfo() }
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
     }
 }
 
@@ -609,13 +680,18 @@ struct ReceiptAvatars: View {
     let model: TimelineViewModel
 
     var body: some View {
-        HStack(spacing: -4) {
-            ForEach(row.readers) { reader in
-                SenderAvatar(name: reader.name, ref: reader.avatar, model: model, size: 16)
-                    .overlay(Circle().stroke(.background, lineWidth: 1))
+        HStack(spacing: HaloSpacing.xxs) {
+            HStack(spacing: -4) {
+                ForEach(row.readers) { reader in
+                    SenderAvatar(name: reader.name, ref: reader.avatar, model: model, size: 16)
+                        .overlay(Circle().stroke(.background, lineWidth: 1))
+                }
             }
             if row.seenBy > row.readers.count {
-                Text("+\(row.seenBy - row.readers.count)").font(.caption2).foregroundStyle(.secondary).padding(.leading, 6)
+                Text("+\(row.seenBy - row.readers.count)")
+                    .font(.caption2)
+                    .foregroundStyle(HaloColor.textSecondary)
+                    .fixedSize()
             }
         }
         .accessibilityElement(children: .ignore)

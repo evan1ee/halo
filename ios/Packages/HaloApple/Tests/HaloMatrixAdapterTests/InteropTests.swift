@@ -436,6 +436,50 @@ struct InteropTests {
         try await roomPort.leave(stage.room)
         try await roomPort.forget(stage.room)
     }
+
+    // MARK: Read receipts under others' messages & receipt timestamps (M20-9, TIMELINE FR-6)
+
+    @Test("Read receipts: others' messages surface other readers with timestamps, excluding self and sender", .timeLimit(.minutes(2)))
+    func readReceiptsOnOthersMessagesAndTimestamps() async throws {
+        let stage = try await TestStage()
+        let ownUserID = try await stage.session.ownUserID()
+        // Third user (`${user}third`, provisioned by `infra/test/run.sh`) joins the room so we can verify receipts
+        // on BOTH someone else's message (peer's) and Halo's own message.
+        let serverDomain = String(ownUserID.split(separator: ":").last ?? "")
+        let peerUserID = try UserID("@\(stage.user)peer:\(serverDomain)")
+        let thirdLocal = "\(stage.user)third"
+        let thirdUserID = try UserID("@\(thirdLocal):\(serverDomain)")
+        let third = try await TestPeer(server: stage.direct, user: thirdLocal, password: stage.password)
+        Cleanup.current.add { await third.logout() }
+        try await third.join(stage.room)
+
+        // Peer sends a message (someone else's message from Halo's POV).
+        let peerEventID = try await stage.peer.send("Peer message for receipts", to: stage.room)
+        try await stage.wait(20, "peer message arrives") {
+            stage.mirror.event(peerEventID) != nil
+        }
+
+        // Third user sends a public read receipt on peer's message.
+        try await third.sendReadReceipt(for: peerEventID, in: stage.room)
+        try await stage.wait(20, "third user's read receipt surfaces on peer's message") {
+            guard let e = stage.mirror.event(peerEventID) else { return false }
+            return e.readReceipts.contains { $0.userID == thirdUserID && $0.timestamp != nil }
+                && !e.readBy.contains(peerUserID)
+                && e.readBy.allSatisfy { $0.rawValue != ownUserID }
+        }
+
+        // Halo sends an own message; peer reads it → peer appears with timestamp.
+        try await stage.timeline.send(text: "Halo message for receipts")
+        try await stage.wait(20, "own message confirmed") {
+            stage.mirror.own("Halo message for receipts")?.eventID != nil
+        }
+        let ownEventID = try #require(stage.mirror.own("Halo message for receipts")?.eventID?.rawValue)
+        try await stage.peer.sendReadReceipt(for: ownEventID, in: stage.room)
+        try await stage.wait(20, "peer receipt surfaces on own message with timestamp") {
+            guard let e = stage.mirror.own("Halo message for receipts") else { return false }
+            return e.readReceipts.contains { $0.userID == peerUserID && $0.timestamp != nil }
+        }
+    }
 }
 
 private func contents(_ event: [String: Any]) -> [String: Any]? { event["content"] as? [String: Any] }

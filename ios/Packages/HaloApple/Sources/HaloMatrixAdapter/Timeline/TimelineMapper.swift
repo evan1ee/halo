@@ -51,8 +51,15 @@ enum TimelineMapper {
             senderName = displayName
             senderAvatar = MatrixRoomListPort.avatar(avatarUrl)
         }
+        let senderID = try? UserID(event.sender)
+        let ownID = try? UserID(ownUserID)
+        let rawReceipts: [ReadReceiptEntry] = event.readReceipts.compactMap { userRaw, receipt in
+            guard let uid = try? UserID(userRaw) else { return nil }
+            return ReadReceiptEntry(userID: uid, timestamp: receipt.timestamp.map(date))
+        }
+        let normalizedReceipts = ReadReceiptPolicy.normalize(rawReceipts, ownUserID: ownID, sender: senderID)
         return HaloDomain.TimelineEvent(
-            eventID: eventID, sender: try? UserID(event.sender), senderName: senderName,
+            eventID: eventID, sender: senderID, senderName: senderName,
             timestamp: date(event.timestamp), isOwn: event.isOwn, kind: kind(of: event.content, ownUserID: ownUserID),
             sendState: sendState(of: event.localSendState),
             reactions: event.reactions.map { reaction in
@@ -60,7 +67,9 @@ enum TimelineMapper {
             },
             replyTo: replyPreview(of: event.content), formattedBody: formattedHTML(of: event.content),
             localID: localID, senderAvatar: senderAvatar,
-            readBy: event.readReceipts.keys.filter { $0 != ownUserID }.sorted().compactMap { try? UserID($0) },
+            readBy: normalizedReceipts.map(\.userID),
+            readReceipts: normalizedReceipts,
+            eventType: event.eventTypeRaw,
             sendFailure: failure(of: event, localID: localID, handles: handles))
     }
 
