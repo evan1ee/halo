@@ -615,4 +615,57 @@ struct BadgeCoordinatorTests {
         await badge.reconcile()
         #expect(port.badge == 0)
     }
+
+    @Test("idle empty sync responses after the first sync skip redundant badge rewrites while waiters still resolve (M19-7)")
+    func idleEmptySyncSkipsRedundantWrites() async throws {
+        let rooms = FakeRoomListPort()
+        let coordinator = RoomListCoordinator(port: rooms)
+        let port = FakeBadgePort()
+        let badge = BadgeCoordinator(rooms: coordinator, port: port)
+        await badge.begin()
+        await coordinator.start()
+        try rooms.emit(.reset([try summary("!idle:x.org")]))
+        rooms.emitSyncComplete()
+        // Wait until the first sync's badge write has actually landed (`writtenSyncEpoch >= 1`).
+        #expect(await badge.waitForSync(after: 0, timeout: .seconds(2)) == true)
+        let writesAfterFirstSync = port.snapshots.count
+
+        // Two idle empty sync responses with no room or receipt changes should not rewrite badge/widgets.
+        rooms.emitSyncComplete()
+        rooms.emitSyncComplete()
+        #expect(await eventually { await badge.syncEpoch == 3 })
+        #expect(port.snapshots.count == writesAfterFirstSync)
+
+        // A background refresh waiter still resolves cleanly on the next sync.
+        let epoch = await badge.syncEpoch
+        let waited = Task { await badge.waitForSync(after: epoch, timeout: .seconds(2)) }
+        for _ in 0..<200 { await Task.yield() }
+        rooms.emitSyncComplete()
+        #expect(await waited.value == true)
+    }
+
+    @Test("lowEnergyMode pauses the periodic read-state auditor and resumes it when cleared (M19-7)")
+    func lowEnergyModePausesPeriodicAudit() async throws {
+        let rooms = FakeRoomListPort()
+        let coordinator = RoomListCoordinator(port: rooms)
+        let port = FakeBadgePort()
+        let auditPort = FakeAuditEvents()
+        let sleepCount = Mutex(0)
+        let badge = BadgeCoordinator(
+            rooms: coordinator, port: port, auditInterval: .milliseconds(1),
+            sleep: { _ in
+                sleepCount.withLock { $0 += 1 }
+                try await Task.sleep(for: .milliseconds(5))
+            })
+        await badge.begin()
+        await badge.setAudit(.init(port: auditPort, roomHash: { $0.rawValue }, appVersion: "1"))
+        await badge.setLowEnergyMode(true)
+        await badge.setForeground(true)
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(sleepCount.withLock { $0 } == 0, "periodic audit must not schedule wake-ups in low energy mode")
+
+        await badge.setLowEnergyMode(false)
+        #expect(await eventually { sleepCount.withLock { $0 } >= 1 })
+        await badge.setForeground(false)
+    }
 }

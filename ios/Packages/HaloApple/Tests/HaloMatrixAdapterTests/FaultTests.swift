@@ -418,6 +418,55 @@ struct FaultTests {
         print("FAULT roomGalleryPaging: pages=\([page1.items.count, page2.items.count, page3.items.count])")
     }
 
+    @Test("Persisted EventTimeCache eliminates repeat GET /event lookups for unread receipts across launches (GA-28, M19-7)", .timeLimit(.minutes(3)))
+    func eventTimeCacheAvoidsLaunchEventFetches() async throws {
+        let stage = try await TestStage()
+        let firstEventID = try await stage.peer.send("older message", to: stage.room)
+        // Wait for our session to see the older message, mark it read, then let peer send a newer message so the room is unread with an older own receipt.
+        try await stage.wait(30, "older message") { stage.mirror.shows("older message") }
+        try await MatrixReadMarkerPort(session: stage.session).sendReceipt(room: stage.room, event: try EventID(firstEventID), isPrivate: false)
+        _ = try await stage.peer.send("newer unread", to: stage.room)
+        try await stage.wait(30, "newer unread") { stage.mirror.shows("newer unread") }
+
+        let cacheFile = FileManager.default.temporaryDirectory.appendingPathComponent("halo-event-times-\(UUID().uuidString).json")
+        Cleanup.current.add { try? FileManager.default.removeItem(at: cacheFile) }
+
+        // First launch: builds room summary, resolves receipt event timestamp, and persists to cacheFile.
+        let listPort1 = MatrixRoomListPort(session: stage.session, eventTimeCacheFile: cacheFile)
+        var firstSummary: RoomSummary?
+        for await update in listPort1.updates(filter: .all) {
+            if case .diff(.reset(let rooms)) = update {
+                firstSummary = rooms.first { $0.id == stage.room }
+                break
+            }
+        }
+        let resolved1 = try #require(firstSummary)
+        #expect(resolved1.ownReceiptEventID?.rawValue == firstEventID)
+        #expect(resolved1.ownReadThrough != nil)
+        // Wait briefly for the 500 ms debounced cache flush to land on disk.
+        let flushDeadline = ContinuousClock.now + .seconds(3)
+        while !FileManager.default.fileExists(atPath: cacheFile.path), ContinuousClock.now < flushDeadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(FileManager.default.fileExists(atPath: cacheFile.path), "event time cache file must persist")
+
+        // Second launch: a brand-new MatrixRoomListPort reading the same cache file makes zero GET /event requests.
+        try await stage.proxy.resetStats()
+        let listPort2 = MatrixRoomListPort(session: stage.session, eventTimeCacheFile: cacheFile)
+        var secondSummary: RoomSummary?
+        for await update in listPort2.updates(filter: .all) {
+            if case .diff(.reset(let rooms)) = update {
+                secondSummary = rooms.first { $0.id == stage.room }
+                break
+            }
+        }
+        let resolved2 = try #require(secondSummary)
+        #expect(resolved2.ownReadThrough == resolved1.ownReadThrough)
+        let eventFetches = try await stage.proxy.eventFetchRequests()
+        #expect(eventFetches == 0, "persisted EventTimeCache must avoid repeat GET /event calls on launch")
+        print("FAULT eventTimeCacheAvoidsLaunchEventFetches: eventFetches=\(eventFetches)")
+    }
+
     struct Broken: Sendable, CustomTestStringConvertible {
         let name: String
         let rule: [String: any Sendable]

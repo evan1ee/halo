@@ -59,8 +59,12 @@ final class AppRoot {
     let attentionCache: AttentionCache
     let activeRecords = ActiveRecordsBox()
     let timelinePort: MatrixTimelinePort
+    let roomListPort: MatrixRoomListPort
     let sessionCoordinator: SessionCoordinator
     let matrixSession: MatrixSessionPort
+    /// Tracks Low Power Mode, thermal state, and network reachability for sync and background scheduling (M19-7).
+    private let deviceConditionsBox = DeviceConditionsBox()
+    private var deviceConditions: DeviceConditions?
     let media: MediaLoader
     let unrecognisedBots = UnrecognisedBotMessages()
     let previewPolicy: any MediaPreviewPolicyPort
@@ -130,11 +134,13 @@ final class AppRoot {
         // Shared with the notification extension: the Keychain access group and the App Group container.
         let keychain = HaloShared.keychain()
         AccountDataEraser.prepareStoreFolders(.standard())  // stores stay out of backups from the first byte
+        let conditionsBox = deviceConditionsBox
         let session = MatrixSessionPort(
             baseDirectory: HaloShared.storeDirectory(),
             readStoredSession: {
                 (try? keychain.readSync(.session)).flatMap { try? JSONDecoder().decode(StoredSession.self, from: $0) }
-            }
+            },
+            syncConditions: { conditionsBox.syncConditions }
         )
         matrixSession = session
         let sessionCoordinator = SessionCoordinator(port: session, keychain: keychain)
@@ -153,10 +159,16 @@ final class AppRoot {
         UserDefaults(suiteName: suite)?.removeObject(forKey: legacyStorageName)
 
         let recordsBox = activeRecords
-        let roomCoordinator = RoomListCoordinator(
-            port: MatrixRoomListPort(session: session, hasRecords: { room in
+        let roomListPort = MatrixRoomListPort(
+            session: session,
+            hasRecords: { room in
                 recordsBox.current?.all().contains { $0.roomID == room } ?? false
-            }),
+            },
+            eventTimeCacheFile: HaloShared.eventTimeCacheFile()
+        )
+        self.roomListPort = roomListPort
+        let roomCoordinator = RoomListCoordinator(
+            port: roomListPort,
             loadsAllPages: true, hiddenRooms: MatrixHiddenRoomsPort(session: session), profiles: profilePort
         )
         self.roomCoordinator = roomCoordinator
@@ -229,8 +241,25 @@ final class AppRoot {
         Self.exportNSEMetrics(namespace: namespace)
         #endif
         self.log = log
-        // The adapter keeps the SDK timelines of the top rooms ready; no view model is made before a room is chosen (M19-9).
-        roomList.warm = { [timelinePort] rooms in await timelinePort.warm(rooms) }
+        // The adapter keeps the SDK timelines of the top rooms ready; skipped under Low Power Mode or thermal stress (M19-7, M19-9).
+        roomList.warm = { [timelinePort, conditionsBox] rooms in
+            guard !SyncEnergyPolicy.schedule(for: conditionsBox.syncConditions).pauseAuxiliaryWork else { return }
+            await timelinePort.warm(rooms)
+        }
+        let readStateRef = readState
+        let device = DeviceConditions { [session, readStateRef, conditionsBox] in
+            let schedule = SyncEnergyPolicy.schedule(for: conditionsBox.syncConditions)
+            Task {
+                await session.conditionsChanged()
+                await readStateRef.setLowEnergyMode(schedule.pauseAuxiliaryWork)
+            }
+        }
+        deviceConditions = device
+        conditionsBox.current = device
+        Task {
+            let schedule = SyncEnergyPolicy.schedule(for: conditionsBox.syncConditions)
+            await readStateRef.setLowEnergyMode(schedule.pauseAuxiliaryWork)
+        }
         // Under memory pressure a timeline started for a room not yet pushed goes first.
         memoryWarning = NotificationCenter.default.addObserver(
             forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main
@@ -269,6 +298,11 @@ extension AppRoot {
         roomFirstRows = HaloSignpost.begin(.roomFirstRows)
     }
 
+    /// Background refresh interval adapted to Low Power Mode and thermal state (M19-7).
+    nonisolated var backgroundRefreshInterval: TimeInterval {
+        SyncEnergyPolicy.schedule(for: deviceConditionsBox.syncConditions).backgroundRefreshInterval
+    }
+
     /// Starts everything that must run whenever the process runs, with or without a window: iOS launches the app in the
     /// background for a silent push or an app refresh without connecting a scene. Call it as often as you like.
     func begin() async {
@@ -289,5 +323,18 @@ final class ActiveRecordsBox: Sendable {
     var current: (any NotificationRecordPort)? {
         get { value.withLock { $0 } }
         set { value.withLock { $0 = newValue } }
+    }
+}
+
+final class DeviceConditionsBox: Sendable {
+    private let value = Mutex<DeviceConditions?>(nil)
+    var current: DeviceConditions? {
+        get { value.withLock { $0 } }
+        set { value.withLock { $0 = newValue } }
+    }
+
+    var syncConditions: SyncEnergyPolicy.Conditions {
+        guard let snap = current?.snapshot else { return .init() }
+        return SyncEnergyPolicy.Conditions(lowPower: snap.lowPower, isHot: snap.isHot, offline: snap.offline)
     }
 }

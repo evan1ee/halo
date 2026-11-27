@@ -34,4 +34,9 @@ public enum HaloShared {
             ?? URL.applicationSupportDirectory
         return base.appendingPathComponent("share-inbox", isDirectory: true)
     }
+
+    /// Derived, rebuildable cache of resolved receipt event timestamps (GA-28, M19-7); excluded from backups and wiped on sign-out.
+    public static func eventTimeCacheFile() -> URL {
+        URL.cachesDirectory.appendingPathComponent("halo-event-times.json")
+    }
 }

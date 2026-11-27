@@ -45,7 +45,7 @@ struct HaloApp: App {
             RootView(root: root)
         }
         .backgroundTask(.appRefresh(BackgroundRefreshScheduler.identifier())) { [root] in
-            BackgroundRefreshScheduler.schedule()
+            BackgroundRefreshScheduler.schedule(interval: root.backgroundRefreshInterval)
             _ = await root.refreshInBackground()
         }
     }
@@ -431,7 +431,7 @@ private struct RootView: View {
                 await root.receipts.flush()
                 await root.renewForeground()
             case .background:
-                BackgroundRefreshScheduler.schedule(log: root.log)
+                BackgroundRefreshScheduler.schedule(log: root.log, interval: root.backgroundRefreshInterval)
                 let lease = BackgroundTaskLease(name: "halo.receipts.flush", onEnd: { HaloDatabase.suspendAll() })
                 defer { lease.end() }
                 await root.setForeground(false)

@@ -116,6 +116,15 @@ struct ProxyControl: Sendable {
         }
     }
 
+    /// Count of HTTP GET requests to single-event endpoints (`/rooms/_/event/_`) since `resetStats()` (GA-28, M19-7).
+    func eventFetchRequests() async throws -> Int {
+        guard let stats = try await call("GET", "/stats", nil) as? [String: [String: Any]] else { return 0 }
+        return stats.reduce(0) { total, entry in
+            let isEventGet = entry.key.hasPrefix("GET ") && entry.key.contains("/event/")
+            return total + (isEventGet ? (entry.value["requests"] as? Int ?? 0) : 0)
+        }
+    }
+
     private func call(_ method: String, _ path: String, _ body: [String: any Sendable]?) async throws -> Any {
         guard let url = URL(string: (env["HALO_FAULT_CONTROL"] ?? "") + path) else { throw ContractViolation("no proxy") }
         var request = URLRequest(url: url)

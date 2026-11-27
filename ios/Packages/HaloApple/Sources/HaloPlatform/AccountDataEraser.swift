@@ -12,12 +12,15 @@ public struct AccountDataLocations: Sendable {
     public let search: URL
     /// The chats offered to Siri, Shortcuts, Spotlight and the widgets.
     public let chatShortcuts: URL
+    /// Derived receipt event-time cache (GA-28, M19-7); optional for test fixtures that construct custom locations.
+    public let eventTimeCache: URL?
 
-    public init(stores: URL, shareInbox: URL, search: URL, chatShortcuts: URL) {
+    public init(stores: URL, shareInbox: URL, search: URL, chatShortcuts: URL, eventTimeCache: URL? = nil) {
         self.stores = stores
         self.shareInbox = shareInbox
         self.search = search
         self.chatShortcuts = chatShortcuts
+        self.eventTimeCache = eventTimeCache
     }
 
     public static func standard(bundle: Bundle = .main) -> AccountDataLocations {
@@ -25,10 +28,11 @@ public struct AccountDataLocations: Sendable {
             stores: HaloShared.storeDirectory(bundle: bundle),
             shareInbox: HaloShared.shareInboxDirectory(bundle: bundle),
             search: HaloShared.searchDirectory(),
-            chatShortcuts: SystemChatShortcutStore.defaultFile(bundle: bundle))
+            chatShortcuts: SystemChatShortcutStore.defaultFile(bundle: bundle),
+            eventTimeCache: HaloShared.eventTimeCacheFile())
     }
 
-    var all: [URL] { [stores, shareInbox, search, chatShortcuts] }
+    var all: [URL] { [stores, shareInbox, search, chatShortcuts] + (eventTimeCache.map { [$0] } ?? []) }
 }
 
 /// Removes what an account left on the device, and keeps it out of backups (AC-AUTH-4, AC-SEC-4).

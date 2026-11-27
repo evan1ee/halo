@@ -92,6 +92,32 @@ struct RoomListMappingTests {
         #expect(MatrixRoomListPort.membership(.joined) == .joined)
         #expect(MatrixRoomListPort.membership(.banned) == .banned)
     }
+
+    @Test("EventTimeCache persists derived timestamps across instances, ignores corrupt files, and deletes on clear (GA-28, M19-7)")
+    func eventTimeCachePersistence() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("halo-etc-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("times.json")
+
+        let first = MatrixRoomListPort.EventTimeCache(file: file)
+        let ts = Date(timeIntervalSince1970: 1_700_000_123.456)
+        first.set("$ev1", ts)
+        first.flushNow()
+        #expect(FileManager.default.fileExists(atPath: file.path))
+
+        let restored = MatrixRoomListPort.EventTimeCache(file: file)
+        let loaded = try #require(restored.get("$ev1"))
+        #expect(abs(loaded.timeIntervalSince1970 - ts.timeIntervalSince1970) < 0.002)
+
+        restored.clear()
+        #expect(restored.get("$ev1") == nil)
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+
+        try Data("not json".utf8).write(to: file)
+        let corrupt = MatrixRoomListPort.EventTimeCache(file: file)
+        #expect(corrupt.get("$ev1") == nil)
+    }
 }
 
 @Suite("MatrixBootstrap (R-09 / §7)")
