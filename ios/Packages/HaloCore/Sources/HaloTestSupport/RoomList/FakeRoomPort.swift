@@ -13,6 +13,10 @@ public final class FakeRoomPort: RoomPort {
         var error: HaloError?
         var modes: [RoomNotificationChoice] = []
         var left: [RoomID] = []
+        var forgotten: [RoomID] = []
+        var knocks: [(address: String, reason: String?)] = []
+        var previews: [String: RoomLifecyclePreview] = [:]
+        var inactive: [RoomSummary] = []
         var edits: [(name: String, topic: String)] = []
         var invites: [[UserID]] = []
         var favourites: [(room: RoomID, on: Bool)] = []
@@ -115,7 +119,54 @@ public final class FakeRoomPort: RoomPort {
 
     public func leave(_ room: RoomID) async throws(HaloError) {
         if let error = state.withLock({ $0.error }) { throw error }
-        state.withLock { $0.left.append(room) }
+        state.withLock {
+            $0.left.append(room)
+            $0.inactive.removeAll { $0.id == room && $0.membership == .knocked }
+        }
+    }
+
+    public var forgottenRooms: [RoomID] { state.withLock { $0.forgotten } }
+    public var knockedAddresses: [(address: String, reason: String?)] { state.withLock { $0.knocks } }
+    public func setPreview(_ preview: RoomLifecyclePreview, for address: String) {
+        state.withLock { $0.previews[address] = preview }
+    }
+    public func setInactiveRooms(_ rooms: [RoomSummary]) {
+        state.withLock { $0.inactive = rooms }
+    }
+
+    public func forget(_ room: RoomID) async throws(HaloError) {
+        if let error = state.withLock({ $0.error }) { throw error }
+        state.withLock {
+            $0.forgotten.append(room)
+            $0.inactive.removeAll { $0.id == room }
+        }
+    }
+
+    public func previewRoom(address: String) async throws(HaloError) -> RoomLifecyclePreview {
+        let (preview, error) = state.withLock { ($0.previews[address], $0.error) }
+        if let error { throw error }
+        if let preview { return preview }
+        return RoomLifecyclePreview(roomID: try? RoomID(address), address: address, name: "Room \(address)", joinAccess: .public)
+    }
+
+    public func knock(address: String, reason: String?) async throws(HaloError) -> RoomID {
+        if let error = state.withLock({ $0.error }) { throw error }
+        return try state.withLock { s throws(HaloError) in
+            s.knocks.append((address, reason))
+            let fallback = try RoomID("!knocked:example.org")
+            let id = s.previews[address]?.roomID ?? (try? RoomID(address)) ?? fallback
+            if let existing = s.previews[address] {
+                s.previews[address] = RoomLifecyclePreview(
+                    roomID: id, address: existing.address, name: existing.name, topic: existing.topic,
+                    avatar: existing.avatar, memberCount: existing.memberCount, membership: .knocked, joinAccess: existing.joinAccess
+                )
+            }
+            return id
+        }
+    }
+
+    public func inactiveRooms() async -> [RoomSummary] {
+        state.withLock { $0.inactive }
     }
 
     public func mediaGallery(in room: RoomID, limit: Int) async throws(HaloError) -> [RoomMediaItem] {

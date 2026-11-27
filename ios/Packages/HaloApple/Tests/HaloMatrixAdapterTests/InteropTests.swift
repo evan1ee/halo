@@ -391,6 +391,51 @@ struct InteropTests {
                 && plainEvents.contains { contents($0)?["msgtype"] as? String == "m.location" }
         }
     }
+
+    // MARK: Room lifecycle: upgraded successor, knock, banned, left & forgotten (M20-8, GA-23)
+
+    @Test("Room lifecycle: tombstoned successor, knock request & cancel, banned forget, and left forget", .timeLimit(.minutes(3)))
+    func roomLifecycleStates() async throws {
+        let stage = try await TestStage()
+        let roomPort = MatrixRoomPort(session: stage.session)
+
+        // 1. Upgraded room (`m.room.tombstone`, GA-23): successor ID & reason surface in RoomDetails.
+        let replacementRoom = try await stage.peer.makeRoom()
+        try await stage.peer.tombstone(stage.room, replacement: replacementRoom, reason: "Upgraded to v11")
+        try await stage.wait(30, "tombstone synced into room details") {
+            let details = try? await roomPort.details(stage.room)
+            return details?.successor == RoomSuccessor(roomID: replacementRoom, reason: "Upgraded to v11")
+        }
+
+        // 2. Knock room: preview → knock → appears as .knocked in inactiveRooms → cancel (leave + forget) removes it cleanly.
+        let knockRoom = try await stage.peer.makeKnockRoom(name: "Knock Room")
+        let knockedID = try await roomPort.knock(address: knockRoom.rawValue, reason: "Hello")
+        #expect(knockedID == knockRoom)
+        try await stage.wait(30, "knocked room appears in inactiveRooms") {
+            await roomPort.inactiveRooms().contains { $0.id == knockRoom && $0.membership == .knocked }
+        }
+        try await roomPort.leave(knockRoom)
+        try? await roomPort.forget(knockRoom)
+
+        // 3. Banned room: peer bans user → appears as .banned → forget succeeds cleanly.
+        let banRoom = try await stage.peer.makeRoom()
+        let selfPeer = try await TestPeer(server: stage.direct, user: stage.user, password: stage.password)
+        try await selfPeer.join(banRoom)
+        await selfPeer.logout()
+        try await stage.wait(30, "joined ban test room") {
+            (try? await roomPort.details(banRoom).membership) == .joined
+        }
+        let ownUserID = try await stage.session.ownUserID()
+        try await stage.peer.ban(user: ownUserID, from: banRoom)
+        try await stage.wait(30, "banned room synced") {
+            await roomPort.inactiveRooms().contains { $0.id == banRoom && $0.membership == .banned }
+        }
+        try await roomPort.forget(banRoom)
+
+        // 4. Leave & forget the tombstoned room.
+        try await roomPort.leave(stage.room)
+        try await roomPort.forget(stage.room)
+    }
 }
 
 private func contents(_ event: [String: Any]) -> [String: Any]? { event["content"] as? [String: Any] }

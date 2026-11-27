@@ -1,5 +1,6 @@
 import HaloDesignSystem
 import HaloDomain
+import HaloFoundation
 import PhotosUI
 import SwiftUI
 
@@ -15,22 +16,26 @@ public struct RoomDetailsView: View {
     @State private var picked: PhotosPickerItem?
 
     private let onLeft: (@MainActor () -> Void)?
+    private let onOpenSuccessor: (@MainActor (RoomID) -> Void)?
     private let onRenamed: @MainActor (String) -> Void
     private let profileSheet: (@MainActor (RoomMemberInfo, @escaping @MainActor () -> Void) -> AnyView?)?
     @State private var shownMember: RoomMemberInfo?
 
     /// `onLeft` runs after the user left the room (the caller pops the room and info pages from the stack).
+    /// `onOpenSuccessor` opens or previews the replacement room when this room was upgraded (GA-23, M20-8).
     /// `onRenamed` runs when the user saves a new room name so the caller can update its navigation title at once.
     /// `profileSheet` builds the profile view for a tapped member (wired by the composition root so features don't import each other).
     public init(
         model: RoomDetailsViewModel,
         profileSheet: (@MainActor (RoomMemberInfo, @escaping @MainActor () -> Void) -> AnyView?)? = nil,
         onRenamed: @escaping @MainActor (String) -> Void = { _ in },
+        onOpenSuccessor: (@MainActor (RoomID) -> Void)? = nil,
         onLeft: (@MainActor () -> Void)? = nil
     ) {
         _model = State(initialValue: model)
         self.profileSheet = profileSheet
         self.onRenamed = onRenamed
+        self.onOpenSuccessor = onOpenSuccessor
         self.onLeft = onLeft
     }
 
@@ -96,6 +101,22 @@ public struct RoomDetailsView: View {
                 .padding(.vertical, 4)
                 Label(details.isEncrypted ? "Encrypted" : "Not encrypted", systemImage: details.isEncrypted ? "lock.fill" : "lock.open")
                 Label(model.memberCountText, systemImage: "person.2")
+            }
+            if let successor = details.successor {
+                Section("Upgraded room") {
+                    Text(successor.reason ?? "This room has been replaced by a newer version.")
+                        .font(HaloTypography.meta)
+                        .foregroundStyle(HaloColor.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let onOpenSuccessor {
+                        Button {
+                            onOpenSuccessor(successor.roomID)
+                        } label: {
+                            Label("Go to new room", systemImage: "arrow.up.circle.fill")
+                        }
+                        .accessibilityIdentifier("roomDetailsOpenSuccessor")
+                    }
+                }
             }
             if details.canEditDetails || details.canInvite {
                 Section {
@@ -204,6 +225,7 @@ public struct RoomDetailsView: View {
         }
         .alert("Leave this room?", isPresented: $model.confirmsLeave) {
             Button("Leave", role: .destructive) { Task { await model.leave() } }
+            Button("Leave and forget", role: .destructive) { Task { await model.leaveAndForget() } }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(model.leavingStrandsRoom ? "You are the only administrator. Nobody will be able to manage the room after you leave." : "You will stop receiving its messages.")

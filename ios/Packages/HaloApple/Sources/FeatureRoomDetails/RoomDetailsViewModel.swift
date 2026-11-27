@@ -351,6 +351,16 @@ public final class RoomDetailsViewModel: Identifiable {
         } catch { actionError = Self.text(error) }
     }
 
+    /// Leaves the room and forgets it on the homeserver so it never lingers (M20-8).
+    public func leaveAndForget() async {
+        do throws(HaloError) {
+            try await port.leave(room)
+            try? await port.forget(room)  // best-effort: some servers auto-forget on leave
+            hasLeft = true
+            actionError = nil
+        } catch { actionError = Self.text(error) }
+    }
+
     private static func text(_ error: HaloError) -> String {
         switch error {
         case .network: "You appear to be offline. Try again."

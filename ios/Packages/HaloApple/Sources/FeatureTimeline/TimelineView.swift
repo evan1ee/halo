@@ -15,6 +15,8 @@ public struct TimelineView: View {
     private let gifPanel: (@MainActor () -> AnyView)?
     private let onOpenThread: (@MainActor (EventID) -> Void)?
     private let onSaveAsSticker: (@MainActor (Data, String) -> Void)?
+    private let onOpenSuccessor: (@MainActor (RoomID) -> Void)?
+    private let onRoomClosed: (@MainActor () -> Void)?
     private let onFirstRows: (@MainActor () -> Void)?
     private let onRowsDrawn: (@MainActor () -> Void)?
     /// How long the landing check waits for the first layout, and between its two looks at the newest row (M19-4: both were 80 and
@@ -76,6 +78,8 @@ public struct TimelineView: View {
         gifPanel: (@MainActor () -> AnyView)? = nil,
         onOpenThread: (@MainActor (EventID) -> Void)? = nil,
         onSaveAsSticker: (@MainActor (Data, String) -> Void)? = nil,
+        onOpenSuccessor: (@MainActor (RoomID) -> Void)? = nil,
+        onRoomClosed: (@MainActor () -> Void)? = nil,
         onFirstRows: (@MainActor () -> Void)? = nil,
         onRowsDrawn: (@MainActor () -> Void)? = nil
     ) {
@@ -84,6 +88,8 @@ public struct TimelineView: View {
         self.gifPanel = gifPanel
         self.onOpenThread = onOpenThread
         self.onSaveAsSticker = onSaveAsSticker
+        self.onOpenSuccessor = onOpenSuccessor
+        self.onRoomClosed = onRoomClosed
         self.onFirstRows = onFirstRows
         self.onRowsDrawn = onRowsDrawn
     }
@@ -505,14 +511,26 @@ public struct TimelineView: View {
             .sharedBackgroundVisibility(.hidden)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            VStack(spacing: 0) {
-                Composer(model: model, input: input, choosingFile: $choosingFile)
-                #if canImport(UIKit)
-                ComposerPanelArea(controller: input) { panel in
-                    ComposerPanelContent(
-                        panel: panel, model: model, input: input, gifPanel: gifPanel, stickerPanel: stickerPanel, choosingFile: $choosingFile)
+            if let banner = model.lifecycleBanner {
+                RoomLifecycleBanner(
+                    state: banner,
+                    isWorking: model.isActingOnLifecycle,
+                    errorMessage: model.lifecycleError,
+                    onOpenSuccessor: { id in onOpenSuccessor?(id) },
+                    onLeaveAndForget: { Task { await model.runLeaveAndForget() } },
+                    onForget: { Task { await model.runForgetRoom() } },
+                    onCancelKnock: { Task { await model.runCancelKnock() } }
+                )
+            } else {
+                VStack(spacing: 0) {
+                    Composer(model: model, input: input, choosingFile: $choosingFile)
+                    #if canImport(UIKit)
+                    ComposerPanelArea(controller: input) { panel in
+                        ComposerPanelContent(
+                            panel: panel, model: model, input: input, gifPanel: gifPanel, stickerPanel: stickerPanel, choosingFile: $choosingFile)
+                    }
+                    #endif
                 }
-                #endif
             }
         }
         #if canImport(UIKit)
@@ -572,6 +590,10 @@ public struct TimelineView: View {
         // A model started ahead of this screen (M19-9) becomes an opened room now; for any other model this does nothing.
         .onAppear { model.present() }
         .task { await model.start() }
+        .task { await model.refreshLifecycle() }
+        .onChange(of: model.lifecycleClosedRoom) { _, closed in
+            if closed { onRoomClosed?() }
+        }
         .onChange(of: scenePhase, initial: true) { _, phase in model.setActive(phase == .active) }
         .onDisappear {
             jumpToBottomTask?.cancel()

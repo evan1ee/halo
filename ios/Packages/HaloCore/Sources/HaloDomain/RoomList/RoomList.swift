@@ -28,13 +28,17 @@ public struct RoomSummary: Sendable, Equatable, Identifiable {
     public let inviter: String?
     /// For an invitation: the inviter's Matrix user ID (used to hide invitations from ignored users); `nil` when unknown or not an invitation.
     public let inviterID: UserID?
+    /// Replacement room announced by `m.room.tombstone`, if this room has been upgraded (GA-23, M20-8).
+    public let successor: RoomSuccessor?
 
     public init(
         id: RoomID, name: String?, isDirect: Bool, isEncrypted: Bool, membership: Membership, read: RoomReadCounts = .none,
         latestEvent: LatestEventRef? = nil, ownReadThrough: Date? = nil, ownReceiptEventID: EventID? = nil,
         isFavourite: Bool = false, preview: LatestMessagePreview? = nil,
-        avatar: MediaRef? = nil, inviter: String? = nil, inviterID: UserID? = nil
+        avatar: MediaRef? = nil, inviter: String? = nil, inviterID: UserID? = nil,
+        successor: RoomSuccessor? = nil
     ) {
+        self.successor = successor
         self.inviter = inviter
         self.inviterID = inviterID
         self.avatar = avatar

@@ -39,6 +39,18 @@ public protocol RoomPort: Sendable {
     /// Leaves the room (FR-4).
     func leave(_ room: RoomID) async throws(HaloError)
 
+    /// Forgets a left or banned room on the homeserver so it never lingers as a stuck row (M20-8).
+    func forget(_ room: RoomID) async throws(HaloError)
+
+    /// Previews a room by room ID (`!…`) or alias (`#…`), reporting membership and join rule (knock, invite-only, banned, public; M20-8).
+    func previewRoom(address: String) async throws(HaloError) -> RoomLifecyclePreview
+
+    /// Sends a knock request to join a knock-enabled room (`address` is a room ID or alias; M20-8).
+    func knock(address: String, reason: String?) async throws(HaloError) -> RoomID
+
+    /// Known rooms whose membership is `.knocked`, `.left`, or `.banned` (non-spaces), so the user can cancel, rejoin, or forget them (M20-8).
+    func inactiveRooms() async -> [RoomSummary]
+
     /// Recent media items (photos, videos, audio, files) in `room`, newest first (M9 Gallery + Export).
     func mediaGallery(in room: RoomID, limit: Int) async throws(HaloError) -> [RoomMediaItem]
 
@@ -78,6 +90,14 @@ private actor SinglePageMediaGallerySession: RoomMediaGallerySession {
 }
 
 extension RoomPort {
+    public func forget(_ room: RoomID) async throws(HaloError) {}
+    public func previewRoom(address: String) async throws(HaloError) -> RoomLifecyclePreview {
+        RoomLifecyclePreview(roomID: try? RoomID(address), address: address, joinAccess: .unknown)
+    }
+    public func knock(address: String, reason: String?) async throws(HaloError) -> RoomID {
+        throw .unsupported("KNOCK")
+    }
+    public func inactiveRooms() async -> [RoomSummary] { [] }
     public func mediaGallery(in room: RoomID, limit: Int) async throws(HaloError) -> [RoomMediaItem] { [] }
     public func openMediaGallery(in room: RoomID) async throws(HaloError) -> any RoomMediaGallerySession {
         SinglePageMediaGallerySession(port: self, room: room)

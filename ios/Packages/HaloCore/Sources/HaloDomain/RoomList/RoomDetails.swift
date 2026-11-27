@@ -16,11 +16,18 @@ public struct RoomDetails: Sendable, Equatable {
     public let canInvite: Bool
     /// The room's avatar (for a direct chat the other person's); `nil` when it has none.
     public let avatar: MediaRef?
+    /// Replacement room announced by `m.room.tombstone`, if this room has been upgraded (GA-23, M20-8).
+    public let successor: RoomSuccessor?
+    /// The signed-in user's current membership in this room (M20-8).
+    public let membership: Membership
 
     public init(
         id: RoomID, name: String?, topic: String?, isDirect: Bool, isEncrypted: Bool, joinedMemberCount: Int, notificationMode: RoomNotificationChoice,
-        canEditDetails: Bool = false, canInvite: Bool = false, avatar: MediaRef? = nil
+        canEditDetails: Bool = false, canInvite: Bool = false, avatar: MediaRef? = nil,
+        successor: RoomSuccessor? = nil, membership: Membership = .joined
     ) {
+        self.successor = successor
+        self.membership = membership
         self.avatar = avatar
         self.canEditDetails = canEditDetails
         self.canInvite = canInvite
@@ -37,17 +44,17 @@ public struct RoomDetails: Sendable, Equatable {
 extension RoomDetails {
     /// A copy with another notification mode.
     public func with(notificationMode: RoomNotificationChoice) -> RoomDetails {
-        RoomDetails(id: id, name: name, topic: topic, isDirect: isDirect, isEncrypted: isEncrypted, joinedMemberCount: joinedMemberCount, notificationMode: notificationMode, canEditDetails: canEditDetails, canInvite: canInvite, avatar: avatar)
+        RoomDetails(id: id, name: name, topic: topic, isDirect: isDirect, isEncrypted: isEncrypted, joinedMemberCount: joinedMemberCount, notificationMode: notificationMode, canEditDetails: canEditDetails, canInvite: canInvite, avatar: avatar, successor: successor, membership: membership)
     }
 
     /// A copy with another name and topic.
     public func with(name: String?, topic: String?) -> RoomDetails {
-        RoomDetails(id: id, name: name, topic: topic, isDirect: isDirect, isEncrypted: isEncrypted, joinedMemberCount: joinedMemberCount, notificationMode: notificationMode, canEditDetails: canEditDetails, canInvite: canInvite, avatar: avatar)
+        RoomDetails(id: id, name: name, topic: topic, isDirect: isDirect, isEncrypted: isEncrypted, joinedMemberCount: joinedMemberCount, notificationMode: notificationMode, canEditDetails: canEditDetails, canInvite: canInvite, avatar: avatar, successor: successor, membership: membership)
     }
 
     /// A copy with another avatar.
     public func with(avatar: MediaRef?) -> RoomDetails {
-        RoomDetails(id: id, name: name, topic: topic, isDirect: isDirect, isEncrypted: isEncrypted, joinedMemberCount: joinedMemberCount, notificationMode: notificationMode, canEditDetails: canEditDetails, canInvite: canInvite, avatar: avatar)
+        RoomDetails(id: id, name: name, topic: topic, isDirect: isDirect, isEncrypted: isEncrypted, joinedMemberCount: joinedMemberCount, notificationMode: notificationMode, canEditDetails: canEditDetails, canInvite: canInvite, avatar: avatar, successor: successor, membership: membership)
     }
 }
 

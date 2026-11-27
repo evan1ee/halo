@@ -59,6 +59,8 @@ private struct RootView: View {
     @State private var searchPresented = false
     @State private var searchModel: MessageSearchViewModel
     @State private var newChat: NewChatViewModel?
+    @State private var roomPreview: RoomPreviewViewModel?
+    @State private var showingInactiveRooms = false
     @State private var showingNotificationPriming = false
     @State private var showingWhatsNew = false
     @State private var ownName = ""
@@ -337,15 +339,48 @@ private struct RootView: View {
             return .handled
         })
         .task { root.matrixLinks.open = { room, event in router.openRoom(room, focus: event) } }
+        // Room links open the full room lifecycle preview sheet (public, knock, invite-only, banned, left; M20-8).
+        .onChange(of: root.matrixLinks.prompt) { _, prompt in
+            if case .join(let address, let event) = prompt {
+                root.matrixLinks.cancel()
+                roomPreview = root.makeRoomPreview(address: address, focusEvent: event)
+            }
+        }
         .alert(
             matrixLinkTitle,
-            isPresented: Binding(get: { root.matrixLinks.prompt != nil }, set: { if !$0 { root.matrixLinks.cancel() } }),
+            isPresented: Binding(get: {
+                if case .startChat = root.matrixLinks.prompt { return true }
+                return false
+            }, set: { if !$0 { root.matrixLinks.cancel() } }),
             presenting: root.matrixLinks.prompt
         ) { prompt in
             Button(matrixLinkAction(prompt)) { Task { await root.matrixLinks.confirm() } }
                 .accessibilityIdentifier("matrix-link-confirm")
             Button("Cancel", role: .cancel) { root.matrixLinks.cancel() }
         } message: { prompt in Text(matrixLinkMessage(prompt)) }
+        .sheet(item: $roomPreview) { previewModel in
+            RoomPreviewSheet(
+                model: previewModel,
+                onOpenRoom: { room, event in
+                    roomPreview = nil
+                    router.openRoom(room, focus: event)
+                },
+                onDismiss: { roomPreview = nil }
+            )
+        }
+        .sheet(isPresented: $showingInactiveRooms) {
+            NavigationStack {
+                InactiveRoomsView(model: root.makeInactiveRooms()) { room in
+                    showingInactiveRooms = false
+                    openOrPreviewRoom(room)
+                }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { showingInactiveRooms = false }
+                    }
+                }
+            }
+        }
         .alert(
             "Couldn't open the link",
             isPresented: Binding(get: { root.matrixLinks.failure != nil }, set: { if !$0 { root.matrixLinks.dismissFailure() } })
@@ -488,6 +523,12 @@ private struct RootView: View {
                     Label("Saved Messages", systemImage: "bookmark")
                 }
                 .accessibilityIdentifier("savedMessages")
+                Button {
+                    showingInactiveRooms = true
+                } label: {
+                    Label("Left & Pending Rooms", systemImage: "tray")
+                }
+                .accessibilityIdentifier("more-inactive-rooms")
                 if !root.preferences.botSenders.isEmpty {
                     Button {
                         router.push(.activity)
@@ -504,6 +545,18 @@ private struct RootView: View {
         .accessibilityIdentifier("more-menu")
     }
 
+    /// Opens `room` directly when already joined, or opens `RoomPreviewSheet` (public, knock, invite-only, banned; M20-8).
+    private func openOrPreviewRoom(_ room: RoomID) {
+        Task {
+            let joined = await root.roomCoordinator.rooms.contains { $0.id == room && $0.membership == .joined }
+            if joined {
+                router.openRoom(room)
+            } else {
+                roomPreview = root.makeRoomPreview(address: room.rawValue)
+            }
+        }
+    }
+
     @ViewBuilder
     private func destination(for route: ChatsRoute) -> some View {
         switch route {
@@ -512,15 +565,16 @@ private struct RootView: View {
                 root: root,
                 room: room,
                 jumpTo: focus,
-                openRoom: { router.openRoom($0) },
+                openRoom: { openOrPreviewRoom($0) },
                 openRoomInfo: { router.openRoomInfo(room) },
-                openThread: { router.openThread(room: room, rootEvent: $0) }
+                openThread: { router.openThread(room: room, rootEvent: $0) },
+                onRoomClosed: { router.removeRoom(room) }
             )
         case .roomInfo(let room):
             RoomDetailsScreen(
                 root: root,
                 room: room,
-                openRoom: { router.openRoom($0) },
+                openRoom: { openOrPreviewRoom($0) },
                 onLeft: { router.removeRoom(room) }
             )
         case .thread(let room, let rootEvent, let focus):
@@ -582,6 +636,7 @@ private struct TimelineScreen: View {
     private let openRoom: @MainActor (RoomID) -> Void
     private let openRoomInfo: @MainActor () -> Void
     private let openThread: @MainActor (EventID) -> Void
+    private let onRoomClosed: @MainActor () -> Void
 
     init(
         root: AppRoot,
@@ -589,11 +644,13 @@ private struct TimelineScreen: View {
         jumpTo: EventID? = nil,
         openRoom: @escaping @MainActor (RoomID) -> Void,
         openRoomInfo: @escaping @MainActor () -> Void,
-        openThread: @escaping @MainActor (EventID) -> Void
+        openThread: @escaping @MainActor (EventID) -> Void,
+        onRoomClosed: @escaping @MainActor () -> Void = {}
     ) {
         self.openRoom = openRoom
         self.openRoomInfo = openRoomInfo
         self.openThread = openThread
+        self.onRoomClosed = onRoomClosed
         self.root = root
         self.room = room
         let timeline = root.makeRoomTimeline(room: room, jumpTo: jumpTo)
@@ -642,6 +699,10 @@ private struct TimelineScreen: View {
                     }).map { AnyView(UserProfileView(model: $0)) }
                 },
                 onRenamed: { title = $0 },
+                onOpenSuccessor: { successor in
+                    details = nil
+                    openRoom(successor)
+                },
                 onLeft: { details = nil; dismiss() }
             )
         }
@@ -656,6 +717,8 @@ private struct TimelineScreen: View {
             onSaveAsSticker: { data, filename in
                 stickerToSave = PendingStickerSave(data: data, filename: filename)
             },
+            onOpenSuccessor: { successor in openRoom(successor) },
+            onRoomClosed: { onRoomClosed() },
             onFirstRows: {
                 root.roomOpen?.end()
                 root.roomOpen = nil
@@ -729,6 +792,7 @@ private struct RoomDetailsScreen: View {
                     openRoom(target)
                 }).map { AnyView(UserProfileView(model: $0)) }
             },
+            onOpenSuccessor: { successor in openRoom(successor) },
             onLeft: onLeft
         )
     }
