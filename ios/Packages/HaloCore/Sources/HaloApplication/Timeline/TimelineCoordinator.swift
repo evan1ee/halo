@@ -243,6 +243,18 @@ public actor TimelineCoordinator {
         try await session.createPoll(poll)
     }
 
+    /// Casts or changes the signed-in user's vote on a confirmed poll (MESSAGING FR-10, M20-4).
+    public func votePoll(pollEventID: EventID, answers: [String]) async throws(HaloError) {
+        guard let session, case .live = status else { throw .cancelled }
+        try await session.votePoll(pollEventID: pollEventID, answers: answers)
+    }
+
+    /// Ends the signed-in user's own poll (MESSAGING FR-10, M20-4).
+    public func endPoll(pollEventID: EventID, fallbackText: String) async throws(HaloError) {
+        guard let session, case .live = status else { throw .cancelled }
+        try await session.endPoll(pollEventID: pollEventID, fallbackText: fallbackText)
+    }
+
     /// The people who can be mentioned in the open room.
     public func members() async throws(HaloError) -> [RoomMember] {
         guard let session, case .live = status else { throw .cancelled }

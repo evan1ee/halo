@@ -885,7 +885,7 @@ struct TimelineViewModelTests {
         }
     }
 
-    @Test("a poll is shown read-only with each answer's vote count")
+    @Test("a poll is mapped to interactive PollDetails with summary text and ended state")
     func polls() throws {
         let vm = TimelineViewModel(
             coordinator: TimelineCoordinator(port: FakeTimelinePort(), room: try RoomID("!r:x.org")),
@@ -894,11 +894,28 @@ struct TimelineViewModelTests {
             vm.row(TimelineItem(
                 id: TimelineItemID("id"),
                 content: .event(TimelineEvent(
-                    eventID: nil, sender: try UserID("@alice:x.org"), senderName: "Alice", timestamp: Date(timeIntervalSince1970: 0), isOwn: false,
-                    kind: .poll(question: "Lunch?", options: [PollOption(text: "Pizza", votes: 2), PollOption(text: "Soup", votes: 1)], ended: ended)))))
+                    eventID: try EventID("$p1"), sender: try UserID("@alice:x.org"), senderName: "Alice", timestamp: Date(timeIntervalSince1970: 0), isOwn: false,
+                    kind: .poll(PollDetails(
+                        question: "Lunch?",
+                        options: [
+                            PollOption(id: "a", text: "Pizza", votes: 2, selectedByMe: true),
+                            PollOption(id: "b", text: "Soup", votes: 1, selectedByMe: false)
+                        ],
+                        visibility: .disclosed,
+                        maxSelections: 1,
+                        totalVoters: 3,
+                        ended: ended))))))
         }
-        #expect(try row(ended: false).text == "📊 Lunch?\n• Pizza — 2 votes\n• Soup — 1 vote\nVoting isn't available in Halo yet")
-        #expect(try row(ended: true).text.hasSuffix("Poll ended"))
+        let openRow = try row(ended: false)
+        #expect(openRow.poll?.question == "Lunch?")
+        #expect(openRow.poll?.options.count == 2)
+        #expect(openRow.poll?.ended == false)
+        #expect(openRow.text == "📊 Lunch?\n• Pizza — 2 votes\n• Soup — 1 vote")
+        #expect(!openRow.showsText)
+        #expect(!openRow.canEdit)
+        let endedRow = try row(ended: true)
+        #expect(endedRow.poll?.ended == true)
+        #expect(endedRow.text.hasSuffix("Poll ended"))
     }
 
     @Test("a call event is a quiet state line saying Halo can't join (D43)")

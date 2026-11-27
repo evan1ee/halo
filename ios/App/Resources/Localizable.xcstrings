@@ -222,6 +222,28 @@
           }
         }
       }
+    },
+    "End poll" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "End poll"
+          }
+        }
+      }
+    },
+    "Sending vote…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sending vote…"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

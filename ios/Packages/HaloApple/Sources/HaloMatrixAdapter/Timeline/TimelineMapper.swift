@@ -53,7 +53,7 @@ enum TimelineMapper {
         }
         return HaloDomain.TimelineEvent(
             eventID: eventID, sender: try? UserID(event.sender), senderName: senderName,
-            timestamp: date(event.timestamp), isOwn: event.isOwn, kind: kind(of: event.content),
+            timestamp: date(event.timestamp), isOwn: event.isOwn, kind: kind(of: event.content, ownUserID: ownUserID),
             sendState: sendState(of: event.localSendState),
             reactions: event.reactions.map { reaction in
                 ReactionSummary(key: reaction.key, count: reaction.senders.count, reactedByMe: reaction.senders.contains { $0.senderId == ownUserID })
@@ -93,9 +93,9 @@ enum TimelineMapper {
         return ReplyPreview(eventID: id, senderName: name, snippet: snippet)
     }
 
-    static func kind(of content: TimelineItemContent) -> TimelineEventKind {
+    static func kind(of content: TimelineItemContent, ownUserID: String = "") -> TimelineEventKind {
         switch content {
-        case .msgLike(let content): kind(of: content.kind)
+        case .msgLike(let content): kind(of: content.kind, ownUserID: ownUserID)
         case .roomMembership(let userID, let displayName, let change, _):
             .membership(user: try? UserID(userID), displayName: displayName, change: map(change))
         case .callInvite, .rtcNotification: .call
@@ -107,7 +107,7 @@ enum TimelineMapper {
         }
     }
 
-    static func kind(of kind: MsgLikeKind) -> TimelineEventKind {
+    static func kind(of kind: MsgLikeKind, ownUserID: String = "") -> TimelineEventKind {
         switch kind {
         case .message(let message):
             switch message.msgType {
@@ -144,10 +144,30 @@ enum TimelineMapper {
         case .sticker(let body, _, let source): .sticker(body: body, source: ref(source))
         case .redacted: .redacted
         case .unableToDecrypt(let message): .undecryptable(reason(of: message))
-        case .poll(let question, _, _, let answers, let votes, let endTime, _):
-            .poll(question: question, options: answers.map { PollOption(text: $0.text, votes: votes[$0.id]?.count ?? 0) }, ended: endTime != nil)
+        case .poll(let question, let pollKind, let maxSelections, let answers, let votes, let endTime, _):
+            mapPoll(
+                question: question, kind: pollKind, maxSelections: maxSelections,
+                answers: answers, votes: votes, ended: endTime != nil, ownUserID: ownUserID)
         case .other, .liveLocation: .unsupported
         }
+    }
+
+    private static func mapPoll(
+        question: String, kind: PollKind, maxSelections: UInt64,
+        answers: [PollAnswer], votes: [String: [String]], ended: Bool, ownUserID: String
+    ) -> TimelineEventKind {
+        let visibility: PollVisibility = kind == .undisclosed ? .undisclosed : .disclosed
+        let options = answers.map { answer in
+            let voters = votes[answer.id] ?? []
+            return PollOption(
+                id: answer.id, text: answer.text, votes: voters.count,
+                selectedByMe: !ownUserID.isEmpty && voters.contains(ownUserID))
+        }
+        let uniqueVoters = Set(votes.values.flatMap { $0 }).count
+        return .poll(PollDetails(
+            question: question, options: options, visibility: visibility,
+            maxSelections: max(1, Int(clamping: maxSelections)),
+            totalVoters: uniqueVoters, ended: ended))
     }
 
     /// `nil` means the event came from the server.

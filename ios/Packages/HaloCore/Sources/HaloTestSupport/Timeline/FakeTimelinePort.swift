@@ -29,6 +29,9 @@ public final class FakeTimelinePort: TimelinePort {
         var files: [OutgoingFile] = []
         var locations: [OutgoingLocation] = []
         var polls: [OutgoingPoll] = []
+        var pollVotes: [(eventID: EventID, answers: [String])] = []
+        var endedPolls: [(eventID: EventID, fallbackText: String)] = []
+        var pollFailure: HaloError?
         var pinned: [EventID] = []
         var fileFailure: HaloError?
         var imageFailure: HaloError?
@@ -99,6 +102,12 @@ public final class FakeTimelinePort: TimelinePort {
     public func pinnedEvents(in id: RoomID) -> [EventID] { rooms.withLock { $0[id]?.pinned ?? [] } }
     /// The polls started, in order.
     public func sentPolls(in id: RoomID) -> [OutgoingPoll] { rooms.withLock { $0[id]?.polls ?? [] } }
+    /// The poll votes sent, in order.
+    public func sentPollVotes(in id: RoomID) -> [(eventID: EventID, answers: [String])] { rooms.withLock { $0[id]?.pollVotes ?? [] } }
+    /// The poll ends sent, in order.
+    public func endedPolls(in id: RoomID) -> [(eventID: EventID, fallbackText: String)] { rooms.withLock { $0[id]?.endedPolls ?? [] } }
+    /// The next `votePoll` or `endPoll` in `id` throws `error`.
+    public func failNextPollAction(in id: RoomID, with error: HaloError) { rooms.withLock { $0[id]?.pollFailure = error } }
     /// The next `sendFile` in `id` throws `error`.
     public func failNextFile(in id: RoomID, with error: HaloError) { rooms.withLock { $0[id]?.fileFailure = error } }
     /// The next `sendImage` throws `error`.
@@ -207,6 +216,8 @@ public final class FakeTimelinePort: TimelinePort {
         func sendFile(_ file: OutgoingFile) async throws(HaloError) { try await live.sendFile(file) }
         func sendLocation(_ location: OutgoingLocation) async throws(HaloError) { try await live.sendLocation(location) }
         func createPoll(_ poll: OutgoingPoll) async throws(HaloError) { try await live.createPoll(poll) }
+        func votePoll(pollEventID: EventID, answers: [String]) async throws(HaloError) { try await live.votePoll(pollEventID: pollEventID, answers: answers) }
+        func endPoll(pollEventID: EventID, fallbackText: String) async throws(HaloError) { try await live.endPoll(pollEventID: pollEventID, fallbackText: fallbackText) }
         func retrySend(localID: String) async throws(HaloError) { try await live.retrySend(localID: localID) }
         func abortSend(localID: String) async throws(HaloError) { try await live.abortSend(localID: localID) }
         func close() async { await live.close() }
@@ -330,6 +341,24 @@ public final class FakeTimelinePort: TimelinePort {
         func createPoll(_ poll: OutgoingPoll) async throws(HaloError) {
             try poll.validate()
             port.rooms.withLock { $0[room]?.polls.append(poll) }
+        }
+
+        func votePoll(pollEventID: EventID, answers: [String]) async throws(HaloError) {
+            if let failure = port.rooms.withLock({ rooms -> HaloError? in
+                guard let f = rooms[room]?.pollFailure else { return nil }
+                rooms[room]?.pollFailure = nil
+                return f
+            }) { throw failure }
+            port.rooms.withLock { $0[room]?.pollVotes.append((pollEventID, answers)) }
+        }
+
+        func endPoll(pollEventID: EventID, fallbackText: String) async throws(HaloError) {
+            if let failure = port.rooms.withLock({ rooms -> HaloError? in
+                guard let f = rooms[room]?.pollFailure else { return nil }
+                rooms[room]?.pollFailure = nil
+                return f
+            }) { throw failure }
+            port.rooms.withLock { $0[room]?.endedPolls.append((pollEventID, fallbackText)) }
         }
 
         func pinnedEventIDs() async -> [EventID] {

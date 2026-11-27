@@ -101,6 +101,10 @@ public protocol TimelineSession: Sendable {
     func sendLocation(_ location: OutgoingLocation) async throws(HaloError)
     /// Starts a poll (`m.poll.start`, D100). `.invalidInput` for an invalid poll (see `OutgoingPoll.validate`).
     func createPoll(_ poll: OutgoingPoll) async throws(HaloError)
+    /// Casts or changes the signed-in user's vote on a confirmed poll (`m.poll.response`, MESSAGING FR-10, M20-4).
+    func votePoll(pollEventID: EventID, answers: [String]) async throws(HaloError)
+    /// Ends the signed-in user's own poll (`m.poll.end`, MESSAGING FR-10, M20-4).
+    func endPoll(pollEventID: EventID, fallbackText: String) async throws(HaloError)
 
     /// Sends a failed local echo again (`TimelineEvent.localID`). Throws `.notFound` if the echo is gone (it was sent or deleted meanwhile).
     func retrySend(localID: String) async throws(HaloError)
@@ -145,4 +149,6 @@ extension TimelineSession {
     public func pinnedEventIDs() async -> [EventID] { [] }
     public func pin(event: EventID) async throws(HaloError) { throw .unsupported("PIN_NOT_SUPPORTED") }
     public func unpin(event: EventID) async throws(HaloError) { throw .unsupported("PIN_NOT_SUPPORTED") }
+    public func votePoll(pollEventID: EventID, answers: [String]) async throws(HaloError) { throw .unsupported("POLL_VOTE") }
+    public func endPoll(pollEventID: EventID, fallbackText: String) async throws(HaloError) { throw .unsupported("POLL_END") }
 }

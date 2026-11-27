@@ -217,7 +217,11 @@ struct InteropTests {
                     "question": ["org.matrix.msc1767.text": "Where?"], "kind": "org.matrix.msc3381.poll.disclosed", "max_selections": 1,
                     "answers": [["id": "a", "org.matrix.msc1767.text": "Here"], ["id": "b", "org.matrix.msc1767.text": "There"]]],
                 "org.matrix.msc1767.text": "Where?\n1. Here\n2. There"
-            ]) { if case .poll("Where?", let options, false) = $0.kind { options.count == 2 } else { false } },
+            ]) {
+                if case .poll(let details) = $0.kind {
+                    details.question == "Where?" && details.options.count == 2 && !details.ended && details.visibility == .disclosed
+                } else { false }
+            },
             Incoming(name: "sticker", type: "m.sticker", content: [
                 "body": "cat", "url": uri, "info": ["mimetype": "image/png", "w": 128, "h": 128]
             ]) { if case .sticker("cat", let source) = $0.kind { source != nil } else { false } },
@@ -232,6 +236,67 @@ struct InteropTests {
 
     /// A 1 × 1 PNG.
     static let pixel = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+
+    // MARK: Polls with two accounts (M20-4, AC-M5)
+
+    @Test("Polls: two accounts vote, change vote leaves one vote per person, and creator ends own poll", .timeLimit(.minutes(3)))
+    func pollsTwoAccounts() async throws {
+        let stage = try await TestStage()
+        try await stage.timeline.createPoll(OutgoingPoll(question: "Dinner?", answers: ["Pizza", "Sushi"]))
+
+        func currentPoll() -> (eventID: EventID, details: PollDetails)? {
+            stage.mirror.poll(question: "Dinner?")
+        }
+
+        try await stage.wait(30, "poll created") { currentPoll() != nil }
+        let initial = try #require(currentPoll())
+        let pizza = try #require(initial.details.options.first { $0.text == "Pizza" })
+        let sushi = try #require(initial.details.options.first { $0.text == "Sushi" })
+
+        // Account 1 votes Pizza.
+        try await stage.timeline.votePoll(pollEventID: initial.eventID, answers: [pizza.id])
+        try await stage.wait(30, "account 1 vote echoed") {
+            guard let poll = currentPoll()?.details else { return false }
+            return poll.options.first { $0.id == pizza.id }?.votes == 1
+                && poll.options.first { $0.id == pizza.id }?.selectedByMe == true
+                && poll.totalVoters == 1
+        }
+
+        // Account 2 votes Sushi (raw MSC3381 poll response).
+        _ = try await stage.peer.send(
+            [
+                "org.matrix.msc3381.poll.response": ["answers": [sushi.id]],
+                "m.relates_to": ["rel_type": "m.reference", "event_id": initial.eventID.rawValue],
+            ],
+            type: "org.matrix.msc3381.poll.response",
+            to: stage.room
+        )
+        try await stage.wait(30, "account 2 vote echoed") {
+            guard let poll = currentPoll()?.details else { return false }
+            return poll.options.first { $0.id == pizza.id }?.votes == 1
+                && poll.options.first { $0.id == sushi.id }?.votes == 1
+                && poll.totalVoters == 2
+        }
+
+        // Account 1 changes vote to Sushi → leaves one vote per person (Pizza=0, Sushi=2, totalVoters=2, AC-M5).
+        try await stage.timeline.votePoll(pollEventID: initial.eventID, answers: [sushi.id])
+        try await stage.wait(30, "account 1 changed vote") {
+            guard let poll = currentPoll()?.details else { return false }
+            return poll.options.first { $0.id == pizza.id }?.votes == 0
+                && poll.options.first { $0.id == pizza.id }?.selectedByMe == false
+                && poll.options.first { $0.id == sushi.id }?.votes == 2
+                && poll.options.first { $0.id == sushi.id }?.selectedByMe == true
+                && poll.totalVoters == 2
+        }
+
+        // Creator ends the poll.
+        let latest = try #require(currentPoll()?.details)
+        try await stage.timeline.endPoll(pollEventID: initial.eventID, fallbackText: latest.endFallbackText())
+        try await stage.wait(30, "poll ended") { currentPoll()?.details.ended == true }
+        let finalPoll = try #require(currentPoll()?.details)
+        #expect(finalPoll.ended)
+        #expect(finalPoll.options.first { $0.id == sushi.id }?.votes == 2)
+    }
 }
 
 private func contents(_ event: [String: Any]) -> [String: Any]? { event["content"] as? [String: Any] }

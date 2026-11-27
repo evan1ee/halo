@@ -23,6 +23,7 @@ extension TimelineViewModel {
             }
             botTapped.subtract(botTasks.completed)
             botUnanswered.subtract(botTasks.completed)
+            reconcilePendingPolls(snapshot.items)
             var profiles: [UserID: (name: String?, avatar: MediaRef?)] = [:]
             for item in snapshot.items {
                 if case .event(let event) = item.content, let sender = event.sender, !event.isOwn, event.senderName != nil || event.senderAvatar != nil {
@@ -416,12 +417,12 @@ extension TimelineViewModel {
                 return TimelineRow(
                     id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: text, eventID: event.eventID, isOwn: event.isOwn,
                     reactions: Self.chips(event.reactions), styled: styled, location: locationCard, source: plainSource(event, body))
-            case .poll(let question, let options, let ended):
-                let lines = options.map { "• \($0.text) — \($0.votes) \($0.votes == 1 ? "vote" : "votes")" }
-                let text = (["📊 \(question)"] + lines + [ended ? "Poll ended" : "Voting isn't available in Halo yet"]).joined(separator: "\n")
+            case .poll(let details):
+                let lines = details.options.map { "• \($0.text) — \($0.votes) \($0.votes == 1 ? "vote" : "votes")" }
+                let text = (["📊 \(details.question)"] + lines + (details.ended ? ["Poll ended"] : [])).joined(separator: "\n")
                 return TimelineRow(
                     id: id, style: event.isOwn ? .ownMessage : .message, sender: name, text: text, eventID: event.eventID, isOwn: event.isOwn,
-                    reactions: Self.chips(event.reactions))
+                    reactions: Self.chips(event.reactions), poll: details)
             case .call:
                 return TimelineRow(id: id, style: .state, sender: nil, text: "\(name) started a call — Halo can't join calls")
             case .otherState:

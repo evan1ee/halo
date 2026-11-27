@@ -557,6 +557,7 @@ extension TimelineViewModel {
             if let row = byEvent[id] {
                 let preview: String
                 if let location = row.location { preview = location.title }
+                else if let poll = row.poll { preview = "📊 \(poll.question)" }
                 else if let video = row.video { preview = video.caption ?? "Video" }
                 else if let audio = row.audio { preview = audio.isVoice ? "Voice message" : audio.name }
                 else if let file = row.file { preview = file.name }
@@ -677,6 +678,69 @@ extension TimelineViewModel {
             default: sendError = "The poll couldn't be sent."
             }
             return false
+        }
+    }
+
+    /// Casts or changes the user's vote on a confirmed poll (MESSAGING FR-10, AC-M5, M20-4).
+    /// Marks the vote as pending immediately and keeps it pending until the server snapshot echoes it or sending fails.
+    public func votePoll(_ row: TimelineRow, optionID: String) async {
+        guard let eventID = row.eventID, let poll = row.poll, !poll.ended, !endingPolls.contains(eventID) else { return }
+        let current = pendingPollVotes[eventID] ?? poll.ownSelectedIDs
+        guard let next = poll.nextSelection(tapping: optionID, current: current) else { return }
+        let previousPending = pendingPollVotes[eventID]
+        await actions.run("poll-vote:\(eventID.rawValue)") {
+            pollErrors[eventID] = nil
+            pendingPollVotes[eventID] = next
+            do {
+                try await coordinator.votePoll(pollEventID: eventID, answers: next)
+            } catch {
+                if let previousPending {
+                    pendingPollVotes[eventID] = previousPending
+                } else {
+                    pendingPollVotes.removeValue(forKey: eventID)
+                }
+                if case .network = error as? HaloError {
+                    pollErrors[eventID] = "Can't reach the server. Your vote wasn't sent."
+                } else {
+                    pollErrors[eventID] = "Couldn't send your vote."
+                }
+            }
+        }
+    }
+
+    /// Ends the user's own confirmed poll (MESSAGING FR-10, M20-4).
+    public func endPoll(_ row: TimelineRow) async {
+        guard row.isOwn, let eventID = row.eventID, let poll = row.poll, !poll.ended else { return }
+        await actions.run("poll-end:\(eventID.rawValue)") {
+            pollErrors[eventID] = nil
+            endingPolls.insert(eventID)
+            do {
+                try await coordinator.endPoll(pollEventID: eventID, fallbackText: poll.endFallbackText())
+            } catch {
+                endingPolls.remove(eventID)
+                if case .network = error as? HaloError {
+                    pollErrors[eventID] = "Can't reach the server. The poll wasn't ended."
+                } else {
+                    pollErrors[eventID] = "Couldn't end this poll."
+                }
+            }
+        }
+    }
+
+    /// Clears pending poll votes and ending flags once the server timeline snapshot confirms them.
+    func reconcilePendingPolls(_ items: [TimelineItem]) {
+        guard !pendingPollVotes.isEmpty || !endingPolls.isEmpty else { return }
+        for item in items {
+            guard case .event(let event) = item.content,
+                  let id = event.eventID,
+                  case .poll(let details) = event.kind else { continue }
+            if let pending = pendingPollVotes[id],
+               details.ended || Set(details.ownSelectedIDs) == Set(pending) {
+                pendingPollVotes.removeValue(forKey: id)
+            }
+            if details.ended {
+                endingPolls.remove(id)
+            }
         }
     }
 
