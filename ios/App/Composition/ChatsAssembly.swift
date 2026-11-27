@@ -64,6 +64,7 @@ extension AppRoot {
             room: room,
             drafts: threadRoot == nil ? drafts : nil,
             images: ImagePreparer(),
+            videos: VideoPreparer(),
             readThrough: readThroughClosure,
             thumbnails: thumbnailMemory
         )

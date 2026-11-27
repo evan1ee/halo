@@ -695,14 +695,14 @@ struct TimelineViewModelTests {
         #expect(voice.audio?.waveform == [0.1, 0.8, 0.3])
         #expect(!voice.showsText && !voice.canEdit && voice.text == "[Voice message]")
         let video = vm.row(event(.media(MediaAttachment(kind: .video, body: "clip.mp4", source: MediaRef(token: "v"), size: 3_000_000, duration: 75))))
-        #expect(video.file?.detail.hasPrefix("1:15 · ") == true)
+        #expect(video.file == nil && video.video?.duration == 75 && video.video?.caption == nil && !video.showsText)
         let noSource = vm.row(event(.media(MediaAttachment(kind: .file, body: "gone.bin", source: nil))))
         #expect(noSource.file == nil && noSource.text == "[File] gone.bin" && noSource.showsText)
         #expect(vm.row(event(.media(MediaAttachment(kind: .file, body: "README", source: MediaRef(token: "r"), mimeType: "text/plain")))).file?.detail == "PLAIN")
-        // A video's own still picture rides along; other kinds ignore one, and a video without one has none.
-        let still = vm.row(event(.media(MediaAttachment(kind: .video, body: "clip.mp4", source: MediaRef(token: "v"), width: 320, height: 240, thumbnail: MediaRef(token: "t")))))
-        #expect(still.file?.thumbnail?.ref == MediaRef(token: "t") && still.file?.thumbnail?.aspectRatio == 320.0 / 240.0)
-        #expect(video.file?.thumbnail == nil)
+        // A video's own still picture rides along with its portrait/landscape aspect ratio; files ignore one.
+        let still = vm.row(event(.media(MediaAttachment(kind: .video, body: "clip.mp4", source: MediaRef(token: "v"), width: 320, height: 240, thumbnail: MediaRef(token: "t"), caption: "Sunny day"))))
+        #expect(still.video?.thumbnail?.ref == MediaRef(token: "t") && still.video?.aspectRatio == 320.0 / 240.0 && still.video?.caption == "Sunny day")
+        #expect(video.video?.thumbnail == nil)
         #expect(vm.row(event(.media(MediaAttachment(kind: .file, body: "a.bin", source: MediaRef(token: "x"), thumbnail: MediaRef(token: "t"))))).file?.thumbnail == nil)
     }
 

@@ -206,7 +206,8 @@ public final class TimelineViewModel {
     public internal(set) var replyingTo: TimelineRow?
 
     public var canSend: Bool {
-        (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingPhotos.isEmpty) && !isSending && !isSendingImage
+        (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingPhotos.isEmpty || !pendingVideos.isEmpty)
+            && !isSending && !isSendingImage && !isSendingVideo
     }
 
     let coordinator: TimelineCoordinator
@@ -234,6 +235,7 @@ public final class TimelineViewModel {
     let receipts: ReadReceiptCoordinator?
     let drafts: DraftCoordinator?
     let imagePreparer: (any ImagePreparing)?
+    let videoPreparer: (any VideoPreparing)?
     let room: RoomID?
     let dwell: Duration
     let sleep: @Sendable (Duration) async throws -> Void
@@ -291,7 +293,7 @@ public final class TimelineViewModel {
     ///   - thumbnails: the pictures already shown, shared by the app's timelines; a model of its own when not given.
     public init(
         coordinator: TimelineCoordinator, media: MediaLoader? = nil, previewsAllowed: (@Sendable () async -> Bool)? = nil, receipts: ReadReceiptCoordinator? = nil, room: RoomID? = nil,
-        drafts: DraftCoordinator? = nil, images: (any ImagePreparing)? = nil, readThrough: (@Sendable () async -> Date?)? = nil, dwell: Duration = TimelineViewModel.seenDwell, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        drafts: DraftCoordinator? = nil, images: (any ImagePreparing)? = nil, videos: (any VideoPreparing)? = nil, readThrough: (@Sendable () async -> Date?)? = nil, dwell: Duration = TimelineViewModel.seenDwell, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
         locale: Locale = .current, timeZone: TimeZone = .current, thumbnails: TimelineThumbnailMemory? = nil,
         now: @escaping @Sendable () -> Date = { Date() },
         audioPlayer: AudioPlaybackController? = nil
@@ -305,6 +307,7 @@ public final class TimelineViewModel {
         self.room = room
         self.drafts = drafts
         self.imagePreparer = images
+        self.videoPreparer = videos
         self.readThrough = readThrough
         self.dwell = dwell
         self.sleep = sleep
@@ -498,6 +501,8 @@ public final class TimelineViewModel {
     /// Closes the timeline. Call when the screen disappears.
     public func stop() async {
         cancelOpenFile()
+        cancelOpenVideo()
+        removePendingVideos()
         audioPlayer.stop()
         observation?.cancel()
         observation = nil
@@ -664,9 +669,14 @@ public final class TimelineViewModel {
     var openFileTask: Task<Void, Never>?
     public internal(set) var openedFile: OpenedFile?
     public internal(set) var openingRow: String?
+    var openVideoTask: Task<Void, Never>?
+    public internal(set) var openedVideo: OpenedVideo?
+    public internal(set) var openingVideoRow: String?
     public internal(set) var openFileError: String?
     public internal(set) var editHistory: EditHistoryState?
     public internal(set) var isSendingImage = false
     public internal(set) var pendingPhotos: [OutgoingImage] = []
+    public internal(set) var isSendingVideo = false
+    public internal(set) var pendingVideos: [OutgoingFile] = []
     public internal(set) var isSendingFile = false
 }

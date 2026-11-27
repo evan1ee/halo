@@ -14,6 +14,14 @@ extension TimelineViewModel {
         public let url: URL
     }
 
+    /// A downloaded video clip on disk, played in `VideoPlayerSheet` (M20-3).
+    public struct OpenedVideo: Identifiable, Equatable {
+        public let id = UUID()
+        public let url: URL
+        public let title: String
+        public let caption: String?
+    }
+
     /// The id of the row whose file is downloading.
     /// A file is written to disk as it arrives (M19-5), so the limit is disk and patience, not memory.
     public nonisolated static let openSizeLimit = 300 * 1024 * 1024
@@ -26,6 +34,10 @@ extension TimelineViewModel {
             target = TimelineRow.FileTile(
                 kind: .audio, name: Self.audioFilename(from: audio.name, mimeType: audio.mimeType),
                 detail: "", ref: audio.ref, size: audio.size, thumbnail: nil)
+        } else if let video = row.video {
+            target = TimelineRow.FileTile(
+                kind: .video, name: VideoDisplayMetrics.videoFilename(from: video.filename, mimeType: video.mimeType),
+                detail: "", ref: video.ref, size: video.size, thumbnail: video.thumbnail)
         } else {
             target = nil
         }
@@ -96,6 +108,87 @@ extension TimelineViewModel {
         if let url = openedFile?.url { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         openedFile = nil
     }
+
+    // MARK: Full-screen video playback (MEDIA_ATTACHMENTS FR-2, M19-5, M20-3)
+
+    /// Streams a video attachment straight to disk and opens the full-screen native player (AC-MED-3).
+    public func openVideo(_ row: TimelineRow) async {
+        guard let video = row.video, media != nil, openingVideoRow == nil else { return }
+        openFileError = nil
+        if let size = video.size, size > Self.openSizeLimit {
+            openFileError = "This video is too large to open here yet (\(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)))."
+            return
+        }
+        audioPlayer.stop()
+        openingVideoRow = row.id
+        let rowID = row.id
+        let title = row.isOwn ? "You" : (row.sender ?? "Video")
+        let task = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                if self.openingVideoRow == rowID {
+                    self.openingVideoRow = nil
+                    self.openVideoTask = nil
+                }
+            }
+            do {
+                let url = try await self.downloadVideoToTemp(video)
+                if Task.isCancelled || self.openingVideoRow != rowID {
+                    try? FileManager.default.removeItem(at: url.deletingLastPathComponent())  // best-effort: cancelled download temp folder
+                    return
+                }
+                self.openedVideo = OpenedVideo(url: url, title: title, caption: video.caption)
+            } catch is CancellationError {
+                return
+            } catch HaloError.cancelled {
+                return
+            } catch {
+                guard !Task.isCancelled, self.openingVideoRow == rowID else { return }
+                self.openFileError = (error as? HaloError) == .network(retryable: true)
+                    ? "Can't reach the server. The video wasn't opened."
+                    : "The video couldn't be opened."
+            }
+        }
+        openVideoTask = task
+        await task.value
+    }
+
+    /// Cancels an in-flight video download (AC-MED-3); leaves no error and cleans up any temporary folder.
+    public func cancelOpenVideo() {
+        openVideoTask?.cancel()
+        openVideoTask = nil
+        openingVideoRow = nil
+    }
+
+    /// Full-screen video player was dismissed: deletes its temporary file copy.
+    public func closeVideo() {
+        if let url = openedVideo?.url { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        openedVideo = nil
+    }
+
+    /// Streams a video attachment straight to a temporary disk folder with a player-friendly file extension (M19-5, M20-3).
+    public func downloadVideoToTemp(_ video: TimelineRow.Video) async throws -> URL {
+        guard let media else { throw HaloError.notFound }
+        if let size = video.size, size > Self.openSizeLimit {
+            throw HaloError.invalidInput("Video exceeds the size limit")
+        }
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("halo-video-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let filename = VideoDisplayMetrics.videoFilename(from: video.filename, mimeType: video.mimeType)
+        do {
+            return try await media.file(video.ref, name: filename, mimeType: video.mimeType, in: directory)
+        } catch {
+            try? FileManager.default.removeItem(at: directory)  // best-effort: half-made temporary folder
+            throw error
+        }
+    }
+
+    /// Whether a video's inline poster is shown immediately (MEDIA_ATTACHMENTS FR-7).
+    public func showsPreview(of video: TimelineRow.Video) -> Bool { !previewsHidden || revealedPreviews.contains(video.ref) }
+
+    /// The user tapped a hidden video poster: it loads and stays shown while the room is open.
+    public func revealPreview(of video: TimelineRow.Video) { revealedPreviews.insert(video.ref) }
 
     // MARK: Inline audio and voice playback (MEDIA_ATTACHMENTS FR-3, M20-2)
 
@@ -203,7 +296,7 @@ extension TimelineViewModel {
     /// Sends the draft (MESSAGING FR-2). The message shows up in the timeline as a local echo.
     public func send() async {
         guard canSend else { return }
-        if !pendingPhotos.isEmpty { await sendPendingPhotos(); return }
+        if !pendingPhotos.isEmpty || !pendingVideos.isEmpty { await sendPendingMedia(); return }
         let text = draft
         isSending = true
         sendError = nil
@@ -278,6 +371,96 @@ extension TimelineViewModel {
 
     /// Drops all held photos; the typed text stays.
     public func removePendingPhoto() { pendingPhotos.removeAll() }
+
+    /// `true` when the composer can attach videos with poster + caption (M20-3).
+    public var canSendVideos: Bool { videoPreparer != nil }
+
+    /// Maximum number of videos that can be attached together in one batch.
+    public static let maxPendingVideos = 5
+
+    /// Stages a video file from Gallery or Files off the main actor (poster thumbnail, portrait/landscape dimensions, duration)
+    /// so the user can add a caption before sending (M20-3).
+    public func attachVideo(fileURL: URL, filename: String, mimeType: String) async {
+        guard let videoPreparer, !isSendingVideo, pendingVideos.count < Self.maxPendingVideos else { return }
+        isSendingVideo = true
+        sendError = nil
+        defer { isSendingVideo = false }
+        let stagedDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("halo-pending-video-\(UUID().uuidString)", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: stagedDir, withIntermediateDirectories: true)
+            let safeName = VideoDisplayMetrics.videoFilename(from: filename, mimeType: mimeType)
+            let stagedURL = stagedDir.appendingPathComponent(safeName)
+            try FileManager.default.copyItem(at: fileURL, to: stagedURL)
+            let prepared = try await videoPreparer.prepare(fileURL: stagedURL, filename: safeName, mimeType: mimeType)
+            pendingVideos.append(prepared)
+        } catch let error as HaloError {
+            try? FileManager.default.removeItem(at: stagedDir)
+            switch error {
+            case .invalidInput("FILE_TOO_LARGE"): sendError = "That video is too large to send."
+            case .invalidInput("EMPTY_FILE"): sendError = "That video is empty."
+            default: sendError = "That video couldn't be prepared."
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: stagedDir)
+            sendError = "That video couldn't be read."
+        }
+    }
+
+    /// Drops one pending video at `index` and deletes its staged temporary copy.
+    public func removePendingVideo(at index: Int) {
+        guard pendingVideos.indices.contains(index) else { return }
+        let removed = pendingVideos.remove(at: index)
+        Self.cleanUpStagedVideo(removed)
+    }
+
+    /// Drops all pending videos and deletes their staged temporary copies.
+    public func removePendingVideos() {
+        let items = pendingVideos
+        pendingVideos.removeAll()
+        for item in items { Self.cleanUpStagedVideo(item) }
+    }
+
+    private static func cleanUpStagedVideo(_ video: OutgoingFile) {
+        guard let url = video.fileURL else { return }
+        let dir = url.deletingLastPathComponent()
+        if dir.lastPathComponent.hasPrefix("halo-pending-video-") {
+            try? FileManager.default.removeItem(at: dir)
+        }
+    }
+
+    /// Sends all pending photos and videos in order, attaching the composer text as the first item's caption.
+    func sendPendingMedia() async {
+        if !pendingPhotos.isEmpty {
+            await sendPendingPhotos()
+            guard sendError == nil else { return }
+        }
+        guard !pendingVideos.isEmpty else { return }
+        isSendingVideo = true
+        sendError = nil
+        defer { isSendingVideo = false }
+        var caption: String? = {
+            let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }()
+        while let video = pendingVideos.first {
+            let outgoing = video.with(caption: caption)
+            do {
+                try await coordinator.sendFile(outgoing)
+                pendingVideos.removeFirst()
+                Self.cleanUpStagedVideo(video)
+                if caption != nil {
+                    caption = nil
+                    draft = ""
+                }
+            } catch {
+                sendError = error == .network(retryable: true)
+                    ? "Can't reach the server. The video wasn't sent."
+                    : "The video couldn't be sent."
+                return
+            }
+        }
+    }
 
     /// Sends all held photos in order, attaching the composer text as the first photo's caption.
     /// Removes each photo as it succeeds so a mid-batch failure keeps only the unsent photos.
@@ -374,6 +557,7 @@ extension TimelineViewModel {
             if let row = byEvent[id] {
                 let preview: String
                 if let location = row.location { preview = location.title }
+                else if let video = row.video { preview = video.caption ?? "Video" }
                 else if let audio = row.audio { preview = audio.isVoice ? "Voice message" : audio.name }
                 else if let file = row.file { preview = file.name }
                 else if row.isSticker { preview = "Sticker" }
