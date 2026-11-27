@@ -359,6 +359,22 @@ extension TimelineViewModel {
                             duration: attachment.duration, isVoice: attachment.isVoice, waveform: attachment.waveform),
                         source: plainSource(event, attachment.body))
                 }
+                if attachment.kind == .video, let source = attachment.source {
+                    let ratio = VideoDisplayMetrics.aspectRatio(width: attachment.width, height: attachment.height)
+                    let caption = VideoDisplayMetrics.caption(body: attachment.body, explicitCaption: attachment.caption)
+                    let label = caption.map { "[Video] \($0)" } ?? "[Video] \(attachment.body)"
+                    let poster: TimelineRow.Image? = attachment.thumbnail.map {
+                        .init(ref: $0, aspectRatio: ratio, blurhash: attachment.blurhash, isOwn: event.isOwn)
+                    }
+                    return TimelineRow(
+                        id: id, style: style, sender: name, text: label, eventID: event.eventID, isOwn: event.isOwn,
+                        reactions: Self.chips(event.reactions),
+                        video: .init(
+                            ref: source, filename: attachment.body, caption: caption, mimeType: attachment.mimeType,
+                            size: attachment.size, duration: attachment.duration, aspectRatio: ratio,
+                            thumbnail: poster, blurhash: attachment.blurhash, isOwn: event.isOwn),
+                        source: plainSource(event, attachment.body))
+                }
                 let label = "[\(Self.label(attachment.kind))] \(attachment.body)"
                 guard let source = attachment.source else { return TimelineRow(id: id, style: style, sender: name, text: label) }
                 return TimelineRow(

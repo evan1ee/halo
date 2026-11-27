@@ -32,7 +32,10 @@ struct InteropTests {
         try await timeline.sendFile(OutgoingFile(
             data: Data(count: 64), filename: "voice.m4a", mimeType: "audio/mp4",
             duration: 2.5, waveform: [0.0, 0.5, 1.0], isVoiceMessage: true))
-        try await timeline.sendFile(OutgoingFile(data: Data(count: 64), filename: "clip.mp4", mimeType: "video/mp4"))
+        try await timeline.sendFile(OutgoingFile(
+            data: Data(count: 64), filename: "clip.mp4", mimeType: "video/mp4",
+            duration: 4.0, width: 1080, height: 1920, caption: "Portrait clip",
+            thumbnail: OutgoingImage.Thumbnail(data: png, mimeType: "image/png", width: 1, height: 1)))
         try await timeline.sendLocation(OutgoingLocation(latitude: 52.5, longitude: 13.4, isOwnLocation: false))
         try await timeline.createPoll(OutgoingPoll(question: "Lunch?", answers: ["Yes", "No"]))
         let uri = try await stage.peer.upload(png, type: "image/png")
@@ -90,7 +93,11 @@ struct InteropTests {
         let mscAudio = try #require(voice["org.matrix.msc1767.audio"] as? [String: Any])
         #expect(mscAudio["duration"] as? Int == 2500)
         #expect((mscAudio["waveform"] as? [Int])?.count == 3)
-        #expect(try message("clip.mp4")["msgtype"] as? String == "m.video")
+        let video = try message("Portrait clip")
+        #expect(video["msgtype"] as? String == "m.video")
+        #expect(video["filename"] as? String == "clip.mp4")
+        #expect(info(video)["w"] as? Int == 1080 && info(video)["h"] as? Int == 1920 && info(video)["duration"] as? Int == 4000)
+        #expect((info(video)["thumbnail_url"] as? String)?.hasPrefix("mxc://") == true)
         let location = try #require(events.compactMap(contents).first(where: { $0["msgtype"] as? String == "m.location" }))
         #expect((location["geo_uri"] as? String)?.hasPrefix("geo:52.5,13.4") == true)
         let pollEvent = try #require(events.first(where: { ($0["type"] as? String)?.hasSuffix("poll.start") == true }))
@@ -185,9 +192,9 @@ struct InteropTests {
             ]) { media($0, .image) != nil },
             Incoming(name: "image without info", content: ["msgtype": "m.image", "body": "bare.png", "url": uri]) { media($0, .image) != nil },
             Incoming(name: "video", content: [
-                "msgtype": "m.video", "body": "v.mp4", "url": uri,
+                "msgtype": "m.video", "body": "Beach clip", "filename": "v.mp4", "url": uri,
                 "info": ["mimetype": "video/mp4", "w": 320, "h": 240, "duration": 2500, "thumbnail_url": uri, "thumbnail_info": ["mimetype": "image/png"]]
-            ]) { media($0, .video)?.duration == 2.5 && media($0, .video)?.thumbnail != nil },
+            ]) { media($0, .video)?.duration == 2.5 && media($0, .video)?.thumbnail != nil && media($0, .video)?.caption == "Beach clip" },
             Incoming(name: "audio", content: [
                 "msgtype": "m.audio", "body": "a.ogg", "url": uri, "info": ["mimetype": "audio/ogg", "duration": 1500]
             ]) { media($0, .audio)?.duration == 1.5 },

@@ -200,11 +200,13 @@ public struct MediaAttachment: Sendable, Equatable {
     public let isVoice: Bool
     /// Normalised `[0, 1]` amplitude samples from MSC1767 `org.matrix.msc1767.audio.waveform`, when provided by the sender.
     public let waveform: [Float]?
+    /// Optional explicit caption when distinct from filename (MSC2530, M20-3).
+    public let caption: String?
 
     public init(
         kind: MediaKind, body: String, source: MediaRef?, width: Int? = nil, height: Int? = nil,
         mimeType: String? = nil, size: Int? = nil, duration: TimeInterval? = nil, thumbnail: MediaRef? = nil,
-        blurhash: String? = nil, isVoice: Bool = false, waveform: [Float]? = nil
+        blurhash: String? = nil, isVoice: Bool = false, waveform: [Float]? = nil, caption: String? = nil
     ) {
         self.blurhash = blurhash
         self.thumbnail = thumbnail
@@ -218,6 +220,7 @@ public struct MediaAttachment: Sendable, Equatable {
         self.duration = duration
         self.isVoice = isVoice
         self.waveform = waveform
+        self.caption = caption
     }
 }
 

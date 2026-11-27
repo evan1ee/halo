@@ -110,6 +110,17 @@ struct RowView: View {
                                     isOwn: row.style == .ownMessage
                                 )
                             }
+                            if let video = row.video {
+                                VideoPosterView(
+                                    row: row,
+                                    video: video,
+                                    isOpening: model.openingVideoRow == row.id,
+                                    model: model,
+                                    isOwn: row.style == .ownMessage,
+                                    open: { Task { await model.openVideo(row) } },
+                                    cancel: { model.cancelOpenVideo() }
+                                )
+                            }
                             if let location = row.location {
                                 LocationCardView(location: location, isOwn: row.style == .ownMessage)
                                     .opacity(row.status == nil ? 1 : 0.6)
@@ -292,6 +303,7 @@ private struct MessageActionsSheet: View {
 
     private var previewText: String {
         if let location = row.location { return location.title }
+        if let video = row.video { return video.caption ?? "Video" }
         if let audio = row.audio { return audio.isVoice ? "Voice message" : audio.name }
         if let file = row.file { return file.name }
         if row.isSticker { return "Sticker" }
@@ -373,14 +385,15 @@ private struct MessageActionsSheet: View {
                             }
                         }
                         #if canImport(UIKit)
-                        if row.file == nil, row.audio == nil, !row.isSticker, let text = row.source?.body ?? (row.showsText ? row.text : nil) {
+                        if row.file == nil, row.audio == nil, !row.isSticker,
+                           let text = row.video?.caption ?? (row.video == nil ? (row.source?.body ?? (row.showsText ? row.text : nil)) : nil) {
                             actionRow("Copy", systemImage: "doc.on.doc") {
                                 UIPasteboard.general.string = text
                                 dismiss()
                             }
                         }
                         #endif
-                        if row.audio != nil {
+                        if row.audio != nil || row.video != nil {
                             actionRow("Open file", systemImage: "square.and.arrow.up") {
                                 dismiss()
                                 Task { await model.openFile(row) }

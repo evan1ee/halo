@@ -53,10 +53,12 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     public var canSendAnyway = false
     /// A sticker: its image is shown without a bubble or caption (`text` is the accessibility label).
     public let isSticker: Bool
-    /// A file or video attachment, shown as a tile that opens in Quick Look (MEDIA_ATTACHMENTS FR-2, FR-4).
+    /// A file attachment, shown as a tile that opens in Quick Look (MEDIA_ATTACHMENTS FR-4).
     public let file: FileTile?
     /// An audio file or voice message, played inline in the bubble (MEDIA_ATTACHMENTS FR-3, M20-2).
     public let audio: Audio?
+    /// A video attachment, shown as an inline poster that opens the full-screen player (MEDIA_ATTACHMENTS FR-2, M20-3).
+    public let video: Video?
     /// A shared location (`m.location`), shown as a static map snapshot card that opens in Apple Maps.
     public let location: Location?
 
@@ -142,6 +144,36 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
         }
     }
 
+    public struct Video: Equatable, Sendable {
+        public let ref: MediaRef
+        public let filename: String
+        public let caption: String?
+        public let mimeType: String?
+        public let size: Int?
+        public let duration: TimeInterval?
+        public let aspectRatio: Double
+        public let thumbnail: Image?
+        public let blurhash: String?
+        public let isOwn: Bool
+
+        public init(
+            ref: MediaRef, filename: String, caption: String? = nil, mimeType: String? = nil,
+            size: Int? = nil, duration: TimeInterval? = nil, aspectRatio: Double = VideoDisplayMetrics.defaultAspectRatio,
+            thumbnail: Image? = nil, blurhash: String? = nil, isOwn: Bool = false
+        ) {
+            self.ref = ref
+            self.filename = filename
+            self.caption = caption
+            self.mimeType = mimeType
+            self.size = size
+            self.duration = duration
+            self.aspectRatio = aspectRatio
+            self.thumbnail = thumbnail
+            self.blurhash = blurhash
+            self.isOwn = isOwn
+        }
+    }
+
     public struct Location: Equatable, Sendable {
         public let latitude: Double
         public let longitude: Double
@@ -158,13 +190,13 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
         }
     }
 
-    /// Whether the row shows its `text` in a bubble. A sticker never does, nor does a file tile, audio bubble or location card, and neither does an image whose
+    /// Whether the row shows its `text` in a bubble. A sticker never does, nor does a file tile, audio bubble, video poster or location card, and neither does an image whose
     /// body is just its file name ("photo.jpg", which clients put in `body` when there is no caption); a real caption is shown.
-    public var showsText: Bool { !isSticker && file == nil && audio == nil && location == nil && !(image != nil && Self.looksLikeFilename(text)) }
+    public var showsText: Bool { !isSticker && file == nil && audio == nil && video == nil && location == nil && !(image != nil && Self.looksLikeFilename(text)) }
 
     /// Whether a plain text message consists solely of 1–3 native Unicode emoji and renders jumbo-sized without a bubble fill.
     public var isJumboEmoji: Bool {
-        showsText && image == nil && file == nil && audio == nil && location == nil && card == nil && NativeEmoji.isEmojiOnly(text, maxCount: 3)
+        showsText && image == nil && file == nil && audio == nil && video == nil && location == nil && card == nil && NativeEmoji.isEmojiOnly(text, maxCount: 3)
     }
 
     /// The KLIPY GIF or sticker this message is, when its whole text is one KLIPY media link (COMPOSER_PANELS §6, D98).
@@ -173,8 +205,8 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
         return KlipyLink.mediaURL(in: text)
     }
 
-    /// Whether the user can edit this row's text (own confirmed text message; never photos, files, audio, locations or stickers).
-    public var canEdit: Bool { isOwn && style == .ownMessage && eventID != nil && image == nil && file == nil && audio == nil && location == nil && !isSticker }
+    /// Whether the user can edit this row's text (own confirmed text message; never photos, files, audio, video, locations or stickers).
+    public var canEdit: Bool { isOwn && style == .ownMessage && eventID != nil && image == nil && file == nil && audio == nil && video == nil && location == nil && !isSticker }
 
     static func looksLikeFilename(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -224,11 +256,12 @@ public struct TimelineRow: Equatable, Identifiable, Sendable {
     init(
         id: String, style: Style, sender: String?, text: String, image: Image? = nil, status: String? = nil,
         eventID: EventID? = nil, isOwn: Bool = false, reactions: [Chip] = [], reply: Reply? = nil, styled: AttributedString? = nil,
-        failedLocalID: String? = nil, isSticker: Bool = false, file: FileTile? = nil, audio: Audio? = nil, location: Location? = nil, source: Source? = nil, card: BotCard? = nil
+        failedLocalID: String? = nil, isSticker: Bool = false, file: FileTile? = nil, audio: Audio? = nil, video: Video? = nil, location: Location? = nil, source: Source? = nil, card: BotCard? = nil
     ) {
         self.card = card
         self.source = source
         self.location = location
+        self.video = video
         self.audio = audio
         self.file = file
         self.failedLocalID = failedLocalID

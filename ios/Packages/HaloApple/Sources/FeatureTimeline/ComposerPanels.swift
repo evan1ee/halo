@@ -6,6 +6,7 @@ import MapKit
 import PhotosUI
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 /// The panel under the composer: the expression panel (GIFs · Stickers · Emoji) or attachments
 /// (docs/features/COMPOSER_PANELS.md §4–§7). Panels never touch the composer: they insert or send through the view model.
@@ -254,40 +255,64 @@ struct AttachmentPanel: View {
     }
 }
 
-/// An inline, privacy-preserving system Photos picker (no photo-library permission needed); checked photos join the
-/// composer's pending strip, unchecked ones leave it.
+/// Streams a picked Photos video straight to a temporary disk file without loading it into memory (M19-5, M20-3).
+private struct PickedVideoFile: Transferable {
+    let url: URL
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(importedContentType: .movie) { received in
+            let dir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("halo-picked-video-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let dest = dir.appendingPathComponent(received.file.lastPathComponent)
+            try FileManager.default.copyItem(at: received.file, to: dest)
+            return Self(url: dest)
+        }
+    }
+}
+
+/// An inline, privacy-preserving system Photos picker (no photo-library permission needed); checked photos and videos
+/// join the composer's pending strip (with captions on send, M20-3), unchecked ones leave it.
 private struct GalleryTab: View {
+    private struct AttachedItem: Equatable {
+        let id: String
+        let isVideo: Bool
+    }
+
     let model: TimelineViewModel
     @State private var selection: [PhotosPickerItem] = []
-    /// Picker item identifiers in the order their photos were attached, to mirror deselection.
-    @State private var attached: [String] = []
+    /// Picker item identifiers in the order their items were attached, to mirror deselection.
+    @State private var attached: [AttachedItem] = []
 
-    private var remaining: Int { max(1, TimelineViewModel.maxPendingPhotos - model.pendingPhotos.count + attached.count) }
+    private var remaining: Int {
+        let totalPending = model.pendingPhotos.count + model.pendingVideos.count
+        return max(1, TimelineViewModel.maxPendingPhotos - totalPending + attached.count)
+    }
 
     var body: some View {
         Group {
-            if model.canSendImages {
+            if model.canSendImages || model.canSendVideos {
                 PhotosPicker(
                     selection: $selection,
                     maxSelectionCount: remaining,
                     selectionBehavior: .continuousAndOrdered,
-                    matching: .images,
+                    matching: model.canSendVideos ? .any(of: [.images, .videos]) : .images,
                     preferredItemEncoding: .current,
                     photoLibrary: .shared()
                 ) {
-                    Text("Photos")
+                    Text("Photos & Videos")
                 }
                 .photosPickerStyle(.inline)
                 .photosPickerDisabledCapabilities([.stagingArea, .selectionActions])
                 .photosPickerAccessoryVisibility(.hidden, edges: .all)
                 .accessibilityIdentifier("photo-button")
             } else {
-                ContentUnavailableView("Photos can't be sent here", systemImage: "photo.badge.exclamationmark")
+                ContentUnavailableView("Media can't be sent here", systemImage: "photo.badge.exclamationmark")
             }
         }
         .onChange(of: selection) { _, new in Task { await sync(to: new) } }
-        .onChange(of: model.pendingPhotos.count) { _, count in
-            // Sent, or a photo removed from the strip: the picker's checkmarks can no longer be matched, so they reset.
+        .onChange(of: model.pendingPhotos.count + model.pendingVideos.count) { _, count in
+            // Sent, or an item removed from the strip: the picker's checkmarks can no longer be matched, so they reset.
             if count < attached.count {
                 attached = []
                 selection = []
@@ -295,23 +320,41 @@ private struct GalleryTab: View {
         }
     }
 
-    /// Mirrors the picker's selection into the pending photos: newly checked photos are prepared and attached in order,
-    /// unchecked ones are removed again.
+    /// Mirrors the picker's selection into pending photos and videos: newly checked items are prepared and attached
+    /// in order, unchecked ones are removed again.
     private func sync(to new: [PhotosPickerItem]) async {
-        let newIDs = new.compactMap(\.itemIdentifier)
-        // Picked photos sit after any attached another way (pasted, dropped), in the order they were picked.
-        let base = max(0, model.pendingPhotos.count - attached.count)
-        for (offset, id) in attached.enumerated().reversed() where !newIDs.contains(id) {
-            model.removePendingPhoto(at: base + offset)
-            attached.remove(at: offset)
+        let newIDs = Set(new.enumerated().map { index, item in item.itemIdentifier ?? "item-\(index)" })
+        // Remove any unchecked photos/videos from the end of their respective pending strips.
+        let attachedPhotos = attached.filter { !$0.isVideo }
+        let photoBase = max(0, model.pendingPhotos.count - attachedPhotos.count)
+        for (offset, entry) in attachedPhotos.enumerated().reversed() where !newIDs.contains(entry.id) {
+            model.removePendingPhoto(at: photoBase + offset)
         }
+        let attachedVideos = attached.filter(\.isVideo)
+        let videoBase = max(0, model.pendingVideos.count - attachedVideos.count)
+        for (offset, entry) in attachedVideos.enumerated().reversed() where !newIDs.contains(entry.id) {
+            model.removePendingVideo(at: videoBase + offset)
+        }
+        attached.removeAll { !newIDs.contains($0.id) }
+
         for (index, item) in new.enumerated() {
             let id = item.itemIdentifier ?? "item-\(index)"
-            guard !attached.contains(id) else { continue }
-            guard let data = try? await item.loadTransferable(type: Data.self) else { continue }  // best-effort: an item the picker can't read is skipped
-            let before = model.pendingPhotos.count
-            await model.attachPhoto(data: data, filename: id.components(separatedBy: "/").first ?? "photo")
-            if model.pendingPhotos.count > before { attached.append(id) }
+            guard !attached.contains(where: { $0.id == id }) else { continue }
+            let isVideo = model.canSendVideos && item.supportedContentTypes.contains(where: { $0.conforms(to: .movie) })
+            if isVideo {
+                guard let picked = try? await item.loadTransferable(type: PickedVideoFile.self) else { continue }  // best-effort: an unreadable picker item is skipped
+                defer { try? FileManager.default.removeItem(at: picked.url.deletingLastPathComponent()) }
+                let ext = picked.url.pathExtension
+                let mime = UTType(filenameExtension: ext)?.preferredMIMEType ?? "video/mp4"
+                let before = model.pendingVideos.count
+                await model.attachVideo(fileURL: picked.url, filename: picked.url.lastPathComponent, mimeType: mime)
+                if model.pendingVideos.count > before { attached.append(AttachedItem(id: id, isVideo: true)) }
+            } else {
+                guard let data = try? await item.loadTransferable(type: Data.self) else { continue }  // best-effort: an item the picker can't read is skipped
+                let before = model.pendingPhotos.count
+                await model.attachPhoto(data: data, filename: id.components(separatedBy: "/").first ?? "photo")
+                if model.pendingPhotos.count > before { attached.append(AttachedItem(id: id, isVideo: false)) }
+            }
         }
     }
 }

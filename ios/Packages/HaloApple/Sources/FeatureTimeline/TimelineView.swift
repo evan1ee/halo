@@ -166,9 +166,9 @@ public struct TimelineView: View {
                             .onScrollVisibilityChange(threshold: 0.5) { model.rowVisibility(row, isVisible: $0) }
                             .onDisappear { model.rowVisibility(row, isVisible: false) }
                             .listRowSeparator(.hidden, edges: .all)
-                            // Messages of one group sit close together; a new sender or a gap gets more room above. Stickers and
-                            // photos have no bubble to separate them, so they keep a small gap even inside a group.
-                            .listRowInsets(EdgeInsets(top: row.continuesRun ? (row.isSticker || row.image != nil ? 4 : 1) : 8, leading: 16, bottom: 1, trailing: 16))
+                            // Messages of one group sit close together; a new sender or a gap gets more room above. Stickers,
+                            // photos and videos have no bubble to separate them, so they keep a small gap even inside a group.
+                            .listRowInsets(EdgeInsets(top: row.continuesRun ? (row.isSticker || row.image != nil || row.video != nil ? 4 : 1) : 8, leading: 16, bottom: 1, trailing: 16))
                     }
                 }
                 .listStyle(.plain)
@@ -528,9 +528,19 @@ public struct TimelineView: View {
         .fullScreenCover(item: $viewerPhoto) { photo in
             photoViewer(initial: photo)
         }
+        .fullScreenCover(item: Binding(get: { model.openedVideo }, set: { if $0 == nil { model.closeVideo() } })) { video in
+            VideoPlayerSheet(fileURL: video.url, title: video.title, caption: video.caption) {
+                model.closeVideo()
+            }
+        }
         #else
         .sheet(item: $viewerPhoto) { photo in
             photoViewer(initial: photo)
+        }
+        .sheet(item: Binding(get: { model.openedVideo }, set: { if $0 == nil { model.closeVideo() } })) { video in
+            VideoPlayerSheet(fileURL: video.url, title: video.title, caption: video.caption) {
+                model.closeVideo()
+            }
         }
         #endif
         .overlay(alignment: .top) {

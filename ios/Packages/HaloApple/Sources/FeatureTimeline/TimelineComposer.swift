@@ -22,8 +22,8 @@ struct Composer: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var hasAccessoryRows: Bool {
-        model.typingText != nil || !model.identityNotices.isEmpty || model.sendError != nil || model.isSendingImage || model.isSendingFile || model.editing != nil
-            || model.replyingTo != nil || !model.mentionSuggestions.isEmpty || !model.emojiSuggestions.isEmpty || !model.pendingPhotos.isEmpty
+        model.typingText != nil || !model.identityNotices.isEmpty || model.sendError != nil || model.isSendingImage || model.isSendingVideo || model.isSendingFile || model.editing != nil
+            || model.replyingTo != nil || !model.mentionSuggestions.isEmpty || !model.emojiSuggestions.isEmpty || !model.pendingPhotos.isEmpty || !model.pendingVideos.isEmpty
     }
 
     var body: some View {
@@ -210,6 +210,7 @@ struct Composer: View {
                 }
             }
             if model.isSendingImage { ProgressView("Sending photo…").font(HaloTypography.caption) }
+            if model.isSendingVideo { ProgressView("Preparing video…").font(HaloTypography.caption) }
             if model.isSendingFile { ProgressView("Sending file…").font(HaloTypography.caption) }
             if model.editing != nil {
                 HStack {
@@ -256,6 +257,66 @@ struct Composer: View {
                 }
             }
             if !model.pendingPhotos.isEmpty { pendingPhotoStrip }
+            if !model.pendingVideos.isEmpty { pendingVideoStrip }
+        }
+    }
+
+    private var pendingVideoStrip: some View {
+        VStack(alignment: .leading, spacing: HaloSpacing.xs) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: HaloSpacing.s) {
+                    ForEach(Array(model.pendingVideos.enumerated()), id: \.offset) { index, video in
+                        ZStack(alignment: .topTrailing) {
+                            ZStack(alignment: .bottomTrailing) {
+                                #if canImport(UIKit)
+                                if let thumb = video.thumbnail {
+                                    DecodedImage(thumb.data, maxPixel: ImagePipeline.Size.listRow) { image in
+                                        image.resizable().scaledToFill()
+                                            .frame(width: 56, height: 56)
+                                            .clipShape(.rect(cornerRadius: HaloRadius.small, style: .continuous))
+                                    } placeholder: {
+                                        RoundedRectangle(cornerRadius: HaloRadius.small, style: .continuous)
+                                            .fill(HaloColor.mediaBackdrop)
+                                            .frame(width: 56, height: 56)
+                                    }
+                                } else {
+                                    RoundedRectangle(cornerRadius: HaloRadius.small, style: .continuous)
+                                        .fill(HaloColor.mediaBackdrop)
+                                        .frame(width: 56, height: 56)
+                                        .overlay {
+                                            Image(systemName: "video.fill")
+                                                .foregroundStyle(HaloColor.mediaOverlayForeground)
+                                        }
+                                }
+                                #endif
+                                if let duration = video.duration, duration > 0 {
+                                    Text(AudioPlaybackMath.formatTime(duration))
+                                        .font(HaloTypography.caption.monospacedDigit())
+                                        .foregroundStyle(HaloColor.mediaOverlayForeground)
+                                        .padding(.horizontal, HaloSpacing.xxs)
+                                        .background(HaloColor.mediaOverlayBackground, in: .capsule)
+                                        .padding(2)
+                                }
+                            }
+                            Button { model.removePendingVideo(at: index) } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(HaloTypography.caption)
+                                    .symbolRenderingMode(.palette)
+                                    .foregroundStyle(HaloColor.mediaOverlayForeground, HaloColor.mediaOverlayBackground)
+                            }
+                            .offset(x: 4, y: -4)
+                            .accessibilityLabel("Remove video")
+                            .accessibilityIdentifier("remove-video")
+                        }
+                        .padding(.top, HaloSpacing.xs)
+                    }
+                }
+                .padding(.horizontal, HaloSpacing.xs)
+            }
+            Text(model.pendingVideos.count == 1
+                 ? "Video ready. Add a caption below, or send as is."
+                 : "\(model.pendingVideos.count) videos ready. Add a caption below, or send as is.")
+                .font(HaloTypography.caption).foregroundStyle(HaloColor.textSecondary)
         }
     }
 
@@ -294,14 +355,21 @@ struct Composer: View {
         }
     }
 
-    /// Reads a file picked in Files (inside its security scope, size checked before reading) and sends it as is.
+    /// Reads a file picked in Files (inside its security scope, size checked before reading). Videos are staged
+    /// from disk so the user can add a caption and send a poster thumbnail (M20-3); other files send as is.
     static func sendPickedFile(_ url: URL, model: TimelineViewModel) async {
         let opened = url.startAccessingSecurityScopedResource()
         defer { if opened { url.stopAccessingSecurityScopedResource() } }
         let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         guard size <= OutgoingFile.maximumBytes else { model.reportFileTooLarge(); return }
-        guard let data = try? Data(contentsOf: url) else { model.reportFileUnreadable(); return }
         let type = UTType(filenameExtension: url.pathExtension)
+        if type?.conforms(to: .movie) == true, model.canSendVideos {
+            await model.attachVideo(
+                fileURL: url, filename: url.lastPathComponent,
+                mimeType: type?.preferredMIMEType ?? "video/mp4")
+            return
+        }
+        guard let data = try? Data(contentsOf: url) else { model.reportFileUnreadable(); return }
         await model.sendFile(data: data, filename: url.lastPathComponent, mimeType: type?.preferredMIMEType ?? "application/octet-stream")
     }
 }

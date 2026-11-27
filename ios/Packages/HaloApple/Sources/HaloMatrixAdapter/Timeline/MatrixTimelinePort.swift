@@ -419,9 +419,10 @@ final class MatrixTimelineSession: TimelineSession {
 
     func sendFile(_ file: OutgoingFile) async throws(HaloError) {
         try file.validate()
+        let uploadSource: UploadSource = file.fileURL.map { .file(filename: $0.path) } ?? .data(bytes: file.data, filename: file.filename)
         let params = UploadParameters(
-            source: .data(bytes: file.data, filename: file.filename), caption: nil, formattedCaption: nil, mentions: nil, inReplyTo: nil)
-        let size = UInt64(file.data.count)
+            source: uploadSource, caption: file.caption, formattedCaption: nil, mentions: nil, inReplyTo: nil)
+        let size = UInt64(file.byteCount)
         do {
             let handle: SendAttachmentJoinHandle
             switch file.kind {
@@ -433,13 +434,20 @@ final class MatrixTimelineSession: TimelineSession {
                     handle = try timeline.sendAttachment(params: params, attachment: .audio(audioInfo: audioInfo))
                 }
             case .video:
+                let thumbInfo = file.thumbnail.map {
+                    ThumbnailInfo(height: UInt64($0.height), width: UInt64($0.width), mimetype: $0.mimeType, size: UInt64($0.data.count))
+                }
+                let thumbSource = file.thumbnail.map {
+                    UploadSource.data(bytes: $0.data, filename: "thumb-\(file.filename).jpg")
+                }
                 handle = try timeline.sendAttachment(
                     params: params,
                     attachment: .video(
                         videoInfo: VideoInfo(
-                            duration: file.duration, height: nil, width: nil, mimetype: file.mimeType, size: size,
-                            thumbnailInfo: nil, thumbnailSource: nil, blurhash: nil),
-                        thumbnailSource: nil))
+                            duration: file.duration, height: file.height.map(UInt64.init), width: file.width.map(UInt64.init),
+                            mimetype: file.mimeType, size: size,
+                            thumbnailInfo: thumbInfo, thumbnailSource: nil, blurhash: nil),
+                        thumbnailSource: thumbSource))
             case .file:
                 handle = try timeline.sendAttachment(
                     params: params,
