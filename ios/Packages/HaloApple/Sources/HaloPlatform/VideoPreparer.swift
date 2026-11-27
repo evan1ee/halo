@@ -6,10 +6,11 @@ import HaloFoundation
 import ImageIO
 import UniformTypeIdentifiers
 
-/// `VideoPreparing` over `AVFoundation` and `ImageIO` (MEDIA_ATTACHMENTS FR-2, M20-3).
+/// `VideoPreparing` over `AVFoundation` and `ImageIO` (MEDIA_ATTACHMENTS FR-2, D56, M20-3, M20-5).
 ///
 /// Reads display-oriented dimensions (applying track rotation so portrait videos stay portrait), duration,
-/// and a 600 px JPEG poster frame without loading the video file into memory.
+/// strips GPS/location metadata losslessly via passthrough export when present (D56), and creates a 600 px
+/// JPEG poster frame without loading the video file into memory.
 public struct VideoPreparer: VideoPreparing {
     public let thumbnailDimension: Int
     public let jpegQuality: Double
@@ -25,7 +26,12 @@ public struct VideoPreparer: VideoPreparing {
         guard size <= OutgoingFile.maximumBytes else { throw .invalidInput("FILE_TOO_LARGE") }
 
         let safeName = VideoDisplayMetrics.videoFilename(from: filename, mimeType: mimeType)
-        let asset = AVURLAsset(url: fileURL)
+        let sourceAsset = AVURLAsset(url: fileURL)
+
+        let cleanURL = try await stripLocationMetadataIfNeeded(
+            from: sourceAsset, sourceURL: fileURL, safeName: safeName, mimeType: mimeType
+        )
+        let asset = cleanURL == fileURL ? sourceAsset : AVURLAsset(url: cleanURL)
 
         let rawDuration = try? await asset.load(.duration)  // best-effort: duration is optional metadata
         let durationSeconds: TimeInterval? = rawDuration.flatMap { cmTime in
@@ -53,7 +59,7 @@ public struct VideoPreparer: VideoPreparing {
             filename: safeName,
             mimeType: mimeType,
             duration: durationSeconds,
-            fileURL: fileURL,
+            fileURL: cleanURL,
             width: pixelWidth,
             height: pixelHeight,
             caption: nil,
@@ -61,6 +67,79 @@ public struct VideoPreparer: VideoPreparing {
         )
         try outgoing.validate()
         return outgoing
+    }
+
+    /// Returns `true` when the container carries any GPS/location metadata item (D56).
+    public static func hasLocationMetadata(in asset: AVURLAsset) async -> Bool {
+        let allItems = (try? await asset.load(.metadata)) ?? []  // best-effort: unreadable metadata treated as empty
+        let commonItems = (try? await asset.load(.commonMetadata)) ?? []  // best-effort: unreadable metadata treated as empty
+        let combined = allItems + commonItems
+        if !AVMetadataItem.metadataItems(from: combined, filteredByIdentifier: .commonIdentifierLocation).isEmpty {
+            return true
+        }
+        if !AVMetadataItem.metadataItems(from: combined, filteredByIdentifier: .quickTimeMetadataLocationISO6709).isEmpty {
+            return true
+        }
+        if !AVMetadataItem.metadataItems(from: combined, filteredByIdentifier: .quickTimeUserDataLocationISO6709).isEmpty {
+            return true
+        }
+        return combined.contains { item in
+            let id = item.identifier?.rawValue.lowercased() ?? ""
+            let key = item.commonKey?.rawValue.lowercased() ?? ""
+            return id.contains("location") || id.contains("gps") || id.contains("xyz") || key.contains("location")
+        }
+    }
+
+    /// Strips location metadata losslessly using `AVMetadataItemFilter.forSharing()` without re-encoding video frames (D56).
+    /// Fails closed if location metadata is present and cannot be removed.
+    private func stripLocationMetadataIfNeeded(
+        from asset: AVURLAsset, sourceURL: URL, safeName: String, mimeType: String
+    ) async throws(HaloError) -> URL {
+        guard await Self.hasLocationMetadata(in: asset) else { return sourceURL }
+
+        guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetPassthrough) else {
+            throw .internal(code: "VIDEO_METADATA_STRIP_FAILED")
+        }
+
+        let ext = (safeName as NSString).pathExtension.lowercased()
+        let preferredType: AVFileType = (ext == "mov" || mimeType == "video/quicktime") ? .mov : .mp4
+        let compatible = export.supportedFileTypes
+        let outputType: AVFileType
+        if compatible.contains(preferredType) {
+            outputType = preferredType
+        } else if compatible.contains(.mp4) {
+            outputType = .mp4
+        } else if compatible.contains(.mov) {
+            outputType = .mov
+        } else if let first = compatible.first {
+            outputType = first
+        } else {
+            throw .internal(code: "VIDEO_METADATA_STRIP_FAILED")
+        }
+
+        let cleanDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("halo-pending-video-clean-\(UUID().uuidString)", isDirectory: true)
+        let cleanURL = cleanDir.appendingPathComponent(safeName)
+        do {
+            try FileManager.default.createDirectory(at: cleanDir, withIntermediateDirectories: true)
+        } catch {
+            throw .internal(code: "VIDEO_METADATA_STRIP_FAILED")
+        }
+
+        export.metadataItemFilter = AVMetadataItemFilter.forSharing()
+        do {
+            try await export.export(to: cleanURL, as: outputType)
+        } catch {
+            try? FileManager.default.removeItem(at: cleanDir)
+            throw .internal(code: "VIDEO_METADATA_STRIP_FAILED")
+        }
+
+        let cleanedAsset = AVURLAsset(url: cleanURL)
+        if await Self.hasLocationMetadata(in: cleanedAsset) {
+            try? FileManager.default.removeItem(at: cleanDir)
+            throw .internal(code: "VIDEO_METADATA_STRIP_FAILED")
+        }
+        return cleanURL
     }
 
     private func generatePoster(for asset: AVURLAsset) async -> OutgoingImage.Thumbnail? {

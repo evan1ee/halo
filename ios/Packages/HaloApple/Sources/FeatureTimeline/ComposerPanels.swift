@@ -271,8 +271,8 @@ private struct PickedVideoFile: Transferable {
     }
 }
 
-/// An inline, privacy-preserving system Photos picker (no photo-library permission needed); checked photos and videos
-/// join the composer's pending strip (with captions on send, M20-3), unchecked ones leave it.
+/// An inline, privacy-preserving system Photos picker (no photo-library permission needed) paired with an in-context
+/// Camera entry (M20-5); checked or captured photos and videos join the composer's pending strip (with captions on send, M20-3).
 private struct GalleryTab: View {
     private struct AttachedItem: Equatable {
         let id: String
@@ -283,6 +283,8 @@ private struct GalleryTab: View {
     @State private var selection: [PhotosPickerItem] = []
     /// Picker item identifiers in the order their items were attached, to mirror deselection.
     @State private var attached: [AttachedItem] = []
+    @State private var camera = CameraPermissionController()
+    @Environment(\.openURL) private var openURL
 
     private var remaining: Int {
         let totalPending = model.pendingPhotos.count + model.pendingVideos.count
@@ -292,23 +294,70 @@ private struct GalleryTab: View {
     var body: some View {
         Group {
             if model.canSendImages || model.canSendVideos {
-                PhotosPicker(
-                    selection: $selection,
-                    maxSelectionCount: remaining,
-                    selectionBehavior: .continuousAndOrdered,
-                    matching: model.canSendVideos ? .any(of: [.images, .videos]) : .images,
-                    preferredItemEncoding: .current,
-                    photoLibrary: .shared()
-                ) {
-                    Text("Photos & Videos")
+                VStack(spacing: HaloSpacing.xs) {
+                    CameraEntryButton(
+                        allowsVideo: model.canSendVideos,
+                        isLoading: camera.isRequestingPermission
+                    ) {
+                        Task { await camera.openCamera() }
+                    }
+                    .padding(.horizontal, HaloSpacing.m)
+                    .padding(.top, HaloSpacing.xs)
+
+                    PhotosPicker(
+                        selection: $selection,
+                        maxSelectionCount: remaining,
+                        selectionBehavior: .continuousAndOrdered,
+                        matching: model.canSendVideos ? .any(of: [.images, .videos]) : .images,
+                        preferredItemEncoding: .current,
+                        photoLibrary: .shared()
+                    ) {
+                        Text("Photos & Videos")
+                    }
+                    .photosPickerStyle(.inline)
+                    .photosPickerDisabledCapabilities([.stagingArea, .selectionActions])
+                    .photosPickerAccessoryVisibility(.hidden, edges: .all)
+                    .accessibilityIdentifier("photo-button")
                 }
-                .photosPickerStyle(.inline)
-                .photosPickerDisabledCapabilities([.stagingArea, .selectionActions])
-                .photosPickerAccessoryVisibility(.hidden, edges: .all)
-                .accessibilityIdentifier("photo-button")
             } else {
                 ContentUnavailableView("Media can't be sent here", systemImage: "photo.badge.exclamationmark")
             }
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { camera.isPresentingCamera },
+            set: { if !$0 { camera.dismissCamera() } }
+        )) {
+            CameraPickerSheet(
+                allowsVideo: model.canSendVideos,
+                onCapture: { result in
+                    camera.dismissCamera()
+                    Task { await handleCapture(result) }
+                },
+                onError: { message in
+                    camera.reportCaptureError(message)
+                },
+                onCancel: {
+                    camera.dismissCamera()
+                }
+            )
+            .ignoresSafeArea()
+        }
+        .sheet(item: Binding(
+            get: { camera.statusSheet },
+            set: { if $0 == nil { camera.dismissStatusSheet() } }
+        )) { status in
+            ScrollView {
+                CameraStatusSheet(
+                    status: status,
+                    onOpenSettings: URL(string: UIApplication.openSettingsURLString).map { url in
+                        { openURL(url) }
+                    },
+                    onDismiss: { camera.dismissStatusSheet() }
+                )
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
         .onChange(of: selection) { _, new in Task { await sync(to: new) } }
         .onChange(of: model.pendingPhotos.count + model.pendingVideos.count) { _, count in
@@ -317,6 +366,16 @@ private struct GalleryTab: View {
                 attached = []
                 selection = []
             }
+        }
+    }
+
+    private func handleCapture(_ result: CameraCaptureResult) async {
+        switch result {
+        case .photo(let data, let filename):
+            await model.attachPhoto(data: data, filename: filename)
+        case .video(let fileURL, let filename, let mimeType):
+            defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+            await model.attachVideo(fileURL: fileURL, filename: filename, mimeType: mimeType)
         }
     }
 

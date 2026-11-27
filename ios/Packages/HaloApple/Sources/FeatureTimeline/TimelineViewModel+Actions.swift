@@ -393,6 +393,9 @@ extension TimelineViewModel {
             let stagedURL = stagedDir.appendingPathComponent(safeName)
             try FileManager.default.copyItem(at: fileURL, to: stagedURL)
             let prepared = try await videoPreparer.prepare(fileURL: stagedURL, filename: safeName, mimeType: mimeType)
+            if prepared.fileURL != stagedURL {
+                try? FileManager.default.removeItem(at: stagedDir)
+            }
             pendingVideos.append(prepared)
         } catch let error as HaloError {
             try? FileManager.default.removeItem(at: stagedDir)
