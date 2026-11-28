@@ -30,7 +30,7 @@ public struct NewChatView: View {
                         }
                     }
                     if model.isSearching && model.candidates.isEmpty {
-                        HStack(spacing: 8) { ProgressView(); Text("Searching…").foregroundStyle(.secondary) }
+                        LoadingState(.rows(count: 3))
                     } else if model.foundNobody {
                         Text("No one found. To reach someone the directory doesn't list, type their full ID, like @name:server.")
                             .font(.footnote).foregroundStyle(.secondary)
@@ -88,7 +88,13 @@ public struct NewChatView: View {
                 } footer: {
                     Text("Enter a Matrix room alias (#room:server) or room ID (!id:server) to join directly.")
                 }
-                if let error = model.errorText { Section { Text(error).foregroundStyle(HaloColor.danger) } }
+                if let error = model.errorText {
+                    Section {
+                        ErrorState(layout: .inline, title: "Couldn't complete action", message: error)
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.clear)
+                    }
+                }
             }
             .navigationTitle("New chat")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(model.isWorking) } }

@@ -11,6 +11,7 @@ public final class StickerLibraryViewModel {
     public private(set) var packs: [StickerPack] = []
     public private(set) var unavailableCount = 0
     public private(set) var isLoading = false
+    public private(set) var loadFailed = false
     public private(set) var isBusy = false
     public private(set) var uploadProgress: (done: Int, total: Int)?
     public private(set) var error: String?
@@ -175,6 +176,7 @@ public final class StickerLibraryViewModel {
         packs = snapshot.packs.filter { $0.source == .userEnabled }
         unavailableCount = snapshot.unavailablePacks.count
         isLoading = snapshot.phase == .loading && packs.isEmpty
+        loadFailed = snapshot.phase == .failed && packs.isEmpty
     }
 
     static func message(for error: HaloError, fallback: String) -> String {

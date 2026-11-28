@@ -425,10 +425,17 @@ private struct PagedPhotoPage: View {
 
     @State private var fileURL: URL?
     @State private var isLoading = false
+    @State private var loadFailed = false
+    @State private var reloadToken = 0
     #if canImport(UIKit)
     /// The photo decoded off the main thread straight from disk, at most `ImagePipeline.Size.viewer` on the long side.
     @State private var viewerImage: UIImage?
     #endif
+
+    private struct LoadKey: Equatable {
+        let id: String
+        let token: Int
+    }
 
     var body: some View {
         Group {
@@ -441,7 +448,11 @@ private struct PagedPhotoPage: View {
                         onZoomChange: onZoomChange
                     )
                 } else if isLoading {
-                    ProgressView().tint(HaloColor.mediaOverlayForeground)
+                    ProgressView()
+                        .tint(HaloColor.mediaOverlayForeground)
+                        .accessibilityLabel("Loading photo")
+                } else if loadFailed {
+                    errorView
                 } else {
                     fallbackView
                 }
@@ -453,14 +464,16 @@ private struct PagedPhotoPage: View {
             #endif
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task(id: item.id) {
+        .task(id: LoadKey(id: item.id, token: reloadToken)) {
             guard item.isImage else { return }
+            loadFailed = false
             if let cachedURL = fileURL ?? existingFileURL {
                 fileURL = cachedURL
                 #if canImport(UIKit)
                 if viewerImage == nil {
                     isLoading = true
                     viewerImage = await ImagePipeline.decode(fileURL: cachedURL, maxPixel: ImagePipeline.Size.viewer)
+                    loadFailed = viewerImage == nil
                     isLoading = false
                 }
                 #endif
@@ -478,10 +491,31 @@ private struct PagedPhotoPage: View {
                 onLoaded(loaded)
                 #if canImport(UIKit)
                 viewerImage = await ImagePipeline.decode(fileURL: loaded, maxPixel: ImagePipeline.Size.viewer)
+                loadFailed = viewerImage == nil
                 #endif
+            } else {
+                loadFailed = true
             }
             isLoading = false
         }
+    }
+
+    private var errorView: some View {
+        ContentUnavailableView {
+            Label("Couldn't load photo", systemImage: "exclamationmark.triangle")
+                .foregroundStyle(HaloColor.mediaOverlayForeground)
+        } description: {
+            Text("Check your connection and try again.")
+                .foregroundStyle(HaloColor.mediaOverlayForeground.opacity(0.8))
+        } actions: {
+            Button("Try again") {
+                reloadToken += 1
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(HaloSpacing.l)
+        .contentShape(.rect)
+        .onTapGesture(perform: onSingleTap)
     }
 
     private var fallbackView: some View {

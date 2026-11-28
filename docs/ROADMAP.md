@@ -37,7 +37,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 | GA-17 | The room list is replaced as a whole on every change (ROOM_LIST §4 forbids it; the adapter sends only changes since M19-3) | `.diff(.reset(list))` | M19-3 |
 | GA-22 | No way to report a message or room (App Review 1.2) | no `reportContent` | M20-7 |
 | GA-24 | Localisation isn't ready: 12 catalog keys, about 376 literals in views (AC-UX-10 was ticked) | `Localizable.xcstrings` | M21-6 |
-| GA-25 | Shared loading/error states used on 2 screens; system motion and contrast settings barely read | `ErrorState`, `accessibilityReduceMotion` ×2, `HaloMotion` ×2 | M21-1, M21-3 |
+| GA-25 | System motion, transparency and contrast settings barely read (`M21-1` shared loading/empty/error states done 2026-11-28) | `accessibilityReduceMotion` ×2, `HaloMotion` ×2 | M21-3 |
 | GA-26 | Release builds have no push gateway; the privacy manifests and labels don't mention KLIPY search | `Base`/Release config, `PrivacyInfo.xcprivacy` | M22-1, M22-3 |
 | GA-29 | A half-open connection hides new messages for 39 s (now 24 s: request timeout 15 s, M18-11) | `FaultTests.halfOpenSync` | M18-11 |
 | GA-31 | Messages of a type Halo doesn't know are missing from the timeline instead of showing their fallback text | `InteropTests.incoming` | M20-19 |
@@ -132,7 +132,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 
 | Task | Class · size | Done when |
 |---|---|---|
-| [ ] **M21-1 State matrix**: every screen × loading, empty, error, offline, no-permission, recovering | R · M | Matrix in SCREEN_SPECIFICATIONS, each cell a `#Preview` or test; AC-UX-6 |
+| [x] **M21-1 State matrix** (*built 2026-11-28, closes UX-19: extended `LoadingState` with `.rows`, `.grid`, and `.detail` skeletons, added icon + AX5 vertical stacking to `ErrorState` and `HaloBanner`, and added retryable failure UI to `PagedPhotoViewer`; replaced bare list/grid/detail spinners and raw error/empty views across `GlobalMediaGalleryView`, `RoomDetailsView`, `RoomMediaGalleryView`, `UserProfileView`, `BotActivityView`, `NewChatView`, `MessageSearchResultsSection`, `TimelineView`, `PinnedMessagesSheet`, `EditHistoryView`, `StickerPanelView`, `KlipyPanelView`, `StickerLibraryView` + `StickerLibraryViewModel.loadFailed`, `AddToStickerPackSheet`, `DevicesSettingsView`, `StickerPackSettingsView`, and `RecoveryView`; recorded full S1–S15 state matrix in `SCREEN_SPECIFICATIONS.md`; verified by `StateComponentsTests` incl. Light/Dark/AX5 snapshots, `StickerLibraryViewModelTests.surfacesLoadFailureAndRecovers`, and `UserProfileViewModelTests.failedLoadRecoversOnRetry`*): every screen × loading, empty, error, offline, no-permission, recovering | R · M | Matrix in SCREEN_SPECIFICATIONS, each cell a `#Preview` or test; AC-UX-6 |
 | [ ] **M21-2 Flow walk-through**: install → first message; notification → reply; send photo; find an old message; recover from offline; new device | R · M | Steps counted and reduced; no dead end; AC-UX-5 with three people 👤 |
 | [ ] **M21-3 Motion and system settings**: all animation through `HaloMotion`; Reduce Motion, Reduce Transparency, Increase Contrast, Bold Text | R · M | Lint for raw `withAnimation`; AC-MOT-2; screenshots per setting |
 | [ ] **M21-4 Visual regression tests** for components and key screens (light, dark, contrast, AX5, RTL, iPad) | R · M | Run in `prepush.sh`; approach without a new dependency or justified (AGENTS §11) |
@@ -175,7 +175,7 @@ Halo is ready for external testers (Beta 2) when all rows hold except those mark
 | Messaging | Every R task of M20; interop matrix green | M17-7 | open |
 | Native feel | No raw colours or fixed font sizes outside `HaloDesignSystem` | AC-UX-1 | ✅ |
 | First five minutes | First message in ≤ 3 min, no dead ends | AC-UX-5 (3 people) | open |
-| States | Every screen × every state | AC-UX-6 | open (GA-25) |
+| States | Every screen × every state | AC-UX-6 | ✅ (M21-1) |
 | Accessibility | Zero audit issues on root screens; VoiceOver + AX5 golden path | AC-UX-8, AC-UX-9 | partly |
 | Language | AC-UX-10 | M21-6 | open (GA-24) |
 | Stability | Beta: crash-free sessions ≥ 99.5 %, no hang > 2 s. **1.0: ≥ 99.8 %, no hang > 1 s in the last 14 days** | TestFlight + MetricKit | not measured (no build in the field yet) |

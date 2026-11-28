@@ -23,9 +23,13 @@ public struct AddToStickerPackSheet: View {
             List {
                 if let error = model.error {
                     Section {
-                        Text(error)
-                            .font(HaloTypography.caption)
-                            .foregroundStyle(HaloColor.danger)
+                        HaloBanner(
+                            tone: .danger,
+                            icon: "exclamationmark.triangle.fill",
+                            message: error,
+                            onDismiss: { model.dismissError() }
+                        )
+                        .listRowInsets(EdgeInsets())
                     }
                 }
 
@@ -38,10 +42,16 @@ public struct AddToStickerPackSheet: View {
 
                 if model.isLoading {
                     Section {
-                        HStack {
-                            Spacer()
-                            ProgressView("Loading packs…")
-                            Spacer()
+                        LoadingState(.rows(count: 3))
+                            .listRowBackground(Color.clear)
+                    }
+                } else if model.loadFailed {
+                    Section {
+                        ErrorState(
+                            title: "Couldn't load sticker packs",
+                            message: "Check your connection and try again."
+                        ) {
+                            Task { await model.reload() }
                         }
                         .listRowBackground(Color.clear)
                     }

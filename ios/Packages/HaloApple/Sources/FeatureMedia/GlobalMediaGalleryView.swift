@@ -45,12 +45,17 @@ public struct GlobalMediaGalleryView: View {
         }
         .overlay {
             if model.isLoading && model.items.isEmpty {
-                ProgressView("Loading media…")
+                LoadingState(model.filter == .files ? .rows(count: 6) : .grid(columns: 3, count: 9))
+                    .padding(.horizontal, model.filter == .files ? HaloSpacing.l : 0)
+            } else if let error = model.error, model.items.isEmpty {
+                ErrorState(title: "Couldn't load media", message: error) {
+                    Task { await model.load() }
+                }
             } else if model.filteredItems.isEmpty && model.error == nil {
-                ContentUnavailableView(
-                    emptyTitle,
-                    systemImage: "photo.on.rectangle.angled",
-                    description: Text(emptyDescription)
+                EmptyState(
+                    icon: "photo.on.rectangle.angled",
+                    title: emptyTitle,
+                    message: emptyDescription
                 )
             }
         }
@@ -235,11 +240,11 @@ public struct GlobalMediaGalleryView: View {
     private var mediaGrid: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
-                if let error = model.error {
-                    Text(error)
-                        .font(HaloTypography.meta)
-                        .foregroundStyle(HaloColor.danger)
-                        .padding(.horizontal)
+                if let error = model.error, !model.items.isEmpty {
+                    ErrorState(layout: .inline, title: "Couldn't refresh media", message: error) {
+                        Task { await model.load() }
+                    }
+                    .padding(.horizontal)
                 }
                 ForEach(model.sections) { section in
                     VStack(alignment: .leading, spacing: 6) {
@@ -298,11 +303,13 @@ public struct GlobalMediaGalleryView: View {
 
     private var filesList: some View {
         List {
-            if let error = model.error {
+            if let error = model.error, !model.items.isEmpty {
                 Section {
-                    Text(error)
-                        .font(HaloTypography.meta)
-                        .foregroundStyle(HaloColor.danger)
+                    ErrorState(layout: .inline, title: "Couldn't refresh media", message: error) {
+                        Task { await model.load() }
+                    }
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
                 }
             }
             ForEach(model.sections) { section in

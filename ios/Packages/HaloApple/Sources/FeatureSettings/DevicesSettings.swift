@@ -100,33 +100,53 @@ struct DevicesSettingsView: View {
     init(actions: DevicesSettingsActions) { _model = State(initialValue: DevicesSettingsModel(actions: actions)) }
 
     var body: some View {
-        List {
-            if let error = model.error {
-                Section { Text(error).foregroundStyle(HaloColor.danger) }
-            }
-            Section {
-                if model.loaded, model.rows.isEmpty, model.error == nil {
-                    Text("No sessions").foregroundStyle(.secondary)
+        Group {
+            if !model.loaded {
+                LoadingState(.rows(count: 3))
+                    .padding(.horizontal, HaloSpacing.l)
+            } else if model.rows.isEmpty, let error = model.error {
+                ErrorState(title: "Couldn't load sessions", message: error) {
+                    Task { await model.load() }
                 }
-                ForEach(model.rows) { row in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(row.name)
-                        Text(model.detail(row)).font(.caption).foregroundStyle(.secondary)
-                    }
-                    .swipeActions {
-                        if model.canSignOut, !row.isCurrent {
-                            Button("Sign out", role: .destructive) { model.pendingSignOut = [row.id] }
+            } else if model.rows.isEmpty {
+                EmptyState(
+                    icon: "iphone",
+                    title: "No sessions",
+                    message: "Active sessions for your account appear here."
+                )
+            } else {
+                List {
+                    if let error = model.error {
+                        Section {
+                            ErrorState(layout: .inline, title: "Couldn't update sessions", message: error) {
+                                Task { await model.load() }
+                            }
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.clear)
                         }
                     }
-                }
-            } footer: {
-                Text(model.canSignOut
-                     ? "Every place this account is signed in. Swipe a session to sign it out."
-                     : "Every place this account is signed in. To sign a session out, use your account page.")
-            }
-            if model.canSignOut, !model.others.isEmpty {
-                Section {
-                    Button("Sign out all other sessions", role: .destructive) { model.pendingSignOut = model.others.map(\.id) }
+                    Section {
+                        ForEach(model.rows) { row in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(row.name)
+                                Text(model.detail(row)).font(.caption).foregroundStyle(.secondary)
+                            }
+                            .swipeActions {
+                                if model.canSignOut, !row.isCurrent {
+                                    Button("Sign out", role: .destructive) { model.pendingSignOut = [row.id] }
+                                }
+                            }
+                        }
+                    } footer: {
+                        Text(model.canSignOut
+                             ? "Every place this account is signed in. Swipe a session to sign it out."
+                             : "Every place this account is signed in. To sign a session out, use your account page.")
+                    }
+                    if model.canSignOut, !model.others.isEmpty {
+                        Section {
+                            Button("Sign out all other sessions", role: .destructive) { model.pendingSignOut = model.others.map(\.id) }
+                        }
+                    }
                 }
             }
         }

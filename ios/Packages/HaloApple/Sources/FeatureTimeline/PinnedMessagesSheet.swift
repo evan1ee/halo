@@ -27,10 +27,10 @@ struct PinnedMessagesSheet: View {
             Divider()
 
             if pins.isEmpty {
-                ContentUnavailableView(
-                    "No pinned messages",
-                    systemImage: "pin.slash",
-                    description: Text("Long-press any message to pin it here.")
+                EmptyState(
+                    icon: "pin.slash",
+                    title: "No pinned messages",
+                    message: "Long-press any message to pin it here."
                 )
             } else {
                 List {

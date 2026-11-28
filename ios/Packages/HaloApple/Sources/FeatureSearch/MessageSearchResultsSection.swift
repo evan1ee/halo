@@ -23,18 +23,14 @@ public struct MessageSearchResultsSection: View {
                 filters
                 if let coverage = model.coverage { notice(coverage) }
                 if let error = model.errorMessage {
-                    Text(error)
-                        .foregroundStyle(HaloColor.danger)
-                        .font(HaloTypography.meta)
-                        .listRowSeparator(.hidden)
+                    ErrorState(layout: .inline, title: "Search unavailable", message: error) {
+                        model.submit()
+                    }
+                    .listRowSeparator(.hidden)
                 }
                 if model.isLoading && model.rows.isEmpty {
-                    HStack(spacing: HaloSpacing.s) {
-                        ProgressView()
-                        Text("Searching messages…").font(HaloTypography.meta).foregroundStyle(HaloColor.textSecondary)
-                    }
-                    .padding(.vertical, HaloSpacing.s)
-                    .listRowSeparator(.hidden)
+                    LoadingState(.rows(count: 3))
+                        .listRowSeparator(.hidden)
                 } else if model.rows.isEmpty && model.searchedQuery == trimmed && model.errorMessage == nil {
                     VStack(spacing: HaloSpacing.xs) {
                         Image(systemName: "magnifyingglass")

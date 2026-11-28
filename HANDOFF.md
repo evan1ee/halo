@@ -1,21 +1,21 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-28 · Branch: `main` (PRs #1–#114 merged + M20-19 mapper/interop verification)
+Last updated: 2026-11-28 · Branch: `feat/m21-state-matrix` (PRs #1–#114 merged; M21-1 ready for PR)
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
 - **Roadmap:** M0–M16 are built and merged. Re-planned 2026-11-25 to a production release (D121): M17 measure → M18 security and reliability → M19 performance → M20 messaging → M21 experience → M22 beta and launch, with gates G-SCALE, G-PERF, G-SHIP ([docs/ROADMAP.md](docs/ROADMAP.md)). The audit behind it found 26 gaps (ROADMAP §2); Halo isn't a release candidate yet.
-- **Milestones:** M0–M16 built, partly for M14–M15 (GA-24…GA-26). **M17 in progress:** M17-1, 2, 3, 6, 8 done; M17-4, M17-5 and M17-7 done except what needs a device or the founder (§5). **M18:** all non-founder/non-device R/C tasks merged (#92–#100); M18-6/M18-12 need the founder, M18-10 needs a device. **M19:** merged (#101) with all non-device R tasks built (M19-1…M19-5, M19-7, M19-9, M19-11); M19-6/8/10 need a physical iPhone 📱. **M20:** all non-founder/non-upstream R tasks done and merged — M20-1 (#91), M20-2 (#102), M20-3 (#103, GA-18 removed), M20-4 (#104, GA-19 removed), M20-5 (#105, GA-20 removed), M20-6 (#106), M20-8 (#107, GA-23 removed), M20-9 (#108), M20-10 (#109, GA-30 removed), M20-11 (#111), M20-12 (#112), M20-13 (#114); remaining M20 R tasks are externally gated: M20-7 report/block (`Q-REPORT` 👤) and M20-19 unknown msgtypes (`GA-31`, verified upstream `matrix-rust-sdk` 26.11.17 gap 📤; Halo mapper ready). **Architecture audit (2026-11-27/28):** PR #110 (P1/F-02), S-6, and PR #113 (P2 batch: F-08, P-1/P-2, P-4/P-5) merged. Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`), physical iPhone 17e (`00008150-001149800E7B401C`).
-- **Last checks (M20-19 + full M20 interop, 2026-11-28):** `HALO_SIM="iPhone Air" infra/test/run.sh interop` passed all 7 live Synapse interop tests (75.54 s, 1 verified upstream known issue `GA-31`: outgoing, incoming, polls, encrypted forward AC-M4, room lifecycle, read receipts on others' messages, basic moderation); `HALO_SIM="iPhone Air" scripts/prepush.sh` passed (nothing skipped; handoff, docs, boundaries + 6/6 boundary tests, design tokens, HaloCore, HaloApple, `Halo-Debug` build, full `HaloUITests`, gitleaks, 0 SwiftLint violations in 335 files).
-- **Earlier checks (PR #114 M20-13, PR #113 P2 batch, PR #112 M20-12, 2026-11-28):** all GitHub CI checks passed; `scripts/prepush.sh` passed (0 SwiftLint violations in 335 files); `StorageContractTests` (2.38 s) and `roomList` contract test (13.05 s) passed on live Synapse.
-- **CI:** PRs #1–#111 merged. `scenarios.yml` (Synapse behind the fault proxy); Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
+- **Milestones:** M0–M16 built, partly for M14–M15 (GA-24…GA-26). **M17 in progress:** M17-1, 2, 3, 6, 8 done; M17-4, M17-5 and M17-7 done except what needs a device or the founder (§5). **M18:** all non-founder/non-device R/C tasks merged (#92–#100); M18-6/M18-12 need the founder, M18-10 needs a device. **M19:** merged (#101) with all non-device R tasks built (M19-1…M19-5, M19-7, M19-9, M19-11); M19-6/8/10 need a physical iPhone 📱. **M20:** all non-founder/non-upstream R tasks done and merged — M20-1 (#91), M20-2 (#102), M20-3 (#103, GA-18 removed), M20-4 (#104, GA-19 removed), M20-5 (#105, GA-20 removed), M20-6 (#106), M20-8 (#107, GA-23 removed), M20-9 (#108), M20-10 (#109, GA-30 removed), M20-11 (#111), M20-12 (#112), M20-13 (#114); remaining M20 R tasks are externally gated: M20-7 report/block (`Q-REPORT` 👤) and M20-19 unknown msgtypes (`GA-31`, verified upstream `matrix-rust-sdk` 26.11.17 gap 📤; Halo mapper ready). **M21 in progress:** M21-1 State matrix built (`feat/m21-state-matrix`, closes UX-19 and GA-25 part 1). **Architecture audit (2026-11-27/28):** PR #110 (P1/F-02), S-6, and PR #113 (P2 batch: F-08, P-1/P-2, P-4/P-5) merged. Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`), physical iPhone 17e (`00008150-001149800E7B401C`).
+- **Last checks (M21-1 State matrix, 2026-11-28):** `HALO_SIM="iPhone Air" scripts/prepush.sh` passed (nothing skipped; handoff, docs, boundaries + 6/6 boundary tests, design tokens, HaloCore, HaloApple incl. `StateComponentsTests` + `StickerLibraryViewModelTests` + `UserProfileViewModelTests`, `Halo-Debug` build, full `HaloUITests`, gitleaks, 0 SwiftLint violations in 335 files); Light, Dark, and AX5 snapshots of `LoadingState`, `ErrorState`, and `HaloBanner` visually verified.
+- **Earlier checks (M20-19 + full M20 interop, PR #114 M20-13, 2026-11-28):** `HALO_SIM="iPhone Air" infra/test/run.sh interop` passed all 7 live Synapse interop tests (75.54 s, 1 verified upstream known issue `GA-31`); all GitHub CI checks passed on #114; `StorageContractTests` (2.38 s) passed on live Synapse.
+- **CI:** PRs #1–#114 merged. `scenarios.yml` (Synapse behind the fault proxy); Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
+- **M21-1 State matrix (2026-11-28, `feat/m21-state-matrix`):** Extended `HaloDesignSystem` `LoadingState` with `.rows`, `.grid`, and `.detail` skeletons, added custom icon + AX5 vertical stacking to `ErrorState` and `HaloBanner`, and added retryable failure UI to `PagedPhotoViewer`. Replaced bare list/grid/detail spinners and raw error/empty views across `GlobalMediaGalleryView`, `RoomDetailsView`, `RoomMediaGalleryView`, `UserProfileView`, `BotActivityView`, `NewChatView`, `MessageSearchResultsSection`, `TimelineView` (`DelayedLoadingState` preserving D126 0-flash + inline pagination `ErrorState`), `PinnedMessagesSheet`, `EditHistoryView`, `StickerPanelView`, `KlipyPanelView`, `StickerLibraryView` (+ `StickerLibraryViewModel.loadFailed`), `AddToStickerPackSheet`, `DevicesSettingsView`, `StickerPackSettingsView`, and `RecoveryView`. Recorded the S1–S15 state matrix in `docs/design/SCREEN_SPECIFICATIONS.md`, closed `UX-19`, and verified with Light/Dark/AX5 snapshots and unit regression tests.
 - **M20-19 Unknown message types investigation & mapper prep (2026-11-28):** Updated `TimelineMapper` to map `MessageType.other(_, body)` to the sender's fallback text when non-empty (verified with `UTDReasonTests.unknownMessageFallback`). Verified empirically on live Synapse against `matrix-rust-sdk` 26.11.17 that `room.timeline()`, `TimelineFilter.all`, and `TimelineFilter.eventFilter(.exclude([]))` all omit unknown `msgtype` events upstream before the FFI diff listener — confirmed M20-19 / `GA-31` requires an upstream SDK change (📤) and re-ran the full `InteropTests` suite.
 - **M20-13 Storage (2026-11-28, merged #114):** Added `MediaCacheRetention` (D55: 1 GB / 30 days default), `StoreSizeBreakdown`, `MediaCacheClearResult`, and `StoragePort` (`HaloDomain`), `StorageCoordinator` + `PreferencesStore.mediaCacheRetention` (`HaloApplication`), `UserDefaultsPreferencesStore` persistence (`HaloPlatform`), `ImagePipeline.clearCache()` (`HaloDesignSystem`), `MatrixStoragePort` + `MatrixSessionPort` using SDK `getStoreSizes()` and `setMediaRetentionPolicy` to clear only cached media while preserving encryption keys, `stateStore` send queue, and `halo.sqlite` (AC-SET-3), and `StorageSettingsSection` + `StorageSettingsViewModel` (`FeatureSettings`) wired into `AppRoot` / `SettingsAssembly`.
-- **Architecture audit P2 batch (2026-11-28, merged #113):** Completed F-08 (`TimelineViewModel` split into `TimelineBotTaskModel`, `TimelineComposerModel`, `TimelineMediaModel`), P-1/P-2 (`MatrixRoomListPort.EventCoalescer`, incremental `getRoom` lookup, zero-FFI filter refresh), and P-4/P-5 (single-pass `scanSnapshot` + `buildRows`, per-row/sender/day `rowContext` cache invalidation).
 
 ## 3. Key decisions
 Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D128), [docs/adr/README.md](docs/adr/README.md).
@@ -45,9 +45,10 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D128), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
-- **Adapter (`HaloMatrixAdapter`):** `Timeline/TimelineMapper.swift` (`unknownMessageKind` for `MessageType.other`).
-- **Tests:** `HaloMatrixAdapterTests/{AdapterSmokeTests.swift, InteropTests.swift}`.
-- **Docs:** `docs/ROADMAP.md`, `HANDOFF.md`.
+- **Design system (`HaloDesignSystem`):** `Components/{LoadingState.swift, ErrorState.swift, Banner.swift}`, `Media/PagedPhotoViewer.swift`.
+- **Features:** `FeatureMedia/GlobalMediaGalleryView.swift`, `FeatureRoomDetails/{RoomDetailsView.swift, RoomMediaGalleryView.swift}`, `FeatureProfile/UserProfileView.swift`, `FeatureBotActivity/BotActivityView.swift`, `FeatureRoomList/NewChatView.swift`, `FeatureSearch/MessageSearchResultsSection.swift`, `FeatureTimeline/{TimelineView.swift, PinnedMessagesSheet.swift, TimelineSecondarySheets.swift}`, `FeatureStickers/{StickerPanelView.swift, KlipyPanelView.swift, StickerLibraryView.swift, StickerLibraryViewModel.swift, AddToStickerPackSheet.swift}`, `FeatureSettings/{DevicesSettings.swift, StickerPackSettings.swift}`, `FeatureOnboarding/RecoveryView.swift`.
+- **Tests:** `HaloDesignSystemTests/StateComponentsTests.swift`, `FeatureStickersTests/StickerLibraryViewModelTests.swift`, `FeatureProfileTests/UserProfileViewModelTests.swift`.
+- **Docs:** `docs/design/{SCREEN_SPECIFICATIONS.md, UX_AUDIT.md}`, `docs/ROADMAP.md`, `HANDOFF.md`.
 - Earlier pushes: see `git log`.
 
 ## 5. Outstanding issues
@@ -115,7 +116,7 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 
 ## 6. Next steps
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §3.
-1. Start **M21** R tasks in order: **M21-1 State matrix** (removes GA-25 part 1) → **M21-3 Motion & system settings** (removes GA-25) → **M21-6 Localisation** (removes GA-24) → **M21-7 Copy** → **M21-9 First run without an account**.
+1. Continue **M21** R tasks in order: **M21-3 Motion & system settings** (removes GA-25 & UX-20) → **M21-4 Visual regression tests** → **M21-6 Localisation** (removes GA-24) → **M21-7 Copy** → **M21-9 First run without an account**.
 2. Return to **M20-7 Report and block** (removes GA-22) once founder decides `Q-REPORT`, and **M20-19 Unknown message types** (removes GA-31) once upstream `matrix-rust-sdk` delivers custom `msgtype` events in timelines (📤).
 3. Remaining optional P2 audit items (S-3, F-03, F-06, F-07, S-5) and open M18/M19 device/founder items: M18-10 (📱), M18-12 (👤), M18-6 (👤), Q-VERIFY; M19-6/8/10 (📱).
 4. Founder: the device and hand checks of §5; long lead times: push gateway (M22-1), legal (M22-4), KLIPY production key, filtering entitlement, artwork.
@@ -124,10 +125,10 @@ Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §3.
 ```text
 /loop Read AGENTS.md, HANDOFF.md, docs/development/AUTONOMOUS_LOOP.md and docs/ROADMAP.md (§1–§3, §7).
 
-All non-founder/non-upstream M20 R tasks are merged (M20-7 waits on Q-REPORT; M20-19 waits on upstream SDK 📤).
-Work the ROADMAP §3 queue starting at M21-1 (State matrix: shared loading/empty/error/offline views on every screen,
-removes GA-25 part 1), then M21-3 (Motion and system settings, removes GA-25), M21-6 (Localisation, removes GA-24),
-M21-7 (Copy), and M21-9 (First run without an account).
+M21-1 State matrix is built (UX-19 closed). Continue the ROADMAP §3 M21 queue starting at M21-3 (Motion and system
+settings: all animations through HaloMotion, Reduce Motion/Reduce Transparency/Increase Contrast/Bold Text, lint for
+raw withAnimation, removes GA-25 and UX-20), then M21-4 (Visual regression tests in prepush.sh), M21-6 (Localisation,
+removes GA-24), M21-7 (Copy: single HaloErrorCopy source), and M21-9 (First run without an account).
 
 Rules learned in the audit (keep them true):
 - Badge counts and totals only through BadgeCalculator (AGENTS §4.2); no `+=` on counts anywhere else.

@@ -50,10 +50,12 @@ public struct BotActivityView: View {
                 Text("From messages on this device. Halo only knows what your bots said in rooms you have opened here, or whose newest message is from a bot; the bot's own list is the truth.")
             }
             if sections.isEmpty {
-                ContentUnavailableView(
-                    "Nothing yet", systemImage: "checklist",
-                    description: Text("Tasks and reminders from your bots show up here once you open their rooms."))
-                    .listRowBackground(Color.clear)
+                EmptyState(
+                    icon: "checklist",
+                    title: "Nothing yet",
+                    message: "Tasks and reminders from your bots show up here once you open their rooms."
+                )
+                .listRowBackground(Color.clear)
             }
             section("Open", sections.open)
             section("Reminders", sections.reminders)

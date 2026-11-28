@@ -38,9 +38,13 @@ public struct RoomMediaGalleryView: View {
                 }
                 .pickerStyle(.segmented)
             }
-            if let error = model.galleryError {
+            if let error = model.galleryError, !model.galleryItems.isEmpty {
                 Section {
-                    Text(error).foregroundStyle(HaloColor.danger).font(HaloTypography.meta)
+                    ErrorState(layout: .inline, title: "Couldn't load media", message: error) {
+                        Task { await model.loadGallery() }
+                    }
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
                 }
             }
             if let exportedURL {
@@ -114,9 +118,18 @@ public struct RoomMediaGalleryView: View {
         }
         .overlay {
             if model.isLoadingGallery && model.galleryItems.isEmpty {
-                ProgressView()
+                LoadingState(.rows(count: 5))
+                    .padding(.horizontal, HaloSpacing.l)
+            } else if let error = model.galleryError, model.galleryItems.isEmpty {
+                ErrorState(title: "Couldn't load media", message: error) {
+                    Task { await model.loadGallery() }
+                }
             } else if filteredItems.isEmpty && model.galleryError == nil {
-                ContentUnavailableView("No media yet", systemImage: "photo.on.rectangle.angled")
+                EmptyState(
+                    icon: "photo.on.rectangle.angled",
+                    title: "No media yet",
+                    message: "Photos, videos, and files shared in this room will appear here."
+                )
             }
         }
         .navigationTitle("Media & Files")

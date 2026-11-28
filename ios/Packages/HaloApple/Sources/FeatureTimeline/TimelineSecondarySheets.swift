@@ -190,8 +190,21 @@ struct EditHistoryView: View {
         NavigationStack {
             Group {
                 switch state {
-                case .loading: ProgressView()
-                case .failed(let text): ContentUnavailableView("Edit history unavailable", systemImage: "clock.badge.exclamationmark", description: Text(text))
+                case .loading:
+                    LoadingState(.rows(count: 3))
+                        .padding(.horizontal, HaloSpacing.l)
+                case .failed(let text):
+                    ErrorState(
+                        icon: "clock.badge.exclamationmark",
+                        title: "Edit history unavailable",
+                        message: text
+                    )
+                case .loaded(let versions) where versions.isEmpty:
+                    EmptyState(
+                        icon: "clock",
+                        title: "No edits yet",
+                        message: "Previous versions of this message will appear here."
+                    )
                 case .loaded(let versions):
                     List(versions) { version in
                         VStack(alignment: .leading, spacing: 2) {
