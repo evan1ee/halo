@@ -22,16 +22,13 @@ public struct StickerLibraryView: View {
         List {
             if let error = model.error {
                 Section {
-                    HStack(spacing: HaloSpacing.s) {
-                        Text(error).font(HaloTypography.caption).foregroundStyle(HaloColor.danger)
-                        Spacer()
-                        Button { model.dismissError() } label: {
-                            Image(systemName: "xmark").font(.caption2.weight(.semibold))
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel("Dismiss")
-                    }
+                    HaloBanner(
+                        tone: .danger,
+                        icon: "exclamationmark.triangle.fill",
+                        message: error,
+                        onDismiss: { model.dismissError() }
+                    )
+                    .listRowInsets(EdgeInsets())
                 }
             }
 
@@ -60,25 +57,28 @@ public struct StickerLibraryView: View {
 
             if model.isLoading {
                 Section {
-                    HStack {
-                        Spacer()
-                        ProgressView("Loading sticker packs…")
-                        Spacer()
+                    LoadingState(.rows(count: 4))
+                        .listRowBackground(Color.clear)
+                }
+            } else if model.loadFailed {
+                Section {
+                    ErrorState(
+                        title: "Couldn't load sticker packs",
+                        message: "Check your connection and try again."
+                    ) {
+                        Task { await model.reload() }
                     }
                     .listRowBackground(Color.clear)
                 }
             } else if model.packs.isEmpty {
                 Section {
-                    ContentUnavailableView {
-                        Label("No sticker packs yet", systemImage: "face.smiling")
-                    } description: {
-                        Text("Create a pack from your photos to send stickers in any chat.")
-                    } actions: {
-                        if model.canCreatePack {
-                            Button("New sticker pack") { newPack = model.beginNewPack() }
-                                .buttonStyle(.borderedProminent)
-                        }
-                    }
+                    EmptyState(
+                        icon: "face.smiling",
+                        title: "No sticker packs yet",
+                        message: "Create a pack from your photos to send stickers in any chat.",
+                        actionTitle: model.canCreatePack ? "New sticker pack" : nil,
+                        onAction: model.canCreatePack ? { newPack = model.beginNewPack() } : nil
+                    )
                     .listRowBackground(Color.clear)
                 }
             } else {
@@ -259,17 +259,13 @@ public struct StickerPackDetailView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: HaloSpacing.m) {
                         if let error = model.error {
-                            HStack(spacing: HaloSpacing.s) {
-                                Text(error).font(HaloTypography.caption).foregroundStyle(HaloColor.danger)
-                                Spacer()
-                                Button { model.dismissError() } label: {
-                                    Image(systemName: "xmark").font(.caption2.weight(.semibold))
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(.secondary)
-                            }
-                            .padding(HaloSpacing.s)
-                            .background(HaloColor.bgSecondary, in: .rect(cornerRadius: 10))
+                            HaloBanner(
+                                tone: .danger,
+                                icon: "exclamationmark.triangle.fill",
+                                message: error,
+                                onDismiss: { model.dismissError() }
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: HaloRadius.medium, style: .continuous))
                         }
 
                         if let progress = model.uploadProgress {
@@ -442,7 +438,11 @@ public struct StickerPackDetailView: View {
                     .presentationDragIndicator(.visible)
                 }
             } else {
-                ContentUnavailableView("Pack unavailable", systemImage: "face.smiling")
+                EmptyState(
+                    icon: "face.smiling",
+                    title: "Pack unavailable",
+                    message: "This sticker pack is no longer available."
+                )
             }
         }
     }

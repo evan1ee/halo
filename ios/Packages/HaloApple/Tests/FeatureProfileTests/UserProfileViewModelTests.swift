@@ -71,4 +71,27 @@ struct UserProfileViewModelTests {
         let model = try make(profiles: FakeProfilePort())
         #expect(model.shareURL?.absoluteString == "https://matrix.to/#/@ann:x.org")
     }
+
+    @Test("failed load without a room fallback exposes retryable failed state and recovers on retry (M21-1)")
+    func failedLoadRecoversOnRetry() async throws {
+        let ann = try UserID("@ann:x.org")
+        let profiles = FakeProfilePort(profiles: [UserProfile(userID: ann, displayName: "Ann")])
+        profiles.fail(with: .network(retryable: true))
+        let model = UserProfileViewModel(
+            profiles: profiles,
+            chats: FakeChatCreationPort(),
+            user: ann,
+            roomDisplayName: nil,
+            isMe: false,
+            onOpenRoom: { _ in }
+        )
+
+        #expect(model.content == .loading)
+        await model.load()
+        #expect(model.content == .failed("You appear to be offline. Try again."))
+
+        profiles.fail(with: nil)
+        await model.load()
+        #expect(model.content == .loaded(UserProfile(userID: ann, displayName: "Ann"), isIgnored: false))
+    }
 }

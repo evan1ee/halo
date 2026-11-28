@@ -54,14 +54,11 @@ public struct RoomDetailsView: View {
     public var body: some View {
         Group {
             switch model.content {
-            case .loading: ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .loading:
+                LoadingState(.detail(rows: 5))
             case .failed(let text):
-                ContentUnavailableView {
-                    Label("Couldn't load the room", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(text)
-                } actions: {
-                    Button("Try again") { Task { await model.load() } }.buttonStyle(.borderedProminent)
+                ErrorState(title: "Couldn't load the room", message: text) {
+                    Task { await model.load() }
                 }
             case .loaded(let details, let members): list(details, members)
             }

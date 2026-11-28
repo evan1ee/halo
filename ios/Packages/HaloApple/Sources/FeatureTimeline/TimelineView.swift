@@ -113,29 +113,40 @@ public struct TimelineView: View {
         Group {
             switch model.content {
             case .opening:
-                // No spinner when a room opens: it is normally there within a moment. Only a slow open (a poor network) gets one.
-                DelayedProgressView()
+                // No skeleton/spinner on a fast cached open (D126): only a slow open (> 1 s) shows the timeline skeleton.
+                DelayedLoadingState()
             case .failed(let message):
-                ContentUnavailableView {
-                    Label("Couldn't open room", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(message)
-                } actions: {
-                    Button("Try again") { Task { await model.retry() } }.buttonStyle(.borderedProminent)
+                ErrorState(title: "Couldn't open room", message: message) {
+                    Task { await model.retry() }
                 }
             case .live(let rows, let isPaginating, let canLoadEarlier, let paginationError):
                 ScrollViewReader { proxy in
                 List {
                     if canLoadEarlier {
-                        HStack {
-                            Spacer()
+                        Group {
                             if isPaginating {
-                                ProgressView()
+                                HStack {
+                                    Spacer()
+                                    ProgressView()
+                                        .accessibilityLabel("Loading earlier messages")
+                                    Spacer()
+                                }
+                            } else if let paginationError {
+                                ErrorState(
+                                    layout: .inline,
+                                    title: "Couldn't load earlier messages",
+                                    message: paginationError
+                                ) {
+                                    Task { await model.loadEarlier() }
+                                }
                             } else {
-                                Button(paginationError ?? "Load earlier messages") { Task { await model.loadEarlier() } }
-                                    .font(.footnote)
+                                HStack {
+                                    Spacer()
+                                    Button("Load earlier messages") { Task { await model.loadEarlier() } }
+                                        .font(.footnote)
+                                    Spacer()
+                                }
                             }
-                            Spacer()
                         }
                         .listRowSeparator(.hidden)
                         // History loads only while this row is on screen (the user is at the top), and continues until the
@@ -147,12 +158,12 @@ public struct TimelineView: View {
                     // A room with nothing but its setup events (created, joined, settings) says so, above those events
                     // (as a row, so the short-room alignment keeps it clear of them and of the composer).
                     if !canLoadEarlier, !rows.contains(where: \.isConversation) {
-                        ContentUnavailableView {
-                            Label("No messages yet", systemImage: "bubble.left.and.bubble.right")
-                        } description: {
-                            Text("Messages you send here appear in this conversation.")
-                        }
-                        // ContentUnavailableView fills what it's offered and can be squeezed; a list row must keep its own
+                        EmptyState(
+                            icon: "bubble.left.and.bubble.right",
+                            title: "No messages yet",
+                            message: "Messages you send here appear in this conversation."
+                        )
+                        // EmptyState wraps ContentUnavailableView which fills what it's offered and can be squeezed; a list row must keep its own
                         // height or the description draws over the setup rows below (founder screenshot, two-line description).
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityElement(children: .combine)
@@ -725,12 +736,12 @@ struct PaginationTrigger: Hashable {
     let ready: Bool
 }
 
-/// A spinner that appears only when the wait passes one second.
-private struct DelayedProgressView: View {
+/// A timeline skeleton that appears only when the open wait passes one second (preserves D126 0-flash on cached rooms).
+private struct DelayedLoadingState: View {
     @State private var shown = false
 
     var body: some View {
-        ProgressView()
+        LoadingState(.timeline())
             .opacity(shown ? 1 : 0)
             .task {
                 try? await Task.sleep(for: .seconds(1))

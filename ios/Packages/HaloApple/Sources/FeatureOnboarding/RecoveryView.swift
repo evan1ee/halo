@@ -85,11 +85,13 @@ public struct RecoveryView: View {
                 case .cancelled(let reason):
                     statusNoticeContent(
                         title: "Verification cancelled",
-                        detail: reason ?? "The verification request was cancelled.")
+                        detail: reason ?? "The verification request was cancelled.",
+                        buttonTitle: "Back")
                 case .failed(let code):
                     statusNoticeContent(
                         title: "Verification couldn't complete",
-                        detail: "Try again with your other device or use your recovery key (\(code)).")
+                        detail: "Try again with your other device or use your recovery key (\(code)).",
+                        buttonTitle: "Try again")
                 }
             }
             .padding(.horizontal, 24)
@@ -127,7 +129,7 @@ public struct RecoveryView: View {
             #endif
             .submitLabel(.go).onSubmit { if canSubmit { Task { await model.submit() } } }
         if let message = model.errorMessage {
-            Text(message).foregroundStyle(HaloColor.danger).font(HaloTypography.meta).multilineTextAlignment(.center)
+            ErrorState(layout: .inline, title: "Couldn't verify", message: message)
         }
         if model.isWorking {
             ProgressView().frame(minHeight: 44)
@@ -261,17 +263,14 @@ public struct RecoveryView: View {
     }
 
     @ViewBuilder
-    private func statusNoticeContent(title: String, detail: String) -> some View {
-        Text(title).font(.title3.bold())
-        Text(detail)
-            .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
-        Button {
+    private func statusNoticeContent(title: String, detail: String, buttonTitle: String) -> some View {
+        ErrorState(
+            title: title,
+            message: detail,
+            retryTitle: buttonTitle
+        ) {
             Task { await model.cancelVerification() }
-        } label: {
-            Text("Back").frame(maxWidth: .infinity)
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
     }
 }
 #endif

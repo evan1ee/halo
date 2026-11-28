@@ -26,15 +26,12 @@ public struct KlipyPanelView: View {
                 .padding(.top, HaloSpacing.s)
                 .padding(.bottom, HaloSpacing.xs)
             if let error = model.sendError {
-                HStack(spacing: HaloSpacing.s) {
-                    Text(error).font(HaloTypography.caption).foregroundStyle(HaloColor.danger)
-                    Spacer()
-                    Button { model.dismissSendError() } label: { Image(systemName: "xmark").font(HaloTypography.caption) }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(HaloColor.textSecondary)
-                        .accessibilityLabel("Dismiss")
-                }
-                .padding(.horizontal, HaloSpacing.m)
+                HaloBanner(
+                    tone: .danger,
+                    icon: "exclamationmark.triangle.fill",
+                    message: error,
+                    onDismiss: { model.dismissSendError() }
+                )
             }
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: HaloSpacing.m) {
@@ -61,14 +58,16 @@ public struct KlipyPanelView: View {
     @ViewBuilder private var results: some View {
         switch model.phase {
         case .idle:
-            ProgressView().frame(maxWidth: .infinity, minHeight: 120)
+            LoadingState(.grid(columns: isGIF ? 3 : 4, count: isGIF ? 9 : 8))
         case .loading where model.items.isEmpty:
-            ProgressView().frame(maxWidth: .infinity, minHeight: 120)
+            LoadingState(.grid(columns: isGIF ? 3 : 4, count: isGIF ? 9 : 8))
         case .failed:
-            ContentUnavailableView {
-                Label(isGIF ? "Couldn't load GIFs" : "Couldn't load stickers", systemImage: "wifi.exclamationmark")
-            } actions: {
-                Button("Try again") { Task { await model.retry() } }.buttonStyle(.borderedProminent)
+            ErrorState(
+                icon: "wifi.exclamationmark",
+                title: isGIF ? "Couldn't load GIFs" : "Couldn't load stickers",
+                message: "Check your connection and try again."
+            ) {
+                Task { await model.retry() }
             }
         default:
             if model.items.isEmpty, model.isSearching {

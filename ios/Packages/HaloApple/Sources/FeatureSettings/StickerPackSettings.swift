@@ -53,25 +53,39 @@ public struct StickerPackSettingsView: View {
     public init(actions: StickerPackSettingsActions) { _model = State(initialValue: StickerPackSettingsModel(actions: actions)) }
 
     public var body: some View {
-        List {
-            if let error = model.error {
-                Section { Text(error).foregroundStyle(HaloColor.danger) }
-            }
-            Section {
-                if model.loaded, model.rows.isEmpty {
-                    Text("No packs added").foregroundStyle(.secondary)
-                }
-                ForEach(model.rows) { row in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(row.name)
-                        Text(row.detail).font(.caption).foregroundStyle(.secondary)
+        Group {
+            if !model.loaded {
+                LoadingState(.rows(count: 3))
+                    .padding(.horizontal, HaloSpacing.l)
+            } else if model.rows.isEmpty, model.error == nil {
+                EmptyState(
+                    icon: "face.smiling",
+                    title: "No packs added",
+                    message: "Sticker packs you enable appear here."
+                )
+            } else {
+                List {
+                    if let error = model.error {
+                        Section {
+                            ErrorState(layout: .inline, title: "Couldn't remove pack", message: error)
+                                .listRowInsets(EdgeInsets())
+                                .listRowBackground(Color.clear)
+                        }
                     }
-                    .swipeActions {
-                        Button("Remove", role: .destructive) { Task { await model.remove(row.id) } }
+                    Section {
+                        ForEach(model.rows) { row in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(row.name)
+                                Text(row.detail).font(.caption).foregroundStyle(.secondary)
+                            }
+                            .swipeActions {
+                                Button("Remove", role: .destructive) { Task { await model.remove(row.id) } }
+                            }
+                        }
+                    } footer: {
+                        Text("Removing a pack only takes it out of your list. The room that holds it and its stickers are not touched.")
                     }
                 }
-            } footer: {
-                Text("Removing a pack only takes it out of your list. The room that holds it and its stickers are not touched.")
             }
         }
         .navigationTitle("Sticker packs")

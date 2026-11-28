@@ -74,4 +74,31 @@ struct StickerLibraryViewModelTests {
         #expect(!ok)
         #expect(vm.error == "You don't have permission to edit this pack.")
     }
+
+    @Test("surfaces loadFailed on initial load failure and recovers on reload (M21-1)")
+    func surfacesLoadFailureAndRecovers() async throws {
+        let ref = PackRef(room: try RoomID("!pack:x.org"), stateKey: "pack")
+        let pack = StickerPack(ref: ref, displayName: "Cats", avatarURL: nil, usage: [.sticker], attribution: nil, stickers: [], source: .userEnabled)
+
+        let packsPort = FakeStickerPacks(StickerPackLoad(packs: [pack]))
+        packsPort.fail(with: .network(retryable: true))
+        let managementPort = FakeStickerPackManagement(backing: packsPort)
+        let library = StickerLibrary(packs: packsPort, prefs: FakeStickerPrefs())
+        let manager = StickerPackManager(port: managementPort, preparer: PassThroughPreparer(), library: library)
+        let vm = StickerLibraryViewModel(library: library, manager: manager)
+
+        await vm.start()
+        defer { vm.stop() }
+        await Task.yield()
+
+        #expect(vm.packs.isEmpty)
+        #expect(vm.loadFailed)
+
+        packsPort.fail(with: nil)
+        await vm.reload()
+        await Task.yield()
+
+        #expect(!vm.loadFailed)
+        #expect(vm.packs.count == 1)
+    }
 }

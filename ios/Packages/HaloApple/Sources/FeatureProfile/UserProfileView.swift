@@ -15,8 +15,16 @@ public struct UserProfileView: View {
         NavigationStack {
             Group {
                 switch model.content {
-                case .loading: ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-                case .failed(let text): ContentUnavailableView("Couldn't load the profile", systemImage: "person.crop.circle.badge.exclamationmark", description: Text(text))
+                case .loading:
+                    LoadingState(.detail(rows: 3))
+                case .failed(let text):
+                    ErrorState(
+                        icon: "person.crop.circle.badge.exclamationmark",
+                        title: "Couldn't load the profile",
+                        message: text
+                    ) {
+                        Task { await model.load() }
+                    }
                 case .loaded(let profile, let ignored): list(profile, ignored: ignored)
                 }
             }
@@ -68,7 +76,13 @@ public struct UserProfileView: View {
                     Text(ignored ? "You don't see this person's messages." : "Ignoring hides this person's messages and invitations everywhere.")
                 }
             }
-            if let error = model.actionError { Section { Text(error).foregroundStyle(HaloColor.danger) } }
+            if let error = model.actionError {
+                Section {
+                    ErrorState(layout: .inline, title: "Action failed", message: error)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                }
+            }
         }
         .disabled(model.isWorking)
         .task(id: copied) {

@@ -56,15 +56,12 @@ public struct StickerPanelView: View {
             // Room for the sheet's drag indicator above the search field.
             .padding(.horizontal, 12).padding(.top, embedded ? 8 : 28).padding(.bottom, 8)
             if let error = model.sendError {
-                HStack(spacing: 8) {
-                    Text(error).font(HaloTypography.caption).foregroundStyle(HaloColor.danger)
-                    Spacer()
-                    Button { model.dismissSendError() } label: { Image(systemName: "xmark").font(.caption2.weight(.semibold)) }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel("Dismiss")
-                }
-                .padding(.horizontal, 12).padding(.bottom, 6)
+                HaloBanner(
+                    tone: .danger,
+                    icon: "exclamationmark.triangle.fill",
+                    message: error,
+                    onDismiss: { model.dismissSendError() }
+                )
             }
             if let notice = model.unavailableNotice {
                 HStack(spacing: 8) {
@@ -80,28 +77,26 @@ public struct StickerPanelView: View {
                     .padding(.horizontal, 12).padding(.bottom, 6)
             }
             if model.isLoading {
-                Spacer()
-                ProgressView("Loading stickers…")
-                Spacer()
+                LoadingState(.grid(columns: 4, count: 8))
+                Spacer(minLength: 0)
             } else if model.emptyMessage != nil {
                 if model.isSearching {
                     ContentUnavailableView.search(text: model.query)
                 } else if model.snapshot.phase == .failed {
-                    ContentUnavailableView {
-                        Label("Couldn't load stickers", systemImage: "exclamationmark.triangle")
-                    } actions: {
-                        Button("Try again") { Task { await model.retryLoad() } }.buttonStyle(.borderedProminent)
+                    ErrorState(
+                        title: "Couldn't load stickers",
+                        message: "Check your connection and try again."
+                    ) {
+                        Task { await model.retryLoad() }
                     }
                 } else {
-                    ContentUnavailableView {
-                        Label("No sticker packs yet", systemImage: "face.smiling")
-                    } description: {
-                        Text("Create a pack to send stickers here.")
-                    } actions: {
-                        if model.canCreatePack {
-                            Button("New sticker pack") { newPack = model.beginNewPack() }.buttonStyle(.borderedProminent)
-                        }
-                    }
+                    EmptyState(
+                        icon: "face.smiling",
+                        title: "No sticker packs yet",
+                        message: "Create a pack to send stickers here.",
+                        actionTitle: model.canCreatePack ? "New sticker pack" : nil,
+                        onAction: model.canCreatePack ? { newPack = model.beginNewPack() } : nil
+                    )
                 }
             } else {
                 List {

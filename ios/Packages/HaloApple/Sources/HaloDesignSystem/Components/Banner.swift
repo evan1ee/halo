@@ -39,8 +39,36 @@ public struct HaloBanner: View {
         self.onDismiss = onDismiss
     }
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+
     public var body: some View {
-        HStack(spacing: HaloSpacing.s) {
+        Group {
+            if typeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: HaloSpacing.s) {
+                    HStack(alignment: .top, spacing: HaloSpacing.s) {
+                        bannerLabel
+                        Spacer(minLength: HaloSpacing.xs)
+                        dismissButton
+                    }
+                    actionButton
+                }
+            } else {
+                HStack(spacing: HaloSpacing.s) {
+                    bannerLabel
+                    Spacer(minLength: HaloSpacing.xs)
+                    actionButton
+                    dismissButton
+                }
+            }
+        }
+        .padding(.horizontal, HaloSpacing.m)
+        .padding(.vertical, HaloSpacing.s)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.bar)
+    }
+
+    private var bannerLabel: some View {
+        HStack(alignment: .top, spacing: HaloSpacing.s) {
             Image(systemName: icon)
                 .foregroundStyle(tone.tint)
                 .symbolRenderingMode(.hierarchical)
@@ -49,26 +77,32 @@ public struct HaloBanner: View {
                 .font(HaloTypography.meta)
                 .foregroundStyle(HaloColor.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: HaloSpacing.xs)
-            if let actionTitle, let onAction {
-                Button(actionTitle, action: onAction)
-                    .font(HaloTypography.meta.weight(.semibold))
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-            }
-            if let onDismiss {
-                Button(action: onDismiss) {
-                    Image(systemName: "xmark")
-                        .font(HaloTypography.captionEmphasis)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(HaloColor.textSecondary)
-                .accessibilityLabel("Dismiss")
-            }
         }
-        .padding(.horizontal, HaloSpacing.m)
-        .padding(.vertical, HaloSpacing.s)
-        .background(.bar)
+    }
+
+    @ViewBuilder
+    private var actionButton: some View {
+        if let actionTitle, let onAction {
+            Button(actionTitle, action: onAction)
+                .font(HaloTypography.meta.weight(.semibold))
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        }
+    }
+
+    @ViewBuilder
+    private var dismissButton: some View {
+        if let onDismiss {
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(HaloTypography.captionEmphasis)
+                    .frame(minWidth: 28, minHeight: 28)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(HaloColor.textSecondary)
+            .accessibilityLabel("Dismiss")
+        }
     }
 }
 
