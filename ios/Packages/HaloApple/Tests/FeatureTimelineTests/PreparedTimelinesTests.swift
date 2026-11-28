@@ -212,4 +212,26 @@ struct PreparedTimelinesTests {
         #expect(port.totalOpens(in: room) == 1, "opened once")
         await model.stop()
     }
+
+    @Test("two quick taps push only the last room; the first lets go of its timeline (audit F-02, moved from AppRoot)", .timeLimit(.minutes(1)))
+    func newerTapReplacesOlder() async throws {
+        let first = try RoomID("!a:x.org"), second = try RoomID("!b:x.org")
+        let port = FakeTimelinePort()
+        port.addRoom(first, items: [try message(1)])
+        port.addRoom(second, items: [try message(2)])
+        let (limits, release) = AsyncStream<Void>.makeStream()
+        let holder = PreparedTimelines(wait: { _ in for await _ in limits { return } }) {
+            TimelineViewModel(coordinator: TimelineCoordinator(port: port, room: $0), room: $0)
+        }
+        var pushed: [RoomID] = []
+        holder.open(first) { pushed.append(first) }
+        holder.open(second) { pushed.append(second) }
+        for _ in 0..<200_000 where pushed.isEmpty { await Task.yield() }
+        release.finish()  // any wait still running ends
+        for _ in 0..<20_000 { await Task.yield() }
+        #expect(pushed == [second])
+        #expect(holder.waitingRoom == second)
+        for _ in 0..<200_000 where port.openSessions(in: first) > 0 { await Task.yield() }
+        #expect(port.openSessions(in: first) == 0, "the abandoned room's timeline is closed")
+    }
 }

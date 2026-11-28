@@ -66,7 +66,10 @@ extension AppRoot {
                     // Without a database, receipts and drafts still work from memory; there is nothing to restore.
                 }
                 AccountDataEraser.excludeFromBackup(.standard())
-                await search.attach(user, cipher: fieldCipher)
+                let lock = searchLock
+                await search.attach(user) {
+                    SearchIndexStore(directory: HaloShared.searchDirectory(for: user), cipher: fieldCipher, isReadable: { lock?.isReadable ?? true })
+                }
                 await syncBotAllowlist()
             case .signedOut:
                 guard let user = current else {

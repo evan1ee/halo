@@ -258,4 +258,33 @@ struct NotificationProcessorTests {
         }
         #expect(shown.withLock { $0.values.reduce(0, +) } == 40)
     }
+
+    @Test("F-01: for a room the app hasn't counted, the extension's fallback equals the app's own evaluation of the same pushes")
+    func fallbackMatchesAppEvaluation() async throws {
+        for pushes in 1...4 {
+            let fetcher = FakeNotificationFetchPort()
+            let records = FakeNotificationRecords()
+            let processor = NotificationProcessor(
+                fetcher: fetcher, records: records, attention: { AttentionBaseline(counts: [:]) }, isAppForeground: { false }, now: { now })
+            var last: NotificationDecision?
+            for index in 0..<pushes {
+                let event = try EventID("$p\(pushes)-\(index)")
+                fetcher.setResult(.success(.display(NotificationDisplay(
+                    title: "Alice", body: "Hi", timestamp: eventTs.addingTimeInterval(Double(index)), isMention: false, mode: .allMessages))), for: event)
+                last = await processor.process(room: roomA, event: event)
+            }
+            guard case .deliver(_, _, _, let badge, _, let counts) = last else {
+                Issue.record("expected a delivered notification")
+                return
+            }
+            // What the app computes once it runs: the same room, no server counts yet, the extension's records.
+            let input = RoomReadInputs(
+                roomID: roomA, membership: .joined, isEncrypted: false,
+                counts: RoomReadCounts(mode: .allMessages, server: .zero, sdk: .zero, isMarkedUnread: false))
+            let app = ReadStateCoordinator.evaluated(inputs: [input], records: records.all()).map(\.state)
+            let appCounts = BadgeCalculator.attentionCounts(evaluated: app)
+            #expect(counts == appCounts, "\(pushes) pushes")
+            #expect(badge == BadgeCalculator.badge(app), "\(pushes) pushes")
+        }
+    }
 }

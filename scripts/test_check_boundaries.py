@@ -33,6 +33,19 @@ class CheckBoundariesNamingTests(unittest.TestCase):
             res = self._run(root)
             self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
 
+    def test_logic_type_in_composition_root_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "ios" / "Packages").mkdir(parents=True)
+            app = root / "ios" / "App"
+            app.mkdir(parents=True)
+            (app / "AppRoot.swift").write_text("@MainActor\nfinal class AppRoot {}\nfinal class RecordsBox: Sendable {}\n")
+            self.assertEqual(self._run(root).returncode, 0)
+            (app / "Search.swift").write_text("@MainActor\nfinal class MessageSearchEngine {}\n")
+            res = self._run(root)
+            self.assertEqual(res.returncode, 1, res.stdout)
+            self.assertIn("MessageSearchEngine", res.stdout)
+
     def test_bad_feature_name_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

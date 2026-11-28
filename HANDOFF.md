@@ -1,18 +1,20 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-27 · Branch: `docs/architecture-audit-fixes` (from `main` after #109) · PRs #1–#109 merged before it
+Last updated: 2026-11-28 · Branch: `docs/architecture-audit-fixes` (from `main` after #109) · PRs #1–#109 merged before it
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
 - **Roadmap:** M0–M16 are built and merged. Re-planned 2026-11-25 to a production release (D121): M17 measure → M18 security and reliability → M19 performance → M20 messaging → M21 experience → M22 beta and launch, with gates G-SCALE, G-PERF, G-SHIP ([docs/ROADMAP.md](docs/ROADMAP.md)). The audit behind it found 26 gaps (ROADMAP §2); Halo isn't a release candidate yet.
-- **Milestones:** M0–M16 built, partly for M14–M15 (GA-24…GA-26). **M17 in progress:** M17-1, 2, 3, 6, 8 done; M17-4, M17-5 and M17-7 done except what needs a device or the founder (§5). **M18:** all non-founder/non-device R/C tasks merged (#92–#100); M18-6/M18-12 need the founder, M18-10 needs a device. **M19:** merged (#101) with all non-device R tasks built (M19-1…M19-5, M19-7, M19-9, M19-11); M19-6/8/10 need a physical iPhone 📱. **M20 in progress:** M20-1 (#91), M20-2 voice/audio (#102), M20-3 video (#103, GA-18 removed), M20-4 polls (#104, GA-19 removed), M20-5 camera (#105, GA-20 removed), M20-6 forward (#106), M20-8 room lifecycle (#107, GA-23 removed), M20-9 receipts & message info (#108) and M20-10 text rendering (#109, GA-30 removed) merged; M20-7 report/block paused on founder decision `Q-REPORT`. **Architecture audit (2026-11-27):** [docs/ARCHITECTURE_AUDIT.md](docs/ARCHITECTURE_AUDIT.md) written; its doc-only fixes are on `docs/architecture-audit-fixes` (D127, D128, ADR-0025); its code fixes are open (§5). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`), physical iPhone 17e (`00008150-001149800E7B401C`).
-- **Last checks (audit doc fixes, 2026-11-27):** `scripts/validate-docs.sh` and `scripts/check-boundaries.sh` passed; docs only, so no Swift tests or builds were run.
+- **Milestones:** M0–M16 built, partly for M14–M15 (GA-24…GA-26). **M17 in progress:** M17-1, 2, 3, 6, 8 done; M17-4, M17-5 and M17-7 done except what needs a device or the founder (§5). **M18:** all non-founder/non-device R/C tasks merged (#92–#100); M18-6/M18-12 need the founder, M18-10 needs a device. **M19:** merged (#101) with all non-device R tasks built (M19-1…M19-5, M19-7, M19-9, M19-11); M19-6/8/10 need a physical iPhone 📱. **M20 in progress:** M20-1 (#91), M20-2 voice/audio (#102), M20-3 video (#103, GA-18 removed), M20-4 polls (#104, GA-19 removed), M20-5 camera (#105, GA-20 removed), M20-6 forward (#106), M20-8 room lifecycle (#107, GA-23 removed), M20-9 receipts & message info (#108) and M20-10 text rendering (#109, GA-30 removed) merged; M20-7 report/block paused on founder decision `Q-REPORT`. **Architecture audit (2026-11-27):** [docs/ARCHITECTURE_AUDIT.md](docs/ARCHITECTURE_AUDIT.md) written; its doc-only fixes and its P1 code fixes are on `docs/architecture-audit-fixes` (D127, D128, ADR-0025); the rest of the `try?` review (S-6) and the P2 items are open (§5). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`), physical iPhone 17e (`00008150-001149800E7B401C`).
+- **Last checks (audit P1 + F-02, 2026-11-28):** `HALO_SIM="iPhone Air" scripts/prepush.sh` passed all checks (handoff, docs, boundaries, boundaries unit tests 6/6, design tokens, HaloCore 273 tests, HaloApple simulator tests, Halo-Debug app build, gitleaks, swiftlint 0 violations) except `HaloUITests.testComposerPanelsSwapWithKeyboard`, which passed immediately on isolated rerun (`testPastedImageJoinsPendingPhotos` passed). Earlier on this branch (2026-11-27): `infra/test/run.sh search` (5/5), `infra/test/run.sh faults exportWithBrokenHistory`, and full `HaloUITests` rerun passed. New regression tests that failed before their fix: `DraftCoordinatorTests.writesStayInOrder`, `TimelineLifecycleTests.stopDuringStart`, `FaultTests.exportWithBrokenHistory`.
 - **Earlier checks (M20-10 text rendering, 2026-11-27):** `HALO_SIM="iPhone Air" scripts/prepush.sh` passed; `HALO_SIM="iPhone Air" infra/test/run.sh interop` passed (6/6 tests, only 1 pre-existing known issue GA-31 remaining — GA-30 removed and verified green on live Synapse!); `MentionFormatterTests`, `RichTextParserTests` (incl. hostile HTML stress fixtures), `HTMLTextTests`, `RichTextRenderingTests`, and Light/Dark/AX5 visual inspection passed.
 - **CI:** PRs #1–#109 merged. `scenarios.yml` (Synapse behind the fault proxy); Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
+- **Architecture audit F-02 (2026-11-27):** `MessageSearchEngine` moved from `App/Composition/SearchAssembly.swift` into `HaloApplication` behind the new `AccountSearchIndexPort` (`SearchIndexStore`, `FakeSearchIndex`) and an `Environment` of iOS services; sync and search share one `DeviceConditions`; room-open orchestration is `PreparedTimelines.open`; `check_boundaries.py` rejects a `class`/`actor` in a composition root other than `AppRoot`, OS entry points and `…Box` holders. Tests: `MessageSearchEngineTests` (new), `PreparedTimelinesTests.newerTapReplacesOlder`, `test_check_boundaries.test_logic_type_in_composition_root_fails`.
+- **Architecture audit P1 code fixes (2026-11-27):** badge counts and totals only through `BadgeCalculator` in app, NSE and widget (F-01, AGENTS §4.2); `FeatureComposer` deleted (D127); `FeatureSettings` writes through the shared `PreferencesStore`, `AppPreferences` deleted (F-05); `TimelineViewModel.stop()` cancels and awaits an in-flight start (F-10); `DraftCoordinator` keeps store writes in order (F-09); `MatrixRoomPort.exportMessages` fails instead of exporting part of a room when older history can't be loaded (S-6).
 - **Architecture audit and doc fixes (2026-11-27):** read-only audit of the whole iOS codebase at `2b98ee7` ([docs/ARCHITECTURE_AUDIT.md](docs/ARCHITECTURE_AUDIT.md): verdict sound, no P0; P1/P2 plan). Doc-only drift fixed: composer stays in `FeatureTimeline` (D127, ADR-0025, supersedes the `FeatureComposer` part of ADR-0022); `TaskHandle` rule reworded to actual practice (D128: AGENTS §8, CODE_CONVENTIONS §3, SDK_INTEGRATION §2); adapter isolation (CONCURRENCY §2); `HaloPersistence` not Linux-built and renderers in `HaloBotRendering` (MODULE_BOUNDARIES §1, TEST_STRATEGY, CI_CD).
 - **M20-10 text rendering (2026-11-27, removes GA-30):** Added `MentionFormatter.html(_:mentions:)` in `HaloDomain` and switched `MatrixTimelinePort.content` to `messageEventContentFromHtml` when mentions are present so `body` stays clean plain text (`hello @Peer`) while `formatted_body` keeps `matrix.to` pills and `m.mentions` keeps `user_ids`; built pure linear-time `RichTextParser` (`HaloBotRendering`) and `RichTextMessageView` (`FeatureTimeline`) for fenced code blocks with one-tap Copy, tap-to-reveal `data-mx-spoiler` pills, bounded scrollable tables, nested lists, headings, and blockquotes while blocking scripts/styles/iframes/images/dangerous URLs and keeping simple messages on the fast `Text` path; verified with `MentionFormatterTests`, `RichTextParserTests`, `RichTextRenderingTests` (Light/Dark/AX5 snapshots), and live Synapse `InteropTests` (6/6 passed, `GA-30` removed).
 - **M20-9 receipts & message info (2026-11-27, merged #108):** Added `ReadReceiptEntry`/`ReadReceiptPolicy`, receipts under others' messages with 0 pt layout jump, read timestamps, `MessageInfoView`, and 3-account live Synapse `InteropTests.readReceiptsOnOthersMessagesAndTimestamps`.
@@ -45,6 +47,8 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D128), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
+- **Audit F-02:** `HaloDomain/Ports/SearchPort` (`AccountSearchIndexPort`), `HaloApplication/Search/MessageSearchEngine` (new), `HaloTestSupport/Search/FakeSearchIndex`, `HaloPersistence/SearchIndexStore`, `FeatureTimeline/PreparedTimelines`, `App/{AppRoot, HaloApp, Composition/SearchAssembly, Composition/SessionAssembly}`, `scripts/{check_boundaries, test_check_boundaries}.py`; tests `HaloApplicationTests/MessageSearchEngineTests` (new), `FeatureTimelineTests/PreparedTimelinesTests`; docs `architecture/MODULE_BOUNDARIES` §2, `features/MESSAGE_SEARCH`, `ARCHITECTURE_AUDIT`.
+- **Audit P1 code fixes:** `HaloDomain/{ReadState/ReadState, Ports/BadgePort, Widgets/UnreadWidgetSnapshot}`, `HaloApplication/{ReadState/ReadStateCoordinator, Notifications/NotificationProcessor, Timeline/DraftCoordinator, Account/PreferencesStore}`, `HaloMatrixAdapter/RoomList/MatrixRoomPort`, `FeatureTimeline/TimelineViewModel`, `FeatureSettings/SettingsView` (`AppPreferences` deleted), `FeatureComposer` (deleted), `HaloApple/Package.swift`, `ios/project.yml`, `ios/Halo.xcodeproj/project.pbxproj` (hand-edited, team kept), `App/{HaloApp, Composition/SettingsAssembly}`; tests `HaloDomainTests/BadgeCalculatorTests` (new), `HaloApplicationTests/{NotificationProcessorTests, DraftCoordinatorTests}`, `FeatureTimelineTests/TimelineLifecycleTests` (new), `HaloMatrixAdapterTests/FaultTests`, `HaloPlatformTests/UserDefaultsPreferencesStoreTests`; docs `matrix/UNREAD_STATE`, `features/{SETTINGS, MESSAGING, STICKERS, MEDIA_ATTACHMENTS}`, `development/DEVELOPMENT_SETUP`, `ARCHITECTURE_AUDIT`.
 - **Audit doc fixes:** `AGENTS.md` (§8), `docs/ARCHITECTURE_AUDIT.md` (new), `docs/adr/0025-composer-stays-in-feature-timeline.md` (new), `docs/adr/{README, 0022-module-layout-v2}.md`, `docs/DECISION_LOG.md` (D127, D128), `docs/README.md`, `docs/architecture/{CONCURRENCY, MODULE_BOUNDARIES}.md`, `docs/development/{CI_CD, CODE_CONVENTIONS}.md`, `docs/matrix/SDK_INTEGRATION.md`, `docs/testing/TEST_STRATEGY.md`, `HANDOFF.md`.
 - Earlier pushes: see `git log`.
 
@@ -52,7 +56,8 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D128), [docs/adr/R
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
 
 **Not done, for future action (from the M18–M20 work; remove a line when done)**
-- **Architecture audit code fixes (P1, [ARCHITECTURE_AUDIT.md](docs/ARCHITECTURE_AUDIT.md) §6):** badge totals in one `HaloDomain` function for app, NSE and widget (F-01, AGENTS §4.2); delete `FeatureComposer` (D127) and the duplicate `AppPreferences` store (F-05); move `MessageSearchEngine` and room-open orchestration out of `App/` (F-02); `TimelineViewModel.stop()` vs. in-flight start and per-keystroke typing/draft ordering (F-09, F-10); behaviour-changing `try?` in `MatrixRoomPort.exportMessages` (S-6).
+- **Architecture audit, still open ([ARCHITECTURE_AUDIT.md](docs/ARCHITECTURE_AUDIT.md) §6):** S-6 — review the remaining behaviour-changing `try?` sites in the adapter; then the P2 items (F-08 `TimelineViewModel` split, P-1/P-2 room-list scaling, P-4/P-5 timeline mapping, F-03, F-06, F-07, S-5).
+- **`HaloUITests.testPastedImageJoinsPendingPhotos` flake (2026-11-27):** failed once in a full `prepush`, passed 2 of 2 alone right after and in a full-suite rerun; the change on the branch doesn't touch pasting. Watch it.
 - **M20-5:** live hardware photo/video capture & iOS permission prompt on a physical iPhone 📱; `NSCameraUsageDescription`, in-context `CameraAccessPolicy`/`CameraPermissionController`, denied/restricted/unavailable UI with Settings link, lossless video GPS stripping (`VideoPreparer`) & photo GPS stripping (`ImagePreparer`), and Light/Dark/AX5 snapshots are built and verified.
 - **M20-3:** 100 MB video memory measurement, portrait/landscape full-screen rotation feel, and Save to Photos permission flow on a physical iPhone 📱; inline posters, disk-streamed `AVPlayerViewController`, captions on send, poster thumbnails, Save/Share, Light/Dark/AX5, and interop tests are built and verified.
 - **M20-2:** live phone-call interruption, Bluetooth headphone disconnect, and VoiceOver check on a physical iPhone 📱; inline player, Element Ogg Opus interop, MSC3245/MSC1767 send & receive, Light/Dark/AX5, and unit tests are built and verified.
@@ -114,23 +119,36 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §3.
 1. Continue **M20** R tasks in order: **M20-11 Search inside a room** → **M20-12 Basic moderation** → **M20-13 Storage** → **M20-19 Unknown message types** (removes GA-31); return to **M20-7 Report and block** (removes GA-22) once founder decides `Q-REPORT`.
 2. Open M18/M19 items: M18-10 (device matrix 📱), M18-12 (security review 👤), M18-6 (OIDC end to end 👤), Q-VERIFY; M19-6/8/10 need a physical iPhone 📱.
-3. Architecture audit P1 code fixes (§5, [ARCHITECTURE_AUDIT.md](docs/ARCHITECTURE_AUDIT.md) §6), batched with or between M20 tasks.
+3. Architecture audit: the rest of S-6, then P2 (§5, [ARCHITECTURE_AUDIT.md](docs/ARCHITECTURE_AUDIT.md) §6), batched with or between M20 tasks.
 4. Founder: the device and hand checks of §5; long lead times: push gateway (M22-1), legal (M22-4), KLIPY production key, filtering entitlement, artwork.
 
 ## 7. Next Session Prompt
 ```text
 /loop Read AGENTS.md, HANDOFF.md, docs/development/AUTONOMOUS_LOOP.md and docs/ROADMAP.md (§1–§3, §7).
-Work the ROADMAP §3 queue starting at M20-11 (Search inside a room with next/previous using SearchPort room filter and M20-1 focused jump; M20-7 remains paused until founder decides Q-REPORT): Plan → Implement → Verify → Review → Land, R tasks first.
 
-A task is done only when its "Done when" holds by a test that failed before, its GA row is removed, its spec no longer says
-"not built", and the rules of ROADMAP §1 hold. G-SCALE is accepted with conditions (D125); G-PERF and
-G-SHIP are the founder's. 1.0 scope is fixed (D122). Open decisions: Q-VERIFY, Q-REPORT (for M20-7).
+Work the ROADMAP §3 queue starting at M20-11 (Search inside a room with next/previous using the SearchPort
+room filter and the M20-1 focused jump; M20-7 stays paused until the founder decides Q-REPORT):
+Plan → Implement → Verify → Review → Land, R tasks first. Between M20 tasks, batch the open audit items
+(HANDOFF §5): the rest of S-6 (behaviour-changing `try?` in the adapter), then P2 — F-08 TimelineViewModel split
+(composer / bot tasks / media child models), P-1/P-2 room-list rebuild coalescing, P-4/P-5 timeline mapping passes.
+
+Rules learned in the audit (keep them true):
+- Badge counts and totals only through BadgeCalculator (AGENTS §4.2); no `+=` on counts anywhere else.
+- No class/actor in App/, NotificationService/, ShareExtension/, WidgetExtension/ except AppRoot, OS entry points
+  and `…Box` holders (check_boundaries.py); new behaviour goes into HaloApplication or a feature, with unit tests.
+- Preferences only through the shared PreferencesStore; the composer lives in FeatureTimeline (D127).
+- A bug fix needs a test that failed before (as DraftCoordinatorTests.writesStayInOrder, TimelineLifecycleTests,
+  FaultTests.exportWithBrokenHistory did).
+
+A task is done only when its "Done when" holds by a test that failed before, its GA row is removed, its spec no longer
+says "not built", and the rules of ROADMAP §1 hold. G-SCALE is accepted with conditions (D125); G-PERF and G-SHIP are
+the founder's. 1.0 scope is fixed (D122). Open decisions: Q-VERIFY, Q-REPORT (for M20-7).
 
 Checks per iteration:
 - HALO_SIM="iPhone Air" scripts/prepush.sh
 - scripts/contract-test.sh (touched contracts); it fails if a run leaves rooms or devices
+- infra/test/run.sh faults|interop|search when sending, sync, timeline mapping or search changes
 - Simulator check in light, dark and AX5 for UI changes
-- infra/test/run.sh faults|interop when sending, sync or timeline mapping changes
 - Never scale-test on stickertester or contractpeer; use the M17-3 accounts
 - Update HANDOFF.md, ROADMAP.md and the owning spec in the last commit of every push (AGENTS.md §18).
 ```

@@ -87,6 +87,11 @@ struct RoomReadState: Sendable, Equatable {
 function. `BadgeCalculator.badge(_ states: [RoomReadState]) -> Int` sums `badgeCount` for rooms where `attention == true`
 (**[DECISION D82, ADR-0021]**, superseding D5: `allMessages` contributes `max(notify, highlight, 1)`, `mentionsAndKeywords`
 contributes `max(highlight, 1)`, muted marked-unread and invites contribute `1`, non-attention rooms contribute `0`).
+Every count and total is made by `BadgeCalculator` (audit F-01): `roomCount` (one room), `attentionCounts` (the app's per-room
+map: evaluated rooms, pushes for rooms not listed before the first sync, carried counts, exclusions), `total` (icon, widget,
+`BadgeSnapshot`) and `countAfterUnsyncedPushes` (the NSE fallback, R-08). `ReadStateCoordinator`, `NotificationProcessor` and the
+widget call these; none adds counts itself. `NotificationProcessorTests.fallbackMatchesAppEvaluation` holds the NSE fallback equal
+to the app's evaluation of the same pushes.
 
 ## 5. Evaluation rules
 

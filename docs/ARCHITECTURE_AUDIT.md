@@ -228,12 +228,12 @@ None of these needs a new dependency or a rewrite. Each is small enough for one 
 *No P0 architectural defect was found.* (The P0 product invariants — read state, badge — are tested; F-01 is a drift to close in P1, not a reproduced wrong badge.)
 
 ### P1 — before Beta 1
-1. **Close the badge-rule drift (F-01):** one pure `HaloDomain` function for "per-room counts → total", used by `ReadStateCoordinator`, `NotificationProcessor` and the widget; add an app-vs-NSE equivalence property test. Or, if the current split is intended, rewrite AGENTS §4.2 to say exactly what is allowed where.
+1. ✅ **Close the badge-rule drift (F-01):** done — `BadgeCalculator.{roomCount, total, attentionCounts, countAfterUnsyncedPushes}` are used by `ReadStateCoordinator`, `NotificationProcessor`, `BadgeSnapshot` and the widget; `BadgeCalculatorTests` and `NotificationProcessorTests.fallbackMatchesAppEvaluation` (behaviour unchanged, so these guard rather than reproduce a bug).
 2. **Fix the documentation drift (§4 rows 5–9)** — done on `docs/architecture-audit-fixes` (D127, D128).
-3. **Delete `FeatureComposer` (S-1, decided by D127) and the duplicate preference store (S-2/F-05).**
-4. **Stop growing the composition root (F-02):** move `MessageSearchEngine` into `HaloApplication` (it already only wires ports), move room-open orchestration into a `HaloApplication` coordinator, and add a rule to `check_boundaries.py` capping non-view logic in `App/` (e.g. no new `actor`/`final class` outside `AppRoot`).
-5. **Make `stop()` cancel/await an in-flight start (F-10)** and serialise typing/draft writes (F-09), each with a regression test.
-6. **Review behaviour-changing `try?` sites (S-6)**, starting with room export truncation.
+3. ✅ **Delete `FeatureComposer` (S-1, D127) and the duplicate preference store (S-2/F-05):** done — `FeatureSettings` writes through the shared `PreferencesStore`; `AppPreferences` and `PreferencesStore.reload()` are gone; defaults moved to `UserDefaultsPreferencesStoreTests`.
+4. ✅ **Stop growing the composition root (F-02):** done — `MessageSearchEngine` is in `HaloApplication` behind the new `AccountSearchIndexPort` and an `Environment` of iOS services (`MessageSearchEngineTests`); room-open orchestration is `PreparedTimelines.open` (`PreparedTimelinesTests.newerTapReplacesOlder`); `check_boundaries.py` now rejects a `class`/`actor` in a composition root other than `AppRoot`, OS entry points and `…Box` holders. Sync and search now share one `DeviceConditions`.
+5. ✅ **F-10 and F-09 (drafts):** done, both now **VERIFIED** defects — `TimelineLifecycleTests.stopDuringStart` and `DraftCoordinatorTests.writesStayInOrder` failed before the fix (`stop()` cancels and awaits the start; `DraftCoordinator` chains store writes). Typing-notice order is left as is: ephemeral, throttled, and the server expires it.
+6. ◐ **Review behaviour-changing `try?` sites (S-6):** room export done — a failing `/messages` now fails the export (`FaultTests.exportWithBrokenHistory` failed before the fix); the other sites are open.
 
 ### P2 — during M20–M22
 7. **Split `TimelineViewModel` (F-08)** into composer, bot-task and media child models; collapse `TimelineCoordinator` pass-throughs (S-3).

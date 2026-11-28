@@ -409,9 +409,52 @@ public enum ReadStatePolicy {
 }
 
 /// The app badge: total unread messages across rooms needing attention (D82, supersedes D5).
-/// Never incremented blindly; always recomputed by one function (D9).
+/// Never incremented blindly; always recomputed here (D9). The app, the notification extension and the widget all count
+/// through these functions, so the icon, the widget and the list can't disagree (D118).
 public enum BadgeCalculator {
+    /// What one room adds to the badge: its unread messages (at least 1) while it needs attention, otherwise nothing.
+    public static func roomCount(_ state: RoomReadState) -> Int {
+        state.attention ? max(state.badgeCount, 1) : 0
+    }
+
     public static func badge(_ states: [RoomReadState]) -> Int {
-        states.reduce(0) { $0 + ($1.attention ? max($1.badgeCount, 1) : 0) }
+        states.reduce(0) { $0 + roomCount($1) }
+    }
+
+    /// The badge for stored per-room counts (the icon, the widget, the extension's fallback): the sum of the positive ones.
+    public static func total<Key: Hashable>(_ counts: [Key: Int]) -> Int {
+        counts.values.reduce(0) { $0 + max($1, 0) }
+    }
+
+    /// The per-room counts of one evaluation by the app (D82, R-03, R-04).
+    /// - Parameters:
+    ///   - evaluated: the `ReadStatePolicy` result of every listed room.
+    ///   - unlistedRecords: one room ID per notification record of a room that isn't listed yet. Only before the run's first
+    ///     sync response: each such push counts one message until the room's own evaluation replaces it.
+    ///   - carried: counts kept from an earlier evaluation for rooms not evaluated in this run yet. They already include the
+    ///     pushes counted then, so the larger count wins, never the sum.
+    ///   - excluded: rooms that never count (the virtual gallery entry, left or hidden rooms).
+    public static func attentionCounts(
+        evaluated: [RoomReadState], unlistedRecords: [RoomID] = [], carried: [RoomID: Int] = [:], excluded: Set<RoomID> = []
+    ) -> [RoomID: Int] {
+        var counts: [RoomID: Int] = [:]
+        for state in evaluated where state.attention {
+            counts[state.roomID] = roomCount(state)
+        }
+        let listed = Set(evaluated.map(\.roomID))
+        for room in unlistedRecords where !listed.contains(room) {
+            counts[room, default: 0] += 1
+        }
+        for (room, count) in carried where count > 0 {
+            counts[room] = max(counts[room] ?? 0, count)
+        }
+        for room in excluded { counts.removeValue(forKey: room) }
+        return counts
+    }
+
+    /// A room's count in the extension's fallback badge (R-08): the app's last count for the room plus what the pushes
+    /// since then are worth under `ReadStatePolicy` on their own (at least one message, since they give attention).
+    public static func countAfterUnsyncedPushes(lastEvaluated: Int, pushes: RoomReadState) -> Int {
+        max(lastEvaluated, 0) + max(pushes.badgeCount, 1)
     }
 }

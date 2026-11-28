@@ -1,6 +1,6 @@
 # Feature: Stickers
 
-> Priority: MVP+ (v1, D45), P2 (v2) · Milestone: M4 (v1), later (v2) · Modules: FeatureStickers, FeatureComposer, FeatureTimeline, `HaloDomain/Stickers` (ImagePackParser, StickerLibrary model), `HaloApplication/StickerLibrary`, ports `RoomPort`, `AccountDataPort`, `MediaPort`, `TimelinePort` · Decisions: D13, D48, ADR-0011 · Requirements: R-ST-*, R-P2-ST
+> Priority: MVP+ (v1, D45), P2 (v2) · Milestone: M4 (v1), later (v2) · Modules: FeatureStickers, FeatureTimeline (incl. the composer, D127), `HaloDomain/Stickers` (ImagePackParser, StickerLibrary model), `HaloApplication/StickerLibrary`, ports `RoomPort`, `AccountDataPort`, `MediaPort`, `TimelinePort` · Decisions: D13, D48, ADR-0011 · Requirements: R-ST-*, R-P2-ST
 
 ## 1. Purpose
 A sticker experience like Discord's — fast panel, favourites, recents, search, personal packs — built **only on

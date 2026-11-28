@@ -238,6 +238,25 @@ struct FaultTests {
         #expect(bodies == ["after expiry"], "exactly once")
     }
 
+    @Test("Older history that can't be loaded fails the export instead of exporting part of the room (audit S-6)", .timeLimit(.minutes(4)))
+    func exportWithBrokenHistory() async throws {
+        let stage = try await TestStage()
+        // Messages sent while this device is offline come back as a gap after the newest few: exporting them needs `/messages`.
+        try await stage.proxy.fault(["action": "refuse"])
+        try await stage.wait(60, "sync reports the outage") { [.offline, .failed].contains(stage.sync.last) }
+        for index in 0..<40 { _ = try await stage.peer.send("history \(index)", to: stage.room) }
+        try await stage.proxy.heal()
+        try await stage.wait(60, "the newest message") { stage.mirror.shows("history 39") }
+        try await stage.proxy.fault(["action": "status", "status": 403, "path": "/messages"])  // not retried by the SDK
+        await #expect(throws: HaloError.self) {
+            _ = try await MatrixRoomPort(session: stage.session).exportMessages(in: stage.room, limit: 40)
+        }
+        #expect(try await stage.proxy.hits() >= 1, "the export asked for older history")
+        try await stage.proxy.heal()
+        let all = try await MatrixRoomPort(session: stage.session).exportMessages(in: stage.room, limit: 40)
+        #expect(all.contains { $0.body == "history 0" } && all.contains { $0.body == "history 39" })
+    }
+
     @Test("A file comes down to a file on disk, byte for byte, in the folder it was asked for (M19-5)", .timeLimit(.minutes(3)))
     func fileToDisk() async throws {
         let stage = try await TestStage()

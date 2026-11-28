@@ -11,7 +11,7 @@ public struct UnreadWidgetSnapshot: Sendable, Equatable {
 
     public init(counts: [String: Int], updatedAt: Date?) {
         let positive = counts.values.filter { $0 > 0 }
-        totalUnread = positive.reduce(0, +)
+        totalUnread = BadgeCalculator.total(counts)
         chatCount = positive.count
         self.updatedAt = updatedAt
     }

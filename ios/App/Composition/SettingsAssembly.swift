@@ -18,13 +18,10 @@ extension AppRoot {
         SettingsConfiguration(
             version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?",
             build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?",
+            preferences: preferences,
             onPrivateReceiptsChange: { [weak self] value in
                 guard let self else { return }
-                self.preferences.privateReceipts = value
                 Task { await self.receipts.setPrivateReceipts(value) }
-            },
-            onPreferencesChanged: { [weak self] in
-                self?.preferences.reload()
             },
             saveBotSenders: { [weak self] old, new in
                 guard let self else { return nil }

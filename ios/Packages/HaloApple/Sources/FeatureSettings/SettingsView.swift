@@ -1,5 +1,7 @@
 #if canImport(SwiftUI)
+import HaloApplication
 import HaloDesignSystem
+import HaloDomain
 import SwiftUI
 
 /// The account's media preview setting as the Settings screen offers it (MEDIA_ATTACHMENTS FR-7).
@@ -24,9 +26,9 @@ public struct VerifyDeviceAction {
 public struct SettingsConfiguration {
     public let version: String
     public let build: String
-    public let preferences: AppPreferences
+    /// The app's one preference store (`PreferencesPort`); every toggle here writes through it, so the rest of the app sees the change at once.
+    public let preferences: PreferencesStore
     public let onPrivateReceiptsChange: (Bool) -> Void
-    public let onPreferencesChanged: (@MainActor () -> Void)?
     public let saveBotSenders: (@Sendable (_ old: [String], _ new: [String]) async -> [String]?)?
     public let loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)?
     public let saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)?
@@ -55,9 +57,8 @@ public struct SettingsConfiguration {
     public init(
         version: String,
         build: String,
-        preferences: AppPreferences = AppPreferences(),
+        preferences: PreferencesStore,
         onPrivateReceiptsChange: @escaping (Bool) -> Void = { _ in },
-        onPreferencesChanged: (@MainActor () -> Void)? = nil,
         saveBotSenders: (@Sendable (_ old: [String], _ new: [String]) async -> [String]?)? = nil,
         loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)? = nil,
         saveMediaPreviews: (@Sendable (MediaPreviewChoice) async -> Bool)? = nil,
@@ -87,7 +88,6 @@ public struct SettingsConfiguration {
         self.build = build
         self.preferences = preferences
         self.onPrivateReceiptsChange = onPrivateReceiptsChange
-        self.onPreferencesChanged = onPreferencesChanged
         self.saveBotSenders = saveBotSenders
         self.loadMediaPreviews = loadMediaPreviews
         self.saveMediaPreviews = saveMediaPreviews
@@ -120,7 +120,7 @@ public struct SettingsView: View {
     private var version: String { config.version }
     private var build: String { config.build }
     private var onSignOut: () -> Void { config.onSignOut }
-    private var preferences: AppPreferences { config.preferences }
+    private var preferences: PreferencesStore { config.preferences }
     private var onPrivateReceiptsChange: (Bool) -> Void { config.onPrivateReceiptsChange }
     private var saveBotSenders: (@Sendable (_ old: [String], _ new: [String]) async -> [String]?)? { config.saveBotSenders }
     private var loadMediaPreviews: (@Sendable () async -> MediaPreviewChoice)? { config.loadMediaPreviews }
@@ -155,7 +155,7 @@ public struct SettingsView: View {
     private var clearCache: (@Sendable () async -> Bool)? { config.clearCache }
     @State private var storage: [StorageSize] = []
     @State private var clearingCache = false
-    @AppStorage(AppPreferences.appearanceKey) private var appearance = Appearance.system.rawValue
+    @State private var appearance: AppAppearance
     @State private var mediaPreviews: MediaPreviewChoice = .always
     @State private var mediaPreviewsLoaded = false
     @State private var mediaPreviewsFailed = false
@@ -175,6 +175,7 @@ public struct SettingsView: View {
         _privacyBlur = State(initialValue: config.preferences.privacyBlur)
         _chatsInSystemSearch = State(initialValue: config.preferences.chatsInSystemSearch)
         _followFocusFilter = State(initialValue: config.preferences.followFocusFilter)
+        _appearance = State(initialValue: config.preferences.appearance)
     }
 
     public var body: some View {
@@ -207,7 +208,6 @@ public struct SettingsView: View {
                     .onChange(of: privateReceipts) { _, value in
                         preferences.privateReceipts = value
                         onPrivateReceiptsChange(value)
-                        config.onPreferencesChanged?()
                     }
                 Toggle("Typing notices", isOn: $sendTypingNotices)
                     .accessibilityIdentifier("typing-notices")
@@ -218,13 +218,11 @@ public struct SettingsView: View {
                     .accessibilityIdentifier("privacy-blur")
                     .onChange(of: privacyBlur) { _, value in
                         preferences.privacyBlur = value
-                        config.onPreferencesChanged?()
                     }
                 Toggle("Chats in Siri and Spotlight", isOn: $chatsInSystemSearch)
                     .accessibilityIdentifier("chats-in-system-search")
                     .onChange(of: chatsInSystemSearch) { _, value in
                         preferences.chatsInSystemSearch = value
-                        config.onPreferencesChanged?()
                     }
             } header: {
                 Text("Privacy")
@@ -236,7 +234,6 @@ public struct SettingsView: View {
                     .accessibilityIdentifier("follow-focus-filter")
                     .onChange(of: followFocusFilter) { _, value in
                         preferences.followFocusFilter = value
-                        config.onPreferencesChanged?()
                     }
             } header: {
                 Text("Focus")
@@ -245,11 +242,10 @@ public struct SettingsView: View {
             }
             Section("Appearance") {
                 Picker("Theme", selection: $appearance) {
-                    ForEach(Appearance.allCases) { Text($0.title).tag($0.rawValue) }
+                    ForEach(AppAppearance.allCases) { Text($0.title).tag($0) }
                 }
                 .accessibilityIdentifier("appearance")
-                // The picker stores to UserDefaults; the root view reads `PreferencesStore`, so refresh it.
-                .onChange(of: appearance) { config.onPreferencesChanged?() }
+                .onChange(of: appearance) { _, value in preferences.appearance = value }
             }
             if config.onOpenStickers == nil, let stickerPacks {
                 Section("Stickers") {
@@ -500,7 +496,7 @@ private struct BotsSection: View {
     @State private var editor: BotListEditor
     @State private var newBot = ""
 
-    init(preferences: AppPreferences, sync: (@Sendable (_ old: [String], _ new: [String]) async -> [String]?)? = nil) {
+    init(preferences: PreferencesStore, sync: (@Sendable (_ old: [String], _ new: [String]) async -> [String]?)? = nil) {
         _editor = State(initialValue: BotListEditor(senders: preferences.botSenders, store: { preferences.botSenders = $0 }, sync: sync))
     }
 

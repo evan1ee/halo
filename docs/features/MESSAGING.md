@@ -1,6 +1,6 @@
 # Feature: Messaging (Composer, Sending, Interactions)
 
-> Priority: P1 · Milestone: M2 · Modules: FeatureComposer, FeatureTimeline, `TimelinePort` · Requirements: R-P1-MSG
+> Priority: P1 · Milestone: M2 · Modules: FeatureTimeline (incl. the composer, D127), `TimelinePort` · Requirements: R-P1-MSG
 
 ## 1. Purpose
 Send, reply, edit, delete and react reliably, online or offline.

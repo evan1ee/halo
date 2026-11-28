@@ -19,7 +19,7 @@ manifests and by `scripts/check-boundaries.sh` (see [../development/CI_CD.md](..
 | `HaloPlatform` | 6 | UserNotifications, BackgroundTasks, Keychain, file protection, ImageIO decoding, haptics | HaloDomain, HaloFoundation | ❌ |
 | `HaloDesignSystem` | 1 | Tokens, components, shared media viewers, the composer's keyboard/panel area | HaloFoundation | ❌ |
 | `HaloBotRendering` | 1 | Bot cards for parsed templates, generic fallback, and the message text renderers: HTML-subset → `AttributedString` (`HTMLText`, D29) and rich text (`RichTextParser`) | HaloDomain, HaloDesignSystem | ❌ |
-| `Feature*` (Onboarding, RoomList, Timeline incl. the composer (D127), Media, RoomDetails, Profile, Search, Settings, Stickers, BotActivity; `FeatureComposer` is retired, ADR-0025) | 1–2 | Screens + `@Observable` view models | HaloApplication, HaloDomain, HaloDesignSystem, HaloBotRendering (Timeline, BotActivity only), HaloFoundation | ❌ |
+| `Feature*` (Onboarding, RoomList, Timeline incl. the composer (D127, ADR-0025), Media, RoomDetails, Profile, Search, Settings, Stickers, BotActivity) | 1–2 | Screens + `@Observable` view models | HaloApplication, HaloDomain, HaloDesignSystem, HaloBotRendering (Timeline, BotActivity only), HaloFoundation | ❌ |
 | `HaloTestSupport` | test | Fakes of every port, the shared port contract suites, fixture loaders, scenario builders | HaloDomain, HaloFoundation (not HaloApplication: its tests use these fakes, and SwiftPM forbids package cycles) | ✅ |
 | `Halo` (app target) | root | `AppContainer`, scene setup, deep links | all | ❌ |
 | `HaloNotificationService` (NSE target) | root | NSE entry point; the notification pipeline | HaloApplication, HaloDomain, HaloMatrixAdapter, HaloPersistence, HaloPlatform, HaloFoundation | ❌ |
@@ -75,6 +75,7 @@ Renaming an existing module needs a reason beyond style.
 | ❌ Upstream FFI types in a port signature or a domain model | Same as the first rule |
 | ❌ `HaloPersistence` stores Matrix events, receipts or room state as truth | Single source of truth (DATA_FLOW §1) |
 | ❌ Badge or attention computed outside `BadgeCalculator` / `ReadStatePolicy` | D9 |
+| ❌ A composition root (`ios/App`, `NotificationService`, `ShareExtension`, `WidgetExtension`) declares a `class`/`actor` other than its object graph (`AppRoot`), an OS entry point it must subclass, or a `…Box` holder | Roots are wiring; behaviour belongs where it is unit-tested (AGENTS §5, audit F-02; `check_boundaries.py`) |
 
 ## 3. The Rust/Swift boundary
 

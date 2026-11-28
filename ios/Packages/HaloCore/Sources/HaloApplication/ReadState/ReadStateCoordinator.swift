@@ -443,24 +443,12 @@ public actor ReadStateCoordinator {
         seen.formUnion(inputs.map(\.roomID))
         seen.formUnion(excludedRooms)
         let activeRecords = stored.filter { !pass.superseded.contains($0.eventID) && !excludedRooms.contains($0.roomID) }
-        var counts: [RoomID: Int] = [:]
-        for (input, state) in pass.results where state.attention {
-            counts[input.roomID] = max(state.badgeCount, 1)
-        }
-        let known = Set(inputs.map(\.roomID))
         // Before the first sync response of the run, records for rooms not yet in the loaded list still count;
         // once sync has reported the full joined/invited set, unknown rooms no longer count (R-03, R-04).
-        if !hasSynced {
-            for record in activeRecords where !known.contains(record.roomID) {
-                counts[record.roomID, default: 0] += 1
-            }
-        }
-        let carryable = hasSynced ? carried.filter { syncedRooms.contains($0.key) } : carried
-        for (room, count) in carryable where !seen.contains(room) && !excludedRooms.contains(room) && count > 0 {
-            // The stored count already includes the records the extension added to it: the larger one, never the sum.
-            counts[room] = max(counts[room] ?? 0, count)
-        }
-        for room in excludedRooms { counts.removeValue(forKey: room) }
+        let unlisted = hasSynced ? [] : activeRecords.map(\.roomID)
+        let carryable = (hasSynced ? carried.filter { syncedRooms.contains($0.key) } : carried).filter { !seen.contains($0.key) }
+        let counts = BadgeCalculator.attentionCounts(
+            evaluated: pass.results.map(\.state), unlistedRecords: unlisted, carried: carryable, excluded: excludedRooms)
         carried = counts
         if counts != attentionCounts || !hasWritten {
             hasWritten = true

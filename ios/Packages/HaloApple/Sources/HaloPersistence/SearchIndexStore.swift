@@ -8,7 +8,7 @@ import Synchronization
 /// `LocalSearchIndexPort` over `search-index.sqlite` (DATA_MODELS §3b, D123, D124): one file per account in the app's private folder, with
 /// `complete` protection and no backup. It is derived data: a damaged file or one of another version is deleted and filled again.
 /// While the phone is locked the file can't be opened; writes then go, encrypted, to the holding file and move over at the next opening.
-public final class SearchIndexStore: LocalSearchIndexPort {
+public final class SearchIndexStore: AccountSearchIndexPort {
     /// Any other version is deleted (MIGRATIONS §1b).
     static let schemaVersion = 2
 

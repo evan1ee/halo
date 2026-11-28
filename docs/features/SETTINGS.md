@@ -35,7 +35,7 @@ Every setting persisted immediately; server-backed settings show their sync stat
 Standard navigation list; toggles apply immediately (with rollback on server failure).
 
 ## 7. Data models
-`AppPreferences` (UserDefaults, App Group); server-backed: push rules, account data.
+`PreferencesSnapshot` through `PreferencesPort` (`UserDefaultsPreferencesStore`, `halo.*` keys), read and written only via the shared `PreferencesStore` (audit F-05: `FeatureSettings` has no store of its own); server-backed: push rules, account data.
 
 ## 8. API boundaries
 `AccountDataPort`, `ProfilePort`, `EncryptionPort`, `PusherPort`, platform ports.

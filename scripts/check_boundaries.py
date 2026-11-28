@@ -221,6 +221,29 @@ def check_adapter_public_api() -> None:
                 violations.append(f"{path.relative_to(ROOT)}: public signature mentions upstream type {name}: `{decl.strip()}`")
 
 
+# Composition roots are wiring (AGENTS.md §5, audit F-02): behaviour lives in a package where it is unit-tested. The only reference
+# types a root may declare are its object graph, the OS entry points it must subclass, and `…Box` holders that hand a reference
+# across isolation. Anything else (a coordinator, an engine, a store) belongs in HaloApplication or a feature.
+COMPOSITION_ROOTS = ("App", "NotificationService", "ShareExtension", "WidgetExtension")
+ROOT_TYPES_ALLOWED = {"AppRoot", "PushDelegate", "BackgroundTaskLease", "NotificationService", "ShareViewController"}
+ROOT_TYPE_RE = re.compile(r"^\s*(?:@\w+\s+)*(?:(?:public|private|fileprivate|internal|final)\s+)*(?:class|actor)\s+([A-Z]\w*)", re.M)
+
+
+def check_composition_roots() -> None:
+    for folder in COMPOSITION_ROOTS:
+        base = ROOT / "ios" / folder
+        if not base.exists():
+            continue
+        for path in sorted(base.rglob("*.swift")):
+            code = strip_comments_and_strings(path.read_text())
+            for name in ROOT_TYPE_RE.findall(code):
+                if name in ROOT_TYPES_ALLOWED or name.endswith("Box"):
+                    continue
+                violations.append(
+                    f"{path.relative_to(ROOT)}: composition root declares class/actor {name}; move behaviour into "
+                    "HaloApplication or a feature (AGENTS.md §5, audit F-02)")
+
+
 def main() -> int:
     if not PACKAGES.exists():
         print("check-boundaries: no ios/Packages yet — nothing to check")
@@ -232,6 +255,7 @@ def main() -> int:
     check_module_naming()
     check_manifests()
     check_adapter_public_api()
+    check_composition_roots()
     if violations:
         print(f"check-boundaries: {len(violations)} violation(s)")
         for v in violations:

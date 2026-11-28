@@ -38,9 +38,9 @@ agents at dead code whenever "the composer" is mentioned.
   bot tasks, media playback; audit F-08) inside the same module is the intended way to keep it manageable.
 
 ## Consequences
-- MODULE_BOUNDARIES §1 lists the composer under `FeatureTimeline` and marks `FeatureComposer` retired.
-- Follow-up code change: delete `FeatureComposer` (`Package.swift` product and targets, `ios/project.yml`, the import in
-  `App/HaloApp.swift`) and this ADR's "retired" note in MODULE_BOUNDARIES.
+- MODULE_BOUNDARIES §1 lists the composer under `FeatureTimeline`.
+- `FeatureComposer` was deleted (module, product, `ios/project.yml`, the app import, `FeatureComposerTests`) on 2026-11-27,
+  in the audit P1 change.
 
 ## Verified facts and assumptions
 - [VERIFIED] On `main` at `2b98ee7`, a search for `ComposerBarView`, `ComposerRules` and `ComposerPendingPhoto` outside

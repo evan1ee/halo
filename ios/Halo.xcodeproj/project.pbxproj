@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0C1CAE82816D985693B4C8BF /* FeatureComposer in Frameworks */ = {isa = PBXBuildFile; productRef = BB911AE22A7227E609CD2CE7 /* FeatureComposer */; };
 		10757F510EC7D763B9EB1108 /* BotsAssembly.swift in Sources */ = {isa = PBXBuildFile; fileRef = E564C282FF13C235D2277912 /* BotsAssembly.swift */; };
 		123BF7EF1A3DD146A8963956 /* FeatureTimeline in Frameworks */ = {isa = PBXBuildFile; productRef = CA58B4AA249ADB3B7D52F822 /* FeatureTimeline */; };
 		22D698C75F1FEFFBCA4B0B5E /* HaloPerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 728AB519D86EE3790719F071 /* HaloPerformanceTests.swift */; };
@@ -177,7 +176,6 @@
 				BE3EF4909E03BC002C1F56F2 /* FeatureOnboarding in Frameworks */,
 				E8553A487B6F3ABD3324C076 /* FeatureRoomList in Frameworks */,
 				123BF7EF1A3DD146A8963956 /* FeatureTimeline in Frameworks */,
-				0C1CAE82816D985693B4C8BF /* FeatureComposer in Frameworks */,
 				75CAA59DD21250B3641AE203 /* FeatureMedia in Frameworks */,
 				C6BD8DC5AF51B09789033F38 /* FeatureStickers in Frameworks */,
 				A19909DE1ED1C7A18B7E875D /* FeatureSettings in Frameworks */,
@@ -493,7 +491,6 @@
 				18A49619EE2B183955D7BF78 /* FeatureOnboarding */,
 				0C836EFC11F76DCA8283F9D9 /* FeatureRoomList */,
 				CA58B4AA249ADB3B7D52F822 /* FeatureTimeline */,
-				BB911AE22A7227E609CD2CE7 /* FeatureComposer */,
 				84318732D188D72FB105A06B /* FeatureMedia */,
 				AAFD571766A64EDC98FF89D7 /* FeatureStickers */,
 				7D43312B40716CAB6D1A8628 /* FeatureSettings */,
@@ -1272,10 +1269,6 @@
 		B84FBDA7CBAD6737BE7C8ACE /* HaloFoundation */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = HaloFoundation;
-		};
-		BB911AE22A7227E609CD2CE7 /* FeatureComposer */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = FeatureComposer;
 		};
 		C3E6E033024B8F8416C982EB /* FeatureBotActivity */ = {
 			isa = XCSwiftPackageProductDependency;

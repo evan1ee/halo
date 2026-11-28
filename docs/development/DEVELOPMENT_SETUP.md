@@ -19,7 +19,7 @@ halo/
 │   └── Packages/
 │       ├── HaloCore/         Linux-buildable manifest (HaloFoundation, HaloDomain, HaloApplication, HaloTestSupport)
 │       └── HaloApple/        Apple manifest (HaloMatrixAdapter, HaloPersistence, HaloPlatform, HaloDesignSystem,
-│                             HaloBotRendering, FeatureOnboarding, FeatureRoomList, FeatureTimeline, FeatureComposer,
+│                             HaloBotRendering, FeatureOnboarding, FeatureRoomList, FeatureTimeline,
 │                             FeatureMedia, FeatureRoomDetails, FeatureProfile, FeatureSearch, FeatureSettings,
 │                             FeatureStickers, FeatureBotActivity)
 ├── tools/
