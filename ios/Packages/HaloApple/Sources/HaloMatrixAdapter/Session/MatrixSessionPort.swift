@@ -619,14 +619,14 @@ public actor MatrixSessionPort: SessionPort {
             sendQueueErrorsHandle?.cancel()
             sendQueueErrorsHandle = client.subscribeToSendQueueStatus(listener: errors)
             sendQueueErrors = errors
-            try? await client.setMediaRetentionPolicy(policy: Self.defaultMediaRetentionPolicy)  // best-effort: a read; the caller falls back to a default and nothing changes
+            try? await client.setMediaRetentionPolicy(policy: Self.defaultMediaRetentionPolicy)  // best-effort: cache retention config must not block session restore; SDK default policy stays active (audit S-6)
         }
         authDelegateHandle?.cancel()
         let auth = AuthDelegate { [weak self] isSoftLogout in
             Task { await self?.handleAuthError(isSoftLogout: isSoftLogout, generation: generation) }
         }
         authDelegate = auth
-        authDelegateHandle = try? client.setDelegate(delegate: auth)
+        authDelegateHandle = try? client.setDelegate(delegate: auth)  // best-effort: SDK returns TaskHandle? on non-throwing builds; auth errors still surface on next sync call
         reportedAuthErrorGeneration = nil
         delegate?.seed(session)
         historyClient = nil

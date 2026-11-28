@@ -539,8 +539,8 @@ final class MatrixTimelineSession: TimelineSession {
                 return updated
             }
         } catch { throw ErrorMapper.map(error) }
-        let isRoomPinned = (try? await room.roomInfo().pinnedEventIds.contains(event.rawValue)) ?? false  // best-effort: a read; the caller falls back to a default and nothing changes
-        if isRoomPinned || !removedPersonal {
+        let isRoomPinned = try? await room.roomInfo().pinnedEventIds.contains(event.rawValue)  // best-effort: nil falls back to attempting room unpin below so a pinned event is never silently left pinned (audit S-6)
+        if UnpinPolicy.shouldUnpinRoom(isRoomPinned: isRoomPinned, removedPersonal: removedPersonal) {
             do {
                 _ = try await timeline.unpinEvent(eventId: event.rawValue)
             } catch {
@@ -655,4 +655,12 @@ final class SendHandleStore: Sendable {
     func remember(localID: String, handle: SendHandle, error: QueueWedgeError) { entries.withLock { $0[localID] = Entry(handle: handle, error: error) } }
     func entry(localID: String) -> Entry? { entries.withLock { $0[localID] } }
     func forget(localID: String) { entries.withLock { _ = $0.removeValue(forKey: localID) } }
+}
+
+/// Decides whether `unpin` must also issue `timeline.unpinEvent` (audit S-6): when `roomInfo()` couldn't be read (`nil`),
+/// still attempt the room unpin so a room-pinned message is never silently left pinned after personal-pin removal.
+enum UnpinPolicy {
+    static func shouldUnpinRoom(isRoomPinned: Bool?, removedPersonal: Bool) -> Bool {
+        (isRoomPinned ?? true) || !removedPersonal
+    }
 }

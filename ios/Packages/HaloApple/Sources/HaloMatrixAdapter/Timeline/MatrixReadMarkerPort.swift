@@ -29,12 +29,12 @@ public final class MatrixReadMarkerPort: ReadMarkerPort {
             // Delegate latest-event resolution and unthreaded receipt sending to the SDK (R-20).
             try await sdkRoom.markAsRead(receiptType: receiptType)
             try await sdkRoom.markAsRead(receiptType: .fullyRead)
-            if let receipt = try? await sdkRoom.loadUserReceipt(  // best-effort: a read; the caller falls back to a default and nothing changes
+            if let receipt = try? await sdkRoom.loadUserReceipt(  // best-effort: both receipts were already sent above; nil return lets sync reconcile the local marker
                 receiptType: receiptType, thread: .unthreaded, userId: sdkRoom.ownUserId()
             ) {
                 return try EventID(receipt.eventId)
             }
-            if let latest = try? await sdkRoom.timeline().latestEventId() {  // best-effort: a read; the caller falls back to a default and nothing changes
+            if let latest = try? await sdkRoom.timeline().latestEventId() {  // best-effort: fallback read after receipts succeeded; nil return lets sync reconcile
                 return try EventID(latest)
             }
             return nil

@@ -301,7 +301,7 @@ public final class MatrixMessageIndexSource: MessageIndexSourcePort {
             await mirror.settle(after: seen)
         }
         if waitsForKeys { await mirror.waitForKeys() }
-        return mirror.slice(reachedStart: reachedStart)
+        return try mirror.slice(reachedStart: reachedStart)
     }
 
     /// Asks the server, not the SDK: a deletion inside a part of the room that sync left out never reaches the SDK's cache.
@@ -346,17 +346,34 @@ private final class EventListener: RoomMessageLikeEventsListener {
 }
 
 /// The items of a history timeline, kept from its updates.
-private final class HistoryMirror: TimelineListener {
+final class HistoryMirror: TimelineListener, Sendable {
+    private struct State {
+        var items: [SearchMapper.Item] = []
+        var updates = 0
+        var failure: HaloError?
+    }
+
     private let room: RoomID
-    private let state = Mutex((items: [SearchMapper.Item](), updates: 0))
+    private let state = Mutex(State())
 
     init(room: RoomID) { self.room = room }
 
     func onUpdate(diff: [MatrixRustSDK.TimelineDiff]) {
         let mapped = diff.map { SearchMapper.map($0, room: room) }
+        applyMapped(mapped)
+    }
+
+    func applyMapped(_ mapped: [ListDiff<SearchMapper.Item>]) {
         state.withLock { state in
-            // A diff that doesn't fit is followed by a reset; what is missing until then is read again with the next slice.
-            for diff in mapped { try? ListReducer.apply(diff, to: &state.items) }
+            for diff in mapped {
+                if case .reset = diff { state.failure = nil }
+                do {
+                    try ListReducer.apply(diff, to: &state.items)
+                } catch {
+                    // Failing the slice makes SearchIndexer back off and retry instead of advancing the anchor past dropped events (audit S-6).
+                    state.failure = ErrorMapper.map(error)
+                }
+            }
             state.updates += 1
         }
     }
@@ -389,8 +406,11 @@ private final class HistoryMirror: TimelineListener {
         state.withLock { $0.items.reduce(0) { count, item in if case .undecryptable = item { count + 1 } else { count } } }
     }
 
-    func slice(reachedStart: Bool) -> SearchHistorySlice {
-        let items = state.withLock { $0.items }
+    func slice(reachedStart: Bool) throws(HaloError) -> SearchHistorySlice {
+        let items = try state.withLock { state throws(HaloError) -> [SearchMapper.Item] in
+            if let failure = state.failure { throw failure }
+            return state.items
+        }
         var slice = SearchHistorySlice(reachedStart: reachedStart)
         for item in items {
             switch item {

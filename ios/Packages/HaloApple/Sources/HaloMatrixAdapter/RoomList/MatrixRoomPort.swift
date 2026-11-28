@@ -21,7 +21,7 @@ public final class MatrixRoomPort: RoomPort {
         } catch { throw ErrorMapper.map(error) }
         // Permissions: unknown power levels mean "no" (the server still has the last word).
         var canEdit = false, canInvite = false
-        if let levels = try? await room.getPowerLevels(), let own = try? await session.ownUserID() {  // best-effort: a read; the caller falls back to a default and nothing changes
+        if let levels = try? await room.getPowerLevels(), let own = try? await session.ownUserID() {  // best-effort: fail-closed; hides edit/invite controls if power levels can't be read
             canEdit = (try? levels.canUserSendState(userId: own, stateEvent: .roomName)) == true && (try? levels.canUserSendState(userId: own, stateEvent: .roomTopic)) == true
             canInvite = (try? levels.canUserInvite(userId: own)) == true
         }
@@ -384,9 +384,15 @@ private final class GalleryListener: TimelineListener {
 
 /// Maps gallery timeline diffs directly into domain items on the SDK callback without blocking or re-entering FFI (AGENTS §8).
 final class GalleryCollector: TimelineListener, Sendable {
+    private struct State {
+        var items: [HaloDomain.TimelineItem] = []
+        var updates = 0
+        var failure: HaloError?
+    }
+
     private let ownUserID: String
     private let sleep: @Sendable (Duration) async -> Void
-    private let state = Mutex<(items: [HaloDomain.TimelineItem], updates: Int)>(([], 0))
+    private let state = Mutex(State())
 
     init(ownUserID: String, sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
         self.ownUserID = ownUserID
@@ -403,7 +409,13 @@ final class GalleryCollector: TimelineListener, Sendable {
     func applyMapped(_ mapped: [HaloDomain.TimelineDiff]) {
         state.withLock { current in
             for update in mapped {
-                try? ListReducer.apply(update, to: &current.items)
+                if case .reset = update { current.failure = nil }
+                do {
+                    try ListReducer.apply(update, to: &current.items)
+                } catch {
+                    // Record reducer corruption instead of silently returning an incomplete media gallery (audit S-6).
+                    current.failure = ErrorMapper.map(error)
+                }
             }
             current.updates += 1
         }
@@ -424,8 +436,11 @@ final class GalleryCollector: TimelineListener, Sendable {
         }
     }
 
-    func mediaItemsNewestFirst() -> [RoomMediaItem] {
-        let snapshot = state.withLock { $0.items }
+    func mediaItemsNewestFirst() throws(HaloError) -> [RoomMediaItem] {
+        let snapshot = try state.withLock { current throws(HaloError) -> [HaloDomain.TimelineItem] in
+            if let failure = current.failure { throw failure }
+            return current.items
+        }
         var result: [RoomMediaItem] = []
         result.reserveCapacity(snapshot.count)
         for item in snapshot.reversed() {
@@ -471,7 +486,7 @@ private actor MatrixRoomMediaGallerySession: RoomMediaGallerySession {
             settledInitial = true
             await collector.settle(after: 0)
         }
-        var unseen = collector.mediaItemsNewestFirst().filter { !deliveredIDs.contains($0.eventID) }
+        var unseen = try collector.mediaItemsNewestFirst().filter { !deliveredIDs.contains($0.eventID) }
         var steps = 0
         while unseen.count < limit && !reachedStart && steps < Self.maxStepsPerPage {
             let seen = collector.updates
@@ -482,7 +497,7 @@ private actor MatrixRoomMediaGallerySession: RoomMediaGallerySession {
             }
             await collector.settle(after: seen)
             steps += 1
-            unseen = collector.mediaItemsNewestFirst().filter { !deliveredIDs.contains($0.eventID) }
+            unseen = try collector.mediaItemsNewestFirst().filter { !deliveredIDs.contains($0.eventID) }
         }
         let page = Array(unseen.prefix(limit))
         for item in page { deliveredIDs.insert(item.eventID) }

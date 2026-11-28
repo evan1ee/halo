@@ -146,7 +146,7 @@ struct RoomListMappingTests {
         }
         await collector.settle(after: 0)
         await delivery.value
-        let items = collector.mediaItemsNewestFirst()
+        let items = try collector.mediaItemsNewestFirst()
         #expect(items.map(\.attachment.body) == ["sunset.jpg"])
     }
 }

@@ -518,12 +518,14 @@ public struct TimelineView: View {
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             if let roomSearch, roomSearch.isPresented {
-                RoomSearchBar(
-                    model: roomSearch,
-                    onOpenThreadMessage: onOpenThreadMessage ?? onOpenThread.map { open in
-                        { root, _ in open(root) }
-                    }
-                )
+                let openThreadHandler: (@MainActor (EventID, EventID) -> Void)? = if let onOpenThreadMessage {
+                    onOpenThreadMessage
+                } else if let onOpenThread {
+                    { @MainActor root, _ in onOpenThread(root) }
+                } else {
+                    nil
+                }
+                RoomSearchBar(model: roomSearch, onOpenThreadMessage: openThreadHandler)
             }
         }
         .onChange(of: roomSearch?.isPresented ?? false) { _, presented in

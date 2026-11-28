@@ -1,21 +1,21 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-28 · Branch: `feat/m20-room-search` (from `main` after #110) · PRs #1–#110 merged before it
+Last updated: 2026-11-28 · Branch: `main` (PRs #1–#111 merged + audit S-6 fix)
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
 - **Roadmap:** M0–M16 are built and merged. Re-planned 2026-11-25 to a production release (D121): M17 measure → M18 security and reliability → M19 performance → M20 messaging → M21 experience → M22 beta and launch, with gates G-SCALE, G-PERF, G-SHIP ([docs/ROADMAP.md](docs/ROADMAP.md)). The audit behind it found 26 gaps (ROADMAP §2); Halo isn't a release candidate yet.
-- **Milestones:** M0–M16 built, partly for M14–M15 (GA-24…GA-26). **M17 in progress:** M17-1, 2, 3, 6, 8 done; M17-4, M17-5 and M17-7 done except what needs a device or the founder (§5). **M18:** all non-founder/non-device R/C tasks merged (#92–#100); M18-6/M18-12 need the founder, M18-10 needs a device. **M19:** merged (#101) with all non-device R tasks built (M19-1…M19-5, M19-7, M19-9, M19-11); M19-6/8/10 need a physical iPhone 📱. **M20 in progress:** M20-1 (#91), M20-2 voice/audio (#102), M20-3 video (#103, GA-18 removed), M20-4 polls (#104, GA-19 removed), M20-5 camera (#105, GA-20 removed), M20-6 forward (#106), M20-8 room lifecycle (#107, GA-23 removed), M20-9 receipts & message info (#108), M20-10 text rendering (#109, GA-30 removed), and M20-11 in-room search (on `feat/m20-room-search`) built; M20-7 report/block paused on founder decision `Q-REPORT`. **Architecture audit (2026-11-27/28):** PR #110 merged ([docs/ARCHITECTURE_AUDIT.md](docs/ARCHITECTURE_AUDIT.md), doc fixes, P1 fixes, F-02 cleanup, D127, D128, ADR-0025); the rest of S-6 and P2 items are open (§5). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`), physical iPhone 17e (`00008150-001149800E7B401C`).
-- **Last checks (M20-11 in-room search, 2026-11-28):** `HALO_SIM="iPhone Air" scripts/prepush.sh` passed (nothing skipped: handoff, docs, boundaries, 6/6 boundary tests, design tokens, HaloCore 278+ tests, HaloApple simulator tests, Halo-Debug app build, full HaloUITests, gitleaks, swiftlint 0 violations in 325 files); `HALO_SIM="iPhone Air" infra/test/run.sh search inRoomSearchAndFocusedJump` passed on live Synapse; `RoomSearchViewModelTests` Light/Dark/AX5 snapshots visually verified.
-- **Earlier checks (PR #110 audit P1 + F-02, 2026-11-28):** all 6 GitHub CI checks passed (`scenarios`, `swift-linux`, `boundaries`, `secrets`, `handoff`, `docs`); local `prepush.sh` passed with `testComposerPanelsSwapWithKeyboard` passing on isolated rerun (`testPastedImageJoinsPendingPhotos` passed).
-- **CI:** PRs #1–#110 merged. `scenarios.yml` (Synapse behind the fault proxy); Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
+- **Milestones:** M0–M16 built, partly for M14–M15 (GA-24…GA-26). **M17 in progress:** M17-1, 2, 3, 6, 8 done; M17-4, M17-5 and M17-7 done except what needs a device or the founder (§5). **M18:** all non-founder/non-device R/C tasks merged (#92–#100); M18-6/M18-12 need the founder, M18-10 needs a device. **M19:** merged (#101) with all non-device R tasks built (M19-1…M19-5, M19-7, M19-9, M19-11); M19-6/8/10 need a physical iPhone 📱. **M20 in progress:** M20-1 (#91), M20-2 voice/audio (#102), M20-3 video (#103, GA-18 removed), M20-4 polls (#104, GA-19 removed), M20-5 camera (#105, GA-20 removed), M20-6 forward (#106), M20-8 room lifecycle (#107, GA-23 removed), M20-9 receipts & message info (#108), M20-10 text rendering (#109, GA-30 removed), and M20-11 in-room search (#111) merged; M20-7 report/block paused on founder decision `Q-REPORT`. **Architecture audit (2026-11-27/28):** PR #110 merged ([docs/ARCHITECTURE_AUDIT.md](docs/ARCHITECTURE_AUDIT.md), doc fixes, P1 fixes, F-02 cleanup, D127, D128, ADR-0025); S-6 (`try?` audit in `HaloMatrixAdapter`) completed; P2 items are open (§5). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`), physical iPhone 17e (`00008150-001149800E7B401C`).
+- **Last checks (audit S-6, 2026-11-28):** `HALO_SIM="iPhone Air" scripts/prepush.sh` passed all test suites and builds (handoff, docs, boundaries, 6/6 boundary tests, design tokens, HaloCore, HaloApple incl. `AdapterErrorPropagationTests` + `RoomListMappingTests` 8/8, `Halo-Debug` build, full `HaloUITests`, gitleaks); fixed 2 SwiftLint `// best-effort:` comment violations and a Swift 6 warning in `TimelineView.swift`, then verified `swiftlint` (0 violations), `Halo-Debug` build (0 warnings), `validate-docs.sh`, and `check-boundaries.sh` green.
+- **Earlier checks (PR #111 M20-11 in-room search, 2026-11-28):** all 5 GitHub CI checks passed; `HALO_SIM="iPhone Air" scripts/prepush.sh` passed (nothing skipped, 0 SwiftLint violations in 325 files); `HALO_SIM="iPhone Air" infra/test/run.sh search inRoomSearchAndFocusedJump` passed on live Synapse; Light/Dark/AX5 snapshots visually verified.
+- **CI:** PRs #1–#111 merged. `scenarios.yml` (Synapse behind the fault proxy); Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
-- **M20-11 Search inside a room (2026-11-28):** Added pure `RoomSearchNavigator` and `RoomSearchIndexNotice` (`HaloDomain`), `MessageSearchEngine.makeRoomSearchCoordinator()` and `roomCoverage(for:)` (`HaloApplication`) so room-scoped searches refresh live and prioritize the open room without disturbing global search, `RoomSearchViewModel` and `RoomSearchBar` (`FeatureTimeline`) with previous/older (`↑`) and next/newer (`↓`) stepping across pages, M20-1 focused jumps leaving read state unaffected, thread-match handoff, empty/indexing/offline/error+retry states, and Light/Dark/AX5 + VoiceOver support, wired via the room toolbar (`⌘F`) and Room Info ("Search in chat"). Verified by `RoomSearchNavigationTests`, `MessageSearchEngineTests.roomSearchCoordinatorIsolation`, `RoomSearchViewModelTests` (incl. Light/Dark/AX5 snapshots), and live Synapse `SearchContractTests.inRoomSearchAndFocusedJump`.
+- **Architecture audit S-6 (2026-11-28):** Audited every remaining `try?` site in `HaloMatrixAdapter`: `GalleryCollector` and `HistoryMirror` now propagate `ListReducer` corruption errors instead of silently truncating media galleries or advancing search anchors past dropped events (recovering cleanly on `.reset`), `UnpinPolicy` defaults unknown `roomInfo()` reads to attempting room unpin instead of silently leaving room-pinned events pinned, and misleading stamped comments on write/fail-closed sites (`MatrixSessionPort`, `MatrixRoomPort`, `MatrixReadMarkerPort`) were replaced with accurate per-site reasons. Verified with `AdapterErrorPropagationTests` (3 new regression tests).
+- **M20-11 Search inside a room (2026-11-28, merged #111):** Added pure `RoomSearchNavigator` and `RoomSearchIndexNotice` (`HaloDomain`), `MessageSearchEngine.makeRoomSearchCoordinator()` and `roomCoverage(for:)` (`HaloApplication`), `RoomSearchViewModel` and `RoomSearchBar` (`FeatureTimeline`) with previous/older (`↑`) and next/newer (`↓`) stepping across pages, M20-1 focused jumps leaving read state unaffected, thread-match handoff, empty/indexing/offline/error+retry states, and Light/Dark/AX5 + VoiceOver support, wired via the room toolbar (`⌘F`) and Room Info ("Search in chat").
 - **Architecture audit PR #110 (2026-11-27/28, merged):** Landed `docs/ARCHITECTURE_AUDIT.md`, doc-vs-code drift fixes (D127, D128, ADR-0025), P1 fixes (F-01 `BadgeCalculator`, S-1 deleted `FeatureComposer`, S-2/F-05 deleted `AppPreferences`, F-09 serialized `DraftCoordinator`, F-10 `TimelineViewModel.stop()` awaits `starting`, S-6 room export fails on broken history), and F-02 composition-root cleanup (`MessageSearchEngine` in `HaloApplication`, `PreparedTimelines.open` in `FeatureTimeline`, `check_boundaries.py` composition-root guard).
-- **M20-10 text rendering (2026-11-27, merged #109, removes GA-30):** Added `MentionFormatter.html(_:mentions:)` in `HaloDomain` and switched `MatrixTimelinePort.content` to `messageEventContentFromHtml` when mentions are present so `body` stays clean plain text (`hello @Peer`) while `formatted_body` keeps `matrix.to` pills and `m.mentions` keeps `user_ids`; built pure linear-time `RichTextParser` (`HaloBotRendering`) and `RichTextMessageView` (`FeatureTimeline`) for fenced code blocks with one-tap Copy, tap-to-reveal `data-mx-spoiler` pills, bounded scrollable tables, nested lists, headings, and blockquotes while blocking scripts/styles/iframes/images/dangerous URLs and keeping simple messages on the fast `Text` path; verified with `MentionFormatterTests`, `RichTextParserTests`, `RichTextRenderingTests` (Light/Dark/AX5 snapshots), and live Synapse `InteropTests` (6/6 passed, `GA-30` removed).
 
 ## 3. Key decisions
 Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D128), [docs/adr/README.md](docs/adr/README.md).
@@ -45,17 +45,16 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D128), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
-- **Domain (`HaloDomain`):** `Search/RoomSearchNavigation.swift` (new); test `HaloDomainTests/RoomSearchNavigationTests.swift` (new).
-- **Application (`HaloApplication`):** `Search/MessageSearchEngine.swift`; test `HaloApplicationTests/MessageSearchEngineTests.swift`.
-- **Features & App (`FeatureTimeline`, `FeatureRoomDetails`, `App`):** `FeatureTimeline/{RoomSearchViewModel.swift, RoomSearchBar.swift, TimelineView.swift}`, `FeatureRoomDetails/RoomDetailsView.swift`, `App/{HaloApp.swift, Composition/SearchAssembly.swift}`; tests `FeatureTimelineTests/RoomSearchViewModelTests.swift` (new), `HaloMatrixAdapterTests/SearchContractTests.swift`.
-- **Docs:** `docs/features/{MESSAGE_SEARCH, TIMELINE}.md`, `docs/ROADMAP.md`, `HANDOFF.md`.
+- **Adapter (`HaloMatrixAdapter`):** `RoomList/MatrixRoomPort.swift` (`GalleryCollector`), `Search/MatrixMessageIndexSource.swift` (`HistoryMirror`), `Timeline/{MatrixTimelinePort.swift, MatrixReadMarkerPort.swift}`, `Session/MatrixSessionPort.swift`.
+- **Tests:** `HaloMatrixAdapterTests/{AdapterErrorPropagationTests.swift, AdapterSmokeTests.swift}`.
+- **Docs:** `docs/ARCHITECTURE_AUDIT.md`, `HANDOFF.md`.
 - Earlier pushes: see `git log`.
 
 ## 5. Outstanding issues
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
 
 **Not done, for future action (from the M18–M20 work; remove a line when done)**
-- **Architecture audit, still open ([ARCHITECTURE_AUDIT.md](docs/ARCHITECTURE_AUDIT.md) §6):** S-6 — review the remaining behaviour-changing `try?` sites in the adapter; then the P2 items (F-08 `TimelineViewModel` split, P-1/P-2 room-list scaling, P-4/P-5 timeline mapping, F-03, F-06, F-07, S-5).
+- **Architecture audit, still open ([ARCHITECTURE_AUDIT.md](docs/ARCHITECTURE_AUDIT.md) §6):** P2 items only (F-08 `TimelineViewModel` split, P-1/P-2 room-list scaling, P-4/P-5 timeline mapping, F-03, F-06, F-07, S-5); all P1 items and S-6 are done.
 - **`HaloUITests.testPastedImageJoinsPendingPhotos` flake (2026-11-27):** failed once in a full `prepush`, passed 2 of 2 alone right after and in a full-suite rerun; the change on the branch doesn't touch pasting. Watch it.
 - **M20-5:** live hardware photo/video capture & iOS permission prompt on a physical iPhone 📱; `NSCameraUsageDescription`, in-context `CameraAccessPolicy`/`CameraPermissionController`, denied/restricted/unavailable UI with Settings link, lossless video GPS stripping (`VideoPreparer`) & photo GPS stripping (`ImagePreparer`), and Light/Dark/AX5 snapshots are built and verified.
 - **M20-3:** 100 MB video memory measurement, portrait/landscape full-screen rotation feel, and Save to Photos permission flow on a physical iPhone 📱; inline posters, disk-streamed `AVPlayerViewController`, captions on send, poster thumbnails, Save/Share, Light/Dark/AX5, and interop tests are built and verified.
@@ -116,19 +115,19 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 
 ## 6. Next steps
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §3.
-1. Batch the rest of audit **S-6** (behaviour-changing `try?` in `HaloMatrixAdapter`), then continue **M20** R tasks in order: **M20-12 Basic moderation** → **M20-13 Storage** → **M20-19 Unknown message types** (removes GA-31); return to **M20-7 Report and block** (removes GA-22) once founder decides `Q-REPORT`.
-2. Open M18/M19 items: M18-10 (device matrix 📱), M18-12 (security review 👤), M18-6 (OIDC end to end 👤), Q-VERIFY; M19-6/8/10 need a physical iPhone 📱.
-3. Architecture audit P2 (§5, [ARCHITECTURE_AUDIT.md](docs/ARCHITECTURE_AUDIT.md) §6): F-08 `TimelineViewModel` split, P-1/P-2 room-list coalescing, P-4/P-5 timeline mapping passes, batched between M20 tasks.
+1. Continue **M20** R tasks in order: **M20-12 Basic moderation** → **M20-13 Storage** → **M20-19 Unknown message types** (removes GA-31); return to **M20-7 Report and block** (removes GA-22) once founder decides `Q-REPORT`.
+2. Between M20 tasks, batch architecture audit P2 items (§5, [ARCHITECTURE_AUDIT.md](docs/ARCHITECTURE_AUDIT.md) §6): F-08 `TimelineViewModel` split, P-1/P-2 room-list coalescing, P-4/P-5 timeline mapping passes.
+3. Open M18/M19 items: M18-10 (device matrix 📱), M18-12 (security review 👤), M18-6 (OIDC end to end 👤), Q-VERIFY; M19-6/8/10 need a physical iPhone 📱.
 4. Founder: the device and hand checks of §5; long lead times: push gateway (M22-1), legal (M22-4), KLIPY production key, filtering entitlement, artwork.
 
 ## 7. Next Session Prompt
 ```text
 /loop Read AGENTS.md, HANDOFF.md, docs/development/AUTONOMOUS_LOOP.md and docs/ROADMAP.md (§1–§3, §7).
 
-Work the ROADMAP §3 queue starting with the open audit S-6 (behaviour-changing `try?` in HaloMatrixAdapter),
-then M20-12 (Basic moderation: remove, ban, unban, roles shown, gated by live power levels), M20-13 (Storage),
-and M20-19 (Unknown message types, removes GA-31); M20-7 stays paused until the founder decides Q-REPORT.
-Between M20 tasks, batch P2 audit items (HANDOFF §5): F-08 TimelineViewModel split (composer / bot tasks / media
+Work the ROADMAP §3 queue starting at M20-12 (Basic moderation: remove, ban, unban, roles shown, gated by live power levels),
+then M20-13 (Storage: sizes, clear media cache, retention D55), and M20-19 (Unknown message types, removes GA-31);
+M20-7 stays paused until the founder decides Q-REPORT.
+Between M20 tasks, batch the open P2 audit items (HANDOFF §5): F-08 TimelineViewModel split (composer / bot tasks / media
 child models), P-1/P-2 room-list rebuild coalescing, P-4/P-5 timeline mapping passes.
 
 Rules learned in the audit (keep them true):
