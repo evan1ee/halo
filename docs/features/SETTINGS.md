@@ -20,7 +20,7 @@ One place for account, notifications, privacy, appearance, storage, diagnostics 
 | Appearance | System / light / dark, text size follows Dynamic Type |
 | Stickers | Manage packs (built: list + remove enabled packs), favourites (links to the sticker manager; not built) |
 | Bots | Allowlisted bot user IDs for template cards (synced as `one.mbm.halo.bot_allowlist`, an edit changes only what the user changed, D120; see BOT_MESSAGES §3) |
-| Storage | SDK store sizes, clear media cache (built: file sizes; clears in-memory thumbnails and per-session `caches/` directories. Not built: the SDK's `getStoreSizes`/`clearCaches` and retention, ROADMAP M20-13). Message search has a section of its own: progress, size, pause, mobile data, delete and rebuild (MESSAGE_SEARCH FR-14 |
+| Storage | SDK store sizes (`getStoreSizes()` breakdown: Media cache, Messages & room state, Encryption keys, Halo database), clear media cache (clears SDK media store via retention cleanup, Halo media temp files, and in-memory caches without touching keys, drafts or unsent messages, AC-SET-3), and media cache retention limits (D55: 1 GB / 30 days default, configurable size and expiry persisted through `PreferencesStore` and applied to the SDK — **built** 2026-11-28, ROADMAP M20-13). Message search has a section of its own: progress, size, pause, mobile data, delete and rebuild (MESSAGE_SEARCH FR-14) |
 | Diagnostics | Auditor summary (debug/TestFlight), "Reconcile now", "Export diagnostics (.zip)" (`DiagnosticsZipArchive`, built) |
 | Privacy (app switcher) | "Hide content in app switcher" (D61, built) |
 | Focus | "Follow Focus filters" (D104, built, default **off**): only while on does a Focus's Halo filter (D90) narrow the chat list |

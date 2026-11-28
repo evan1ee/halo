@@ -30,6 +30,7 @@ public actor MatrixSessionPort: SessionPort {
     private let readStoredSession: (@Sendable () -> StoredSession?)?
     private let persistRefreshedSession: (@Sendable (StoredSession) -> Void)?
     private let syncConditions: @Sendable () -> SyncEnergyPolicy.Conditions
+    private let mediaRetention: @Sendable () -> MediaCacheRetention
     private let initialisePlatform: @Sendable (Bool) throws(HaloError) -> Void
     private var client: Client?
     private var syncTask: Task<Void, Never>?
@@ -64,14 +65,19 @@ public actor MatrixSessionPort: SessionPort {
     public static let oauthRedirectURI = "one.mbm.halo:/oauth/callback"
     public static let oauthClientURI = "https://halo.mbm.one"
 
+    /// Maps domain `MediaCacheRetention` (D55) to the SDK's `MediaRetentionPolicy`.
+    static func sdkRetentionPolicy(for retention: MediaCacheRetention) -> MediaRetentionPolicy {
+        MediaRetentionPolicy(
+            maxCacheSize: retention.maxSize.bytes,
+            maxFileSize: MediaCacheRetention.maxFileSizeBytes,
+            lastAccessExpiry: retention.expiry.seconds,
+            cleanupFrequency: MediaCacheRetention.cleanupFrequencySeconds
+        )
+    }
+
     /// SDK media cache retention defaults (D55, V-MEDIA-1): 1 GiB total cache, 50 MiB max single file,
     /// 30-day unaccessed expiry, daily cleanup. Applied to main-app sessions only (not the NSE).
-    static let defaultMediaRetentionPolicy = MediaRetentionPolicy(
-        maxCacheSize: 1_073_741_824,
-        maxFileSize: 52_428_800,
-        lastAccessExpiry: 30 * 86_400,
-        cleanupFrequency: 86_400
-    )
+    static let defaultMediaRetentionPolicy = sdkRetentionPolicy(for: .defaultPolicy)
 
     /// - Parameters:
     ///   - baseDirectory: where per-login SDK stores live (the App Group container in the app).
@@ -92,13 +98,15 @@ public actor MatrixSessionPort: SessionPort {
         enablesSlidingSync: Bool = false,
         readStoredSession: (@Sendable () -> StoredSession?)? = nil,
         persistRefreshedSession: (@Sendable (StoredSession) -> Void)? = nil,
-        syncConditions: @escaping @Sendable () -> SyncEnergyPolicy.Conditions = { .init() }
+        syncConditions: @escaping @Sendable () -> SyncEnergyPolicy.Conditions = { .init() },
+        mediaRetention: @escaping @Sendable () -> MediaCacheRetention = { .defaultPolicy }
     ) {
         self.init(
             baseDirectory: baseDirectory, holderName: holderName, sendsMessages: sendsMessages,
             lightweightRuntime: lightweightRuntime, enablesSlidingSync: enablesSlidingSync,
             readStoredSession: readStoredSession, persistRefreshedSession: persistRefreshedSession,
             syncConditions: syncConditions,
+            mediaRetention: mediaRetention,
             initialisePlatform: MatrixBootstrap.initialise(lightweightRuntime:))
     }
 
@@ -110,6 +118,7 @@ public actor MatrixSessionPort: SessionPort {
         readStoredSession: (@Sendable () -> StoredSession?)? = nil,
         persistRefreshedSession: (@Sendable (StoredSession) -> Void)? = nil,
         syncConditions: @escaping @Sendable () -> SyncEnergyPolicy.Conditions = { .init() },
+        mediaRetention: @escaping @Sendable () -> MediaCacheRetention = { .defaultPolicy },
         initialisePlatform: @escaping @Sendable (Bool) throws(HaloError) -> Void
     ) {
         self.baseDirectory = baseDirectory
@@ -121,6 +130,7 @@ public actor MatrixSessionPort: SessionPort {
         self.readStoredSession = readStoredSession
         self.persistRefreshedSession = persistRefreshedSession
         self.syncConditions = syncConditions
+        self.mediaRetention = mediaRetention
         self.initialisePlatform = initialisePlatform
     }
 
@@ -603,6 +613,46 @@ public actor MatrixSessionPort: SessionPort {
         do { return try await client.getSessionVerificationController() } catch { throw ErrorMapper.map(error) }
     }
 
+    /// Reads the SDK's store sizes (`cryptoStore`, `stateStore`, `eventCacheStore`, `mediaStore`) (M20-13).
+    func sdkStoreSizes() async throws(HaloError) -> StoreSizes {
+        guard let client else { throw .unauthorized(soft: false) }
+        do { return try await client.getStoreSizes() } catch { throw ErrorMapper.map(error) }
+    }
+
+    /// Applies a `MediaCacheRetention` policy to the signed-in client's media store (D55, M20-13).
+    func applyMediaRetention(_ retention: MediaCacheRetention) async throws(HaloError) {
+        guard let client else { throw .unauthorized(soft: false) }
+        do {
+            try await client.setMediaRetentionPolicy(policy: Self.sdkRetentionPolicy(for: retention))
+        } catch {
+            throw ErrorMapper.map(error)
+        }
+    }
+
+    /// Clears ONLY the SDK's media store without touching `cryptoStore` (keys) or `stateStore` (unsent messages),
+    /// then restores `retention` (SETTINGS AC-SET-3, M20-13).
+    func clearMediaStore(restoring retention: MediaCacheRetention) async throws(HaloError) {
+        guard let client else { throw .unauthorized(soft: false) }
+        let zeroPolicy = MediaRetentionPolicy(
+            maxCacheSize: 0,
+            maxFileSize: 0,
+            lastAccessExpiry: 0,
+            cleanupFrequency: 0
+        )
+        do {
+            try await client.setMediaRetentionPolicy(policy: zeroPolicy)
+            try await client.setMediaRetentionPolicy(policy: Self.sdkRetentionPolicy(for: retention))
+        } catch {
+            throw ErrorMapper.map(error)
+        }
+    }
+
+    /// Active session's store directory ID, if signed in (used to avoid deleting the active store's open SQLite files).
+    func activeStoreID() -> String? { storeID }
+
+    /// Base directory holding per-session SDK store folders.
+    nonisolated var storeBaseDirectory: URL { baseDirectory }
+
     // MARK: Internals
 
     private func register(_ continuation: AsyncStream<SessionEvent>.Continuation, id: UUID) { events[id] = continuation }
@@ -619,7 +669,8 @@ public actor MatrixSessionPort: SessionPort {
             sendQueueErrorsHandle?.cancel()
             sendQueueErrorsHandle = client.subscribeToSendQueueStatus(listener: errors)
             sendQueueErrors = errors
-            try? await client.setMediaRetentionPolicy(policy: Self.defaultMediaRetentionPolicy)  // best-effort: cache retention config must not block session restore; SDK default policy stays active (audit S-6)
+            let retention = Self.sdkRetentionPolicy(for: mediaRetention())
+            try? await client.setMediaRetentionPolicy(policy: retention)  // best-effort: cache retention config must not block session restore; SDK default policy stays active (audit S-6)
         }
         authDelegateHandle?.cancel()
         let auth = AuthDelegate { [weak self] isSoftLogout in

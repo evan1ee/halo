@@ -65,6 +65,11 @@ public final class PreferencesStore {
         set { update { $0.searchHistoryOnMobileData = newValue } }
     }
 
+    public var mediaCacheRetention: MediaCacheRetention {
+        get { snapshot.mediaCacheRetention }
+        set { update { $0.mediaCacheRetention = newValue } }
+    }
+
     private func update(_ mutate: (inout PreferencesSnapshot) -> Void) {
         var next = snapshot
         mutate(&next)
