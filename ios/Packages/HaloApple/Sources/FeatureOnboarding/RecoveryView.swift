@@ -9,6 +9,7 @@ import SwiftUI
 public struct RecoveryBanner: View {
     private let model: RecoveryViewModel
     @State private var isPresented = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(model: RecoveryViewModel) { self.model = model }
 
@@ -32,12 +33,12 @@ public struct RecoveryBanner: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .transition(HaloMotion.slide(from: .top, reduceMotion: reduceMotion))
                 .accessibilityIdentifier("recovery-banner")
             }
         }
         // It appears once the account's state is known, a moment after launch: slide it in rather than jump the list.
-        .animation(.easeOut(duration: 0.25), value: model.needsRecovery)
+        .animation(HaloMotion.gentle(reduceMotion: reduceMotion), value: model.needsRecovery)
         .sheet(isPresented: $isPresented) { RecoveryView(model: model) }
         .onChange(of: model.isVerified) { _, verified in if verified { isPresented = false } }
         .onChange(of: hasIncomingRequest) { _, incoming in if incoming { isPresented = true } }

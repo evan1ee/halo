@@ -53,6 +53,7 @@ public struct ErrorState: View {
                     HaloColor.bgSecondary,
                     in: RoundedRectangle(cornerRadius: HaloRadius.medium, style: .continuous)
                 )
+                .haloContrastBorder(cornerRadius: HaloRadius.medium)
         }
     }
 

@@ -85,7 +85,7 @@ public final class ComposerInputController {
     /// The composer's ↑ / ↓ button. The panel's content is laid out at the taller of its two heights while the area
     /// animates, so it slides rather than redraws: no flash.
     public func toggleExpanded() {
-        withAnimation(.smooth(duration: 0.35)) { state.toggleExpanded() }
+        HaloMotion.animate(HaloMotion.panelExpand(reduceMotion: HaloMotion.systemReduceMotion)) { state.toggleExpanded() }
     }
 
     // MARK: Events from the composer, the panels and the timeline
@@ -99,7 +99,7 @@ public final class ComposerInputController {
                 resignKeyboard()
                 return
             }
-            withAnimation(Self.keyboardAnimation(duration: 0.25)) { state.fieldFocused() }
+            HaloMotion.animate(Self.keyboardAnimation(duration: 0.25)) { state.fieldFocused() }
             armLingerTimeout()
         } else {
             state.fieldUnfocused()
@@ -109,7 +109,7 @@ public final class ComposerInputController {
     /// The composer's button for `panel`.
     public func toggle(_ panel: ComposerPanel) {
         let opening = state.panel != panel
-        withAnimation(Self.keyboardAnimation(duration: 0.25)) { state.toggle(panel) }
+        HaloMotion.animate(Self.keyboardAnimation(duration: 0.25)) { state.toggle(panel) }
         if opening {
             panelOpenedAt = .now
             resignKeyboard()
@@ -120,7 +120,7 @@ public final class ComposerInputController {
     }
 
     public func open(_ panel: ComposerPanel) {
-        withAnimation(Self.keyboardAnimation(duration: 0.25)) { state.open(panel) }
+        HaloMotion.animate(Self.keyboardAnimation(duration: 0.25)) { state.open(panel) }
         panelOpenedAt = .now
         resignKeyboard()
     }
@@ -136,7 +136,7 @@ public final class ComposerInputController {
     /// Closes the keyboard or panel (a tap or drag on the conversation).
     public func dismiss() {
         guard state.mode != .idle || state.displayedPanel != nil else { return }
-        withAnimation(Self.keyboardAnimation(duration: 0.25)) { state.dismiss() }
+        HaloMotion.animate(Self.keyboardAnimation(duration: 0.25)) { state.dismiss() }
         resignKeyboard()
     }
 
@@ -185,7 +185,7 @@ public final class ComposerInputController {
     /// Applies a keyboard change; `overlap` is already measured against the window's bottom safe area.
     func apply(isHiding: Bool, overlap: Double, duration: Double) {
         let animation = Self.keyboardAnimation(duration: duration)
-        withAnimation(animation) {
+        HaloMotion.animate(animation) {
             if isHiding || overlap <= 0 {
                 keyboardOverlap = 0
                 state.keyboardWillHide()
@@ -218,7 +218,7 @@ public final class ComposerInputController {
         lingerTimeout = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(600))
             guard !Task.isCancelled, let self, self.state.lingeringPanel != nil else { return }
-            withAnimation(Self.keyboardAnimation(duration: 0.25)) { self.state.keyboardCoversLingeringPanel() }
+            HaloMotion.animate(Self.keyboardAnimation(duration: 0.25)) { self.state.keyboardCoversLingeringPanel() }
         }
     }
 
@@ -228,7 +228,7 @@ public final class ComposerInputController {
     /// spring with ω ≈ 22/s matches within a frame. The often-quoted "mass 3, stiffness 1000, damping 500" is strongly
     /// overdamped and creeps in over half a second.
     public static func keyboardAnimation(duration: Double) -> Animation {
-        duration <= 0 ? .linear(duration: 0) : .interpolatingSpring(mass: 1, stiffness: 484, damping: 44, initialVelocity: 0)
+        HaloMotion.keyboard(duration: duration, reduceMotion: HaloMotion.systemReduceMotion)
     }
 
 }

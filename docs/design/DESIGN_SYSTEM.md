@@ -56,7 +56,8 @@ SF Symbols only (MVP). Halo-specific glyphs (app icon, empty-state illustrations
 ## 6. Motion
 - Standard spring: `.spring(response: 0.35, dampingFraction: 0.85)`; sticker panel: `.spring(response: 0.3, dampingFraction: 0.9)`.
 - Badges change with a fade + scale (0.15 s). Bubbles appear with a 0.2 s fade + 4 pt rise.
-- **Reduce Motion**: replace movement with cross-fades; stickers show their first frame.
+- **Reduce Motion (`HaloMotion`, AC-MOT-2):** all animations, `withAnimation` calls (`HaloMotion.animate`), transitions (`HaloMotion.slide`, `HaloMotion.scalePop`), and symbol effects (`haloSymbolReplace`, `haloSymbolPulse`, `haloNumericTextTransition`) route through `HaloMotion` (enforced by SwiftLint `no_raw_with_animation` and `no_raw_animation_modifier`). Under Reduce Motion, springs/slides/scales degrade to calm cross-fades, programmatic scrolls jump without sliding (`HaloMotion.scroll(reduceMotion: true) == nil`), and stickers show their first frame.
+- **Reduce Transparency, Increase Contrast, Bold Text (`HaloAccessibility`):** bars (`.haloBarBackground()`), media overlay pills (`.haloOverlayPillBackground()`), and the app-switcher privacy cover fall back to opaque high-contrast surfaces under Reduce Transparency or Increase Contrast; cards and inline states gain crisp borders (`.haloContrastBorder`) and custom strokes thicken under Increase Contrast and Bold Text (`legibilityWeight == .bold`).
 
 ## 7. Components (MVP)
 

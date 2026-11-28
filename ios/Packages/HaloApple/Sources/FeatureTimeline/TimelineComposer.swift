@@ -32,7 +32,7 @@ struct Composer: View {
                 accessoryRows
                     .padding(HaloSpacing.s)
                     .glassEffect(.regular, in: .rect(cornerRadius: HaloRadius.bubble, style: .continuous))
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .transition(HaloMotion.slide(from: .bottom, reduceMotion: reduceMotion))
             }
             inputRow
         }
@@ -88,7 +88,7 @@ struct Composer: View {
                         Image(systemName: input.state.showsKeyboardToggle(for: .expression) ? "keyboard" : "face.smiling")
                             .font(HaloTypography.title)
                             .foregroundStyle(HaloColor.textSecondary)
-                            .contentTransition(.symbolEffect(.replace))
+                            .haloSymbolReplace(reduceMotion: reduceMotion)
                             .frame(width: 44, height: 44)
                             .contentShape(.rect)
                     }
@@ -108,23 +108,23 @@ struct Composer: View {
             if voice.isRecording {
                 ComposerCircleButton(systemImage: "arrow.up", label: "Send voice message", prominent: true) { sendVoice() }
                     .accessibilityIdentifier("voice-send-button")
-                    .transition(.scale.combined(with: .opacity))
+                    .transition(HaloMotion.scalePop(reduceMotion: reduceMotion))
             } else if model.canSend {
                 ComposerCircleButton(systemImage: "paperplane.fill", label: "Send", prominent: true) {
                     sendTrigger += 1
                     Task { await model.send() }
                 }
                 .accessibilityIdentifier("send-button")
-                .transition(.scale.combined(with: .opacity))
+                .transition(HaloMotion.scalePop(reduceMotion: reduceMotion))
             } else {
                 ComposerCircleButton(systemImage: trailingSymbol, label: trailingLabel) { trailingTapped() }
-                    .contentTransition(.symbolEffect(.replace))
+                    .haloSymbolReplace(reduceMotion: reduceMotion)
                     .accessibilityIdentifier(input.state.panel != nil ? "panel-expand-button" : "voice-button")
-                    .transition(.scale.combined(with: .opacity))
+                    .transition(HaloMotion.scalePop(reduceMotion: reduceMotion))
             }
         }
-        .animation(.snappy(duration: 0.2), value: model.canSend)
-        .animation(.snappy(duration: 0.2), value: voice.isRecording)
+        .animation(HaloMotion.snappy(reduceMotion: reduceMotion), value: model.canSend)
+        .animation(HaloMotion.snappy(reduceMotion: reduceMotion), value: voice.isRecording)
         .alert("Microphone access is off", isPresented: Binding(get: { voice.phase == .denied }, set: { if !$0 { voice.dismissProblem() } })) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -156,7 +156,7 @@ struct Composer: View {
     private var recordingField: some View {
         HStack(spacing: HaloSpacing.s) {
             Circle().fill(HaloColor.danger).frame(width: 10, height: 10)
-                .symbolEffect(.pulse)
+                .haloSymbolPulse(reduceMotion: reduceMotion)
                 .accessibilityHidden(true)
             Text(VoiceRecorder.clock(voice.elapsed))
                 .font(HaloTypography.body.monospacedDigit())

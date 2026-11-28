@@ -50,3 +50,19 @@ custom_rules:
     excluded: ".*Tests/.*"
     message: "Decode with ImagePipeline / DecodedImage (off the main thread, sized, cached; M19-1, NFR-12/13). A decode that is off the main thread by design ends with `// decode: <reason>`."
     severity: error
+  no_raw_with_animation:
+    name: "Route animations through HaloMotion"
+    regex: '(?<![\w.])withAnimation(?:\s*\(|\s*\{)'
+    excluded:
+      - ".*/HaloMotion\\.swift"
+      - ".*Tests/.*"
+    message: "Route all animations through HaloMotion.animate(...) so Reduce Motion is respected everywhere (DESIGN_SYSTEM §6, AC-MOT-2, M21-3)."
+    severity: error
+  no_raw_animation_modifier:
+    name: "Use HaloMotion in .animation() modifiers"
+    regex: '\.animation\((?!HaloMotion\.|nil)'
+    excluded:
+      - ".*/HaloMotion\\.swift"
+      - ".*Tests/.*"
+    message: "Pass a HaloMotion curve (or nil) to .animation(...) so Reduce Motion is respected everywhere (DESIGN_SYSTEM §6, AC-MOT-2, M21-3)."
+    severity: error

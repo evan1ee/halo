@@ -80,7 +80,7 @@ public struct PanelTabPill<Tab: Hashable & Identifiable>: View {
         HStack(spacing: HaloSpacing.xxs) {
             ForEach(items) { item in
                 Button {
-                    withAnimation(HaloMotion.stickerPanel(reduceMotion: reduceMotion)) { selection = item.tab }
+                    HaloMotion.animate(HaloMotion.stickerPanel(reduceMotion: reduceMotion)) { selection = item.tab }
                 } label: {
                     Group {
                         if stacked, let symbol = item.systemImage {

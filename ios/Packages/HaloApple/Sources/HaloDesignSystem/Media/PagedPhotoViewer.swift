@@ -41,6 +41,7 @@ public struct PagedPhotoViewer: View {
     @State private var toastMessage: String?
     @State private var toastTask: Task<Void, Never>?
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let loadImageFile: @Sendable (PagedMediaItem) async -> URL?
     private let exportItem: @Sendable (PagedMediaItem) async -> URL?
@@ -113,7 +114,7 @@ public struct PagedPhotoViewer: View {
                                 loadedFileByID[item.id] = url
                             },
                             onSingleTap: {
-                                withAnimation(.easeInOut(duration: 0.2)) {
+                                HaloMotion.animate(HaloMotion.gentle(reduceMotion: reduceMotion)) {
                                     showsChrome.toggle()
                                 }
                             },
@@ -128,7 +129,7 @@ public struct PagedPhotoViewer: View {
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 #endif
                 .offset(y: dragOffset)
-                .scaleEffect(1 - dismissProgress * 0.12)
+                .scaleEffect(reduceMotion ? 1 : (1 - dismissProgress * 0.12))
                 .simultaneousGesture(swipeDownToDismissGesture)
 
                 if let toastMessage {
@@ -137,16 +138,16 @@ public struct PagedPhotoViewer: View {
                         .foregroundStyle(HaloColor.mediaOverlayForeground)
                         .padding(.horizontal, HaloSpacing.m)
                         .padding(.vertical, HaloSpacing.s)
-                        .background(.ultraThinMaterial, in: .capsule)
+                        .haloOverlayPillBackground()
                         .environment(\.colorScheme, .dark)
                         .padding(.bottom, showsChrome ? 92 : 36)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        .transition(HaloMotion.slide(from: .bottom, reduceMotion: reduceMotion))
                         .zIndex(2)
                 }
 
                 if showsChrome {
                     bottomChrome
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        .transition(HaloMotion.slide(from: .bottom, reduceMotion: reduceMotion))
                 }
             }
             .navigationTitle(
@@ -320,7 +321,7 @@ public struct PagedPhotoViewer: View {
                 .foregroundStyle(HaloColor.mediaOverlayForeground)
                 .padding(.horizontal, HaloSpacing.m)
                 .padding(.vertical, HaloSpacing.xxs)
-                .background(.ultraThinMaterial, in: .capsule)
+                .haloOverlayPillBackground()
                 .environment(\.colorScheme, .dark)
             }
 
@@ -353,7 +354,7 @@ public struct PagedPhotoViewer: View {
                 if shouldDismiss && value.translation.height > abs(value.translation.width) {
                     dismiss()
                 } else {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+                    HaloMotion.animate(HaloMotion.standard(reduceMotion: reduceMotion)) {
                         dragOffset = 0
                     }
                 }
@@ -402,13 +403,13 @@ public struct PagedPhotoViewer: View {
 
     private func showToast(_ message: String) {
         toastTask?.cancel()
-        withAnimation(.easeInOut(duration: 0.2)) {
+        HaloMotion.animate(HaloMotion.gentle(reduceMotion: reduceMotion)) {
             toastMessage = message
         }
         toastTask = Task {
             try? await Task.sleep(for: .seconds(1.8))
             guard !Task.isCancelled else { return }
-            withAnimation(.easeInOut(duration: 0.25)) {
+            HaloMotion.animate(HaloMotion.gentle(reduceMotion: reduceMotion)) {
                 toastMessage = nil
             }
         }
