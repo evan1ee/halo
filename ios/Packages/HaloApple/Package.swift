@@ -271,6 +271,12 @@ let package = Package(
             ],
             resources: [.copy("Resources/acknowledgements.csv")]
         ),
-        .testTarget(name: "FeatureSettingsTests", dependencies: ["FeatureSettings"]),
+        .testTarget(
+            name: "FeatureSettingsTests",
+            dependencies: [
+                "FeatureSettings",
+                .product(name: "HaloTestSupport", package: "HaloCore"),
+            ]
+        ),
     ]
 )

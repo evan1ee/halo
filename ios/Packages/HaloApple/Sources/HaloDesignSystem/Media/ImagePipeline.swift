@@ -60,6 +60,9 @@ public enum ImagePipeline {
     private static let store = Store()
     private static var cache: NSCache<NSString, UIImage> { store.cache }
 
+    /// Empties the in-memory decoded image cache (called from Settings → Clear media cache, M20-13).
+    public static func clearCache() { store.clear() }
+
     /// The picture if it was decoded before; cheap enough for a view's first frame.
     public static func cached(_ data: Data, maxPixel: Int) -> UIImage? {
         return cache.object(forKey: key(data, maxPixel: maxPixel) as NSString)

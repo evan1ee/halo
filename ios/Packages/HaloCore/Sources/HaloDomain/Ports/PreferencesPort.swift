@@ -33,6 +33,8 @@ public struct PreferencesSnapshot: Sendable, Equatable, Codable {
     public var searchHistoryPaused: Bool
     /// `true`: older messages are also read on mobile data. Default `false`.
     public var searchHistoryOnMobileData: Bool
+    /// SDK media cache retention policy (D55: defaults to 1 GB / 30 days, M20-13).
+    public var mediaCacheRetention: MediaCacheRetention
 
     public init(
         privateReceipts: Bool = false,
@@ -44,7 +46,8 @@ public struct PreferencesSnapshot: Sendable, Equatable, Codable {
         chatsInSystemSearch: Bool = false,
         followFocusFilter: Bool = false,
         searchHistoryPaused: Bool = false,
-        searchHistoryOnMobileData: Bool = false
+        searchHistoryOnMobileData: Bool = false,
+        mediaCacheRetention: MediaCacheRetention = .defaultPolicy
     ) {
         self.searchHistoryPaused = searchHistoryPaused
         self.searchHistoryOnMobileData = searchHistoryOnMobileData
@@ -56,6 +59,7 @@ public struct PreferencesSnapshot: Sendable, Equatable, Codable {
         self.lastSeenWhatsNewVersion = lastSeenWhatsNewVersion
         self.chatsInSystemSearch = chatsInSystemSearch
         self.followFocusFilter = followFocusFilter
+        self.mediaCacheRetention = mediaCacheRetention
     }
 }
 

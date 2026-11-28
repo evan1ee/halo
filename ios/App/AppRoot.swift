@@ -5,6 +5,7 @@ import FeatureRoomList
 import FeatureTimeline
 import Foundation
 import HaloApplication
+import HaloDesignSystem
 import HaloDomain
 import HaloFoundation
 import HaloMatrixAdapter
@@ -78,6 +79,7 @@ final class AppRoot {
     let devicesPort: MatrixDevicesPort
     let passwordPort: MatrixAccountPasswordPort
     let botAllowlistPort: MatrixBotAllowlistPort
+    let storage: StorageCoordinator
     let search: MessageSearchEngine
     let roomCoordinator: RoomListCoordinator
     /// Matrix links from taps in messages and from outside; asks before joining or starting a chat (M18-9).
@@ -141,7 +143,8 @@ final class AppRoot {
             readStoredSession: {
                 (try? keychain.readSync(.session)).flatMap { try? JSONDecoder().decode(StoredSession.self, from: $0) }
             },
-            syncConditions: { conditionsBox.syncConditions }
+            syncConditions: { conditionsBox.syncConditions },
+            mediaRetention: { preferencesPort.load().mediaCacheRetention }
         )
         matrixSession = session
         let sessionCoordinator = SessionCoordinator(port: session, keychain: keychain)
@@ -196,7 +199,23 @@ final class AppRoot {
 
         timelinePort = MatrixTimelinePort(session: session)
         botActivity = BotActivityCoordinator(timelines: timelinePort)
-        media = MediaLoader(port: MatrixMediaPort(session: session))
+        let media = MediaLoader(port: MatrixMediaPort(session: session))
+        self.media = media
+        let thumbnailMemory = self.thumbnailMemory
+        storage = StorageCoordinator(
+            port: MatrixStoragePort(
+                session: session,
+                haloDatabaseDirectory: HaloShared.storeDirectory().appendingPathComponent("halo", isDirectory: true)
+            ),
+            currentRetention: { preferencesPort.load().mediaCacheRetention },
+            clearMemoryCaches: {
+                await media.clearCache()
+                await MainActor.run {
+                    thumbnailMemory.removeAll()
+                    ImagePipeline.clearCache()
+                }
+            }
+        )
         previewPolicy = MatrixMediaPreviewPolicyPort(session: session)
         roomPort = MatrixRoomPort(session: session)
         chatCreation = MatrixChatCreationPort(session: session)

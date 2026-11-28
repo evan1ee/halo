@@ -42,8 +42,7 @@ public struct SettingsConfiguration {
     public let exportDiagnosticsZip: (@Sendable () async -> URL?)?
     public let reconcile: (@Sendable () async -> Void)?
     public let unexplainedAuditCount: (@Sendable () async -> Int?)?
-    public let storageSizes: (@Sendable () async -> [StorageSize])?
-    public let clearCache: (@Sendable () async -> Bool)?
+    public let storage: StorageSettingsActions?
     public let searchIndex: SearchIndexSettingsActions?
     public let security: (@MainActor () -> [StorageSize])?
     public let setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)?
@@ -72,8 +71,7 @@ public struct SettingsConfiguration {
         exportDiagnosticsZip: (@Sendable () async -> URL?)? = nil,
         reconcile: (@Sendable () async -> Void)? = nil,
         unexplainedAuditCount: (@Sendable () async -> Int?)? = nil,
-        storageSizes: (@Sendable () async -> [StorageSize])? = nil,
-        clearCache: (@Sendable () async -> Bool)? = nil,
+        storage: StorageSettingsActions? = nil,
         searchIndex: SearchIndexSettingsActions? = nil,
         security: (@MainActor () -> [StorageSize])? = nil,
         setUpRecovery: (@MainActor () async -> Result<String, SettingsMessage>)? = nil,
@@ -101,8 +99,7 @@ public struct SettingsConfiguration {
         self.exportDiagnosticsZip = exportDiagnosticsZip
         self.reconcile = reconcile
         self.unexplainedAuditCount = unexplainedAuditCount
-        self.storageSizes = storageSizes
-        self.clearCache = clearCache
+        self.storage = storage
         self.searchIndex = searchIndex
         self.security = security
         self.setUpRecovery = setUpRecovery
@@ -151,10 +148,6 @@ public struct SettingsView: View {
     private var notificationStatus: (@Sendable () async -> String)? { config.notificationStatus }
     private var openSystemSettings: (() -> Void)? { config.openSystemSettings }
     @State private var notifications = ""
-    private var storageSizes: (@Sendable () async -> [StorageSize])? { config.storageSizes }
-    private var clearCache: (@Sendable () async -> Bool)? { config.clearCache }
-    @State private var storage: [StorageSize] = []
-    @State private var clearingCache = false
     @State private var appearance: AppAppearance
     @State private var mediaPreviews: MediaPreviewChoice = .always
     @State private var mediaPreviewsLoaded = false
@@ -345,28 +338,7 @@ public struct SettingsView: View {
                 .task { notifications = await notificationStatus() }
             }
             if let notificationDefaults { NotificationDefaultsSection(actions: notificationDefaults) }
-            if let storageSizes {
-                Section {
-                    ForEach(storage) { LabeledContent($0.name, value: $0.formatted) }
-                    if let clearCache {
-                        Button(clearingCache ? "Clearing cache…" : "Clear media cache") {
-                            clearingCache = true
-                            Task {
-                                _ = await clearCache()
-                                storage = await storageSizes()
-                                clearingCache = false
-                            }
-                        }
-                        .disabled(clearingCache)
-                        .accessibilityIdentifier("clear-cache")
-                    }
-                } header: {
-                    Text("Storage")
-                } footer: {
-                    Text("What Halo keeps on this device: the synced messages and keys, and its own settings database.")
-                }
-                .task { storage = await storageSizes() }
-            }
+            if let storage = config.storage { StorageSettingsSection(actions: storage, preferences: preferences) }
             if let searchIndex = config.searchIndex { SearchIndexSettingsSection(actions: searchIndex) }
             if let diagnostics {
                 Section {

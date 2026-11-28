@@ -19,6 +19,8 @@ public struct UserDefaultsPreferencesStore: PreferencesPort, Sendable {
     public static let followFocusFilterKey = "halo.followFocusFilter"
     public static let searchHistoryPausedKey = "halo.search.historyPaused"
     public static let searchHistoryOnMobileDataKey = "halo.search.onMobileData"
+    public static let mediaCacheMaxSizeKey = "halo.mediaCache.maxSize"
+    public static let mediaCacheExpiryKey = "halo.mediaCache.expiry"
 
     public init(defaults: UserDefaults = .standard) {
         box = Box(defaults: defaults)
@@ -26,6 +28,8 @@ public struct UserDefaultsPreferencesStore: PreferencesPort, Sendable {
 
     public func load() -> PreferencesSnapshot {
         let d = box.defaults
+        let maxSize = MediaCacheSizeLimit(rawValue: d.string(forKey: Self.mediaCacheMaxSizeKey) ?? "") ?? MediaCacheRetention.defaultPolicy.maxSize
+        let expiry = MediaCacheExpiry(rawValue: d.string(forKey: Self.mediaCacheExpiryKey) ?? "") ?? MediaCacheRetention.defaultPolicy.expiry
         return PreferencesSnapshot(
             privateReceipts: d.bool(forKey: Self.privateReceiptsKey),
             sendTypingNotices: d.object(forKey: Self.sendTypingNoticesKey) as? Bool ?? true,
@@ -36,7 +40,8 @@ public struct UserDefaultsPreferencesStore: PreferencesPort, Sendable {
             chatsInSystemSearch: d.bool(forKey: Self.chatsInSystemSearchKey),
             followFocusFilter: d.bool(forKey: Self.followFocusFilterKey),
             searchHistoryPaused: d.bool(forKey: Self.searchHistoryPausedKey),
-            searchHistoryOnMobileData: d.bool(forKey: Self.searchHistoryOnMobileDataKey)
+            searchHistoryOnMobileData: d.bool(forKey: Self.searchHistoryOnMobileDataKey),
+            mediaCacheRetention: MediaCacheRetention(maxSize: maxSize, expiry: expiry)
         )
     }
 
@@ -52,5 +57,7 @@ public struct UserDefaultsPreferencesStore: PreferencesPort, Sendable {
         d.set(snapshot.followFocusFilter, forKey: Self.followFocusFilterKey)
         d.set(snapshot.searchHistoryPaused, forKey: Self.searchHistoryPausedKey)
         d.set(snapshot.searchHistoryOnMobileData, forKey: Self.searchHistoryOnMobileDataKey)
+        d.set(snapshot.mediaCacheRetention.maxSize.rawValue, forKey: Self.mediaCacheMaxSizeKey)
+        d.set(snapshot.mediaCacheRetention.expiry.rawValue, forKey: Self.mediaCacheExpiryKey)
     }
 }

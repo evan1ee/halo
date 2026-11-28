@@ -64,14 +64,7 @@ extension AppRoot {
             unexplainedAuditCount: { [weak self] in
                 await self?.unexplainedAuditCount()
             },
-            storageSizes: { [weak self] in
-                guard let self else { return [] }
-                return await self.storageSizes()
-            },
-            clearCache: { [weak self] in
-                guard let self else { return false }
-                return await self.clearMediaCache()
-            },
+            storage: storageSettings(),
             searchIndex: SearchIndexSettingsActions(
                 status: { [search] in await search.settingsStatus() },
                 isPaused: { [preferences] in preferences.searchHistoryPaused },
@@ -217,18 +210,13 @@ extension AppRoot {
         }
     }
 
-    func clearMediaCache() async -> Bool {
-        await media.clearCache()
-        let root = HaloShared.storeDirectory()
-        let fm = FileManager.default
-        if let subdirs = try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey]) {
-            for dir in subdirs where dir.lastPathComponent != "halo" {
-                let cacheDir = dir.appendingPathComponent("caches", isDirectory: true)
-                guard let files = try? fm.contentsOfDirectory(at: cacheDir, includingPropertiesForKeys: nil) else { continue }
-                for file in files { try? fm.removeItem(at: file) }
-            }
-        }
-        return true
+    func storageSettings() -> StorageSettingsActions {
+        let storage = self.storage
+        return StorageSettingsActions(
+            loadSizes: { () async throws(HaloError) in try await storage.sizes() },
+            clearMediaCache: { () async throws(HaloError) in try await storage.clearMediaCache() },
+            applyRetention: { retention throws(HaloError) in try await storage.applyRetention(retention) }
+        )
     }
 
     func unexplainedAuditCount() async -> Int? {
@@ -239,22 +227,6 @@ extension AppRoot {
     func reconcileNow() async {
         await receipts.flush()
         await readState.reconcile()
-    }
-
-    nonisolated func storageSizes() async -> [StorageSize] {
-        let directory = HaloShared.storeDirectory()
-        func size(of url: URL) -> Int64 {
-            let keys: [URLResourceKey] = [.totalFileAllocatedSizeKey, .isRegularFileKey]
-            guard let files = FileManager.default.enumerator(at: url, includingPropertiesForKeys: keys) else { return 0 }
-            var total: Int64 = 0
-            for case let file as URL in files {
-                let values = try? file.resourceValues(forKeys: Set(keys))
-                if values?.isRegularFile == true { total += Int64(values?.totalFileAllocatedSize ?? 0) }
-            }
-            return total
-        }
-        let own = size(of: directory.appendingPathComponent("halo", isDirectory: true))
-        return [StorageSize(name: "Messages and keys", bytes: max(0, size(of: directory) - own)), StorageSize(name: "Halo database", bytes: own)]
     }
 
     func mediaPreviewChoice() async -> MediaPreviewChoice {
