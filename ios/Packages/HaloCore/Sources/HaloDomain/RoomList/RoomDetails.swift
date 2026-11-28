@@ -14,6 +14,8 @@ public struct RoomDetails: Sendable, Equatable {
     public let canEditDetails: Bool
     /// The user may invite people.
     public let canInvite: Bool
+    /// Live moderation permissions for removing, banning, and unbanning members (ROOM_MANAGEMENT FR-10, M20-12).
+    public let moderation: RoomModerationPermissions
     /// The room's avatar (for a direct chat the other person's); `nil` when it has none.
     public let avatar: MediaRef?
     /// Replacement room announced by `m.room.tombstone`, if this room has been upgraded (GA-23, M20-8).
@@ -23,7 +25,7 @@ public struct RoomDetails: Sendable, Equatable {
 
     public init(
         id: RoomID, name: String?, topic: String?, isDirect: Bool, isEncrypted: Bool, joinedMemberCount: Int, notificationMode: RoomNotificationChoice,
-        canEditDetails: Bool = false, canInvite: Bool = false, avatar: MediaRef? = nil,
+        canEditDetails: Bool = false, canInvite: Bool = false, moderation: RoomModerationPermissions = .none, avatar: MediaRef? = nil,
         successor: RoomSuccessor? = nil, membership: Membership = .joined
     ) {
         self.successor = successor
@@ -31,6 +33,7 @@ public struct RoomDetails: Sendable, Equatable {
         self.avatar = avatar
         self.canEditDetails = canEditDetails
         self.canInvite = canInvite
+        self.moderation = moderation
         self.id = id
         self.name = name
         self.topic = topic
@@ -44,17 +47,17 @@ public struct RoomDetails: Sendable, Equatable {
 extension RoomDetails {
     /// A copy with another notification mode.
     public func with(notificationMode: RoomNotificationChoice) -> RoomDetails {
-        RoomDetails(id: id, name: name, topic: topic, isDirect: isDirect, isEncrypted: isEncrypted, joinedMemberCount: joinedMemberCount, notificationMode: notificationMode, canEditDetails: canEditDetails, canInvite: canInvite, avatar: avatar, successor: successor, membership: membership)
+        RoomDetails(id: id, name: name, topic: topic, isDirect: isDirect, isEncrypted: isEncrypted, joinedMemberCount: joinedMemberCount, notificationMode: notificationMode, canEditDetails: canEditDetails, canInvite: canInvite, moderation: moderation, avatar: avatar, successor: successor, membership: membership)
     }
 
     /// A copy with another name and topic.
     public func with(name: String?, topic: String?) -> RoomDetails {
-        RoomDetails(id: id, name: name, topic: topic, isDirect: isDirect, isEncrypted: isEncrypted, joinedMemberCount: joinedMemberCount, notificationMode: notificationMode, canEditDetails: canEditDetails, canInvite: canInvite, avatar: avatar, successor: successor, membership: membership)
+        RoomDetails(id: id, name: name, topic: topic, isDirect: isDirect, isEncrypted: isEncrypted, joinedMemberCount: joinedMemberCount, notificationMode: notificationMode, canEditDetails: canEditDetails, canInvite: canInvite, moderation: moderation, avatar: avatar, successor: successor, membership: membership)
     }
 
     /// A copy with another avatar.
     public func with(avatar: MediaRef?) -> RoomDetails {
-        RoomDetails(id: id, name: name, topic: topic, isDirect: isDirect, isEncrypted: isEncrypted, joinedMemberCount: joinedMemberCount, notificationMode: notificationMode, canEditDetails: canEditDetails, canInvite: canInvite, avatar: avatar, successor: successor, membership: membership)
+        RoomDetails(id: id, name: name, topic: topic, isDirect: isDirect, isEncrypted: isEncrypted, joinedMemberCount: joinedMemberCount, notificationMode: notificationMode, canEditDetails: canEditDetails, canInvite: canInvite, moderation: moderation, avatar: avatar, successor: successor, membership: membership)
     }
 }
 
@@ -63,26 +66,35 @@ public enum RoomNotificationChoice: Sendable, Equatable, CaseIterable {
     case allMessages, mentionsAndKeywords, mute
 }
 
-/// A joined or invited member (ROOM_MANAGEMENT FR-2).
+/// A joined, invited, or banned member (ROOM_MANAGEMENT FR-2, FR-10, M20-12).
 public struct RoomMemberInfo: Sendable, Equatable, Identifiable {
     public var id: String { userID }
     /// The raw Matrix user ID, shown to the user in the members list only; never logged.
     public let userID: String
     public let displayName: String?
     public let role: RoomMemberRole
+    public let powerLevel: RoomPowerLevel
     public let isInvited: Bool
+    public let isBanned: Bool
+    public let banReason: String?
     /// `true` for the signed-in user.
     public let isMe: Bool
     /// The member's avatar; `nil` when none.
     public let avatar: MediaRef?
 
-    public init(userID: String, displayName: String?, role: RoomMemberRole, isInvited: Bool = false, isMe: Bool = false, avatar: MediaRef? = nil) {
+    public init(
+        userID: String, displayName: String?, role: RoomMemberRole, powerLevel: RoomPowerLevel = .level(0),
+        isInvited: Bool = false, isBanned: Bool = false, banReason: String? = nil, isMe: Bool = false, avatar: MediaRef? = nil
+    ) {
         self.avatar = avatar
         self.isMe = isMe
         self.userID = userID
         self.displayName = displayName
         self.role = role
+        self.powerLevel = powerLevel
         self.isInvited = isInvited
+        self.isBanned = isBanned
+        self.banReason = banReason
     }
 
     /// The name to show: the display name, else the user ID.

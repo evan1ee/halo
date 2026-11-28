@@ -8,6 +8,10 @@ public final class FakeRoomPort: RoomPort {
     private struct State {
         var details: RoomDetails
         var members: [RoomMemberInfo]
+        var banned: [RoomMemberInfo] = []
+        var removedMembers: [(user: UserID, reason: String?)] = []
+        var bannedCalls: [(user: UserID, reason: String?)] = []
+        var unbannedCalls: [(user: UserID, reason: String?)] = []
         var avatars: [Data] = []
         var avatarRemovals = 0
         var error: HaloError?
@@ -30,10 +34,11 @@ public final class FakeRoomPort: RoomPort {
     public init(
         details: RoomDetails,
         members: [RoomMemberInfo] = [],
+        banned: [RoomMemberInfo] = [],
         gallery: [RoomMediaItem] = [],
         exportedMessages: [RoomExportMessage] = []
     ) {
-        state = Mutex(State(details: details, members: members, gallery: gallery, exportedMessages: exportedMessages))
+        state = Mutex(State(details: details, members: members, banned: banned, gallery: gallery, exportedMessages: exportedMessages))
     }
 
     /// Makes every following call throw (nil: stop failing).
@@ -53,6 +58,53 @@ public final class FakeRoomPort: RoomPort {
         let (members, error) = state.withLock { ($0.members, $0.error) }
         if let error { throw error }
         return Array(members.prefix(limit))
+    }
+
+    public var removedMembers: [(user: UserID, reason: String?)] { state.withLock { $0.removedMembers } }
+    public var bannedCalls: [(user: UserID, reason: String?)] { state.withLock { $0.bannedCalls } }
+    public var unbannedCalls: [(user: UserID, reason: String?)] { state.withLock { $0.unbannedCalls } }
+
+    public func bannedMembers(_ room: RoomID, limit: Int) async throws(HaloError) -> [RoomMemberInfo] {
+        let (banned, error) = state.withLock { ($0.banned, $0.error) }
+        if let error { throw error }
+        return Array(banned.prefix(limit))
+    }
+
+    public func removeMember(_ user: UserID, from room: RoomID, reason: String?) async throws(HaloError) {
+        if let error = state.withLock({ $0.error }) { throw error }
+        state.withLock { state in
+            state.removedMembers.append((user, reason))
+            state.members.removeAll { $0.userID == user.rawValue }
+        }
+    }
+
+    public func banMember(_ user: UserID, from room: RoomID, reason: String?) async throws(HaloError) {
+        if let error = state.withLock({ $0.error }) { throw error }
+        state.withLock { state in
+            state.bannedCalls.append((user, reason))
+            let existing = state.members.first { $0.userID == user.rawValue }
+            state.members.removeAll { $0.userID == user.rawValue }
+            state.banned.removeAll { $0.userID == user.rawValue }
+            state.banned.append(RoomMemberInfo(
+                userID: user.rawValue,
+                displayName: existing?.displayName,
+                role: existing?.role ?? .user,
+                powerLevel: existing?.powerLevel ?? .level(0),
+                isInvited: false,
+                isBanned: true,
+                banReason: reason,
+                isMe: false,
+                avatar: existing?.avatar
+            ))
+        }
+    }
+
+    public func unbanMember(_ user: UserID, from room: RoomID, reason: String?) async throws(HaloError) {
+        if let error = state.withLock({ $0.error }) { throw error }
+        state.withLock { state in
+            state.unbannedCalls.append((user, reason))
+            state.banned.removeAll { $0.userID == user.rawValue }
+        }
     }
 
     public func setNotificationMode(_ mode: RoomNotificationChoice, in room: RoomID) async throws(HaloError) {

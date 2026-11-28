@@ -9,6 +9,18 @@ public protocol RoomPort: Sendable {
     /// Joined and invited members, administrators first, then by name (FR-2). Loads the first `limit` only.
     func members(_ room: RoomID, limit: Int) async throws(HaloError) -> [RoomMemberInfo]
 
+    /// Banned members of `room`, alphabetically by title (FR-10, M20-12). Loads the first `limit` only.
+    func bannedMembers(_ room: RoomID, limit: Int) async throws(HaloError) -> [RoomMemberInfo]
+
+    /// Removes (kicks) a joined member or withdraws an invitation (FR-10, M20-12). Throws `.forbidden` when power levels refuse.
+    func removeMember(_ user: UserID, from room: RoomID, reason: String?) async throws(HaloError)
+
+    /// Bans a user from `room` (FR-10, M20-12). Throws `.forbidden` when power levels refuse.
+    func banMember(_ user: UserID, from room: RoomID, reason: String?) async throws(HaloError)
+
+    /// Unbans a previously banned user in `room` (FR-10, M20-12). Throws `.forbidden` when power levels refuse.
+    func unbanMember(_ user: UserID, from room: RoomID, reason: String?) async throws(HaloError)
+
     /// Stores the user's own mode for the room as a push rule, so every device follows it (FR-3).
     func setNotificationMode(_ mode: RoomNotificationChoice, in room: RoomID) async throws(HaloError)
 
@@ -90,6 +102,16 @@ private actor SinglePageMediaGallerySession: RoomMediaGallerySession {
 }
 
 extension RoomPort {
+    public func bannedMembers(_ room: RoomID, limit: Int) async throws(HaloError) -> [RoomMemberInfo] { [] }
+    public func removeMember(_ user: UserID, from room: RoomID, reason: String?) async throws(HaloError) {
+        throw .unsupported("KICK")
+    }
+    public func banMember(_ user: UserID, from room: RoomID, reason: String?) async throws(HaloError) {
+        throw .unsupported("BAN")
+    }
+    public func unbanMember(_ user: UserID, from room: RoomID, reason: String?) async throws(HaloError) {
+        throw .unsupported("UNBAN")
+    }
     public func forget(_ room: RoomID) async throws(HaloError) {}
     public func previewRoom(address: String) async throws(HaloError) -> RoomLifecyclePreview {
         RoomLifecyclePreview(roomID: try? RoomID(address), address: address, joinAccess: .unknown)

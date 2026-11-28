@@ -492,6 +492,69 @@ struct InteropTests {
             return e.readReceipts.contains { $0.userID == peerUserID && $0.timestamp != nil }
         }
     }
+
+    // MARK: Basic moderation (M20-12, ROOM_MANAGEMENT FR-10, AC-ROOM-4)
+
+    @Test("Basic moderation: live power levels gate kick/ban/unban; unauthorized fails with .forbidden; admin removes, bans with reason, and unbans", .timeLimit(.minutes(2)))
+    func basicModerationPowerLevelsAndActions() async throws {
+        let stage = try await TestStage()
+        let roomPort = MatrixRoomPort(session: stage.session)
+        let ownUserID = try UserID(try await stage.session.ownUserID())
+        let serverDomain = String(ownUserID.rawValue.split(separator: ":").last ?? "")
+        let peerUserID = try UserID("@\(stage.user)peer:\(serverDomain)")
+
+        // 1. In stage.room (created by peer), Halo is a regular member (PL 0): live power levels refuse kick/ban.
+        let regularDetails = try await roomPort.details(stage.room)
+        #expect(!regularDetails.moderation.canKick && !regularDetails.moderation.canBan)
+        await #expect(throws: HaloError.forbidden) {
+            try await roomPort.removeMember(peerUserID, from: stage.room, reason: "Unauthorized")
+        }
+
+        // 2. Halo creates a room (admin/creator power level) and invites peer.
+        let chatPort = MatrixChatCreationPort(session: stage.session)
+        let modRoom = try await chatPort.createRoom(name: "Moderation Test", invite: [peerUserID])
+        try await stage.peer.join(modRoom)
+
+        try await stage.wait(30, "admin details and peer join synced") {
+            guard let details = try? await roomPort.details(modRoom),
+                  let members = try? await roomPort.members(modRoom, limit: 20) else { return false }
+            return details.moderation.canKick && details.moderation.canBan
+                && members.contains { $0.userID == peerUserID.rawValue && !$0.isInvited }
+        }
+
+        let adminDetails = try await roomPort.details(modRoom)
+        let joinedMembers = try await roomPort.members(modRoom, limit: 20)
+        let peerMember = try #require(joinedMembers.first { $0.userID == peerUserID.rawValue })
+        #expect(RoomModerationPolicy.actions(for: peerMember, permissions: adminDetails.moderation) == .init(canRemove: true, canBan: true, canUnban: false))
+
+        // 3. Remove (kick) peer from the room.
+        try await roomPort.removeMember(peerUserID, from: modRoom, reason: "Removed in test")
+        try await stage.wait(30, "peer removed from member list") {
+            guard let members = try? await roomPort.members(modRoom, limit: 20) else { return false }
+            return !members.contains { $0.userID == peerUserID.rawValue }
+        }
+
+        // 4. Re-invite peer, peer rejoins, then ban peer with a reason.
+        try await roomPort.invite([peerUserID], to: modRoom)
+        try await stage.peer.join(modRoom)
+        try await stage.wait(30, "peer rejoined") {
+            guard let members = try? await roomPort.members(modRoom, limit: 20) else { return false }
+            return members.contains { $0.userID == peerUserID.rawValue && !$0.isInvited }
+        }
+
+        try await roomPort.banMember(peerUserID, from: modRoom, reason: "Rule violation")
+        try await stage.wait(30, "peer appears in bannedMembers with reason") {
+            guard let banned = try? await roomPort.bannedMembers(modRoom, limit: 20) else { return false }
+            return banned.contains { $0.userID == peerUserID.rawValue && $0.isBanned && $0.banReason == "Rule violation" }
+        }
+
+        // 5. Unban peer → removed from bannedMembers.
+        try await roomPort.unbanMember(peerUserID, from: modRoom, reason: "Lifted")
+        try await stage.wait(30, "peer removed from bannedMembers") {
+            guard let banned = try? await roomPort.bannedMembers(modRoom, limit: 20) else { return false }
+            return !banned.contains { $0.userID == peerUserID.rawValue }
+        }
+    }
 }
 
 private func contents(_ event: [String: Any]) -> [String: Any]? { event["content"] as? [String: Any] }
