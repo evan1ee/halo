@@ -29,7 +29,6 @@ Halo should be indistinguishable in feel from Messages, Mail and Photos while ke
 | UX-04 | Blocker | Sign-in artwork pending Q-BRAND (founder's halo disc `AppIcon` and `Assets.xcassets` landed in M11) | `ios/App/Resources/Assets.xcassets`; `FeatureOnboarding/SignInView.swift` | App Store submission; DESIGN_SYSTEM §5 | M22-6, Q-BRAND (👤) |
 | UX-17 | High | Videos and voice notes leave the chat for Quick Look; polls can't be answered; no camera | GA-18, GA-19, GA-20 | Familiar patterns (§1.3) | M20-2…M20-5 |
 | UX-18 | High | Links to people and rooms leave the app | GA-14 | NAVIGATION §3 | M18-9 |
-| UX-20 | Medium | Animations mostly bypass `HaloMotion`; Reduce Motion is read in two views and for stickers; contrast is handled only by the colour tokens, Reduce Transparency and Bold Text nowhere | GA-25 | DESIGN_SYSTEM §6, AC-MOT-2 | M21-3 |
 
 ## 3. Findings — ship readiness
 

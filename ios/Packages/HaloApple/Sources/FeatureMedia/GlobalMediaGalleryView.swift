@@ -11,6 +11,7 @@ public struct GlobalMediaGalleryView: View {
     private let onSaveAsSticker: (@MainActor (Data, String) -> Void)?
     @State private var selectedItem: GlobalMediaItem?
     @State private var visibleSectionIDs: Set<String> = []
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(
         model: GlobalMediaGalleryViewModel,
@@ -71,8 +72,8 @@ public struct GlobalMediaGalleryView: View {
                     .font(HaloTypography.headline)
                     .foregroundStyle(HaloColor.textPrimary)
                     .lineLimit(1)
-                    .contentTransition(.numericText())
-                    .animation(.snappy(duration: 0.2), value: currentDateTitle)
+                    .haloNumericTextTransition(reduceMotion: reduceMotion)
+                    .animation(HaloMotion.snappy(reduceMotion: reduceMotion), value: currentDateTitle)
                     .padding(.horizontal, HaloSpacing.m)
                     .frame(height: 44)
                     .glassEffect(.regular, in: .capsule)

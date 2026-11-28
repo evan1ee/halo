@@ -27,6 +27,7 @@ public struct VideoPlayerSheet: View {
     @State private var toastMessage: String?
     @State private var toastTask: Task<Void, Never>?
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(
         fileURL: URL,
@@ -93,10 +94,10 @@ public struct VideoPlayerSheet: View {
                         .foregroundStyle(HaloColor.mediaOverlayForeground)
                         .padding(.horizontal, HaloSpacing.m)
                         .padding(.vertical, HaloSpacing.s)
-                        .background(.ultraThinMaterial, in: .capsule)
+                        .haloOverlayPillBackground()
                         .environment(\.colorScheme, .dark)
                         .padding(.bottom, 96)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        .transition(HaloMotion.slide(from: .bottom, reduceMotion: reduceMotion))
                         .zIndex(2)
                 }
             }
@@ -211,13 +212,13 @@ public struct VideoPlayerSheet: View {
 
     private func showToast(_ message: String) {
         toastTask?.cancel()
-        withAnimation(.easeInOut(duration: 0.2)) {
+        HaloMotion.animate(HaloMotion.gentle(reduceMotion: reduceMotion)) {
             toastMessage = message
         }
         toastTask = Task {
             try? await Task.sleep(for: .seconds(1.8))
             guard !Task.isCancelled else { return }
-            withAnimation(.easeInOut(duration: 0.25)) {
+            HaloMotion.animate(HaloMotion.gentle(reduceMotion: reduceMotion)) {
                 toastMessage = nil
             }
         }

@@ -64,7 +64,7 @@ public struct HaloBanner: View {
         .padding(.horizontal, HaloSpacing.m)
         .padding(.vertical, HaloSpacing.s)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.bar)
+        .haloBarBackground()
     }
 
     private var bannerLabel: some View {

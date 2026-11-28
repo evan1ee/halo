@@ -58,7 +58,7 @@ public struct WhatsNewView: View {
                 .controlSize(.large)
                 .padding(.horizontal, HaloSpacing.xl)
                 .padding(.vertical, HaloSpacing.m)
-                .background(.bar)
+                .haloBarBackground()
             }
         }
     }

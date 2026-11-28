@@ -66,6 +66,7 @@ private struct RootView: View {
     @State private var ownName = ""
     @State private var ownAvatar: Data?
     @State private var privacyCover = false
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @AppStorage("halo.onboarding.notificationPrimingShown") private var notificationPrimingShown = false
 
     init(root: AppRoot) {
@@ -293,7 +294,13 @@ private struct RootView: View {
             // D61: hides the chats in the app switcher's snapshot. Only while leaving (active → inactive → background), not
             // while launching or coming back, and without an icon (founder: "i can see the lock icon during the animation").
             if root.preferences.privacyBlur && privacyCover {
-                Rectangle().fill(.ultraThinMaterial)
+                Group {
+                    if reduceTransparency {
+                        HaloColor.bgPrimary
+                    } else {
+                        Rectangle().fill(.ultraThinMaterial)
+                    }
+                }
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)

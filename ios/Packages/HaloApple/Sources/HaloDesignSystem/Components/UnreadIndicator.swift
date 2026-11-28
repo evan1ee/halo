@@ -13,6 +13,13 @@ public struct UnreadIndicator: View {
     }
 
     private let style: Style
+    @Environment(\.colorSchemeContrast) private var systemContrast
+    @Environment(\.haloColorSchemeContrastOverride) private var overrideContrast
+    @Environment(\.legibilityWeight) private var legibilityWeight
+
+    private var contrast: ColorSchemeContrast {
+        HaloAccessibility.colorSchemeContrast(environment: systemContrast, override: overrideContrast)
+    }
 
     public init(_ style: Style) {
         self.style = style
@@ -30,7 +37,10 @@ public struct UnreadIndicator: View {
         case .approximate:
             ZStack {
                 Circle()
-                    .strokeBorder(HaloColor.attention.opacity(0.45), lineWidth: 1.5)
+                    .strokeBorder(
+                        HaloColor.attention.opacity(HaloAccessibility.borderOpacity(base: 0.45, contrast: contrast)),
+                        lineWidth: HaloAccessibility.strokeWidth(base: 1.5, contrast: contrast, legibilityWeight: legibilityWeight)
+                    )
                     .frame(width: 15, height: 15)
                 Circle()
                     .fill(HaloColor.attention)

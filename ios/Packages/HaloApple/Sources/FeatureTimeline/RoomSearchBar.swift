@@ -35,7 +35,7 @@ public struct RoomSearchBar: View {
         }
         .padding(.horizontal, HaloSpacing.m)
         .padding(.vertical, HaloSpacing.s)
-        .background(.bar)
+        .haloBarBackground()
         .overlay(alignment: .bottom) {
             Divider()
         }

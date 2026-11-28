@@ -57,6 +57,9 @@ public struct TimelineView: View {
     @State private var scrollMoving = false
     /// The user's finger is actively dragging the list (never re-anchor mid-drag).
     @State private var scrollInteracting = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     /// Extra top content margin that keeps a short room anchored just above the composer.
     @State private var shortRoomTopMargin: Double = 0
     /// Recent short-room margin changes, to stop a layout loop instead of freezing (`ShortRoomAlignment`).
@@ -182,7 +185,7 @@ public struct TimelineView: View {
                             onSaveAsSticker: onSaveAsSticker
                         )
                             .background(isRowHighlighted(row) ? HaloColor.accent.opacity(0.18) : .clear, in: .rect(cornerRadius: 8))
-                            .animation(.easeOut(duration: 0.4), value: isRowHighlighted(row))
+                            .animation(HaloMotion.highlightFade(reduceMotion: reduceMotion), value: isRowHighlighted(row))
                             // The pill's target: whether the first row that was unread at open is on screen.
                             .onScrollVisibilityChange { if row.id == model.unreadMarkerID { markerVisible = $0 } }
                             // D6: a row counts as seen when at least half of it is on screen; the 0.5 s dwell is in the view model.
@@ -347,7 +350,7 @@ public struct TimelineView: View {
                     // scrolled up reading history, stay put so the "↓ N new" pill lets the user jump down on their own (TIMELINE §6).
                     guard landed, !model.isFocused, let last = rows.last, model.isAtBottom || last.isOwn else { return }
                     for step in 0..<3 {
-                        withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                        HaloMotion.animate(HaloMotion.scroll(reduceMotion: reduceMotion)) { proxy.scrollTo(last.id, anchor: .bottom) }
                         try? await Task.sleep(for: .milliseconds(step == 0 ? 200 : 250))
                     }
                 }
@@ -364,7 +367,7 @@ public struct TimelineView: View {
                         bottomVisible = false
                         model.setAtBottom(false)
                     }
-                    withAnimation { proxy.scrollTo(target, anchor: .center) }
+                    HaloMotion.animate(HaloMotion.scroll(reduceMotion: reduceMotion)) { proxy.scrollTo(target, anchor: .center) }
                     model.jumpHandled()
                     Task {
                         if model.isFocused {
@@ -386,11 +389,22 @@ public struct TimelineView: View {
                             jumpToBottomTask?.cancel()
                             jumpToBottomTask = nil
                             bottomFollow.detach()
-                            withAnimation { proxy.scrollTo(marker, anchor: .top) }
+                            HaloMotion.animate(HaloMotion.scroll(reduceMotion: reduceMotion)) { proxy.scrollTo(marker, anchor: .top) }
                         } label: {
                             Label("Jump to unread", systemImage: "arrow.up")
                                 .font(.footnote.bold()).padding(.horizontal, 12).padding(.vertical, 6)
-                                .background(.regularMaterial, in: Capsule())
+                                .background {
+                                    if reduceTransparency || colorSchemeContrast == .increased {
+                                        Capsule().fill(HaloColor.bgElevated)
+                                    } else {
+                                        Capsule().fill(.regularMaterial)
+                                    }
+                                }
+                                .overlay {
+                                    if reduceTransparency || colorSchemeContrast == .increased {
+                                        Capsule().strokeBorder(HaloColor.textSecondary.opacity(0.45), lineWidth: 1)
+                                    }
+                                }
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.top, 8)
@@ -423,14 +437,14 @@ public struct TimelineView: View {
                                 if wasMoving {
                                     try? await Task.sleep(for: .milliseconds(50))
                                 } else {
-                                    withAnimation(.easeOut(duration: 0.25)) {
+                                    HaloMotion.animate(HaloMotion.scroll(reduceMotion: reduceMotion)) {
                                         proxy.scrollTo(model.lastRowID ?? last, anchor: .bottom)
                                     }
                                     try? await Task.sleep(for: .milliseconds(120))
                                 }
                                 for _ in 0..<8 {
                                     if Task.isCancelled || bottomVisible || !bottomFollow.jumpingToBottom { break }
-                                    withAnimation(.easeOut(duration: 0.2)) {
+                                    HaloMotion.animate(HaloMotion.scroll(reduceMotion: reduceMotion)) {
                                         proxy.scrollTo(model.lastRowID ?? last, anchor: .bottom)
                                     }
                                     try? await Task.sleep(for: .milliseconds(100))
@@ -491,16 +505,16 @@ public struct TimelineView: View {
                                     .font(.caption2.weight(.semibold))
                                     .foregroundStyle(HaloColor.textPrimary)
                                     .lineLimit(1)
-                                    .contentTransition(.numericText())
+                                    .haloNumericTextTransition(reduceMotion: reduceMotion)
                                 Text(current.preview)
                                     .font(.caption2)
                                     .foregroundStyle(HaloColor.textSecondary)
                                     .lineLimit(1)
                                     .id(current.eventID)
-                                    .transition(.opacity)
+                                    .transition(HaloMotion.fade)
                             }
                             .frame(maxWidth: 165, alignment: .leading)
-                            .animation(.snappy(duration: 0.2), value: index)
+                            .animation(HaloMotion.snappy(reduceMotion: reduceMotion), value: index)
                         }
                         .padding(.horizontal, HaloSpacing.m)
                         .frame(height: 44)
@@ -512,7 +526,7 @@ public struct TimelineView: View {
                         DragGesture(minimumDistance: 20)
                             .onEnded { value in
                                 guard pins.count > 1, abs(value.translation.width) > abs(value.translation.height) else { return }
-                                withAnimation(.snappy(duration: 0.2)) {
+                                HaloMotion.animate(HaloMotion.snappy(reduceMotion: reduceMotion)) {
                                     if value.translation.width > 20 {
                                         activePinIndex = (index + 1) % pins.count
                                     } else if value.translation.width < -20 {
