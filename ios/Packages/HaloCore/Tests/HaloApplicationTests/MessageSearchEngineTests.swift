@@ -111,6 +111,64 @@ struct MessageSearchEngineTests {
         conditions = search.conditions()
         #expect(conditions.mayRun)
     }
+
+    @Test("M20-11: room-scoped coordinator searches only its room, refreshes on live writes, and never disturbs global search", .timeLimit(.minutes(1)))
+    func roomSearchCoordinatorIsolation() async throws {
+        let roomA = try RoomID("!roomA:x.org"), roomB = try RoomID("!roomB:x.org")
+        let source = FakeMessageIndexSource()
+        source.setJoined([roomA, roomB])
+        let rooms = RoomListCoordinator(port: FakeRoomListPort())
+        let session = SessionCoordinator(port: FakeSessionPort(), keychain: InMemoryKeychain())
+        let search = MessageSearchEngine(
+            source: source, rooms: rooms, profiles: FakeProfilePort(),
+            encryption: EncryptionCoordinator(port: FakeEncryptionPort(recoveryKey: nil), session: session),
+            preferences: PreferencesStore(port: FakePreferencesPort()))
+
+        let index = FakeSearchIndex()
+        try await index.apply([.live([
+            .message(SearchIndexEntry(
+                room: roomA, event: try EventID("$a1"), sender: alice, senderName: "Alice", threadRoot: nil,
+                timestamp: Date(timeIntervalSince1970: 100), content: SearchableContent(kind: .message, body: "quarterly report"))),
+            .message(SearchIndexEntry(
+                room: roomB, event: try EventID("$b1"), sender: bob, senderName: "Bob", threadRoot: nil,
+                timestamp: Date(timeIntervalSince1970: 200), content: SearchableContent(kind: .message, body: "quarterly review"))),
+        ])])
+        await search.attach(alice) { index }
+
+        // Global search finds both rooms.
+        await search.coordinator.search(SearchQuery(text: "quarterly"), now: true)
+        for _ in 0..<200_000 {
+            if await search.coordinator.snapshot.hits.count == 2 { break }
+            await Task.yield()
+        }
+        #expect(await search.coordinator.snapshot.hits.count == 2)
+
+        // Independent room search finds only roomA and leaves global search untouched.
+        let roomCoordinator = search.makeRoomSearchCoordinator()
+        await roomCoordinator.search(SearchQuery(text: "quarterly", room: roomA), now: true)
+        for _ in 0..<200_000 {
+            if await roomCoordinator.snapshot.hits.count == 1 { break }
+            await Task.yield()
+        }
+        let roomHits = await roomCoordinator.snapshot.hits
+        #expect(roomHits.map(\.eventID) == [try EventID("$a1")])
+        #expect(await search.coordinator.snapshot.hits.count == 2, "global search stays intact")
+
+        // A live write in roomA refreshes the room coordinator automatically.
+        source.yield(SearchLiveBatch(events: [
+            .message(SearchIndexEntry(
+                room: roomA, event: try EventID("$a2"), sender: alice, senderName: "Alice", threadRoot: nil,
+                timestamp: Date(timeIntervalSince1970: 300), content: SearchableContent(kind: .message, body: "quarterly update"))),
+        ], touched: [roomA]))
+        for _ in 0..<200_000 {
+            if await roomCoordinator.snapshot.hits.count == 2 { break }
+            await Task.yield()
+        }
+        #expect(await roomCoordinator.snapshot.hits.map(\.eventID) == [try EventID("$a2"), try EventID("$a1")])
+
+        await search.detach(deletingIndex: false)
+        #expect(await roomCoordinator.snapshot.hits.isEmpty)
+    }
 }
 
 private extension MessageSearchEngine {

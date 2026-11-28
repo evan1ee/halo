@@ -56,6 +56,7 @@ private struct RootView: View {
     @State private var router = ChatsRouter(replacesDetail: UIDevice.current.userInterfaceIdiom == .pad)
     @State private var compactColumn: NavigationSplitViewColumn = .sidebar
     @State private var searchPresented = false
+    @State private var pendingRoomSearch: RoomID?
     @State private var searchModel: MessageSearchViewModel
     @State private var newChat: NewChatViewModel?
     @State private var roomPreview: RoomPreviewViewModel?
@@ -564,9 +565,11 @@ private struct RootView: View {
                 root: root,
                 room: room,
                 jumpTo: focus,
+                pendingRoomSearch: $pendingRoomSearch,
                 openRoom: { openOrPreviewRoom($0) },
                 openRoomInfo: { router.openRoomInfo(room) },
                 openThread: { router.openThread(room: room, rootEvent: $0) },
+                openThreadMessage: { router.openThread(room: room, rootEvent: $0, focus: $1) },
                 onRoomClosed: { router.removeRoom(room) }
             )
         case .roomInfo(let room):
@@ -574,6 +577,10 @@ private struct RootView: View {
                 root: root,
                 room: room,
                 openRoom: { openOrPreviewRoom($0) },
+                onSearchInRoom: {
+                    if case .roomInfo(room) = router.path.last { router.path.removeLast() }
+                    pendingRoomSearch = room
+                },
                 onLeft: { router.removeRoom(room) }
             )
         case .thread(let room, let rootEvent, let focus):
@@ -622,12 +629,14 @@ private final class BackgroundTaskLease {
 /// Keeps the view model alive for the lifetime of the pushed room screen.
 private struct TimelineScreen: View {
     @State private var model: TimelineViewModel
+    @State private var roomSearch: RoomSearchViewModel
     @State private var stickers: StickerPanelViewModel
     @State private var klipyGIFs: KlipyPanelModel?
     @State private var klipyStickers: KlipyPanelModel?
     @State private var details: RoomDetailsViewModel?
     @State private var stickerToSave: PendingStickerSave?
     @State private var title = ""
+    @Binding private var pendingRoomSearch: RoomID?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     private let root: AppRoot
@@ -635,25 +644,31 @@ private struct TimelineScreen: View {
     private let openRoom: @MainActor (RoomID) -> Void
     private let openRoomInfo: @MainActor () -> Void
     private let openThread: @MainActor (EventID) -> Void
+    private let openThreadMessage: @MainActor (EventID, EventID) -> Void
     private let onRoomClosed: @MainActor () -> Void
 
     init(
         root: AppRoot,
         room: RoomID,
         jumpTo: EventID? = nil,
+        pendingRoomSearch: Binding<RoomID?> = .constant(nil),
         openRoom: @escaping @MainActor (RoomID) -> Void,
         openRoomInfo: @escaping @MainActor () -> Void,
         openThread: @escaping @MainActor (EventID) -> Void,
+        openThreadMessage: @escaping @MainActor (EventID, EventID) -> Void = { _, _ in },
         onRoomClosed: @escaping @MainActor () -> Void = {}
     ) {
         self.openRoom = openRoom
         self.openRoomInfo = openRoomInfo
         self.openThread = openThread
+        self.openThreadMessage = openThreadMessage
         self.onRoomClosed = onRoomClosed
         self.root = root
         self.room = room
+        _pendingRoomSearch = pendingRoomSearch
         let timeline = root.makeRoomTimeline(room: room, jumpTo: jumpTo)
         _model = State(initialValue: timeline)
+        _roomSearch = State(initialValue: root.makeRoomSearch(room: room, timeline: timeline))
         _stickers = State(initialValue: root.makeStickerPanel(room: room, timeline: timeline))
         _klipyGIFs = State(initialValue: root.makeKlipyPanel(.gifs, timeline: timeline))
         _klipyStickers = State(initialValue: root.makeKlipyPanel(.stickers, timeline: timeline))
@@ -702,6 +717,10 @@ private struct TimelineScreen: View {
                     details = nil
                     openRoom(successor)
                 },
+                onSearchInRoom: {
+                    details = nil
+                    roomSearch.open()
+                },
                 onLeft: { details = nil; dismiss() }
             )
         }
@@ -710,9 +729,11 @@ private struct TimelineScreen: View {
     var body: some View {
         TimelineView(
             model: model,
+            roomSearch: roomSearch,
             stickerPanel: { AnyView(StickerTabView(packs: stickers, klipy: klipyStickers)) },
             gifPanel: klipyGIFs.map { gifs -> @MainActor () -> AnyView in { AnyView(KlipyPanelView(model: gifs)) } },
             onOpenThread: openThread,
+            onOpenThreadMessage: openThreadMessage,
             onSaveAsSticker: { data, filename in
                 stickerToSave = PendingStickerSave(data: data, filename: filename)
             },
@@ -735,6 +756,23 @@ private struct TimelineScreen: View {
         .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    if roomSearch.isPresented { roomSearch.close() } else { roomSearch.open() }
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(roomSearch.isPresented ? HaloColor.accent : HaloColor.textPrimary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(.circle)
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .circle)
+                .keyboardShortcut("f", modifiers: .command)
+                .accessibilityLabel("Search in chat")
+                .accessibilityIdentifier("room-search-button")
+            }
+            .sharedBackgroundVisibility(.hidden)
+            ToolbarItem(placement: .topBarTrailing) {
                 Button { toggleRoomInfo() } label: {
                     AvatarView(name: title, ref: roomAvatar, size: 30, showsOuterFrame: false) { [roomList = root.roomList] in
                         await roomList.avatarData($0)
@@ -749,6 +787,11 @@ private struct TimelineScreen: View {
                 .accessibilityIdentifier("roomInfo")
             }
             .sharedBackgroundVisibility(.hidden)
+        }
+        .onChange(of: pendingRoomSearch, initial: true) { _, target in
+            guard target == room else { return }
+            pendingRoomSearch = nil
+            roomSearch.open()
         }
         .modifier(RoomInfoInspector(
             enabled: UIDevice.current.userInterfaceIdiom == .pad,
@@ -768,16 +811,19 @@ private struct RoomDetailsScreen: View {
     @State private var model: RoomDetailsViewModel
     private let root: AppRoot
     private let openRoom: @MainActor (RoomID) -> Void
+    private let onSearchInRoom: @MainActor () -> Void
     private let onLeft: @MainActor () -> Void
 
     init(
         root: AppRoot,
         room: RoomID,
         openRoom: @escaping @MainActor (RoomID) -> Void,
+        onSearchInRoom: @escaping @MainActor () -> Void = {},
         onLeft: @escaping @MainActor () -> Void
     ) {
         self.root = root
         self.openRoom = openRoom
+        self.onSearchInRoom = onSearchInRoom
         self.onLeft = onLeft
         _model = State(initialValue: root.makeRoomDetails(room: room))
     }
@@ -792,6 +838,7 @@ private struct RoomDetailsScreen: View {
                 }).map { AnyView(UserProfileView(model: $0)) }
             },
             onOpenSuccessor: { successor in openRoom(successor) },
+            onSearchInRoom: onSearchInRoom,
             onLeft: onLeft
         )
     }

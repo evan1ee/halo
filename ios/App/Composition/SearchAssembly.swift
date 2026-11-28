@@ -1,5 +1,6 @@
 import FeatureSearch
 import FeatureSettings
+import FeatureTimeline
 import Foundation
 import HaloApplication
 import HaloDomain
@@ -48,5 +49,21 @@ extension AppRoot {
             },
             statuses: { [search] in await search.statuses() },
             needsVerification: { [recovery] in recovery.needsRecovery })
+    }
+
+    /// In-room message search view model with previous/next stepping and M20-1 focused jumps (ROADMAP M20-11).
+    func makeRoomSearch(room: RoomID, timeline: TimelineViewModel) -> RoomSearchViewModel {
+        let searchEngine = search
+        let coordinator = searchEngine.makeRoomSearchCoordinator()
+        return RoomSearchViewModel(
+            room: room,
+            coordinator: coordinator,
+            statuses: { await searchEngine.statuses() },
+            roomCoverage: { await searchEngine.roomCoverage(for: room) },
+            jumpToEvent: { [weak timeline] event in
+                guard let timeline else { return false }
+                return await timeline.jump(toEvent: event)
+            }
+        )
     }
 }
