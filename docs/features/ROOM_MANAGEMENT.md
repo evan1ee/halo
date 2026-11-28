@@ -21,7 +21,7 @@ See and manage a room's details, members and notification behaviour; start new c
 - FR-7 Edit name/topic/avatar if allowed by power levels (`get_power_levels`).
 - FR-8 Mark as unread / read (READ_RECEIPTS explicit actions).
 - FR-9 Report a message or room to the homeserver, with ignore offered in the same place (`report_content`, `report_room`, F-FFI-24). *Not built; App Review 1.2 needs it* (ROADMAP M20-7, Q-REPORT).
-- FR-10 Remove, ban and unban members, gated by live power levels. *Not built* (ROADMAP M20-12). Role editor, join rules, history visibility and aliases are post-launch (D122).
+- FR-10 Remove, ban and unban members, gated by live power levels (`RoomPowerLevel`, `RoomModerationPermissions`, `RoomModerationPolicy` in `HaloDomain`; `MatrixRoomPort` reads live `RoomPowerLevels` + member `PowerLevel` incl. room v12 `.infinite` creator and executes `kickUser` / `banUser` / `unbanUser` / `bannedMembers`; `RoomDetailsView` shows `Creator` / `Admin` / `Moderator` role badges, per-member moderation menu/swipe/context actions with optional reason confirmation, a `Banned` section with `Unban`, and explains server `.forbidden` / offline refusals without mutating state — **built** 2026-11-28, ROADMAP M20-12). Role editor, join rules, history visibility and aliases are post-launch (D122).
 - FR-11 Upgraded rooms link to their successor (`m.room.tombstone`, `RoomInfo.successorRoom`) in the timeline banner and Room Details (with Leave & Forget); knock-only, invite-only, restricted, banned, and left rooms explain their state with honest previews (`RoomPreviewSheet`), knock request / cancel, and a Left & Pending Rooms view (`InactiveRoomsView`) so no room row is stuck (ROADMAP M20-8).
 
 ## 4. Non-functional requirements

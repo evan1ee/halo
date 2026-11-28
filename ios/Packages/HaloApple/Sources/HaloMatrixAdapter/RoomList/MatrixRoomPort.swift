@@ -21,9 +21,21 @@ public final class MatrixRoomPort: RoomPort {
         } catch { throw ErrorMapper.map(error) }
         // Permissions: unknown power levels mean "no" (the server still has the last word).
         var canEdit = false, canInvite = false
-        if let levels = try? await room.getPowerLevels(), let own = try? await session.ownUserID() {  // best-effort: fail-closed; hides edit/invite controls if power levels can't be read
+        var moderation = RoomModerationPermissions.none
+        if let levels = try? await room.getPowerLevels(), let own = try? await session.ownUserID() {  // best-effort: fail-closed; hides edit/invite/moderation controls if power levels can't be read
             canEdit = (try? levels.canUserSendState(userId: own, stateEvent: .roomName)) == true && (try? levels.canUserSendState(userId: own, stateEvent: .roomTopic)) == true
             canInvite = (try? levels.canUserInvite(userId: own)) == true
+            let ownPowerLevel: RoomPowerLevel
+            if let ownMember = try? await room.member(userId: own) {  // best-effort: falls back to power-levels map if own member isn't cached
+                ownPowerLevel = Self.powerLevel(ownMember.powerLevel)
+            } else {
+                ownPowerLevel = .level(levels.userPowerLevels()[own] ?? levels.values().usersDefault)
+            }
+            moderation = RoomModerationPermissions(
+                canKick: levels.canOwnUserKick(),
+                canBan: levels.canOwnUserBan(),
+                ownPowerLevel: ownPowerLevel
+            )
         }
         let successor: RoomSuccessor? = room.successorRoom().flatMap { s in
             (try? RoomID(s.roomId)).map { RoomSuccessor(roomID: $0, reason: s.reason) }
@@ -32,6 +44,7 @@ public final class MatrixRoomPort: RoomPort {
         return RoomDetails(
             id: id, name: room.displayName(), topic: room.topic(), isDirect: direct, isEncrypted: encrypted,
             joinedMemberCount: Int(room.joinedMembersCount()), notificationMode: Self.choice(mode), canEditDetails: canEdit, canInvite: canInvite,
+            moderation: moderation,
             avatar: MatrixRoomListPort.avatar(room.avatarUrl()),
             successor: successor,
             membership: resolvedMembership)
@@ -50,7 +63,10 @@ public final class MatrixRoomPort: RoomPort {
             let iterator = try await room.members()
             while result.count < scanCap, let chunk = iterator.nextChunk(chunkSize: 200) {
                 for member in chunk where member.membership == .join || member.membership == .invite {
-                    result.append(RoomMemberInfo(userID: member.userId, displayName: member.displayName, role: Self.role(member.suggestedRoleForPowerLevel), isInvited: member.membership == .invite, isMe: member.userId == own, avatar: MatrixRoomListPort.avatar(member.avatarUrl)))
+                    result.append(RoomMemberInfo(
+                        userID: member.userId, displayName: member.displayName, role: Self.role(member.suggestedRoleForPowerLevel),
+                        powerLevel: Self.powerLevel(member.powerLevel),
+                        isInvited: member.membership == .invite, isMe: member.userId == own, avatar: MatrixRoomListPort.avatar(member.avatarUrl)))
                     if result.count >= scanCap { break }
                 }
             }
@@ -58,6 +74,43 @@ public final class MatrixRoomPort: RoomPort {
         let rank: (HaloDomain.RoomMemberRole) -> Int = { switch $0 { case .administrator: 0; case .moderator: 1; case .user: 2 } }
         result.sort { ($0.isInvited ? 1 : 0, rank($0.role), $0.title.lowercased()) < ($1.isInvited ? 1 : 0, rank($1.role), $1.title.lowercased()) }
         return Array(result.prefix(limit))
+    }
+
+    public func bannedMembers(_ id: RoomID, limit: Int) async throws(HaloError) -> [RoomMemberInfo] {
+        let room = try await session.room(id)
+        let scanCap = max(limit, Self.maxScannedMembers)
+        var result: [RoomMemberInfo] = []
+        do {
+            let iterator = try await room.members()
+            while result.count < scanCap, let chunk = iterator.nextChunk(chunkSize: 200) {
+                for member in chunk where member.membership == .ban {
+                    let reason = member.membershipChangeReason?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    result.append(RoomMemberInfo(
+                        userID: member.userId, displayName: member.displayName, role: Self.role(member.suggestedRoleForPowerLevel),
+                        powerLevel: Self.powerLevel(member.powerLevel),
+                        isInvited: false, isBanned: true, banReason: reason?.isEmpty == false ? reason : nil,
+                        isMe: false, avatar: MatrixRoomListPort.avatar(member.avatarUrl)))
+                    if result.count >= scanCap { break }
+                }
+            }
+        } catch { throw ErrorMapper.map(error) }
+        result.sort { $0.title.lowercased() < $1.title.lowercased() }
+        return Array(result.prefix(limit))
+    }
+
+    public func removeMember(_ user: UserID, from id: RoomID, reason: String?) async throws(HaloError) {
+        let room = try await session.room(id)
+        do { try await room.kickUser(userId: user.rawValue, reason: Self.normalizedReason(reason)) } catch { throw ErrorMapper.map(error) }
+    }
+
+    public func banMember(_ user: UserID, from id: RoomID, reason: String?) async throws(HaloError) {
+        let room = try await session.room(id)
+        do { try await room.banUser(userId: user.rawValue, reason: Self.normalizedReason(reason)) } catch { throw ErrorMapper.map(error) }
+    }
+
+    public func unbanMember(_ user: UserID, from id: RoomID, reason: String?) async throws(HaloError) {
+        let room = try await session.room(id)
+        do { try await room.unbanUser(userId: user.rawValue, reason: Self.normalizedReason(reason)) } catch { throw ErrorMapper.map(error) }
     }
 
     public func setNotificationMode(_ mode: RoomNotificationChoice, in id: RoomID) async throws(HaloError) {
@@ -373,6 +426,18 @@ public final class MatrixRoomPort: RoomPort {
 
     static func role(_ role: MatrixRustSDK.RoomMemberRole) -> HaloDomain.RoomMemberRole {
         switch role { case .creator, .administrator: .administrator; case .moderator: .moderator; case .user: .user }
+    }
+
+    static func powerLevel(_ level: MatrixRustSDK.PowerLevel) -> HaloDomain.RoomPowerLevel {
+        switch level {
+        case .infinite: .infinite
+        case .value(let value): .level(value)
+        }
+    }
+
+    private static func normalizedReason(_ reason: String?) -> String? {
+        guard let trimmed = reason?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
+        return trimmed
     }
 }
 

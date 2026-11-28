@@ -19,7 +19,11 @@ public final class RoomDetailsViewModel: Identifiable {
     public private(set) var requestedMembers = RoomDetailsViewModel.memberPage
 
     public private(set) var content: Content = .loading
-    /// Set when changing the mode or leaving fails; cleared by the next successful action or when dismissed.
+    /// Banned members of the room (ROOM_MANAGEMENT FR-10, M20-12).
+    public private(set) var bannedMembers: [RoomMemberInfo] = []
+    /// User ID whose remove/ban/unban request is currently in flight (double-tap protection).
+    public private(set) var moderatingUserID: String?
+    /// Set when changing the mode, moderating, or leaving fails; cleared by the next successful action or when dismissed.
     public private(set) var actionError: String?
 
     public func dismissActionError() { actionError = nil }
@@ -210,12 +214,14 @@ public final class RoomDetailsViewModel: Identifiable {
         self.room = room
     }
 
-    /// The members shown under a heading; administrators carry a badge.
+    /// The members shown under a heading; administrators and moderators carry role badges.
     public func load() async {
         content = .loading
         do throws(HaloError) {
             let details = try await port.details(room)
             let members = try await port.members(room, limit: requestedMembers)
+            let banned = try await port.bannedMembers(room, limit: Self.memberPage)
+            bannedMembers = banned
             content = .loaded(details, members: members)
         } catch { content = .failed(Self.text(error)) }
     }
@@ -227,9 +233,114 @@ public final class RoomDetailsViewModel: Identifiable {
         do throws(HaloError) {
             let details = try await port.details(room)
             let members = try await port.members(room, limit: requestedMembers)
+            let banned = try await port.bannedMembers(room, limit: Self.memberPage)
+            bannedMembers = banned
             content = .loaded(details, members: members)
             actionError = nil
         } catch { actionError = Self.text(error) }
+    }
+
+    // MARK: Basic moderation (ROOM_MANAGEMENT FR-10, AC-ROOM-4, M20-12)
+
+    /// Live moderation actions allowed for `member` under the room's current power levels.
+    public func moderationActions(for member: RoomMemberInfo) -> RoomModerationPolicy.MemberActions {
+        guard case .loaded(let details, _) = content else { return .none }
+        return RoomModerationPolicy.actions(for: member, permissions: details.moderation)
+    }
+
+    /// Removes (kicks) `member` from the room (or withdraws their invitation). On refusal/failure nothing changes and `actionError` explains why.
+    @discardableResult
+    public func removeMember(_ member: RoomMemberInfo, reason: String? = nil) async -> Bool {
+        guard moderatingUserID == nil, case .loaded(let details, let members) = content else { return false }
+        guard RoomModerationPolicy.actions(for: member, permissions: details.moderation).canRemove else {
+            actionError = RoomModerationPolicy.errorMessage(for: .forbidden, action: .remove)
+            return false
+        }
+        guard let userID = try? UserID(member.userID) else {
+            actionError = RoomModerationPolicy.errorMessage(for: .invalidInput("USER_ID"), action: .remove)
+            return false
+        }
+        moderatingUserID = member.userID
+        defer { moderatingUserID = nil }
+        do throws(HaloError) {
+            try await port.removeMember(userID, from: room, reason: reason)
+            content = .loaded(details, members: members.filter { $0.userID != member.userID })
+            actionError = nil
+            await refreshModerationState()
+            return true
+        } catch {
+            actionError = RoomModerationPolicy.errorMessage(for: error, action: .remove)
+            return false
+        }
+    }
+
+    /// Bans `member` from the room. On refusal/failure nothing changes and `actionError` explains why.
+    @discardableResult
+    public func banMember(_ member: RoomMemberInfo, reason: String? = nil) async -> Bool {
+        guard moderatingUserID == nil, case .loaded(let details, let members) = content else { return false }
+        guard RoomModerationPolicy.actions(for: member, permissions: details.moderation).canBan else {
+            actionError = RoomModerationPolicy.errorMessage(for: .forbidden, action: .ban)
+            return false
+        }
+        guard let userID = try? UserID(member.userID) else {
+            actionError = RoomModerationPolicy.errorMessage(for: .invalidInput("USER_ID"), action: .ban)
+            return false
+        }
+        moderatingUserID = member.userID
+        defer { moderatingUserID = nil }
+        do throws(HaloError) {
+            try await port.banMember(userID, from: room, reason: reason)
+            let trimmedReason = reason?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let cleanReason = trimmedReason?.isEmpty == false ? trimmedReason : nil
+            content = .loaded(details, members: members.filter { $0.userID != member.userID })
+            bannedMembers.removeAll { $0.userID == member.userID }
+            bannedMembers.append(RoomMemberInfo(
+                userID: member.userID, displayName: member.displayName, role: member.role,
+                powerLevel: member.powerLevel, isInvited: false, isBanned: true,
+                banReason: cleanReason, isMe: false, avatar: member.avatar
+            ))
+            bannedMembers.sort { $0.title.lowercased() < $1.title.lowercased() }
+            actionError = nil
+            await refreshModerationState()
+            return true
+        } catch {
+            actionError = RoomModerationPolicy.errorMessage(for: error, action: .ban)
+            return false
+        }
+    }
+
+    /// Unbans a previously banned member. On refusal/failure nothing changes and `actionError` explains why.
+    @discardableResult
+    public func unbanMember(_ member: RoomMemberInfo, reason: String? = nil) async -> Bool {
+        guard moderatingUserID == nil, case .loaded(let details, _) = content else { return false }
+        guard RoomModerationPolicy.actions(for: member, permissions: details.moderation).canUnban else {
+            actionError = RoomModerationPolicy.errorMessage(for: .forbidden, action: .unban)
+            return false
+        }
+        guard let userID = try? UserID(member.userID) else {
+            actionError = RoomModerationPolicy.errorMessage(for: .invalidInput("USER_ID"), action: .unban)
+            return false
+        }
+        moderatingUserID = member.userID
+        defer { moderatingUserID = nil }
+        do throws(HaloError) {
+            try await port.unbanMember(userID, from: room, reason: reason)
+            bannedMembers.removeAll { $0.userID == member.userID }
+            actionError = nil
+            await refreshModerationState()
+            return true
+        } catch {
+            actionError = RoomModerationPolicy.errorMessage(for: error, action: .unban)
+            return false
+        }
+    }
+
+    private func refreshModerationState() async {
+        guard let details = try? await port.details(room),  // best-effort: post-moderation refresh keeps server-confirmed counts and lists in sync
+              let members = try? await port.members(room, limit: requestedMembers),  // best-effort: post-moderation refresh
+              let banned = try? await port.bannedMembers(room, limit: Self.memberPage) else { return }  // best-effort: post-moderation refresh
+        bannedMembers = banned
+        content = .loaded(details, members: members)
     }
 
     /// `true` when the last load returned as many members as asked for, so there may be more.
