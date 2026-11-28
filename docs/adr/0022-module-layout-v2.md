@@ -1,6 +1,6 @@
 # ADR-0022: Module and folder layout v2
 
-- **Status:** Accepted (founder, 2026-11-22) — refines ADR-0008, does not replace its layering
+- **Status:** Accepted (founder, 2026-11-22) — refines ADR-0008, does not replace its layering. The `FeatureComposer` module is superseded by [ADR-0025](0025-composer-stays-in-feature-timeline.md) (D127): the composer stays in `FeatureTimeline`
 - **Date:** 2026-11-22
 - **Decision IDs:** D86
 - **Validation:** none — mechanical moves, checked by `scripts/check-boundaries.sh`, `scripts/prepush.sh` and the app build
@@ -61,7 +61,7 @@ ios/
         FeatureOnboarding/         # was FeatureAuth: welcome, sign-in, verify device, priming (S1, S2, S14, S15)
         FeatureRoomList/           # room list + new chat
         FeatureTimeline/           # timeline only (TD-11 split)
-        FeatureComposer/           # composer, attachments, mentions (MODULE_BOUNDARIES plan)
+        FeatureComposer/           # composer, attachments, mentions — superseded: stays in FeatureTimeline (ADR-0025)
         FeatureRoomDetails/        # room details, members, room gallery, export
         FeatureProfile/            # user profile + own profile settings
         FeatureMedia/              # global gallery + the one shared photo viewer + Quick Look

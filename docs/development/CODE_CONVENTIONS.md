@@ -25,10 +25,10 @@
 - Every payload rule is covered by a unit test; no secrets in code or config (APNs keys stay on the server).
 
 ## 3. FFI conventions (adapter)
-- One adapter type per port (`MatrixSessionAdapter: SessionPort` …).
-- Upstream → domain mapping in `Mapping/` files with unit tests per type.
+- One adapter type per port (`MatrixSessionPort: SessionPort`, `MatrixTimelinePort: TimelinePort` …).
+- Upstream → domain mapping in `*Mapper` types next to their port (`Timeline/TimelineMapper.swift`, `Search/SearchMapper.swift`) with unit tests per type.
 - Listener classes are `final class … : <UpstreamListener>, @unchecked Sendable` **only** with an `AsyncStream.Continuation` as their stored state (justified in a comment).
-- Every `TaskHandle` is owned by a `SubscriptionToken`.
+- Every `TaskHandle` is cancelled by a `defer` in its scope or by its stream's `onTermination` (D128).
 - No upstream type escapes a `public`/`package` declaration (checked by `check-boundaries.sh`, which greps the adapter's public interface).
 
 ## 4. Tests

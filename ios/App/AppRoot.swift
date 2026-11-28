@@ -66,6 +66,8 @@ final class AppRoot {
     private let deviceConditionsBox = DeviceConditionsBox()
     private var deviceConditions: DeviceConditions?
     private var conditionUpdateTask: Task<Void, Never>?
+    /// Whether protected data (the search index file) is readable, and the lock/unlock calls into search.
+    var searchLock: ProtectedData?
     let media: MediaLoader
     let unrecognisedBots = UnrecognisedBotMessages()
     let previewPolicy: any MediaPreviewPolicyPort
@@ -112,8 +114,6 @@ final class AppRoot {
     var roomFirstRows: HaloSignpost.Running?
     /// The room whose chat-list row was just tapped: its timing began at the tap, not when it reached the navigation path.
     var roomChosen: RoomID?
-    /// The chat-list tap waiting for its room's rows before pushing the screen (`openWhenReady`); a newer tap replaces it.
-    private var pendingOpen: Task<Void, Never>?
     private(set) var hasBegun = false
 
     init() {
@@ -203,8 +203,13 @@ final class AppRoot {
         let encryption = EncryptionCoordinator(port: MatrixEncryptionPort(session: session), session: sessionCoordinator)
         recovery = RecoveryViewModel(coordinator: encryption)
         let search = MessageSearchEngine(
-            session: session, rooms: roomCoordinator, profiles: profilePort, encryption: encryption, preferences: preferences, log: log)
+            source: MatrixMessageIndexSource(session: session), rooms: roomCoordinator, profiles: profilePort, encryption: encryption,
+            preferences: preferences, environment: MessageSearchEngine.environment(conditions: conditionsBox, log: log), log: log)
         self.search = search
+        // The index file is unreadable while the phone is locked (D124): it closes before and opens again after.
+        searchLock = ProtectedData(
+            willLock: { [weak search] in Task { @MainActor in await search?.phoneWillLock() } },
+            didUnlock: { [weak search] in Task { @MainActor in await search?.phoneUnlocked() } })
         let gate = search.gate
         sync = SyncCoordinator(port: MatrixSyncPort(session: session), session: sessionCoordinator, beforeStart: { await gate.wait() })
         let push = Self.pushConfiguration().map {
@@ -251,6 +256,7 @@ final class AppRoot {
         let device = DeviceConditions { [weak self, session, readStateRef, conditionsBox] in
             Task { @MainActor in
                 self?.applyDeviceConditions(session: session, readState: readStateRef, conditionsBox: conditionsBox)
+                self?.search.conditionsChanged()
             }
         }
         deviceConditions = device
@@ -270,23 +276,6 @@ final class AppRoot {
 }
 
 extension AppRoot {
-    /// Opens `room`, chosen in the chat list: its timeline starts now and `push` runs once the screen would draw its rows on the
-    /// first frame, or after `PreparedTimelines.openingWait` (M19-9). A newer choice cancels this one: only the last room is pushed,
-    /// and the abandoned room lets go of its timeline.
-    func openWhenReady(_ room: RoomID, push: @escaping @MainActor () -> Void) {
-        pendingOpen?.cancel()
-        pendingOpen = Task { [weak self] in
-            guard let self else { return }
-            await preparedTimelines.prepare(room)
-            guard !Task.isCancelled else {
-                preparedTimelines.abandon(room)
-                return
-            }
-            pendingOpen = nil
-            push()
-        }
-    }
-
     /// Begins the `room-open` and `room-first-rows` signposts (a room is being opened); `chosen` when a chat-list row was tapped.
     func beginRoomOpen(chosen: RoomID? = nil) {
         roomChosen = chosen
@@ -347,5 +336,10 @@ final class DeviceConditionsBox: Sendable {
     var syncConditions: SyncEnergyPolicy.Conditions {
         guard let snap = current?.snapshot else { return .init() }
         return SyncEnergyPolicy.Conditions(lowPower: snap.lowPower, isHot: snap.isHot, offline: snap.offline)
+    }
+
+    var searchDevice: MessageSearchEngine.DeviceState {
+        guard let snap = current?.snapshot else { return .init() }
+        return .init(lowPower: snap.lowPower, isHot: snap.isHot, onMobileData: snap.onMobileData, offline: snap.offline)
     }
 }

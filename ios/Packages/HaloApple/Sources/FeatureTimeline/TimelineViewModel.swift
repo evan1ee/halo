@@ -533,7 +533,10 @@ public final class TimelineViewModel {
         isAtBottom = true
         newSinceDetached = 0
         trackedTailID = nil
+        // A `stop()` that came while this was waiting cancels the start: nothing is followed or opened for a closed screen.
+        guard !Task.isCancelled else { return await draftRestored.value }
         let statuses = await coordinator.statuses()
+        guard !Task.isCancelled else { return await draftRestored.value }
         observation = Task { [weak self] in
             for await status in statuses { self?.apply(status) }
         }
@@ -594,8 +597,13 @@ public final class TimelineViewModel {
         Task { await drafts.save(text, for: room) }
     }
 
-    /// Closes the timeline. Call when the screen disappears.
+    /// Closes the timeline. Call when the screen disappears. A start still under way is cancelled and waited for first, so it
+    /// can't open the timeline again after this closed it (audit F-10).
     public func stop() async {
+        if let starting {
+            starting.cancel()
+            await starting.value
+        }
         cancelOpenFile()
         cancelOpenVideo()
         removePendingVideos()

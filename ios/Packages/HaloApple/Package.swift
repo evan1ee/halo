@@ -16,7 +16,6 @@ let package = Package(
         .library(name: "FeatureOnboarding", targets: ["FeatureOnboarding"]),
         .library(name: "FeatureRoomList", targets: ["FeatureRoomList"]),
         .library(name: "FeatureTimeline", targets: ["FeatureTimeline"]),
-        .library(name: "FeatureComposer", targets: ["FeatureComposer"]),
         .library(name: "FeatureMedia", targets: ["FeatureMedia"]),
         .library(name: "FeatureRoomDetails", targets: ["FeatureRoomDetails"]),
         .library(name: "FeatureProfile", targets: ["FeatureProfile"]),
@@ -161,23 +160,6 @@ let package = Package(
         ),
 
         .target(
-            name: "FeatureComposer",
-            dependencies: [
-                "HaloDesignSystem",
-                .product(name: "HaloApplication", package: "HaloCore"),
-                .product(name: "HaloDomain", package: "HaloCore"),
-                .product(name: "HaloFoundation", package: "HaloCore"),
-            ]
-        ),
-        .testTarget(
-            name: "FeatureComposerTests",
-            dependencies: [
-                "FeatureComposer",
-                .product(name: "HaloTestSupport", package: "HaloCore"),
-            ]
-        ),
-
-        .target(
             name: "FeatureMedia",
             dependencies: [
                 "HaloDesignSystem",
@@ -283,6 +265,8 @@ let package = Package(
             name: "FeatureSettings",
             dependencies: [
                 "HaloDesignSystem",
+                .product(name: "HaloApplication", package: "HaloCore"),
+                .product(name: "HaloDomain", package: "HaloCore"),
                 .product(name: "HaloFoundation", package: "HaloCore"),
             ],
             resources: [.copy("Resources/acknowledgements.csv")]

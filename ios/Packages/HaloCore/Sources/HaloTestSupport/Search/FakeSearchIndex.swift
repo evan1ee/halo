@@ -124,7 +124,7 @@ public final class FakeMessageIndexSource: MessageIndexSourcePort {
 }
 
 /// `LocalSearchIndexPort` in memory, with the same rules as the store, without full-text search: a query matches by tokens.
-public final class FakeSearchIndex: LocalSearchIndexPort {
+public final class FakeSearchIndex: AccountSearchIndexPort {
     private struct State {
         var entries: [EventID: (entry: SearchIndexEntry, checkedAt: Date, row: Int64)] = [:]
         var undecryptable: [EventID: RoomID] = [:]
@@ -136,6 +136,9 @@ public final class FakeSearchIndex: LocalSearchIndexPort {
         var error: HaloError?
         var operations: [SearchIndexOperation] = []
         var checkedAt = Date(timeIntervalSince1970: 0)
+        var resumes = 0
+        var suspensions: [[RoomID]] = []
+        var destroyed = false
     }
 
     private let state = Mutex(State())
@@ -145,6 +148,18 @@ public final class FakeSearchIndex: LocalSearchIndexPort {
     public func setCheckedAt(_ date: Date) { state.withLock { $0.checkedAt = date } }
     public var bodies: Set<String> { state.withLock { Set($0.entries.values.map(\.entry.content.body)) } }
     public var operations: [SearchIndexOperation] { state.withLock { $0.operations } }
+
+    // MARK: AccountSearchIndexPort (the file's lifecycle)
+
+    /// How often the file was opened (`resume`).
+    public var resumes: Int { state.withLock { $0.resumes } }
+    /// The joined rooms given to each `suspend`, in order.
+    public var suspensions: [[RoomID]] { state.withLock { $0.suspensions } }
+    public var destroyed: Bool { state.withLock { $0.destroyed } }
+
+    public func resume() async { state.withLock { $0.resumes += 1 } }
+    public func suspend(rooms: [RoomID]) async { state.withLock { $0.suspensions.append(rooms) } }
+    public func destroy() { state.withLock { $0.destroyed = true } }
 
     private func checkError() throws(HaloError) {
         if let error = state.withLock({ $0.error }) { throw error }

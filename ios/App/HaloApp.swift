@@ -1,6 +1,5 @@
 import CoreSpotlight
 import FeatureBotActivity
-import FeatureComposer
 import FeatureMedia
 import FeatureOnboarding
 import FeatureProfile
@@ -166,7 +165,7 @@ private struct RootView: View {
                         onSelect: { room in
                             root.beginRoomOpen(chosen: room)
                             // The room's rows are made first, then its screen is pushed with them (M19-9).
-                            root.openWhenReady(room) { router.openRoom(room) }
+                            root.preparedTimelines.open(room) { router.openRoom(room) }
                         }
                     ) {
                         MessageSearchResultsSection(model: searchModel, onVerify: { router.push(.settings) }) { row in

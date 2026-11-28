@@ -1,10 +1,10 @@
 import HaloDomain
 import Observation
 
-/// Observable store over `PreferencesPort` (TD-02, ADR-0022).
+/// Observable store over `PreferencesPort` (TD-02, ADR-0022): the app's only reader and writer of device preferences.
 ///
-/// Replaces ad-hoc `AppPreferences()` reads in the app composition root so changes (such as bot allowlist,
-/// appearance, privacy blur, or receipt privacy) propagate live across the UI without relaunch.
+/// Settings, the root view and every coordinator share one instance, so a change (bot allowlist, appearance, privacy blur,
+/// receipt privacy) reaches the whole UI at once (audit F-05: no second store over the same keys).
 @MainActor @Observable
 public final class PreferencesStore {
     private let port: any PreferencesPort
@@ -63,11 +63,6 @@ public final class PreferencesStore {
     public var searchHistoryOnMobileData: Bool {
         get { snapshot.searchHistoryOnMobileData }
         set { update { $0.searchHistoryOnMobileData = newValue } }
-    }
-
-    /// Reloads from the backing port (e.g. if another view wrote via legacy `UserDefaults`).
-    public func reload() {
-        snapshot = port.load()
     }
 
     private func update(_ mutate: (inout PreferencesSnapshot) -> Void) {

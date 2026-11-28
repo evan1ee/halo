@@ -19,6 +19,8 @@ public final class PreparedTimelines {
     private let make: @MainActor (RoomID) -> TimelineViewModel
     private let wait: @Sendable (Duration) async -> Void
     private var waiting: (room: RoomID, model: TimelineViewModel)?
+    /// The chat-list choice waiting for its rows before its screen is pushed (`open`); a newer choice replaces it.
+    private var pendingOpen: Task<Void, Never>?
     private var onScreen: Set<RoomID> = []
 
     /// - Parameters:
@@ -57,6 +59,23 @@ public final class PreparedTimelines {
             let once = Once(done)
             model.whenShowable { once.resume() }
             Task { await wait(limit); once.resume() }
+        }
+    }
+
+    /// Opens `room`, chosen in the chat list: its timeline starts now and `push` runs once the screen would draw its rows on the
+    /// first frame, or after `openingWait` (M19-9). A newer choice cancels this one: only the last room is pushed, and the
+    /// abandoned room lets go of its timeline. (Moved here from the app target, audit F-02.)
+    public func open(_ room: RoomID, within limit: Duration = PreparedTimelines.openingWait, push: @escaping @MainActor () -> Void) {
+        pendingOpen?.cancel()
+        pendingOpen = Task { [weak self] in
+            guard let self else { return }
+            await prepare(room, within: limit)
+            guard !Task.isCancelled else {
+                abandon(room)
+                return
+            }
+            pendingOpen = nil
+            push()
         }
     }
 

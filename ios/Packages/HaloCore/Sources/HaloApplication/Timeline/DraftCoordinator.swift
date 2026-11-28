@@ -9,6 +9,8 @@ public actor DraftCoordinator {
     private var cache: [RoomID: String] = [:]
     /// Bumped by `reset()`; a read still running for the previous account doesn't fill the cache.
     private var generation = 0
+    /// The newest store write; the next one waits for it.
+    private var lastWrite: Task<Void, Never>?
 
     public init(store: (any DraftPort)? = nil) { self.store = store }
 
@@ -34,11 +36,19 @@ public actor DraftCoordinator {
         cache = [:]
     }
 
-    /// Remembers `text` as the draft of `room`; blank text removes it. Writes are best effort.
+    /// Remembers `text` as the draft of `room`; blank text removes it. Writes are best effort, and reach the store in the
+    /// order they were made: a slow write of older text can't land after a newer one (the actor is re-entrant at `await`).
     public func save(_ text: String, for room: RoomID) async {
         let blank = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         // An empty entry (not removal) so a read racing the store write can't bring the old text back.
         cache[room] = blank ? "" : text
-        try? await store?.save(text, for: room)  // best-effort: drafts are best effort; the text stays in the composer and is saved again on the next change
+        guard let store else { return }
+        let previous = lastWrite
+        let write = Task {
+            await previous?.value
+            try? await store.save(text, for: room)  // best-effort: drafts are best effort; the text stays in the composer and is saved again on the next change
+        }
+        lastWrite = write
+        await write.value
     }
 }

@@ -130,8 +130,8 @@ public struct NotificationProcessor: Sendable {
         var since = records.all().filter { $0.roomID == room && isNew($0) }
         if !since.contains(where: { $0.eventID == record.eventID }) { since.append(record) }
         var counts = baseline.displayed
-        counts[room] = (baseline.counts[room] ?? 0) + max(evaluate(since).badgeCount, 1)
-        return Fallback(badge: counts.values.reduce(0, +), attentionCounts: counts)
+        counts[room] = BadgeCalculator.countAfterUnsyncedPushes(lastEvaluated: baseline.counts[room] ?? 0, pushes: evaluate(since))
+        return Fallback(badge: BadgeCalculator.total(counts), attentionCounts: counts)
     }
 }
 

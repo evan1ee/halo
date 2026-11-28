@@ -45,8 +45,6 @@ targets:
       - package: HaloApple
         product: FeatureTimeline
       - package: HaloApple
-        product: FeatureComposer
-      - package: HaloApple
         product: FeatureMedia
       - package: HaloApple
         product: FeatureStickers

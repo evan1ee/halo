@@ -1,6 +1,6 @@
 # Feature: Media Attachments
 
-> Priority: P1 · Milestone: M1 (display images), M2 (all display, send images) · Modules: FeatureTimeline, FeatureComposer, `MediaPort`, HaloPlatform (decoding) · Requirements: R-P1-MEDIA
+> Priority: P1 · Milestone: M1 (display images), M2 (all display, send images) · Modules: FeatureTimeline (incl. the composer, D127), `MediaPort`, HaloPlatform (decoding) · Requirements: R-P1-MEDIA
 
 ## 1. Purpose
 Display every incoming media type and send photos (D16).

@@ -94,6 +94,17 @@ public protocol LocalSearchIndexPort: Sendable {
 }
 
 /// Reads decrypted messages for the index (ADR-0024). Implemented by `HaloMatrixAdapter`.
+/// One account's on-device index file as the search lifecycle manages it (D123, D124, audit F-02): opened at sign-in, closed
+/// while the phone is locked (the file is unreadable then), deleted at sign-out.
+public protocol AccountSearchIndexPort: LocalSearchIndexPort {
+    /// Opens the file (again), so the next query doesn't pay for it.
+    func resume() async
+    /// Closes the file before the phone locks; history read meanwhile for `rooms` waits in the encrypted holding file.
+    func suspend(rooms: [RoomID]) async
+    /// Deletes the file and everything kept for it.
+    func destroy()
+}
+
 public protocol MessageIndexSourcePort: Sendable {
     /// What each sync response brings, from now on. One subscriber.
     func batches() -> AsyncStream<SearchLiveBatch>

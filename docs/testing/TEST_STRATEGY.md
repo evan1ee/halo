@@ -10,7 +10,7 @@ flowchart TB
   UI["XCUITest smoke (local Mac, vs dev Synapse)"]
   INT["Integration: adapter contract tests + Synapse scenarios"]
   FFI["FFI smoke tests (adapter ↔ MatrixRustSDK)"]
-  UNIT["Unit + property tests: HaloDomain, HaloApplication, HaloPersistence (Linux + macOS)"]
+  UNIT["Unit + property tests: HaloDomain, HaloApplication (Linux + macOS), HaloPersistence (macOS)"]
   E2E --> UI --> INT --> FFI --> UNIT
 ```
 
@@ -28,7 +28,7 @@ flowchart TB
 | Regression | Every fixed bug → a test at the lowest possible layer | — | — | With the fix (mandatory) |
 
 ## 2. Making Swift domain tests run on Linux
-`HaloFoundation`, `HaloDomain`, `HaloApplication`, `HaloPersistence`, `HaloTestSupport` must build with the Linux Swift toolchain (no Apple-only imports; `#if canImport` only in HaloPlatform).
+`HaloFoundation`, `HaloDomain`, `HaloApplication`, `HaloTestSupport` (the `HaloCore` package) must build with the Linux Swift toolchain (no Apple-only imports; `#if canImport` only in HaloPlatform).
 CI job `swift-linux` runs `swift test` for these packages; GRDB needs `libsqlite3-dev` in the image **[VERIFIED F-CI-1]**.
 
 ## 3. Scenario harness (deterministic sync bug reproduction)

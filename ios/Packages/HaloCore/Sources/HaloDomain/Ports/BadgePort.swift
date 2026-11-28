@@ -17,7 +17,7 @@ public struct BadgeSnapshot: Sendable, Equatable {
         self.syncedThrough = syncedThrough
     }
 
-    public var total: Int { attentionCounts.values.reduce(0, +) }
+    public var total: Int { BadgeCalculator.total(attentionCounts) }
 }
 
 /// What the notification extension starts from: the app's last evaluation and what is shown right now (that evaluation

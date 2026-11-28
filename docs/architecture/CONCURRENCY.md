@@ -10,7 +10,7 @@
 |---|---|
 | Views, `@Observable` view models | `@MainActor` |
 | Coordinators in `HaloApplication` | `actor` (one per coordinator), or `@MainActor` when they only feed UI |
-| `HaloMatrixAdapter` services | `actor`s wrapping FFI objects; upstream objects are confined to the adapter actor that owns them |
+| `HaloMatrixAdapter` services | One `actor`, `MatrixSessionPort`, owns the `Client`, the sync loop and the session; every other port is a stateless `final class … Sendable` (any state behind a `Mutex`) that asks it for the client or a room. Upstream objects never leave the adapter |
 | `HaloDomain` policies | Pure `Sendable` structs/functions; no isolation needed |
 | `HaloPersistence` | GRDB `DatabasePool` (thread-safe); repository methods are `async` |
 

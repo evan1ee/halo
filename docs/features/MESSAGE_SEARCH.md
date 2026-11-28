@@ -48,7 +48,7 @@ Query: `empty → loading(local) → results | none | failed` with progressive b
 `SearchIndexEntry`, `SearchQuery`, `RoomSearchCoverage`, `SearchHistorySlice`, `SearchIndexOperation`, `SearchTokeniser`, `SearchContent`, `SearchIndexPolicy` (pure, `HaloDomain`). Schema: [../data/DATA_MODELS.md](../data/DATA_MODELS.md) §3b.
 
 ## 8. API boundaries
-`SearchPort` (UI-facing; `LocalMessageSearch` behind `CurrentSearchPort`), `LocalSearchIndexPort` (`SearchIndexStore`, HaloPersistence), `MessageIndexSourcePort` (`MatrixMessageIndexSource`, adapter), `SearchIndexer` and `SearchCoordinator` (HaloApplication). Only the adapter sees SDK types; the index never feeds the timeline, the room list or unread state.
+`SearchPort` (UI-facing; `LocalMessageSearch` behind `CurrentSearchPort`), `LocalSearchIndexPort` / `AccountSearchIndexPort` (`SearchIndexStore`, HaloPersistence; the second adds the file's open/close/delete lifecycle), `MessageIndexSourcePort` (`MatrixMessageIndexSource`, adapter), `SearchIndexer`, `SearchCoordinator` and `MessageSearchEngine` (HaloApplication; the per-account lifecycle: attach, lock/unlock, background task, sign-out deletion; the app supplies only iOS's device state, lock state and processing task). Only the adapter sees SDK types; the index never feeds the timeline, the room list or unread state.
 
 ## 9. Error scenarios
 Index damaged or of an older schema → deleted and rebuilt, search says "indexing" · disk full → the write fails, the rooms are read again later, search keeps working · server refuses history → room blocked with the reason · offline → local results only, hits outside the cache open with an explanation · index unreadable while locked → search unavailable until unlock.

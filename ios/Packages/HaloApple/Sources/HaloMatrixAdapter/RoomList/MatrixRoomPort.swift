@@ -294,23 +294,33 @@ public final class MatrixRoomPort: RoomPort {
             let handle = await timeline.addListener(listener: GalleryListener(continuation))
             defer { handle.cancel(); continuation.finish() }
 
-            let paginateTask = Task {
-                for _ in 0..<10 {
-                    let reachedStart = (try? await timeline.paginateBackwards(numEvents: 50)) ?? true  // best-effort: a read; the caller falls back to a default and nothing changes
-                    if reachedStart { break }
+            // Older history that can't be loaded fails the export: a file that silently stops part-way would pass for the whole
+            // room (AGENTS §4.4, audit S-6). Up to 10 pages; a room with more exports its newest `limit` messages, as documented.
+            let paginateTask = Task { () -> HaloError? in
+                defer { continuation.finish() }
+                do {
+                    for _ in 0..<10 {
+                        if try await timeline.paginateBackwards(numEvents: 50) { break }
+                    }
+                    return nil
+                } catch {
+                    return ErrorMapper.map(error)
                 }
-                continuation.finish()
             }
             defer { paginateTask.cancel() }
 
             var items: [HaloDomain.TimelineItem] = []
+            var filled = false
             for await batch in raw {
                 for update in batch {
-                    let mapped = TimelineMapper.map(update, ownUserID: own)
-                    try? ListReducer.apply(mapped, to: &items)
+                    try ListReducer.apply(TimelineMapper.map(update, ownUserID: own), to: &items)
                 }
-                if items.count >= limit { break }
+                if items.count >= limit {
+                    filled = true
+                    break
+                }
             }
+            if !filled, let failure = await paginateTask.value { throw failure }
             var messages: [RoomExportMessage] = []
             for item in items {
                 guard case .event(let event) = item.content, let eventID = event.eventID else { continue }
