@@ -222,6 +222,48 @@ struct SearchContractTests {
         await stage.kill()
     }
 
+    @Test("M20-11: room-filtered SearchPort returns only that room's matches and opens an older match via M20-1 focused jump", .timeLimit(.minutes(5)))
+    func inRoomSearchAndFocusedJump() async throws {
+        try await ProxyControl().heal()
+        let (session, _, _) = try await signIn("inroom")
+        let server = SearchServer(session: session)
+        let roomA = try await server.makeRoom()
+        let roomB = try await server.makeRoom()
+
+        let olderID = try await server.send("compass milestone alpha", to: roomA)
+        for index in 0..<25 { _ = try await server.send("filler message \(index)", to: roomA) }
+        let newerID = try await server.send("compass milestone omega", to: roomA)
+        _ = try await server.send("compass milestone decoy", to: roomB)
+
+        let stage = try SearchStage(session)
+        try await stage.start()
+        try await SearchStage.wait(60, "room-scoped hits in roomA") {
+            let page = try await stage.search.searchLocal(SearchQuery(text: "compass", room: roomA), after: nil)
+            return page.hits.count == 2
+        }
+
+        let roomAPage = try await stage.search.searchLocal(SearchQuery(text: "compass", room: roomA), after: nil)
+        #expect(roomAPage.hits.map(\.roomID) == [roomA, roomA])
+        #expect(roomAPage.hits.map(\.eventID) == [newerID, olderID])
+
+        // Jump to the older hit via M20-1 focused timeline.
+        let timeline = TimelineCoordinator(port: MatrixTimelinePort(session: session), room: roomA)
+        await timeline.open()
+        try await SearchStage.wait(30, "live timeline ready") {
+            if case .live = await timeline.status { return true }
+            return false
+        }
+        try await timeline.focus(on: olderID)
+        try await SearchStage.wait(30, "focused timeline shows older match") {
+            guard case .live(let snapshot) = await timeline.status else { return false }
+            return snapshot.focus == olderID && snapshot.items.contains {
+                if case .event(let event) = $0.content { event.eventID == olderID } else { false }
+            }
+        }
+        await timeline.close()
+        await stage.kill()
+    }
+
     // MARK: Helpers
 
     private func signIn(_ device: String) async throws -> (MatrixSessionPort, StoredSession, URL) {

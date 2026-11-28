@@ -11,9 +11,11 @@ import PhotosUI
 
 public struct TimelineView: View {
     private let model: TimelineViewModel
+    private let roomSearch: RoomSearchViewModel?
     private let stickerPanel: (@MainActor () -> AnyView)?
     private let gifPanel: (@MainActor () -> AnyView)?
     private let onOpenThread: (@MainActor (EventID) -> Void)?
+    private let onOpenThreadMessage: (@MainActor (EventID, EventID) -> Void)?
     private let onSaveAsSticker: (@MainActor (Data, String) -> Void)?
     private let onOpenSuccessor: (@MainActor (RoomID) -> Void)?
     private let onRoomClosed: (@MainActor () -> Void)?
@@ -74,9 +76,11 @@ public struct TimelineView: View {
     /// - Parameter onOpenThread: opens a focused thread sheet for the chosen root event (M10 Threads).
     public init(
         model: TimelineViewModel,
+        roomSearch: RoomSearchViewModel? = nil,
         stickerPanel: (@MainActor () -> AnyView)? = nil,
         gifPanel: (@MainActor () -> AnyView)? = nil,
         onOpenThread: (@MainActor (EventID) -> Void)? = nil,
+        onOpenThreadMessage: (@MainActor (EventID, EventID) -> Void)? = nil,
         onSaveAsSticker: (@MainActor (Data, String) -> Void)? = nil,
         onOpenSuccessor: (@MainActor (RoomID) -> Void)? = nil,
         onRoomClosed: (@MainActor () -> Void)? = nil,
@@ -84,9 +88,11 @@ public struct TimelineView: View {
         onRowsDrawn: (@MainActor () -> Void)? = nil
     ) {
         self.model = model
+        self.roomSearch = roomSearch
         self.stickerPanel = stickerPanel
         self.gifPanel = gifPanel
         self.onOpenThread = onOpenThread
+        self.onOpenThreadMessage = onOpenThreadMessage
         self.onSaveAsSticker = onSaveAsSticker
         self.onOpenSuccessor = onOpenSuccessor
         self.onRoomClosed = onRoomClosed
@@ -164,8 +170,8 @@ public struct TimelineView: View {
                             },
                             onSaveAsSticker: onSaveAsSticker
                         )
-                            .background(model.highlightedRowID == row.id ? Color.accentColor.opacity(0.18) : .clear, in: .rect(cornerRadius: 8))
-                            .animation(.easeOut(duration: 0.4), value: model.highlightedRowID)
+                            .background(isRowHighlighted(row) ? HaloColor.accent.opacity(0.18) : .clear, in: .rect(cornerRadius: 8))
+                            .animation(.easeOut(duration: 0.4), value: isRowHighlighted(row))
                             // The pill's target: whether the first row that was unread at open is on screen.
                             .onScrollVisibilityChange { if row.id == model.unreadMarkerID { markerVisible = $0 } }
                             // D6: a row counts as seen when at least half of it is on screen; the 0.5 s dwell is in the view model.
@@ -510,6 +516,19 @@ public struct TimelineView: View {
             }
             .sharedBackgroundVisibility(.hidden)
         }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if let roomSearch, roomSearch.isPresented {
+                RoomSearchBar(
+                    model: roomSearch,
+                    onOpenThreadMessage: onOpenThreadMessage ?? onOpenThread.map { open in
+                        { root, _ in open(root) }
+                    }
+                )
+            }
+        }
+        .onChange(of: roomSearch?.isPresented ?? false) { _, presented in
+            if presented { input.dismiss() }
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if let banner = model.lifecycleBanner {
                 RoomLifecycleBanner(
@@ -600,9 +619,18 @@ public struct TimelineView: View {
             jumpToBottomTask = nil
             prependAnchorTask?.cancel()
             prependAnchorTask = nil
+            roomSearch?.close()
             model.setActive(false)
             Task { await model.stop() }
         }
+    }
+
+    private func isRowHighlighted(_ row: TimelineRow) -> Bool {
+        if model.highlightedRowID == row.id { return true }
+        if let roomSearch, roomSearch.isPresented, let target = roomSearch.highlightedEventID, row.eventID == target {
+            return true
+        }
+        return false
     }
 
     private func photoViewer(initial: TimelineViewModel.PhotoViewerItem) -> some View {

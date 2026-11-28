@@ -17,12 +17,14 @@ public struct RoomDetailsView: View {
 
     private let onLeft: (@MainActor () -> Void)?
     private let onOpenSuccessor: (@MainActor (RoomID) -> Void)?
+    private let onSearchInRoom: (@MainActor () -> Void)?
     private let onRenamed: @MainActor (String) -> Void
     private let profileSheet: (@MainActor (RoomMemberInfo, @escaping @MainActor () -> Void) -> AnyView?)?
     @State private var shownMember: RoomMemberInfo?
 
     /// `onLeft` runs after the user left the room (the caller pops the room and info pages from the stack).
     /// `onOpenSuccessor` opens or previews the replacement room when this room was upgraded (GA-23, M20-8).
+    /// `onSearchInRoom` opens in-room message search for this room (M20-11).
     /// `onRenamed` runs when the user saves a new room name so the caller can update its navigation title at once.
     /// `profileSheet` builds the profile view for a tapped member (wired by the composition root so features don't import each other).
     public init(
@@ -30,12 +32,14 @@ public struct RoomDetailsView: View {
         profileSheet: (@MainActor (RoomMemberInfo, @escaping @MainActor () -> Void) -> AnyView?)? = nil,
         onRenamed: @escaping @MainActor (String) -> Void = { _ in },
         onOpenSuccessor: (@MainActor (RoomID) -> Void)? = nil,
+        onSearchInRoom: (@MainActor () -> Void)? = nil,
         onLeft: (@MainActor () -> Void)? = nil
     ) {
         _model = State(initialValue: model)
         self.profileSheet = profileSheet
         self.onRenamed = onRenamed
         self.onOpenSuccessor = onOpenSuccessor
+        self.onSearchInRoom = onSearchInRoom
         self.onLeft = onLeft
     }
 
@@ -154,6 +158,12 @@ public struct RoomDetailsView: View {
                 .accessibilityIdentifier("roomNotificationMode")
             }
             Section("Media & Files") {
+                if let onSearchInRoom {
+                    Button(action: onSearchInRoom) {
+                        Label("Search in chat", systemImage: "magnifyingglass")
+                    }
+                    .accessibilityIdentifier("roomDetailsSearch")
+                }
                 NavigationLink {
                     RoomMediaGalleryView(model: model)
                 } label: {

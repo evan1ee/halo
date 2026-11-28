@@ -67,6 +67,28 @@ public final class MessageSearchEngine {
         }
     }
 
+    private final class RoomCoordinatorsBox: Sendable {
+        private final class WeakRef {
+            weak var coordinator: SearchCoordinator?
+            init(_ coordinator: SearchCoordinator) { self.coordinator = coordinator }
+        }
+        private let refs = Mutex<[WeakRef]>([])
+
+        func add(_ coordinator: SearchCoordinator) {
+            refs.withLock { list in
+                list.removeAll { $0.coordinator == nil }
+                list.append(WeakRef(coordinator))
+            }
+        }
+
+        func active() -> [SearchCoordinator] {
+            refs.withLock { list in
+                list.removeAll { $0.coordinator == nil }
+                return list.compactMap(\.coordinator)
+            }
+        }
+    }
+
     public let coordinator: SearchCoordinator
     /// Holds the first sync back until search listens.
     public let gate = SearchStartGate()
@@ -78,6 +100,7 @@ public final class MessageSearchEngine {
     private let port = CurrentSearchPort()
     private let filterCache = FilterCache()
     private let indexerBox = IndexerBox()
+    private let roomCoordinators = RoomCoordinatorsBox()
     private let source: any MessageIndexSourcePort
     private let rooms: RoomListCoordinator
     private let profiles: any ProfilePort
@@ -133,11 +156,16 @@ public final class MessageSearchEngine {
             if !loaded.isEmpty { return loaded }
             return Array(filterCache.joined)
         }
-        let coordinator = self.coordinator
+        let coordinator = self.coordinator, roomCoordinators = self.roomCoordinators
         let indexer = SearchIndexer(
             index: store, source: source, rooms: joined,
             conditions: { [weak self] in await self?.conditions() ?? SearchIndexPolicy.Conditions(mayRun: false) }, log: log,
-            onWrite: { changedRooms in await coordinator.refresh(in: changedRooms) })
+            onWrite: { changedRooms in
+                await coordinator.refresh(in: changedRooms)
+                for roomCoordinator in roomCoordinators.active() {
+                    await roomCoordinator.refresh(in: changedRooms)
+                }
+            })
         self.store = store
         self.indexer = indexer
         port.set(LocalMessageSearch(
@@ -184,6 +212,26 @@ public final class MessageSearchEngine {
         let ignored = (try? await profiles.ignoredUsers()) ?? []  // best-effort: keeps none ignored on read failure
         filterCache.setIgnored(Set(ignored))
         await coordinator.refresh()
+        for roomCoordinator in roomCoordinators.active() {
+            await roomCoordinator.refresh()
+        }
+    }
+
+    /// Creates an independent `SearchCoordinator` for in-room search (M20-11), backed by the account's live index and
+    /// active-query history prioritisation without disturbing global chat-list search.
+    public func makeRoomSearchCoordinator() -> SearchCoordinator {
+        let indexerBox = indexerBox
+        let roomCoordinator = SearchCoordinator(
+            port: port,
+            onRemoteQuery: { query in await indexerBox.current?.setActiveQuery(query) })
+        roomCoordinators.add(roomCoordinator)
+        return roomCoordinator
+    }
+
+    /// Current on-device indexing coverage for a single room (M20-11); `nil` if not yet scanned or detached.
+    public func roomCoverage(for room: RoomID) async -> RoomSearchCoverage? {
+        guard let store else { return nil }
+        return (try? await store.coverage())?[room]  // best-effort: unread coverage treats room as still indexing
     }
 
     /// Stops reading and lets go of the second SDK client; before the session's stores are deleted.
@@ -202,6 +250,9 @@ public final class MessageSearchEngine {
         account = nil
         await gate.close()
         await coordinator.clear()
+        for roomCoordinator in roomCoordinators.active() {
+            await roomCoordinator.clear()
+        }
         publish(SearchIndexStatus())
         if deletingIndex {
             store?.destroy()
