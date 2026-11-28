@@ -123,7 +123,7 @@ What the documents claimed and the code doesn't have. Evidence is a search or fi
 | [ ] **M20-16 Multi-select** (copy, forward, delete) | C · M | Power levels respected; partial failure reported |
 | [ ] **M20-17 Link previews**, off by default, never in encrypted rooms by default (D57) | C · M | No request before opt-in |
 | [ ] **M20-18 Unread tools**: mark all read, low-priority section | C · S | Goes through `ReadStatePolicy`; badge test |
-| [ ] **M20-19 Unknown message types** show the sender's fallback text (GA-31) | R · S · 📤? | `InteropTests.incoming` without the known issue |
+| [ ] **M20-19 Unknown message types** (*Halo mapper ready 2026-11-28: `TimelineMapper` maps `MessageType.other(_, body)` to the sender's fallback text; verified on live Synapse with `matrix-rust-sdk` 26.11.17 that `room.timeline()`, `TimelineFilter.all`, and `TimelineFilter.eventFilter(.exclude([]))` all still omit custom `msgtype` events upstream before the FFI diff listener — requires upstream SDK change 📤*) show the sender's fallback text (GA-31) | R · S · 📤 | `InteropTests.incoming` without the known issue |
 
 **Exit:** R tasks done; interop matrix (M17-7) re-run green.
 

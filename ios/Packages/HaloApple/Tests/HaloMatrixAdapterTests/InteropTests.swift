@@ -152,7 +152,7 @@ struct InteropTests {
             if one.name != cases[0].name, !one.check(event) { missing.append("\(one.name): \(event.kind)") }
         }
         #expect(missing.isEmpty, "\(missing.joined(separator: "\n"))")
-        withKnownIssue("GA-31: the SDK leaves messages of a type it doesn't know out of the timeline") { #expect(knownMissing.isEmpty) }
+        withKnownIssue("GA-31: matrix-rust-sdk 26.11.17 omits unknown msgtypes from live timelines even with TimelineFilter.all / .exclude([])") { #expect(knownMissing.isEmpty) }
 
         let edited = try #require(stage.mirror.event(first))
         #expect(edited.kind == .text("changed", isEdited: true))
@@ -239,10 +239,7 @@ struct InteropTests {
                 "body": "cat", "url": uri, "info": ["mimetype": "image/png", "w": 128, "h": 128]
             ]) { if case .sticker("cat", let source, let url, _) = $0.kind { source != nil && url == uri } else { false } },
             Incoming(name: "unknown msgtype shows its fallback", content: ["msgtype": "com.example.new", "body": "fallback text"], isKnownMissing: true) {
-                switch $0.kind {
-                case .text("fallback text", _), .unsupported: true
-                default: false
-                }
+                $0.kind == .text("fallback text", isEdited: false)
             },
         ]
     }

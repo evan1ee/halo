@@ -66,6 +66,13 @@ struct UTDReasonTests {
         #expect(reason(.unknown) == .unknown)
         #expect(TimelineMapper.reason(of: .unknown) == .unknown)
     }
+
+    @Test("unknown m.room.message msgtype maps to sender's fallback text when non-empty (M20-19, GA-31)")
+    func unknownMessageFallback() {
+        #expect(TimelineMapper.unknownMessageKind(body: "fallback text", messageBody: "", isEdited: false) == .text("fallback text", isEdited: false))
+        #expect(TimelineMapper.unknownMessageKind(body: "", messageBody: "edited fallback", isEdited: true) == .text("edited fallback", isEdited: true))
+        #expect(TimelineMapper.unknownMessageKind(body: "   ", messageBody: "", isEdited: false) == .unsupported)
+    }
 }
 
 @Suite("MatrixRoomListPort mapping")

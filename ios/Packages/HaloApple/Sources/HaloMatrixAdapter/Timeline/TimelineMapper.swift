@@ -116,6 +116,13 @@ enum TimelineMapper {
         }
     }
 
+    static func unknownMessageKind(body: String, messageBody: String, isEdited: Bool) -> TimelineEventKind {
+        let fallback = body.isEmpty ? messageBody : body
+        return fallback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? .unsupported
+            : .text(fallback, isEdited: isEdited)
+    }
+
     static func kind(of kind: MsgLikeKind, ownUserID: String = "") -> TimelineEventKind {
         switch kind {
         case .message(let message):
@@ -148,6 +155,9 @@ enum TimelineMapper {
                     kind: .file, body: message.body, source: ref(content.source),
                     mimeType: content.info?.mimetype, size: clampedInt(content.info?.size)))
             case .location(let content): .location(body: message.body, geoURI: content.geoUri)
+            case .other(_, let body):
+                // Unknown `m.room.message` `msgtype` (GA-31, M20-19): show the sender's Matrix spec fallback `body`.
+                Self.unknownMessageKind(body: body, messageBody: message.body, isEdited: message.isEdited)
             default: .unsupported
             }
         case .sticker(let body, let info, let source):
