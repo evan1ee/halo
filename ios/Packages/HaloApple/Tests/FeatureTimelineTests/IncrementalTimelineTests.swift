@@ -64,19 +64,56 @@ struct IncrementalTimelineTests {
         #expect(rows(model) == fullRebuild(items, in: model))
     }
 
-    @Test("a change to what rows read besides the item (a bot allowlist, a sender's name) maps them again")
-    func contextChange() throws {
+    @Test("context invalidation is scoped per row: new member or unrelated bot leaves unaffected rows cached, while affected rows remap (audit P-5)")
+    func scopedContextInvalidation() throws {
         let model = try model()
-        let items = (1...50).map { message($0) }
+        let readerID = try UserID("@reader:x.org")
+        let botEvent = TimelineItem(id: TimelineItemID("bot-1"), content: .event(TimelineEvent(
+            eventID: try EventID("$bot1:x.org"),
+            sender: try UserID("@bot:x.org"),
+            senderName: "Bot",
+            timestamp: Date(timeIntervalSince1970: 5_000),
+            isOwn: false,
+            kind: .text("Hello", isEdited: false),
+            formattedBody: "<p>Hello</p>"
+        )))
+        let readEvent = TimelineItem(id: TimelineItemID("read-1"), content: .event(TimelineEvent(
+            eventID: try EventID("$read1:x.org"),
+            sender: try UserID("@me:x.org"),
+            senderName: "Me",
+            timestamp: Date(timeIntervalSince1970: 5_060),
+            isOwn: true,
+            kind: .text("Read by Bob", isEdited: false),
+            readReceipts: [ReadReceiptEntry(userID: readerID, timestamp: Date(timeIntervalSince1970: 5_100))]
+        )))
+        var items = (1...50).map { message($0) } + [botEvent, readEvent]
         show(items, in: model)
+        #expect(model.rowsMapped == 52)
+
+        // Adding a brand-new member's message only maps that 1 new row (was 53 before P-5).
+        model.rowsMapped = 0
+        items.append(message(51, sender: "@newcomer:x.org", name: "Newcomer"))
+        show(items, in: model)
+        #expect(model.rowsMapped == 1, "newcomer speaking should not drop the cache; mapped \(model.rowsMapped)")
+        #expect(rows(model) == fullRebuild(items, in: model))
+
+        // Enabling @bot:x.org only remaps the 1 formatted message from @bot:x.org.
         model.rowsMapped = 0
         model.botSenders = ["@bot:x.org"]
         show(items, in: model)
-        #expect(model.rowsMapped == 50)
+        #expect(model.rowsMapped == 1, "only @bot's formatted row should remap; mapped \(model.rowsMapped)")
+        #expect(rows(model) == fullRebuild(items, in: model))
+
+        // When @reader:x.org speaks with a display name, only the new message + the 1 row they read remap.
+        model.rowsMapped = 0
+        items.append(message(52, sender: "@reader:x.org", name: "Reader Updated"))
+        show(items, in: model)
+        #expect(model.rowsMapped == 2, "only newcomer row + readEvent should remap; mapped \(model.rowsMapped)")
+        #expect(rows(model).first(where: { $0.id == "read-1" })?.allReaders.first?.name == "Reader Updated")
         #expect(rows(model) == fullRebuild(items, in: model))
     }
 
-    @Test("crossing midnight refreshes cached date-divider rows from Today to Yesterday")
+    @Test("crossing midnight refreshes only date-divider rows and leaves message rows cached (audit P-5)")
     func midnightRolloverUpdatesDateDivider() throws {
         let day1 = Date(timeIntervalSince1970: 1_700_049_600)  // 2023-11-15 12:00:00 UTC
         let day2 = day1.addingTimeInterval(86_400)
@@ -89,13 +126,17 @@ struct IncrementalTimelineTests {
         let items: [TimelineItem] = [
             TimelineItem(id: TimelineItemID("div-1"), content: .virtual(.dateDivider(day1))),
             message(1),
+            message(2),
+            message(3),
         ]
         show(items, in: model)
         #expect(rows(model).first?.text == "Today")
 
+        model.rowsMapped = 0
         currentNow.withLock { $0 = day2 }
         show(items, in: model)
         #expect(rows(model).first?.text == "Yesterday")
+        #expect(model.rowsMapped == 1, "only the date divider should remap on midnight rollover")
     }
 
     @Test("randomised changes always give the rows a full rebuild gives")

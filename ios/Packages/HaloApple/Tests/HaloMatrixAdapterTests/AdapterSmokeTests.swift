@@ -127,6 +127,44 @@ struct RoomListMappingTests {
         #expect(bounded.get("$e1") == nil && bounded.get("$e2") == nil)
     }
 
+    @Test("EventCoalescer merges bursts of sync, push-rule, and filter events into one batch (audit P-2)")
+    func eventCoalescerMergesBurst() async {
+        let coalescer = MatrixRoomListPort.EventCoalescer()
+        coalescer.enqueueSync(changed: ["!a:x.org"], isCatchUp: false)
+        coalescer.enqueueSync(changed: ["!b:x.org", "!a:x.org"], isCatchUp: false)
+        coalescer.enqueueFilterRefresh()
+        coalescer.enqueuePushRulesRefresh()
+
+        let batch = await coalescer.next()
+        #expect(batch == .init(changed: ["!a:x.org", "!b:x.org"], isCatchUp: false, forceAll: true, filterChanged: true, hasSync: true))
+
+        // Drains any buffered event before returning nil after finish.
+        coalescer.enqueueSync(changed: ["!c:x.org"], isCatchUp: true)
+        coalescer.finish()
+        let finalBatch = await coalescer.next()
+        #expect(finalBatch == .init(changed: ["!c:x.org"], isCatchUp: true, forceAll: false, filterChanged: false, hasSync: true))
+        #expect(await coalescer.next() == nil)
+    }
+
+    @Test("rebuildPlan skips idle syncs, refilters without FFI, uses incremental lookup for live changes, and full-scans catch-up/push-rules (audit P-1)")
+    func rebuildPlanSelection() {
+        let idle = MatrixRoomListPort.EventCoalescer.Batch(hasSync: true)
+        #expect(MatrixRoomListPort.rebuildPlan(batch: idle, hasBaseline: true) == .skipIdleSync)
+        #expect(MatrixRoomListPort.rebuildPlan(batch: idle, hasBaseline: false) == .fullScan(forceAll: true, changed: nil))
+
+        let filterOnly = MatrixRoomListPort.EventCoalescer.Batch(filterChanged: true)
+        #expect(MatrixRoomListPort.rebuildPlan(batch: filterOnly, hasBaseline: true) == .refilterCached)
+
+        let liveChange = MatrixRoomListPort.EventCoalescer.Batch(changed: ["!r1:x.org"], hasSync: true)
+        #expect(MatrixRoomListPort.rebuildPlan(batch: liveChange, hasBaseline: true) == .incremental(["!r1:x.org"]))
+
+        let catchUp = MatrixRoomListPort.EventCoalescer.Batch(changed: ["!r1:x.org"], isCatchUp: true, hasSync: true)
+        #expect(MatrixRoomListPort.rebuildPlan(batch: catchUp, hasBaseline: true) == .fullScan(forceAll: false, changed: ["!r1:x.org"]))
+
+        let pushRules = MatrixRoomListPort.EventCoalescer.Batch(changed: ["!r1:x.org"], forceAll: true, hasSync: true)
+        #expect(MatrixRoomListPort.rebuildPlan(batch: pushRules, hasBaseline: true) == .fullScan(forceAll: true, changed: nil))
+    }
+
     @Test("GalleryCollector.settle awaits asynchronous listener delivery before returning media items (M19-5)")
     func galleryCollectorSettlesAsyncDiffs() async throws {
         let collector = GalleryCollector(ownUserID: "@me:x.org", sleep: { _ in await Task.yield() })

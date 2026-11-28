@@ -15,20 +15,41 @@ public final class TimelineViewModel {
     }
 
     public internal(set) var content: Content = .opening
+
+    /// Owned child models (audit F-08): bot tasks, composer state, and media playback/downloads.
+    public let botState = TimelineBotTaskModel()
+    public let composer = TimelineComposerModel()
+    public let mediaState: TimelineMediaModel
+
     /// User IDs of bots whose messages may become cards (Settings → Bots, BOT_MESSAGES §3).
-    public var botSenders: Set<String> = []
+    public var botSenders: Set<String> {
+        get { botState.botSenders }
+        set { botState.botSenders = newValue }
+    }
     /// Reports a known bot's message whose formatted body no template recognised (by event ID; for the diagnostics count).
-    public var unrecognisedBotMessages: UnrecognisedBotMessages?
+    public var unrecognisedBotMessages: UnrecognisedBotMessages? {
+        get { botState.unrecognisedBotMessages }
+        set { botState.unrecognisedBotMessages = newValue }
+    }
     /// Receives every snapshot of this room so the Activity index learns the bots' tasks (BOT_ACTIVITY FR-1).
-    public var botActivity: BotActivityCoordinator?
+    public var botActivity: BotActivityCoordinator? {
+        get { botState.botActivity }
+        set { botState.botActivity = newValue }
+    }
     /// What the room's bot messages say about tasks (BOT_MESSAGES §6); recomputed with every snapshot.
-    public internal(set) var botTasks = BotTaskTracker([])
-    /// Tasks the user ticked and the bot hasn't confirmed yet, and those that got no answer in time.
-    var botTapped: Set<BotTaskTracker.Key> = []
-    var botUnanswered: Set<BotTaskTracker.Key> = []
-    var botTimeouts: [BotTaskTracker.Key: Task<Void, Never>] = [:]
-    /// How long to wait for the bot before showing "No response from bot" (BOT_MESSAGES §6).
-    var botTimeout: Duration = .seconds(120)
+    public var botTasks: BotTaskTracker { botState.tasks }
+    var botTapped: Set<BotTaskTracker.Key> {
+        get { botState.tapped }
+        set { botState.tapped = newValue }
+    }
+    var botUnanswered: Set<BotTaskTracker.Key> {
+        get { botState.unanswered }
+        set { botState.unanswered = newValue }
+    }
+    var botTimeout: Duration {
+        get { botState.timeout }
+        set { botState.timeout = newValue }
+    }
 
     public enum BotRowState: Equatable, Sendable {
         /// Can be ticked.
@@ -44,142 +65,68 @@ public final class TimelineViewModel {
 
     /// The state of one row of a bot's todo list.
     public func botRowState(bot: String?, id: String) -> BotRowState {
-        guard let bot else { return .unavailable }
-        let key = BotTaskTracker.Key(bot: bot, id: id)
-        if botTasks.isCompleted(key) { return .completed }
-        guard botTasks.source(of: key) != nil else { return .unavailable }
-        if botTapped.contains(key) { return .pending }
-        return botUnanswered.contains(key) ? .noResponse : .open
+        botState.rowState(bot: bot, id: id)
     }
 
     /// Ticks a row: one 👍 on the message that created the task, never on the list (BOT_MESSAGES FR-3). Ignored while pending,
     /// done or unavailable, and no second 👍 is sent when the user already has one on that message.
     public func tickBotTask(bot: String?, id: String) async {
-        guard let bot else { return }
-        let state = botRowState(bot: bot, id: id)
-        guard state == .open || state == .noResponse else { return }
-        let key = BotTaskTracker.Key(bot: bot, id: id)
-        guard let source = botTasks.source(of: key) else { return }
-        botUnanswered.remove(key)
-        botTapped.insert(key)
-        let alreadyReacted: Bool = {
-            guard case .live(let rows, _, _, _) = content, let target = rows.first(where: { $0.eventID == source.eventID }) else { return false }
-            return target.reactions.contains { $0.key == "👍" && $0.reactedByMe }
-        }()
-        if !alreadyReacted {
-            do { try await coordinator.toggleReaction(on: source.eventID, key: "👍") } catch {
-                botTapped.remove(key)
-                sendError = "That didn't work. Try again."
-                return
-            }
-        }
-        botTimeouts[key]?.cancel()
-        let timeout = botTimeout
-        botTimeouts[key] = Task { [weak self] in
-            try? await Task.sleep(for: timeout)
-            guard !Task.isCancelled else { return }
-            self?.botTimedOut(key)
-        }
+        let rows: [TimelineRow] = if case .live(let current, _, _, _) = content { current } else { [] }
+        await botState.tick(
+            bot: bot,
+            id: id,
+            rows: rows,
+            toggleReaction: { [coordinator] eventID, key in try await coordinator.toggleReaction(on: eventID, key: key) },
+            onError: { [composer] message in composer.sendError = message }
+        )
     }
 
-    func botTimedOut(_ key: BotTaskTracker.Key) {
-        guard botTapped.remove(key) != nil else { return }
-        botUnanswered.insert(key)
-        botTimeouts[key] = nil
-    }
+    func botTimedOut(_ key: BotTaskTracker.Key) { botState.timedOut(key) }
+
     /// Whether typing notices are sent while the user composes (Settings → Privacy → Typing notices, SETTINGS §3).
     public var sendsTypingNotices: @MainActor () -> Bool = { true }
     /// KLIPY GIFs and stickers (D98); `nil` hides them, and KLIPY links then show as plain links.
     public var klipy: KlipyCatalog?
 
     /// The Article editor's text (D101): kept while the editor is closed, cleared once the article was sent.
-    public var articleDraft = ""
+    public var articleDraft: String {
+        get { composer.articleDraft }
+        set { composer.articleDraft = newValue }
+    }
 
     /// The message being typed. Cleared only once the send was accepted, so a failure never loses the text.
-    public var draft = "" {
-        didSet {
-            guard draft != oldValue, editing == nil, !isRestoringDraft else { return }
-            saveDraft()
-            if mentionQuery != nil { loadMembersIfNeeded() }
-            let isTyping = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            if sendsTypingNotices() {
-                Task { [coordinator] in await coordinator.setTyping(isTyping) }
-            } else if !isTyping {
-                // If disabled mid-draft, still clear any typing notice already sent; no-op when none was sent.
-                Task { [coordinator] in await coordinator.setTyping(false) }
-            }
-        }
+    public var draft: String {
+        get { composer.draft }
+        set { composer.draft = newValue }
     }
+
     /// People that can be mentioned in this room; loaded the first time the user types `@`.
-    public internal(set) var members: [RoomMember] = []
-    var membersRequested = false
-    /// Users picked from the suggestions for the message being written.
-    var pendingMentions: [Mention] = []
-
-    /// The text after a trailing `@` that starts a word in the draft, or `nil` when the user isn't typing a mention.
-    public var mentionQuery: String? {
-        guard editing == nil, let at = draft.lastIndex(of: "@") else { return nil }
-        if at != draft.startIndex, !draft[draft.index(before: at)].isWhitespace { return nil }
-        let query = draft[draft.index(after: at)...]
-        guard !query.contains(where: \.isWhitespace), query.count <= 30 else { return nil }
-        return String(query)
+    public var members: [RoomMember] {
+        get { composer.members }
+        set { composer.members = newValue }
+    }
+    var pendingMentions: [Mention] {
+        get { composer.pendingMentions }
+        set { composer.pendingMentions = newValue }
     }
 
-    /// Up to five members matching `mentionQuery`.
-    public var mentionSuggestions: [RoomMember] {
-        guard let query = mentionQuery else { return [] }
-        let needle = query.lowercased()
-        let matches = needle.isEmpty ? members : members.filter { member in
-            member.mentionName.lowercased().contains(needle) || member.user.rawValue.lowercased().dropFirst().hasPrefix(needle)
-        }
-        return Array(matches.prefix(5))
-    }
-
-    /// Replaces the `@query` being typed with the member's name and remembers the mention for the send.
-    public func pickMention(_ member: RoomMember) {
-        guard mentionQuery != nil, let at = draft.lastIndex(of: "@") else { return }
-        draft = String(draft[..<at]) + "@\(member.mentionName) "
-        pendingMentions.removeAll { $0.user == member.user }
-        pendingMentions.append(Mention(user: member.user, name: member.mentionName))
-    }
+    public var mentionQuery: String? { composer.mentionQuery }
+    public var mentionSuggestions: [RoomMember] { composer.mentionSuggestions }
+    public func pickMention(_ member: RoomMember) { composer.pickMention(member) }
 
     func loadMembersIfNeeded() {
-        guard !membersRequested else { return }
-        membersRequested = true
+        guard !composer.membersRequested else { return }
+        composer.membersRequested = true
         Task {
-            if let loaded = try? await coordinator.members() { members = loaded } else { membersRequested = false }  // best-effort: a read or a cache; a miss changes nothing the person sees
+            if let loaded = try? await coordinator.members() { composer.members = loaded } else { composer.membersRequested = false }  // best-effort: a read or a cache; a miss changes nothing the person sees
         }
     }
 
-    /// Up to six native emoji matching a trailing `:shortcode` query in `draft`.
-    public var emojiSuggestions: [NativeEmoji.Entry] {
-        NativeEmoji.shortcodeSuggestions(forDraft: draft)?.entries ?? []
-    }
-
-    /// Replaces the trailing `:shortcode` in `draft` with the selected native emoji and records it as recent.
-    public func pickEmojiSuggestion(_ entry: NativeEmoji.Entry) {
-        guard let match = NativeEmoji.shortcodeSuggestions(forDraft: draft) else { return }
-        draft.replaceSubrange(match.range, with: entry.emoji + " ")
-        recordRecentEmoji(entry.emoji)
-    }
-
-    /// Inserts a native emoji into the composer draft and records it as recent.
-    public func insertEmoji(_ emoji: String) {
-        draft += emoji
-        recordRecentEmoji(emoji)
-    }
-
-    /// Most recently used native emoji for reactions and composer input (persisted per device, newest first, max 16).
-    public internal(set) var recentEmoji: [String] = UserDefaults.standard.stringArray(forKey: "halo.emoji.recents") ?? []
-
-    func recordRecentEmoji(_ emoji: String) {
-        let trimmed = emoji.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        recentEmoji.removeAll { $0 == trimmed }
-        recentEmoji.insert(trimmed, at: 0)
-        if recentEmoji.count > 16 { recentEmoji.removeLast(recentEmoji.count - 16) }
-        UserDefaults.standard.set(recentEmoji, forKey: "halo.emoji.recents")
-    }
+    public var emojiSuggestions: [NativeEmoji.Entry] { composer.emojiSuggestions }
+    public func pickEmojiSuggestion(_ entry: NativeEmoji.Entry) { composer.pickEmojiSuggestion(entry) }
+    public func insertEmoji(_ emoji: String) { composer.insertEmoji(emoji) }
+    public var recentEmoji: [String] { composer.recentEmoji }
+    func recordRecentEmoji(_ emoji: String) { composer.recordRecentEmoji(emoji) }
 
     /// "Alice is typing…", or `nil` when nobody else is.
     public internal(set) var typingText: String?
@@ -187,14 +134,26 @@ public final class TimelineViewModel {
     public internal(set) var identityNotices: [IdentityNotice] = []
     /// Names of the loaded timeline's senders, for the reasons a send was refused.
     var senderNames: [UserID: String] = [:]
-    public internal(set) var isSending = false
-    public internal(set) var sendError: String?
+    public var isSending: Bool {
+        get { composer.isSending }
+        set { composer.isSending = newValue }
+    }
+    public var sendError: String? {
+        get { composer.sendError }
+        set { composer.sendError = newValue }
+    }
     /// Double-tap protection for changes to messages (AC-REL-4).
     let actions = ActionGuard()
     /// The own message being edited, or `nil` when the composer writes a new message.
-    public internal(set) var editing: EventID?
+    public var editing: EventID? {
+        get { composer.editing }
+        set { composer.editing = newValue }
+    }
     /// The message an emoji is being picked for, or `nil` when the picker is closed.
-    public internal(set) var reactionTarget: TimelineRow?
+    public var reactionTarget: TimelineRow? {
+        get { composer.reactionTarget }
+        set { composer.reactionTarget = newValue }
+    }
     /// The emoji offered by the picker (a fixed set; the quick row of the menu is `quickReactions`).
     public static let quickReactions = ["👍", "❤️", "😂"]
     public static let pickerEmoji = [
@@ -203,30 +162,38 @@ public final class TimelineViewModel {
         "👋", "✌️", "👌", "🤞", "🫡", "🫶", "💔", "💙", "💚", "⭐️", "✨", "🚀", "☕️", "🍕", "🎂", "🌈",
     ]
     /// The message the next send replies to, or `nil`.
-    public internal(set) var replyingTo: TimelineRow?
-
-    public var canSend: Bool {
-        (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingPhotos.isEmpty || !pendingVideos.isEmpty)
-            && !isSending && !isSendingImage && !isSendingVideo
+    public var replyingTo: TimelineRow? {
+        get { composer.replyingTo }
+        set { composer.replyingTo = newValue }
     }
+
+    public var canSend: Bool { composer.canSend }
 
     let coordinator: TimelineCoordinator
     let media: MediaLoader?
     /// Owns inline playback of voice messages and audio files for this room so playback survives scrolling (MEDIA_ATTACHMENTS FR-3, M20-2).
-    public let audioPlayer: AudioPlaybackController
+    public var audioPlayer: AudioPlaybackController { mediaState.audioPlayer }
     let previewsAllowed: (@Sendable () async -> Bool)?
     /// `true` when the account's media preview setting asks for a tap before photos in this room are shown (FR-7).
-    public internal(set) var previewsHidden = false
-    var revealedPreviews: Set<MediaRef> = []
-    /// Pictures already shown (`TimelineThumbnailMemory`) and the photo reference last seen per row, to carry a sent photo
-    /// from its local echo to the confirmed message.
-    let thumbnailMemory: TimelineThumbnailMemory
-    var knownPhotoRefs: [String: MediaRef] = [:]
-    /// The row made for each item the last time, reused while the item and what the mapping reads besides it are unchanged
-    /// (M19-2): a new message maps one row, not the whole room.
-    var rowCache: [TimelineItemID: (item: TimelineItem, row: TimelineRow)] = [:]
-    var rowCacheContext = 0
-    /// How many rows `row(_:)` made through `mappedRows`; the test that pins M19-2 reads it.
+    public var previewsHidden: Bool {
+        get { mediaState.previewsHidden }
+        set { mediaState.previewsHidden = newValue }
+    }
+    var thumbnailMemory: TimelineThumbnailMemory { mediaState.thumbnailMemory }
+    var knownPhotoRefs: [String: MediaRef] {
+        get { mediaState.knownPhotoRefs }
+        set { mediaState.knownPhotoRefs = newValue }
+    }
+    /// The row made for each item the last time, reused while the item and its narrow external dependencies
+    /// (calendar day for dividers, bot membership for that sender, profiles for its readers, names for its send failure)
+    /// are unchanged (M19-2, audit P-5): a new member speaking maps one row, not the whole room.
+    struct RowCacheEntry {
+        let item: TimelineItem
+        let context: Int
+        let row: TimelineRow
+    }
+    var rowCache: [TimelineItemID: RowCacheEntry] = [:]
+    /// How many rows `row(_:)` made through `buildRows`; the test that pins M19-2 / audit P-5 reads it.
     var rowsMapped = 0
     var observation: Task<Void, Never>?
     let dateFormatter: DateFormatter
@@ -251,7 +218,6 @@ public final class TimelineViewModel {
     /// The items of the last live snapshot, for what is worked out again when a model started ahead is shown.
     var lastItems: [TimelineItem] = []
     var clearedMarkedUnread = false
-    var isRestoringDraft = false
     /// The row currently being forwarded in `ForwardSheet`, if any (MESSAGING FR-8, M20-6).
     public private(set) var forwardingRow: TimelineRow?
     /// Executes multi-target message forwarding (injected by composition root, M20-6).
@@ -336,8 +302,6 @@ public final class TimelineViewModel {
         }
     }
 
-    /// The unsent text that was in the composer when an edit began; it comes back when the edit ends.
-    var stashedDraft = ""
     var reportedOwn: EventID?
     var dwellTask: Task<Void, Never>?
     var pendingCandidate: EventID?
@@ -384,8 +348,7 @@ public final class TimelineViewModel {
         audioPlayer: AudioPlaybackController? = nil
     ) {
         self.coordinator = coordinator
-        self.audioPlayer = audioPlayer ?? AudioPlaybackController()
-        self.thumbnailMemory = thumbnails ?? TimelineThumbnailMemory()
+        self.mediaState = TimelineMediaModel(media: media, thumbnails: thumbnails, audioPlayer: audioPlayer)
         self.media = media
         self.previewsAllowed = previewsAllowed
         self.receipts = receipts
@@ -421,6 +384,18 @@ public final class TimelineViewModel {
         info.dateStyle = .medium
         info.timeStyle = .medium
         infoTimeFormatter = info
+        composer.onDraftEdited = { [weak self] text, hasMention in
+            guard let self else { return }
+            self.saveDraft()
+            if hasMention { self.loadMembersIfNeeded() }
+            let isTyping = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            if self.sendsTypingNotices() {
+                Task { [coordinator = self.coordinator] in await coordinator.setTyping(isTyping) }
+            } else if !isTyping {
+                // If disabled mid-draft, still clear any typing notice already sent; no-op when none was sent.
+                Task { [coordinator = self.coordinator] in await coordinator.setTyping(false) }
+            }
+        }
     }
 
     /// Exact date and time with seconds for Message Info and read-receipt timestamps (M20-9).
@@ -428,7 +403,11 @@ public final class TimelineViewModel {
         infoTimeFormatter.string(from: date)
     }
 
-    isolated deinit { observation?.cancel(); dwellTask?.cancel() }
+    isolated deinit {
+        observation?.cancel()
+        dwellTask?.cancel()
+        botState.cancelTimeouts()
+    }
 
     // MARK: Read receipts
 
@@ -585,10 +564,7 @@ public final class TimelineViewModel {
     func restoreDraft() async {
         guard let drafts, let room else { return }
         let text = await drafts.draft(for: room)
-        guard draft.isEmpty, editing == nil, !text.isEmpty else { return }
-        isRestoringDraft = true
-        draft = text
-        isRestoringDraft = false
+        composer.applyRestoredDraft(text)
     }
 
     func saveDraft() {
@@ -604,10 +580,9 @@ public final class TimelineViewModel {
             starting.cancel()
             await starting.value
         }
-        cancelOpenFile()
-        cancelOpenVideo()
+        botState.cancelTimeouts()
+        mediaState.stop()
         removePendingVideos()
-        audioPlayer.stop()
         observation?.cancel()
         observation = nil
         clearedMarkedUnread = false
@@ -768,21 +743,34 @@ public final class TimelineViewModel {
     public func clearHighlight() { highlightedRowID = nil }
 
 
-    // MARK: Action & media state
+    // MARK: Action & media state (forwarded to owned child models; poll/edit state stays here)
     var readerProfiles: [UserID: (name: String?, avatar: MediaRef?)] = [:]
-    var openFileTask: Task<Void, Never>?
-    public internal(set) var openedFile: OpenedFile?
-    public internal(set) var openingRow: String?
-    var openVideoTask: Task<Void, Never>?
-    public internal(set) var openedVideo: OpenedVideo?
-    public internal(set) var openingVideoRow: String?
-    public internal(set) var openFileError: String?
+    public var openedFile: OpenedFile? { mediaState.openedFile }
+    public var openingRow: String? { mediaState.openingRow }
+    public var openedVideo: OpenedVideo? { mediaState.openedVideo }
+    public var openingVideoRow: String? { mediaState.openingVideoRow }
+    public var openFileError: String? { mediaState.openFileError }
     public internal(set) var editHistory: EditHistoryState?
-    public internal(set) var isSendingImage = false
-    public internal(set) var pendingPhotos: [OutgoingImage] = []
-    public internal(set) var isSendingVideo = false
-    public internal(set) var pendingVideos: [OutgoingFile] = []
-    public internal(set) var isSendingFile = false
+    public var isSendingImage: Bool {
+        get { composer.isSendingImage }
+        set { composer.isSendingImage = newValue }
+    }
+    public var pendingPhotos: [OutgoingImage] {
+        get { composer.pendingPhotos }
+        set { composer.pendingPhotos = newValue }
+    }
+    public var isSendingVideo: Bool {
+        get { composer.isSendingVideo }
+        set { composer.isSendingVideo = newValue }
+    }
+    public var pendingVideos: [OutgoingFile] {
+        get { composer.pendingVideos }
+        set { composer.pendingVideos = newValue }
+    }
+    public var isSendingFile: Bool {
+        get { composer.isSendingFile }
+        set { composer.isSendingFile = newValue }
+    }
     /// Poll votes sent by this device and waiting for the server echo (AC-M5, M20-4).
     public internal(set) var pendingPollVotes: [EventID: [String]] = [:]
     /// Own polls whose `m.poll.end` is waiting for server confirmation (M20-4).

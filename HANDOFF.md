@@ -1,21 +1,21 @@
 # Halo — Session Handoff
 
-Last updated: 2026-11-28 · Branch: `feat/m20-basic-moderation` (PR #112 pending; PRs #1–#111 merged + audit S-6)
+Last updated: 2026-11-28 · Branch: `refactor/audit-p2-batch` (PR #113 pending; PRs #1–#112 merged)
 
 State and next steps only; history is in `git log`, facts in `docs/`. Updated in the last commit of every push (AGENTS.md §18).
 
 ## 1. Current status
 - **Roadmap:** M0–M16 are built and merged. Re-planned 2026-11-25 to a production release (D121): M17 measure → M18 security and reliability → M19 performance → M20 messaging → M21 experience → M22 beta and launch, with gates G-SCALE, G-PERF, G-SHIP ([docs/ROADMAP.md](docs/ROADMAP.md)). The audit behind it found 26 gaps (ROADMAP §2); Halo isn't a release candidate yet.
-- **Milestones:** M0–M16 built, partly for M14–M15 (GA-24…GA-26). **M17 in progress:** M17-1, 2, 3, 6, 8 done; M17-4, M17-5 and M17-7 done except what needs a device or the founder (§5). **M18:** all non-founder/non-device R/C tasks merged (#92–#100); M18-6/M18-12 need the founder, M18-10 needs a device. **M19:** merged (#101) with all non-device R tasks built (M19-1…M19-5, M19-7, M19-9, M19-11); M19-6/8/10 need a physical iPhone 📱. **M20 in progress:** M20-1 (#91), M20-2 voice/audio (#102), M20-3 video (#103, GA-18 removed), M20-4 polls (#104, GA-19 removed), M20-5 camera (#105, GA-20 removed), M20-6 forward (#106), M20-8 room lifecycle (#107, GA-23 removed), M20-9 receipts & message info (#108), M20-10 text rendering (#109, GA-30 removed), M20-11 in-room search (#111) merged, and **M20-12 basic moderation** built on `feat/m20-basic-moderation`; M20-7 report/block paused on founder decision `Q-REPORT`. **Architecture audit (2026-11-27/28):** PR #110 merged ([docs/ARCHITECTURE_AUDIT.md](docs/ARCHITECTURE_AUDIT.md), doc fixes, P1 fixes, F-02 cleanup, D127, D128, ADR-0025); S-6 (`try?` audit in `HaloMatrixAdapter`) completed; P2 items are open (§5). Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`), physical iPhone 17e (`00008150-001149800E7B401C`).
-- **Last checks (M20-12, 2026-11-28):** `HALO_SIM="iPhone Air" scripts/prepush.sh` passed (nothing skipped; handoff, docs, boundaries + 6/6 boundary tests, design tokens, HaloCore, HaloApple, `Halo-Debug` build, full `HaloUITests`, gitleaks, 0 SwiftLint violations in 326 files); `HALO_SIM="iPhone Air" infra/test/run.sh interop basicModerationPowerLevelsAndActions` passed on live Synapse (14.46 s); Light/Dark/AX5 snapshots visually verified.
-- **Earlier checks (audit S-6 & PR #111 M20-11, 2026-11-28):** `scripts/prepush.sh`, `swiftlint` (0 violations), `Halo-Debug` build (0 warnings), `infra/test/run.sh search inRoomSearchAndFocusedJump`, and GitHub CI all green.
+- **Milestones:** M0–M16 built, partly for M14–M15 (GA-24…GA-26). **M17 in progress:** M17-1, 2, 3, 6, 8 done; M17-4, M17-5 and M17-7 done except what needs a device or the founder (§5). **M18:** all non-founder/non-device R/C tasks merged (#92–#100); M18-6/M18-12 need the founder, M18-10 needs a device. **M19:** merged (#101) with all non-device R tasks built (M19-1…M19-5, M19-7, M19-9, M19-11); M19-6/8/10 need a physical iPhone 📱. **M20 in progress:** M20-1 (#91), M20-2 voice/audio (#102), M20-3 video (#103, GA-18 removed), M20-4 polls (#104, GA-19 removed), M20-5 camera (#105, GA-20 removed), M20-6 forward (#106), M20-8 room lifecycle (#107, GA-23 removed), M20-9 receipts & message info (#108), M20-10 text rendering (#109, GA-30 removed), M20-11 in-room search (#111), and M20-12 basic moderation (#112) merged; M20-7 report/block paused on founder decision `Q-REPORT`. **Architecture audit (2026-11-27/28):** PR #110 merged ([docs/ARCHITECTURE_AUDIT.md](docs/ARCHITECTURE_AUDIT.md), P1 fixes, F-02 cleanup, D127, D128, ADR-0025); S-6 completed; **P2 batch (F-08, P-1/P-2, P-4/P-5)** built on `refactor/audit-p2-batch`. Dev Mac: Xcode 27.2, Swift 6.4.2, simulator `iPhone Air` (`HALO_SIM="iPhone Air"`), physical iPhone 16 (`00008140-000222592ED0801C`), physical iPhone 17e (`00008150-001149800E7B401C`).
+- **Last checks (P2 batch, 2026-11-28):** `HALO_SIM="iPhone Air" scripts/contract-test.sh roomList` passed on live Synapse (13.05 s); `HALO_SIM="iPhone Air" scripts/prepush.sh` passed all iOS/docs/boundaries/design-tokens/HaloApple/Halo-Debug/HaloUITests/gitleaks/SwiftLint (0 violations in 329 files) checks (only the pre-existing `SessionCoordinatorTests` flake failed once on `HaloCore`, which passed 274/274 immediately on rerun; `HaloCore` was unchanged).
+- **Earlier checks (PR #112 M20-12, 2026-11-28):** all 6 GitHub CI checks passed; `HALO_SIM="iPhone Air" scripts/prepush.sh` passed (0 SwiftLint violations in 326 files); `infra/test/run.sh interop basicModerationPowerLevelsAndActions` passed on live Synapse (14.46 s).
 - **CI:** PRs #1–#111 merged. `scenarios.yml` (Synapse behind the fault proxy); Linux CI runs `HaloCore` tests; `.github/workflows/pushkin.yml` runs `infra/sygnal/` unit tests; manual-dispatch `.github/workflows/macos-build.yml` (TD-04) runs full iOS Simulator tests + `HaloUITests` before TestFlight uploads.
 
 ## 2. Completed work (last 3 sessions)
 Summary only; older history lives in `git log`.
-- **M20-12 Basic moderation (2026-11-28, `feat/m20-basic-moderation`):** Added `RoomPowerLevel` (including Matrix room v12 `.infinite` creators), `RoomModerationPermissions`, and pure `RoomModerationPolicy` (`HaloDomain`), `RoomPort` moderation methods (`bannedMembers`, `removeMember`, `banMember`, `unbanMember`) + `FakeRoomPort` + `MatrixRoomPort` live `RoomPowerLevels` gating and SDK `kickUser`/`banUser`/`unbanUser` mapping, and `RoomDetailsViewModel` / `RoomDetailsView` role badges (`Creator`/`Admin`/`Moderator`), gated moderation menu/context/swipe actions with confirmation & optional reason, `Banned` section with `Unban`, double-tap guard, honest server-refusal/offline explanations (AC-ROOM-4), and Light/Dark/AX5 support. Verified by `RoomModerationPolicyTests`, `RoomModerationViewModelTests`, and 2-account live Synapse `InteropTests.basicModerationPowerLevelsAndActions`.
+- **Architecture audit P2 batch (2026-11-28, `refactor/audit-p2-batch`):** Completed F-08 (`TimelineViewModel` split into owned `@MainActor @Observable` child models `TimelineBotTaskModel`, `TimelineComposerModel`, and `TimelineMediaModel`, cancelling bot timeouts on `stop()`/`deinit`; `TimelineChildModelsTests`), P-1/P-2 (`MatrixRoomListPort.EventCoalescer` merges queued sync/push-rule/filter bursts, live incremental syncs use `client.getRoom(roomId:)` instead of scanning `client.rooms()`, and filter switches re-filter cached summaries with zero FFI calls; `RoomListMappingTests`), and P-4/P-5 (`TimelineViewModel+Mapping` folds snapshot scans into `scanSnapshot`, builds cached + grouped + collapsed rows in one `buildRows` pass, and scopes row-cache invalidation per row/sender/day via `rowContext`; `IncrementalTimelineTests.scopedContextInvalidation`).
+- **M20-12 Basic moderation (2026-11-28, merged #112):** Added `RoomPowerLevel` (including Matrix room v12 `.infinite` creators), `RoomModerationPermissions`, and pure `RoomModerationPolicy` (`HaloDomain`), `RoomPort` moderation methods (`bannedMembers`, `removeMember`, `banMember`, `unbanMember`) + `FakeRoomPort` + `MatrixRoomPort` live `RoomPowerLevels` gating and SDK `kickUser`/`banUser`/`unbanUser` mapping, and `RoomDetailsViewModel` / `RoomDetailsView` role badges (`Creator`/`Admin`/`Moderator`), gated moderation menu/context/swipe actions with confirmation & optional reason, `Banned` section with `Unban`, double-tap guard, honest server-refusal/offline explanations (AC-ROOM-4), and Light/Dark/AX5 support.
 - **Architecture audit S-6 (2026-11-28):** Audited every remaining `try?` site in `HaloMatrixAdapter`: `GalleryCollector` and `HistoryMirror` now propagate `ListReducer` corruption errors instead of silently truncating media galleries or advancing search anchors past dropped events (recovering cleanly on `.reset`), `UnpinPolicy` defaults unknown `roomInfo()` reads to attempting room unpin instead of silently leaving room-pinned events pinned, and misleading stamped comments on write/fail-closed sites (`MatrixSessionPort`, `MatrixRoomPort`, `MatrixReadMarkerPort`) were replaced with accurate per-site reasons. Verified with `AdapterErrorPropagationTests` (3 new regression tests).
-- **M20-11 Search inside a room (2026-11-28, merged #111):** Added pure `RoomSearchNavigator` and `RoomSearchIndexNotice` (`HaloDomain`), `MessageSearchEngine.makeRoomSearchCoordinator()` and `roomCoverage(for:)` (`HaloApplication`), `RoomSearchViewModel` and `RoomSearchBar` (`FeatureTimeline`) with previous/older (`↑`) and next/newer (`↓`) stepping across pages, M20-1 focused jumps leaving read state unaffected, thread-match handoff, empty/indexing/offline/error+retry states, and Light/Dark/AX5 + VoiceOver support, wired via the room toolbar (`⌘F`) and Room Info ("Search in chat").
 
 ## 3. Key decisions
 Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D128), [docs/adr/README.md](docs/adr/README.md).
@@ -45,19 +45,17 @@ Full list: [docs/DECISION_LOG.md](docs/DECISION_LOG.md) (D1–D128), [docs/adr/R
 - **D96:** the accessibility audit skips contrast under the floating search field and `element == nil` `.contrast`/`.textClipped` while that field is on screen; every resolved element above it still fails.
 
 ## 4. Modified files (this push)
-- **Domain (`HaloDomain`):** `RoomList/{RoomDetails.swift, RoomModeration.swift}`, `Ports/RoomPort.swift`.
-- **Test support (`HaloTestSupport`):** `RoomList/FakeRoomPort.swift`.
-- **Adapter (`HaloMatrixAdapter`):** `RoomList/MatrixRoomPort.swift`.
-- **Feature (`FeatureRoomDetails`):** `RoomDetailsViewModel.swift`, `RoomDetailsView.swift`.
-- **Tests:** `HaloDomainTests/RoomModerationPolicyTests.swift`, `FeatureRoomDetailsTests/RoomModerationViewModelTests.swift`, `HaloMatrixAdapterTests/InteropTests.swift`.
-- **Docs:** `docs/features/ROOM_MANAGEMENT.md`, `docs/ROADMAP.md`, `HANDOFF.md`.
+- **Adapter (`HaloMatrixAdapter`):** `RoomList/MatrixRoomListPort.swift` (`EventCoalescer`, `rebuildPlan`, incremental `getRoom` path).
+- **Feature (`FeatureTimeline`):** `TimelineBotTaskModel.swift`, `TimelineComposerModel.swift`, `TimelineMediaModel.swift`, `TimelineViewModel.swift`, `TimelineViewModel+Actions.swift`, `TimelineViewModel+Mapping.swift`.
+- **Tests:** `HaloMatrixAdapterTests/AdapterSmokeTests.swift`, `FeatureTimelineTests/{IncrementalTimelineTests.swift, TimelineChildModelsTests.swift}`.
+- **Docs:** `docs/ARCHITECTURE_AUDIT.md`, `HANDOFF.md`.
 - Earlier pushes: see `git log`.
 
 ## 5. Outstanding issues
 Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.md](docs/development/OUTSTANDING_ISSUES.md).
 
 **Not done, for future action (from the M18–M20 work; remove a line when done)**
-- **Architecture audit, still open ([ARCHITECTURE_AUDIT.md](docs/ARCHITECTURE_AUDIT.md) §6):** P2 items only (F-08 `TimelineViewModel` split, P-1/P-2 room-list scaling, P-4/P-5 timeline mapping, F-03, F-06, F-07, S-5); all P1 items and S-6 are done.
+- **Architecture audit, still open ([ARCHITECTURE_AUDIT.md](docs/ARCHITECTURE_AUDIT.md) §6):** remaining P2 items only (S-3 `TimelineCoordinator` pass-throughs, F-03 `MatrixSessionPort` split, F-06 `sessionUpdates` actor isolation, F-07 platform side effects behind ports, S-5 image cache unification, #12 CI scale gate); all P1 items, S-6, F-08, P-1/P-2, and P-4/P-5 are done.
 - **`HaloUITests.testPastedImageJoinsPendingPhotos` flake (2026-11-27):** failed once in a full `prepush`, passed 2 of 2 alone right after and in a full-suite rerun; the change on the branch doesn't touch pasting. Watch it.
 - **M20-5:** live hardware photo/video capture & iOS permission prompt on a physical iPhone 📱; `NSCameraUsageDescription`, in-context `CameraAccessPolicy`/`CameraPermissionController`, denied/restricted/unavailable UI with Settings link, lossless video GPS stripping (`VideoPreparer`) & photo GPS stripping (`ImagePreparer`), and Light/Dark/AX5 snapshots are built and verified.
 - **M20-3:** 100 MB video memory measurement, portrait/landscape full-screen rotation feel, and Save to Photos permission flow on a physical iPhone 📱; inline posters, disk-streamed `AVPlayerViewController`, captions on send, poster thumbnails, Save/Share, Light/Dark/AX5, and interop tests are built and verified.
@@ -118,8 +116,8 @@ Non-founder limits and environment notes: [docs/development/OUTSTANDING_ISSUES.m
 
 ## 6. Next steps
 Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §3.
-1. Batch architecture audit P2 items (§5, [ARCHITECTURE_AUDIT.md](docs/ARCHITECTURE_AUDIT.md) §6): F-08 `TimelineViewModel` split, P-1/P-2 room-list coalescing, P-4/P-5 timeline mapping passes.
-2. Continue **M20** R tasks in order: **M20-13 Storage** → **M20-19 Unknown message types** (removes GA-31); return to **M20-7 Report and block** (removes GA-22) once founder decides `Q-REPORT`.
+1. Continue **M20** R tasks in order: **M20-13 Storage** (sizes, clear media cache, retention D55) → **M20-19 Unknown message types** (removes GA-31); return to **M20-7 Report and block** (removes GA-22) once founder decides `Q-REPORT`.
+2. After M20 R tasks, work **M21** R tasks in order (`M21-1` State matrix, `M21-3` Motion & system settings, `M21-6` Localisation, `M21-7` Copy, `M21-9` First run without an account) and remaining optional P2 audit items (S-3, F-03, F-06, F-07, S-5).
 3. Open M18/M19 items: M18-10 (device matrix 📱), M18-12 (security review 👤), M18-6 (OIDC end to end 👤), Q-VERIFY; M19-6/8/10 need a physical iPhone 📱.
 4. Founder: the device and hand checks of §5; long lead times: push gateway (M22-1), legal (M22-4), KLIPY production key, filtering entitlement, artwork.
 
@@ -127,9 +125,9 @@ Queue: [docs/ROADMAP.md](docs/ROADMAP.md) §3.
 ```text
 /loop Read AGENTS.md, HANDOFF.md, docs/development/AUTONOMOUS_LOOP.md and docs/ROADMAP.md (§1–§3, §7).
 
-Work the ROADMAP §3 queue starting with the P2 architecture audit items (HANDOFF §5: F-08 TimelineViewModel split,
-P-1/P-2 room-list rebuild coalescing, P-4/P-5 timeline mapping passes), then M20-13 (Storage: sizes, clear media cache,
-retention D55), and M20-19 (Unknown message types, removes GA-31); M20-7 stays paused until the founder decides Q-REPORT.
+Work the ROADMAP §3 queue starting at M20-13 (Storage: sizes, clear media cache, retention D55), then M20-19
+(Unknown message types, removes GA-31); M20-7 stays paused until the founder decides Q-REPORT. Then continue
+into M21 R tasks per ROADMAP §3.
 
 Rules learned in the audit (keep them true):
 - Badge counts and totals only through BadgeCalculator (AGENTS §4.2); no `+=` on counts anywhere else.

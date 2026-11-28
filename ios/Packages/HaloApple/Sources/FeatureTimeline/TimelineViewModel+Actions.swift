@@ -22,235 +22,29 @@ extension TimelineViewModel {
         public let caption: String?
     }
 
-    /// The id of the row whose file is downloading.
     /// A file is written to disk as it arrives (M19-5), so the limit is disk and patience, not memory.
-    public nonisolated static let openSizeLimit = 300 * 1024 * 1024
+    public nonisolated static let openSizeLimit = TimelineMediaModel.openSizeLimit
 
-    public func openFile(_ row: TimelineRow) async {
-        let target: TimelineRow.FileTile?
-        if let file = row.file {
-            target = file
-        } else if let audio = row.audio {
-            target = TimelineRow.FileTile(
-                kind: .audio, name: Self.audioFilename(from: audio.name, mimeType: audio.mimeType),
-                detail: "", ref: audio.ref, size: audio.size, thumbnail: nil)
-        } else if let video = row.video {
-            target = TimelineRow.FileTile(
-                kind: .video, name: VideoDisplayMetrics.videoFilename(from: video.filename, mimeType: video.mimeType),
-                detail: "", ref: video.ref, size: video.size, thumbnail: video.thumbnail)
-        } else {
-            target = nil
-        }
-        guard let file = target, media != nil, openingRow == nil else { return }
-        openFileError = nil
-        if let size = file.size, size > Self.openSizeLimit {
-            openFileError = "This file is too large to open here yet (\(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)))."
-            return
-        }
-        openingRow = row.id
-        let rowID = row.id
-        let task = Task { [weak self] in
-            guard let self else { return }
-            defer {
-                if self.openingRow == rowID {
-                    self.openingRow = nil
-                    self.openFileTask = nil
-                }
-            }
-            do {
-                let url = try await self.downloadFileToTemp(file)
-                if Task.isCancelled || self.openingRow != rowID {
-                    try? FileManager.default.removeItem(at: url.deletingLastPathComponent())  // best-effort: cancelled download temp folder
-                    return
-                }
-                self.openedFile = OpenedFile(url: url)
-            } catch is CancellationError {
-                return
-            } catch HaloError.cancelled {
-                return
-            } catch {
-                guard !Task.isCancelled, self.openingRow == rowID else { return }
-                self.openFileError = (error as? HaloError) == .network(retryable: true)
-                    ? "Can't reach the server. The file wasn't opened."
-                    : "The file couldn't be opened."
-            }
-        }
-        openFileTask = task
-        await task.value
-    }
-
-    /// Cancels an in-flight file download (AC-MED-3, M19-5); leaves no error and cleans up any temporary folder.
-    public func cancelOpenFile() {
-        openFileTask?.cancel()
-        openFileTask = nil
-        openingRow = nil
-    }
-
-    /// Downloads a file attachment into a sanitized temporary directory (used by Quick Look and drag-out).
-    public func downloadFileToTemp(_ file: TimelineRow.FileTile) async throws -> URL {
-        guard let media else { throw HaloError.notFound }
-        if let size = file.size, size > Self.openSizeLimit {
-            throw HaloError.invalidInput("File exceeds the size limit")
-        }
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("halo-open-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        // The name comes from the sender: the port keeps only its last path component so it can't leave the folder.
-        do {
-            return try await media.file(file.ref, name: file.name, mimeType: nil, in: directory)
-        } catch {
-            try? FileManager.default.removeItem(at: directory)  // best-effort: a half-made temporary folder; the system clears the rest
-            throw error
-        }
-    }
-
-    /// Quick Look was dismissed: the temporary copy is deleted.
-    public func closeFile() {
-        if let url = openedFile?.url { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-        openedFile = nil
-    }
+    public func openFile(_ row: TimelineRow) async { await mediaState.openFile(row) }
+    public func cancelOpenFile() { mediaState.cancelOpenFile() }
+    public func downloadFileToTemp(_ file: TimelineRow.FileTile) async throws -> URL { try await mediaState.downloadFileToTemp(file) }
+    public func closeFile() { mediaState.closeFile() }
 
     // MARK: Full-screen video playback (MEDIA_ATTACHMENTS FR-2, M19-5, M20-3)
 
-    /// Streams a video attachment straight to disk and opens the full-screen native player (AC-MED-3).
-    public func openVideo(_ row: TimelineRow) async {
-        guard let video = row.video, media != nil, openingVideoRow == nil else { return }
-        openFileError = nil
-        if let size = video.size, size > Self.openSizeLimit {
-            openFileError = "This video is too large to open here yet (\(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)))."
-            return
-        }
-        audioPlayer.stop()
-        openingVideoRow = row.id
-        let rowID = row.id
-        let title = row.isOwn ? "You" : (row.sender ?? "Video")
-        let task = Task { [weak self] in
-            guard let self else { return }
-            defer {
-                if self.openingVideoRow == rowID {
-                    self.openingVideoRow = nil
-                    self.openVideoTask = nil
-                }
-            }
-            do {
-                let url = try await self.downloadVideoToTemp(video)
-                if Task.isCancelled || self.openingVideoRow != rowID {
-                    try? FileManager.default.removeItem(at: url.deletingLastPathComponent())  // best-effort: cancelled download temp folder
-                    return
-                }
-                self.openedVideo = OpenedVideo(url: url, title: title, caption: video.caption)
-            } catch is CancellationError {
-                return
-            } catch HaloError.cancelled {
-                return
-            } catch {
-                guard !Task.isCancelled, self.openingVideoRow == rowID else { return }
-                self.openFileError = (error as? HaloError) == .network(retryable: true)
-                    ? "Can't reach the server. The video wasn't opened."
-                    : "The video couldn't be opened."
-            }
-        }
-        openVideoTask = task
-        await task.value
-    }
-
-    /// Cancels an in-flight video download (AC-MED-3); leaves no error and cleans up any temporary folder.
-    public func cancelOpenVideo() {
-        openVideoTask?.cancel()
-        openVideoTask = nil
-        openingVideoRow = nil
-    }
-
-    /// Full-screen video player was dismissed: deletes its temporary file copy.
-    public func closeVideo() {
-        if let url = openedVideo?.url { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-        openedVideo = nil
-    }
-
-    /// Streams a video attachment straight to a temporary disk folder with a player-friendly file extension (M19-5, M20-3).
-    public func downloadVideoToTemp(_ video: TimelineRow.Video) async throws -> URL {
-        guard let media else { throw HaloError.notFound }
-        if let size = video.size, size > Self.openSizeLimit {
-            throw HaloError.invalidInput("Video exceeds the size limit")
-        }
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("halo-video-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let filename = VideoDisplayMetrics.videoFilename(from: video.filename, mimeType: video.mimeType)
-        do {
-            return try await media.file(video.ref, name: filename, mimeType: video.mimeType, in: directory)
-        } catch {
-            try? FileManager.default.removeItem(at: directory)  // best-effort: half-made temporary folder
-            throw error
-        }
-    }
-
-    /// Whether a video's inline poster is shown immediately (MEDIA_ATTACHMENTS FR-7).
-    public func showsPreview(of video: TimelineRow.Video) -> Bool { !previewsHidden || revealedPreviews.contains(video.ref) }
-
-    /// The user tapped a hidden video poster: it loads and stays shown while the room is open.
-    public func revealPreview(of video: TimelineRow.Video) { revealedPreviews.insert(video.ref) }
+    public func openVideo(_ row: TimelineRow) async { await mediaState.openVideo(row) }
+    public func cancelOpenVideo() { mediaState.cancelOpenVideo() }
+    public func closeVideo() { mediaState.closeVideo() }
+    public func downloadVideoToTemp(_ video: TimelineRow.Video) async throws -> URL { try await mediaState.downloadVideoToTemp(video) }
+    public func showsPreview(of video: TimelineRow.Video) -> Bool { mediaState.showsPreview(of: video) }
+    public func revealPreview(of video: TimelineRow.Video) { mediaState.revealPreview(of: video) }
 
     // MARK: Inline audio and voice playback (MEDIA_ATTACHMENTS FR-3, M20-2)
 
-    /// Starts, pauses, resumes, or cancels inline playback for an audio or voice message bubble.
-    public func toggleAudioPlayback(for row: TimelineRow) {
-        guard let audio = row.audio else { return }
-        audioPlayer.togglePlay(
-            itemID: row.id,
-            announcedDuration: audio.duration,
-            isVoice: audio.isVoice,
-            hasWaveform: audio.waveform != nil
-        ) { [weak self] in
-            guard let self else { throw HaloError.cancelled }
-            return try await self.downloadAudioToTemp(audio)
-        }
-    }
-
-    /// Streams an audio attachment straight to a temporary file with a player-friendly file extension (M19-5, M20-2).
-    public func downloadAudioToTemp(_ audio: TimelineRow.Audio) async throws -> URL {
-        guard let media else { throw HaloError.notFound }
-        if let size = audio.size, size > Self.openSizeLimit {
-            throw HaloError.invalidInput("Audio exceeds the size limit")
-        }
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("halo-audio-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let filename = Self.audioFilename(from: audio.name, mimeType: audio.mimeType)
-        do {
-            return try await media.file(audio.ref, name: filename, mimeType: audio.mimeType, in: directory)
-        } catch {
-            try? FileManager.default.removeItem(at: directory)  // best-effort: half-made temporary folder
-            throw error
-        }
-    }
-
-    /// Ensures an audio file saved to disk carries an extension `AVURLAsset` recognises (Element voice notes often use
-    /// `"Voice message"` as `body` with `mimeType: "audio/ogg"`).
-    static func audioFilename(from rawName: String, mimeType: String?) -> String {
-        let last = rawName.split(whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? ""
-        let base = last.isEmpty || last == "." || last == ".." ? "audio" : last
-        let existingExt = (base as NSString).pathExtension.lowercased()
-        let knownAudioExtensions: Set<String> = ["m4a", "mp4", "ogg", "oga", "opus", "mp3", "wav", "aac", "caf", "flac", "aiff", "aif", "webm"]
-        if knownAudioExtensions.contains(existingExt) { return base }
-
-        let mime = (mimeType ?? "").split(separator: ";").first.map { $0.trimmingCharacters(in: .whitespaces).lowercased() } ?? ""
-        let inferredExt: String = switch mime {
-        case "audio/ogg", "application/ogg", "audio/opus": "ogg"
-        case "audio/mp4", "audio/m4a", "audio/x-m4a": "m4a"
-        case "audio/aac": "aac"
-        case "audio/mpeg", "audio/mp3": "mp3"
-        case "audio/wav", "audio/x-wav", "audio/wave": "wav"
-        case "audio/flac", "audio/x-flac": "flac"
-        case "audio/x-caf", "audio/caf": "caf"
-        case "audio/aiff", "audio/x-aiff": "aiff"
-        case "audio/webm": "webm"
-        default: ""
-        }
-        guard !inferredExt.isEmpty else { return base }
-        return "\(base).\(inferredExt)"
-    }
-
-    public func dismissOpenFileError() { openFileError = nil }
+    public func toggleAudioPlayback(for row: TimelineRow) { mediaState.toggleAudioPlayback(for: row) }
+    public func downloadAudioToTemp(_ audio: TimelineRow.Audio) async throws -> URL { try await mediaState.downloadAudioToTemp(audio) }
+    static func audioFilename(from rawName: String, mimeType: String?) -> String { TimelineMediaModel.audioFilename(from: rawName, mimeType: mimeType) }
+    public func dismissOpenFileError() { mediaState.dismissOpenFileError() }
 
     public func loadEarlier() async { await coordinator.paginateBackwards() }
 
@@ -304,9 +98,7 @@ extension TimelineViewModel {
         do {
             if let editing {
                 try await coordinator.edit(event: editing, newText: text)
-                self.editing = nil
-                draft = stashedDraft
-                stashedDraft = ""
+                composer.finishEdit()
                 return
             } else if let id = replyingTo?.eventID {
                 try await coordinator.reply(to: id, text: text, mentions: pendingMentions)
@@ -326,12 +118,10 @@ extension TimelineViewModel {
     /// A photo is being prepared or uploaded.
 
     /// Maximum number of photos that can be attached together in one batch.
-    public static let maxPendingPhotos = 10
-
-    /// Photos picked and prepared but not sent yet; the composer text becomes the first photo's caption when sent.
+    public static let maxPendingPhotos = TimelineComposerModel.maxPendingPhotos
 
     /// The first pending photo, or `nil` when none are attached.
-    public var pendingPhoto: OutgoingImage? { pendingPhotos.first }
+    public var pendingPhoto: OutgoingImage? { composer.pendingPhoto }
 
     /// Prepares a picked photo and appends it to the composer's pending photos (up to `maxPendingPhotos`).
     public func attachPhoto(data: Data, filename: String) async {
@@ -364,19 +154,16 @@ extension TimelineViewModel {
     }
 
     /// Drops one pending photo at `index`; the typed text and other photos stay.
-    public func removePendingPhoto(at index: Int) {
-        guard pendingPhotos.indices.contains(index) else { return }
-        pendingPhotos.remove(at: index)
-    }
+    public func removePendingPhoto(at index: Int) { composer.removePendingPhoto(at: index) }
 
     /// Drops all held photos; the typed text stays.
-    public func removePendingPhoto() { pendingPhotos.removeAll() }
+    public func removePendingPhoto() { composer.removePendingPhoto() }
 
     /// `true` when the composer can attach videos with poster + caption (M20-3).
     public var canSendVideos: Bool { videoPreparer != nil }
 
     /// Maximum number of videos that can be attached together in one batch.
-    public static let maxPendingVideos = 5
+    public static let maxPendingVideos = TimelineComposerModel.maxPendingVideos
 
     /// Stages a video file from Gallery or Files off the main actor (poster thumbnail, portrait/landscape dimensions, duration)
     /// so the user can add a caption before sending (M20-3).
@@ -411,26 +198,10 @@ extension TimelineViewModel {
     }
 
     /// Drops one pending video at `index` and deletes its staged temporary copy.
-    public func removePendingVideo(at index: Int) {
-        guard pendingVideos.indices.contains(index) else { return }
-        let removed = pendingVideos.remove(at: index)
-        Self.cleanUpStagedVideo(removed)
-    }
+    public func removePendingVideo(at index: Int) { composer.removePendingVideo(at: index) }
 
     /// Drops all pending videos and deletes their staged temporary copies.
-    public func removePendingVideos() {
-        let items = pendingVideos
-        pendingVideos.removeAll()
-        for item in items { Self.cleanUpStagedVideo(item) }
-    }
-
-    private static func cleanUpStagedVideo(_ video: OutgoingFile) {
-        guard let url = video.fileURL else { return }
-        let dir = url.deletingLastPathComponent()
-        if dir.lastPathComponent.hasPrefix("halo-pending-video-") {
-            try? FileManager.default.removeItem(at: dir)
-        }
-    }
+    public func removePendingVideos() { composer.removePendingVideos() }
 
     /// Sends all pending photos and videos in order, attaching the composer text as the first item's caption.
     func sendPendingMedia() async {
@@ -451,7 +222,7 @@ extension TimelineViewModel {
             do {
                 try await coordinator.sendFile(outgoing)
                 pendingVideos.removeFirst()
-                Self.cleanUpStagedVideo(video)
+                TimelineComposerModel.cleanUpStagedVideo(video)
                 if caption != nil {
                     caption = nil
                     draft = ""
@@ -747,9 +518,9 @@ extension TimelineViewModel {
         }
     }
 
-    public func reportFileTooLarge() { sendError = "That file is too large to send." }
-    public func reportFileUnreadable() { sendError = "That file couldn't be read." }
-    public func dismissSendError() { sendError = nil }
+    public func reportFileTooLarge() { composer.reportFileTooLarge() }
+    public func reportFileUnreadable() { composer.reportFileUnreadable() }
+    public func dismissSendError() { composer.dismissSendError() }
 
     /// Accepts the contact's current identity (FR-7). The notice goes when the SDK reports the new state.
     public func acceptIdentity(of user: UserID) async {
@@ -792,10 +563,7 @@ extension TimelineViewModel {
     }
 
     /// The emoji panel's delete key: removes the last character (a whole emoji, flags and families included).
-    public func deleteBackward() {
-        guard !draft.isEmpty else { return }
-        draft.removeLast()
-    }
+    public func deleteBackward() { composer.deleteBackward() }
 
     /// Reacts to a confirmed message, or removes the user's reaction.
     public func toggleReaction(on row: TimelineRow, key: String) async {
@@ -804,12 +572,9 @@ extension TimelineViewModel {
     }
 
     /// Opens the emoji picker for a confirmed message.
-    public func beginReactionPicker(_ row: TimelineRow) {
-        guard row.eventID != nil else { return }
-        reactionTarget = row
-    }
+    public func beginReactionPicker(_ row: TimelineRow) { composer.beginReactionPicker(row) }
 
-    public func cancelReactionPicker() { reactionTarget = nil }
+    public func cancelReactionPicker() { composer.cancelReactionPicker() }
 
     /// Reacts with `key` to the picker's message and closes the picker.
     public func pickReaction(_ key: String) async {
@@ -853,28 +618,14 @@ extension TimelineViewModel {
     }
 
     /// Loads an own, confirmed text message into the composer for editing.
-    public func beginEdit(_ row: TimelineRow) {
-        guard row.canEdit, let id = row.eventID else { return }
-        if editing == nil { stashedDraft = draft }
-        editing = id
-        replyingTo = nil
-        draft = row.source?.body ?? row.text.replacingOccurrences(of: " (edited)", with: "")
-    }
+    public func beginEdit(_ row: TimelineRow) { composer.beginEdit(row) }
 
     /// Makes the next send a reply to a confirmed message.
-    public func beginReply(_ row: TimelineRow) {
-        guard row.eventID != nil else { return }
-        editing = nil
-        replyingTo = row
-    }
+    public func beginReply(_ row: TimelineRow) { composer.beginReply(row) }
 
-    public func cancelReply() { replyingTo = nil }
+    public func cancelReply() { composer.cancelReply() }
 
-    public func cancelEdit() {
-        editing = nil
-        draft = stashedDraft
-        stashedDraft = ""
-    }
+    public func cancelEdit() { composer.cancelEdit() }
 
     /// Runs one change to a message; a second tap on the same one while it runs does nothing (AC-REL-4), and a failure is said.
     func perform(_ key: String, _ action: () async throws -> Void) async {
@@ -886,48 +637,25 @@ extension TimelineViewModel {
     }
 
     /// Whether the photo is shown: always, unless the media preview setting hides photos and this one wasn't tapped.
-    public func showsPreview(of image: TimelineRow.Image) -> Bool { !previewsHidden || revealedPreviews.contains(image.ref) }
+    public func showsPreview(of image: TimelineRow.Image) -> Bool { mediaState.showsPreview(of: image) }
 
     /// The user tapped a hidden photo: it loads and stays shown while the room is open.
-    public func revealPreview(of image: TimelineRow.Image) { revealedPreviews.insert(image.ref) }
+    public func revealPreview(of image: TimelineRow.Image) { mediaState.revealPreview(of: image) }
 
     /// A sender's profile picture, small; `nil` if it can't be loaded (the view keeps the initial).
-    public func avatarData(_ ref: MediaRef) async -> Data? {
-        guard let media else { return nil }
-        return try? await media.thumbnail(ref, width: 64, height: 64)  // best-effort: a picture that can't load shows its placeholder; nothing changes
-    }
+    public func avatarData(_ ref: MediaRef) async -> Data? { await mediaState.avatarData(ref) }
 
     /// Largest sticker file the timeline plays by itself (STICKERS FR-8/FR-9; the same limit as the panel).
-    static let stickerAutoplayLimit = 1_000_000
+    static let stickerAutoplayLimit = TimelineMediaModel.stickerAutoplayLimit
 
     /// The full file of a sticker, so an animated one can play; `nil` when it can't be loaded or is too large to autoplay.
-    /// The view decides whether it is animated and whether motion is allowed.
-    public func stickerContent(for image: TimelineRow.Image) async -> Data? {
-        guard let media, let full = try? await media.content(image.ref), full.count <= Self.stickerAutoplayLimit else { return nil }  // best-effort: a picture that can't load shows its placeholder; nothing changes
-        return full
-    }
+    public func stickerContent(for image: TimelineRow.Image) async -> Data? { await mediaState.stickerContent(for: image) }
 
     /// Thumbnail bytes for an image row, or `nil` if it can't be loaded (the row then shows a placeholder).
-    /// Prefers a precomputed thumbnail (`thumbnailRef`) or own cached upload (`MediaFormat::File` in the SDK's encrypted store)
-    /// so own thumbnails aren't downloaded again after a restart (M19-5).
-    public func thumbnail(for image: TimelineRow.Image) async -> Data? {
-        if let known = thumbnailMemory.data(for: image.ref) { return known }
-        guard let media else { return nil }
-        let loaded: Data?
-        if let thumbRef = image.thumbnailRef, let direct = try? await media.cachedContent(thumbRef) {  // best-effort: falls back to server thumbnail
-            loaded = direct
-        } else if image.isOwn, let ownCached = try? await media.cachedContent(image.ref) {  // best-effort: SDK caches own uploads under MediaFormat::File (M19-5)
-            loaded = ownCached
-        } else {
-            loaded = try? await media.thumbnail(image.ref, width: 600, height: 600)  // best-effort: a picture that can't load shows its placeholder; nothing changes
-        }
-        guard let loaded else { return nil }
-        thumbnailMemory.store(loaded, for: image.ref)
-        return loaded
-    }
+    public func thumbnail(for image: TimelineRow.Image) async -> Data? { await mediaState.thumbnail(for: image) }
 
     /// The picture already shown for this reference, for a view's first frame (no waiting, no placeholder).
-    func cachedThumbnail(for image: TimelineRow.Image) -> Data? { thumbnailMemory.data(for: image.ref) }
+    func cachedThumbnail(for image: TimelineRow.Image) -> Data? { mediaState.cachedThumbnail(for: image) }
 
     /// One photo shown in the full-screen zoomable timeline photo viewer (MEDIA_ATTACHMENTS FR-1).
     public struct PhotoViewerItem: Identifiable, Equatable, Sendable {
@@ -954,69 +682,15 @@ extension TimelineViewModel {
         }
     }
 
-    /// Streams a full-resolution photo straight to a temporary file on disk for the viewer (M19-5),
-    /// falling back to a thumbnail written to disk if the full download fails.
     public func fullImageFile(for image: TimelineRow.Image, filename: String = "photo.jpg") async -> URL? {
-        guard let media else { return nil }
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("halo-viewer-\(UUID().uuidString)", isDirectory: true)
-        do {
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let safeName = Self.photoFilename(from: filename)
-            if let url = try? await media.file(image.ref, name: safeName, mimeType: nil, in: dir) {  // best-effort: falls back to thumbnail
-                return url
-            }
-            if let thumb = try? await media.thumbnail(image.ref, width: 1200, height: 1200) {  // best-effort: fallback preview
-                let url = dir.appendingPathComponent(safeName)
-                try thumb.write(to: url, options: .atomic)
-                return url
-            }
-            try? FileManager.default.removeItem(at: dir)
-            return nil
-        } catch {
-            try? FileManager.default.removeItem(at: dir)
-            return nil
-        }
+        await mediaState.fullImageFile(for: image, filename: filename)
     }
 
-    /// Full-resolution bytes for on-demand actions such as Save as Sticker; streams via `fullImageFile` so the SDK file cache is reused.
     public func fullImageData(for image: TimelineRow.Image) async -> Data? {
-        guard let url = await fullImageFile(for: image) else { return nil }
-        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-        return try? Data(contentsOf: url)
+        await mediaState.fullImageData(for: image)
     }
 
-    /// Streams a photo from the full-screen viewer directly to a temporary file on disk for ShareLink / Save Image (M19-5).
     public func exportViewerPhoto(_ item: PhotoViewerItem) async -> URL? {
-        guard let media else { return nil }
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("halo-photo-\(UUID().uuidString)", isDirectory: true)
-        let filename = Self.photoFilename(from: item.caption ?? "photo.jpg")
-        do {
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            if let url = try? await media.file(item.image.ref, name: filename, mimeType: nil, in: dir) {  // best-effort: falls back to thumbnail export
-                return url
-            }
-            if let thumb = try? await media.thumbnail(item.image.ref, width: 1200, height: 1200) {  // best-effort: caller handles nil export URL
-                let url = dir.appendingPathComponent(filename)
-                try thumb.write(to: url, options: .atomic)
-                return url
-            }
-            try? FileManager.default.removeItem(at: dir)
-            return nil
-        } catch {
-            try? FileManager.default.removeItem(at: dir)
-            return nil
-        }
+        await mediaState.exportViewerPhoto(item)
     }
-
-    private static func photoFilename(from rawName: String) -> String {
-        let raw = rawName
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: ":", with: "_")
-        let base = raw.isEmpty ? "photo.jpg" : raw
-        return base.contains(".") ? base : "\(base).jpg"
-    }
-
 }
