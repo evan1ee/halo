@@ -16,38 +16,24 @@ extension TimelineViewModel {
             focusReachedEnd = snapshot.reachedEnd
             if !isFocused { readTracker.update(items: snapshot.items) }
             lastItems = snapshot.items
-            botTasks = botTracker(snapshot.items)
-            if let botActivity, let room, !botSenders.isEmpty, !isFocused {
-                let items = snapshot.items, senders = botSenders
-                Task { await botActivity.observe(room: room, items: items, botSenders: senders) }
-            }
-            botTapped.subtract(botTasks.completed)
-            botUnanswered.subtract(botTasks.completed)
-            reconcilePendingPolls(snapshot.items)
-            var profiles: [UserID: (name: String?, avatar: MediaRef?)] = [:]
-            for item in snapshot.items {
-                if case .event(let event) = item.content, let sender = event.sender, !event.isOwn, event.senderName != nil || event.senderAvatar != nil {
-                    profiles[sender] = (event.senderName, event.senderAvatar)
-                }
-            }
-            readerProfiles = profiles
-            senderNames = Self.senderNames(snapshot.items)
-            let rows = Self.collapsingStateRuns(Self.groupingRuns(mappedRows(snapshot.items), items: snapshot.items), items: snapshot.items)
+            botState.update(items: snapshot.items, room: room, isFocused: isFocused)
+
+            // Single linear scan for reader profiles, sender names, poll reconciliation, message presence, and newest own event (audit P-4).
+            let scan = scanSnapshot(snapshot.items)
+            readerProfiles = scan.profiles
+            senderNames = scan.senderNames
+
+            // Single linear pass for per-row cached mapping, run grouping, and state-run collapsing (audit P-4, P-5).
+            let rows = buildRows(snapshot.items)
             // A photo you sent changes its reference when the server confirms it: the picture on screen becomes the entry
             // for the new reference, so nothing is loaded again.
-            for change in TimelineThumbnailMemory.changedReferences(rows: rows, known: &knownPhotoRefs) {
-                thumbnailMemory.adopt(change.old, as: change.new)
-            }
+            mediaState.adoptChangedPhotoReferences(rows: rows)
             // Wait until there is something to land on: a message, or the whole (message-less) history. The first snapshots of a
             // freshly opened room hold only the start marker and state events.
-            let hasMessage = snapshot.items.contains { item in
-                if case .event(let event) = item.content { switch event.kind { case .text, .notice, .emote, .media, .sticker: return true; default: return false } }
-                return false
-            }
             if isFocused {
                 landed = true
                 trackedTailID = rows.last?.id
-            } else if !landed, !rows.isEmpty, hasMessage || (snapshot.reachedStart && !snapshot.isPaginating) {
+            } else if !landed, !rows.isEmpty, scan.hasMessage || (snapshot.reachedStart && !snapshot.isPaginating) {
                 landed = true
                 trackedTailID = rows.last?.id
                 // Always open at the newest message (D95); the first unread one stays marked, and the "Jump to unread" pill
@@ -65,10 +51,10 @@ extension TimelineViewModel {
                     Task { await loadEarlier() }
                 }
             }
-            if !isFocused { reportOwnMessage(snapshot.items) }
+            if !isFocused { reportOwnMessage(newest: scan.newestOwn) }
             reevaluateSeen()
-            typingText = Self.typingText(snapshot.typing, items: snapshot.items)
-            identityNotices = Self.identityNotices(snapshot.identityAlerts, items: snapshot.items)
+            typingText = Self.typingText(snapshot.typing, names: scan.senderNames)
+            identityNotices = Self.identityNotices(snapshot.identityAlerts, names: scan.senderNames)
             content = .live(
                 rows: rows,
                 isPaginating: snapshot.isPaginating,
@@ -102,16 +88,62 @@ extension TimelineViewModel {
         trackedTailID = tail
     }
 
+    private struct SnapshotScan {
+        var profiles: [UserID: (name: String?, avatar: MediaRef?)] = [:]
+        var senderNames: [UserID: String] = [:]
+        var hasMessage = false
+        var newestOwn: (id: EventID, time: Date)?
+    }
+
+    /// Single linear pass over `items` collecting profiles, sender names, poll reconciliation, message presence, and newest own event (audit P-4).
+    private func scanSnapshot(_ items: [TimelineItem]) -> SnapshotScan {
+        var result = SnapshotScan()
+        let checkPolls = !pendingPollVotes.isEmpty || !endingPolls.isEmpty
+        for item in items {
+            guard case .event(let event) = item.content else { continue }
+            if let sender = event.sender {
+                if let name = event.senderName { result.senderNames[sender] = name }
+                if !event.isOwn, event.senderName != nil || event.senderAvatar != nil {
+                    result.profiles[sender] = (event.senderName, event.senderAvatar)
+                }
+            }
+            if event.isOwn, let id = event.eventID {
+                result.newestOwn = (id, event.timestamp)
+            }
+            switch event.kind {
+            case .text, .notice, .emote, .media, .sticker:
+                result.hasMessage = true
+            case .poll(let details) where checkPolls:
+                if let id = event.eventID {
+                    if let pending = pendingPollVotes[id],
+                       details.ended || Set(details.ownSelectedIDs) == Set(pending) {
+                        pendingPollVotes.removeValue(forKey: id)
+                    }
+                    if details.ended {
+                        endingPolls.remove(id)
+                    }
+                }
+            default:
+                break
+            }
+        }
+        return result
+    }
+
     /// Sending a message means the user has read up to it (MESSAGING FR-6, rule E1b): once the newest own message (in
     /// timeline order, not by timestamp, R-06) has a server event ID it becomes the read position.
     func reportOwnMessage(_ items: [TimelineItem]) {
-        guard isPresented, let receipts, let room else { return }
+        guard isPresented, receipts != nil, room != nil else { return }
         var newest: (id: EventID, time: Date)?
         for item in items {
             guard case .event(let event) = item.content, event.isOwn, let id = event.eventID else { continue }
             newest = (id, event.timestamp)
         }
-        guard let newest, newest.id != reportedOwn else { return }
+        reportOwnMessage(newest: newest)
+    }
+
+    func reportOwnMessage(newest: (id: EventID, time: Date)?) {
+        guard isPresented, let receipts, let room, let newest, newest.id != reportedOwn else { return }
         reportedOwn = newest.id
         Task { await receipts.reportSeen(room: room, event: newest.id, timestamp: newest.time, advancesOrder: true) }
     }
@@ -119,10 +151,11 @@ extension TimelineViewModel {
     /// One notice per contact, named from the timeline's senders (a user without one is shown by user ID).
     static func identityNotices(_ alerts: [IdentityAlert], items: [TimelineItem]) -> [IdentityNotice] {
         guard !alerts.isEmpty else { return [] }
-        var names: [UserID: String] = [:]
-        for item in items {
-            if case .event(let event) = item.content, let sender = event.sender, let name = event.senderName { names[sender] = name }
-        }
+        return identityNotices(alerts, names: senderNames(items))
+    }
+
+    static func identityNotices(_ alerts: [IdentityAlert], names: [UserID: String]) -> [IdentityNotice] {
+        guard !alerts.isEmpty else { return [] }
         return alerts.map { alert in
             let name = names[alert.user] ?? alert.user.rawValue
             switch alert.kind {
@@ -137,10 +170,11 @@ extension TimelineViewModel {
     /// Names come from the timeline's senders; a user without one is shown by user ID (never invented).
     static func typingText(_ users: [UserID], items: [TimelineItem]) -> String? {
         guard !users.isEmpty else { return nil }
-        var names: [UserID: String] = [:]
-        for item in items {
-            if case .event(let event) = item.content, let sender = event.sender, let name = event.senderName { names[sender] = name }
-        }
+        return typingText(users, names: senderNames(items))
+    }
+
+    static func typingText(_ users: [UserID], names: [UserID: String]) -> String? {
+        guard !users.isEmpty else { return nil }
         let labels = users.map { names[$0] ?? $0.rawValue }
         switch labels.count {
         case 1: return "\(labels[0]) is typing…"
@@ -188,22 +222,9 @@ extension TimelineViewModel {
         return result
     }
 
-    func botTracker(_ items: [TimelineItem]) -> BotTaskTracker {
-        guard !botSenders.isEmpty else { return BotTaskTracker([]) }
-        var messages: [BotTaskTracker.Message] = []
-        for item in items {
-            guard case .event(let event) = item.content, let card = botCard(event), let sender = event.sender?.rawValue else { continue }
-            messages.append(.init(bot: sender, eventID: event.eventID, card: card))
-        }
-        return BotTaskTracker(messages)
-    }
-
     /// The card for a message from an allowlisted bot whose HTML a parser recognises.
     func botCard(_ event: TimelineEvent) -> BotCard? {
-        guard let sender = event.sender?.rawValue, botSenders.contains(sender), let html = event.formattedBody else { return nil }
-        let card = BotTemplates.parse(html)
-        if card == nil, let id = event.eventID?.rawValue { unrecognisedBotMessages?.record(eventID: id) }
-        return card
+        botState.card(for: event)
     }
 
     func plainSource(_ event: TimelineEvent, _ body: String) -> TimelineRow.Source {
@@ -215,47 +236,115 @@ extension TimelineViewModel {
         return raw.hasPrefix("@") ? String(raw.dropFirst().prefix { $0 != ":" }) : raw
     }
 
-    /// What `row(_:)` reads besides the item: sender names, readers' profiles, the bot allowlist, and the calendar day (for `"Today"` / `"Yesterday"` dividers). A change drops every cached row.
-    private func mappingContext() -> Int {
-        var hasher = Hasher()
-        hasher.combine(senderNames)
-        hasher.combine(botSenders)
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = dateFormatter.timeZone
-        hasher.combine(calendar.startOfDay(for: now()))
-        var profiles = 0
-        for (user, profile) in readerProfiles {
-            var entry = Hasher()
-            entry.combine(user)
-            entry.combine(profile.name)
-            entry.combine(profile.avatar?.token)
-            profiles &+= entry.finalize()  // a sum, so the order of the dictionary doesn't matter
+    /// Narrow external dependency fingerprint for one row (audit P-5): only changes that actually affect `item`
+    /// invalidate its cached row (day rollover for date dividers, bot allowlist for that sender, reader profiles for
+    /// that event's readers, sender names for that event's send failure).
+    private func rowContext(for item: TimelineItem, dayStart: Date) -> Int {
+        switch item.content {
+        case .virtual(.dateDivider):
+            var hasher = Hasher()
+            hasher.combine(dayStart)
+            return hasher.finalize()
+        case .virtual(.readMarker), .virtual(.timelineStart):
+            return 0
+        case .event(let event):
+            var hasher = Hasher()
+            if event.formattedBody != nil, let sender = event.sender?.rawValue {
+                hasher.combine(botSenders.contains(sender))
+            }
+            if !event.readReceipts.isEmpty {
+                for receipt in event.readReceipts {
+                    hasher.combine(receipt.userID)
+                    if let profile = readerProfiles[receipt.userID] {
+                        hasher.combine(profile.name)
+                        hasher.combine(profile.avatar?.token)
+                    }
+                }
+            }
+            if case .failed = event.sendState, let failure = event.sendFailure {
+                switch failure {
+                case .unverifiedDevices(let users), .identityChanged(let users):
+                    for user in users {
+                        hasher.combine(user)
+                        hasher.combine(senderNames[user])
+                    }
+                case .needsVerification, .sessionExpired, .mediaGone, .other:
+                    break
+                }
+            }
+            return hasher.finalize()
         }
-        hasher.combine(profiles)
-        return hasher.finalize()
     }
 
-    /// The rows for `items`: a cached row is reused when its item is equal and the mapping context is the same, so one new
-    /// message makes one row (M19-2). The result is the same as `items.map(row)`.
-    func mappedRows(_ items: [TimelineItem]) -> [TimelineRow] {
-        let context = mappingContext()
-        if context != rowCacheContext {
-            rowCache.removeAll(keepingCapacity: true)
-            rowCacheContext = context
-        }
-        var next: [TimelineItemID: (item: TimelineItem, row: TimelineRow)] = [:]
-        next.reserveCapacity(items.count)
-        let rows = items.map { item -> TimelineRow in
-            if let hit = rowCache[item.id], hit.item == item {
-                next[item.id] = hit
-                return hit.row
+    /// Single-pass cached row mapping, run grouping, and state-run collapsing (M19-2, audit P-4, P-5).
+    /// Produces the exact same output as `collapsingStateRuns(groupingRuns(items.map(row), items: items), items: items)`.
+    func buildRows(_ items: [TimelineItem]) -> [TimelineRow] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = dateFormatter.timeZone
+        let dayStart = calendar.startOfDay(for: now())
+
+        var nextCache: [TimelineItemID: RowCacheEntry] = [:]
+        nextCache.reserveCapacity(items.count)
+        var rows: [TimelineRow] = []
+        rows.reserveCapacity(items.count)
+
+        let isMessageStyle: (TimelineRow.Style) -> Bool = { $0 == .message || $0 == .ownMessage || $0 == .placeholder }
+        var stretchHasSettings = false
+        var prevEvent: TimelineEvent?
+        var prevStyle: TimelineRow.Style?
+
+        for item in items {
+            let isSettings: Bool
+            let isRoomEvent: Bool
+            let currentEvent: TimelineEvent?
+            if case .event(let event) = item.content {
+                currentEvent = event
+                isSettings = event.kind == .otherState
+                if case .membership = event.kind { isRoomEvent = true } else { isRoomEvent = isSettings }
+            } else {
+                currentEvent = nil
+                isSettings = false
+                isRoomEvent = false
             }
-            rowsMapped += 1
-            let made = row(item)
-            next[item.id] = (item, made)
-            return made
+
+            if !isRoomEvent { stretchHasSettings = false }
+            if isSettings {
+                if stretchHasSettings {
+                    // Collapsed duplicate `.otherState`: keeps `.state` as the immediately preceding style for run grouping.
+                    prevEvent = currentEvent
+                    prevStyle = .state
+                    continue
+                }
+                stretchHasSettings = true
+            }
+
+            let context = rowContext(for: item, dayStart: dayStart)
+            var built: TimelineRow
+            if let hit = rowCache[item.id], hit.item == item, hit.context == context {
+                nextCache[item.id] = hit
+                built = hit.row
+            } else {
+                rowsMapped += 1
+                let made = row(item)
+                nextCache[item.id] = RowCacheEntry(item: item, context: context, row: made)
+                built = made
+            }
+
+            if isMessageStyle(built.style),
+               let prevStyle, prevStyle == built.style,
+               let event = currentEvent, let previous = prevEvent,
+               let sender = event.sender, sender == previous.sender,
+               event.timestamp.timeIntervalSince(previous.timestamp) < Self.runGap,
+               !rows.isEmpty {
+                built.continuesRun = true
+                rows[rows.count - 1].endsRun = false
+            }
+
+            prevEvent = currentEvent
+            prevStyle = built.style
+            rows.append(built)
         }
-        rowCache = next
+        rowCache = nextCache
         return rows
     }
 

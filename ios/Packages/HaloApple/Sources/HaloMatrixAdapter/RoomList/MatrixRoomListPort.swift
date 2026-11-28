@@ -11,8 +11,148 @@ import Synchronization
 public final class MatrixRoomListPort: RoomListPort {
     private struct Subscription {
         let id: UUID
-        let refresh: AsyncStream<Void>.Continuation
+        let filterRefresh: @Sendable () -> Void
         let filter: FilterBox
+    }
+
+    /// Merges queued sync responses, push-rule updates, and UI filter switches while a rebuild runs (audit P-2):
+    /// a catch-up burst produces one coalesced rebuild instead of N sequential rebuilds.
+    final class EventCoalescer: Sendable {
+        struct Batch: Sendable, Equatable {
+            var changed: Set<String> = []
+            var isCatchUp: Bool = false
+            var forceAll: Bool = false
+            var filterChanged: Bool = false
+            var hasSync: Bool = false
+
+            var isEmpty: Bool { !hasSync && !forceAll && !filterChanged }
+        }
+
+        private struct State {
+            var pending = Batch()
+            var finished = false
+            var waiter: CheckedContinuation<Batch?, Never>?
+        }
+
+        private let state = Mutex(State())
+
+        func enqueueSync(changed: Set<String>, isCatchUp: Bool) {
+            let resumed: (CheckedContinuation<Batch?, Never>, Batch)? = state.withLock { state in
+                guard !state.finished else { return nil }
+                state.pending.hasSync = true
+                state.pending.changed.formUnion(changed)
+                state.pending.isCatchUp = state.pending.isCatchUp || isCatchUp
+                if let waiter = state.waiter {
+                    state.waiter = nil
+                    let batch = state.pending
+                    state.pending = Batch()
+                    return (waiter, batch)
+                }
+                return nil
+            }
+            resumed?.0.resume(returning: resumed?.1)
+        }
+
+        func enqueuePushRulesRefresh() {
+            let resumed: (CheckedContinuation<Batch?, Never>, Batch)? = state.withLock { state in
+                guard !state.finished else { return nil }
+                state.pending.forceAll = true
+                if let waiter = state.waiter {
+                    state.waiter = nil
+                    let batch = state.pending
+                    state.pending = Batch()
+                    return (waiter, batch)
+                }
+                return nil
+            }
+            resumed?.0.resume(returning: resumed?.1)
+        }
+
+        func enqueueFilterRefresh() {
+            let resumed: (CheckedContinuation<Batch?, Never>, Batch)? = state.withLock { state in
+                guard !state.finished else { return nil }
+                state.pending.filterChanged = true
+                if let waiter = state.waiter {
+                    state.waiter = nil
+                    let batch = state.pending
+                    state.pending = Batch()
+                    return (waiter, batch)
+                }
+                return nil
+            }
+            resumed?.0.resume(returning: resumed?.1)
+        }
+
+        func finish() {
+            let waiter: CheckedContinuation<Batch?, Never>? = state.withLock { state in
+                state.finished = true
+                defer { state.waiter = nil }
+                return state.waiter
+            }
+            waiter?.resume(returning: nil)
+        }
+
+        func next() async -> Batch? {
+            if Task.isCancelled { return nil }
+            let immediate: (done: Bool, batch: Batch?) = state.withLock { state in
+                if !state.pending.isEmpty {
+                    let batch = state.pending
+                    state.pending = Batch()
+                    return (true, batch)
+                }
+                if state.finished { return (true, nil) }
+                return (false, nil)
+            }
+            if immediate.done { return immediate.batch }
+            return await withTaskCancellationHandler {
+                await withCheckedContinuation { continuation in
+                    let resolved: (Bool, Batch?) = state.withLock { state in
+                        if !state.pending.isEmpty {
+                            let batch = state.pending
+                            state.pending = Batch()
+                            return (true, batch)
+                        }
+                        if state.finished || Task.isCancelled { return (true, nil) }
+                        state.waiter = continuation
+                        return (false, nil)
+                    }
+                    if resolved.0 { continuation.resume(returning: resolved.1) }
+                }
+            } onCancel: {
+                let waiter: CheckedContinuation<Batch?, Never>? = state.withLock { state in
+                    defer { state.waiter = nil }
+                    return state.waiter
+                }
+                waiter?.resume(returning: nil)
+            }
+        }
+    }
+
+    enum RebuildPlan: Equatable, Sendable {
+        /// Idle long-poll with no changed rooms and no filter/push-rule update: zero FFI calls, zero sort/diff.
+        case skipIdleSync
+        /// Only the UI filter changed: zero FFI calls, re-filter and re-sort cached summaries only.
+        case refilterCached
+        /// Normal incremental sync with a non-empty changed set and an existing baseline: look up only `changed` via `getRoom`.
+        case incremental(Set<String>)
+        /// Initial load, catch-up reconciliation after reconnect, or push-rules change: scan `client.rooms()`.
+        case fullScan(forceAll: Bool, changed: Set<String>?)
+    }
+
+    static func rebuildPlan(batch: EventCoalescer.Batch, hasBaseline: Bool) -> RebuildPlan {
+        if !hasBaseline || batch.forceAll {
+            return .fullScan(forceAll: true, changed: nil)
+        }
+        if batch.isCatchUp {
+            return .fullScan(forceAll: false, changed: batch.changed)
+        }
+        if !batch.changed.isEmpty {
+            return .incremental(batch.changed)
+        }
+        if batch.filterChanged {
+            return .refilterCached
+        }
+        return .skipIdleSync
     }
 
     private final class FilterBox: Sendable {
@@ -125,10 +265,10 @@ public final class MatrixRoomListPort: RoomListPort {
     public func updates(filter: RoomListFilter) -> AsyncStream<RoomListUpdate> {
         let (output, continuation) = AsyncStream<RoomListUpdate>.makeStream(bufferingPolicy: .unbounded)
         let id = UUID()
-        let (refresh, refreshContinuation) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        let coalescer = EventCoalescer()
         let filterBox = FilterBox(filter)
         let eventTimes = self.eventTimes
-        let task = Task { [session, hasRecords, eventTimes, weak self] in
+        let task = Task { [session, hasRecords, eventTimes, coalescer, weak self] in
             do {
                 _ = try Self.kind(for: filter)
                 let client = try await session.signedInClient()
@@ -136,41 +276,19 @@ public final class MatrixRoomListPort: RoomListPort {
                 // Push rules arrive in top-level `account_data` (`m.push_rules`), not `response.rooms.joined`, so a
                 // mode change (on this device or another) does not name the room in `SyncChange.joined` (S07b, S10).
                 // `NotificationSettingsDelegate` fires whenever push rules change and triggers a full summary refresh.
-                let settingsDelegate = PushRulesChangeDelegate(refresh: refreshContinuation)
+                let settingsDelegate = PushRulesChangeDelegate { coalescer.enqueuePushRulesRefresh() }
                 settings.setDelegate(delegate: settingsDelegate)
                 defer { settings.setDelegate(delegate: nil); _ = settingsDelegate }
                 var summaries: [String: RoomSummary] = [:]
+                var presentIDs: Set<RoomID> = []
                 var last: [RoomSummary]?
-                @discardableResult
-                func publish(changed: Set<String>?, forceAll: Bool = false) async throws(HaloError) -> Set<RoomID> {
-                    // Fetch `NotificationSettings` per pass so push-rule updates from sync are always visible (S07b, S10).
-                    let currentSettings = await client.getNotificationSettings()
-                    let known = client.rooms().filter { !$0.isSpace() && [.joined, .invited].contains($0.membership()) }
-                    var present: Set<String> = []
-                    var presentIDs: Set<RoomID> = []
-                    var toRebuild: [(roomID: String, id: RoomID, room: Room)] = []
-                    for room in known {
-                        let roomID = room.id()
-                        present.insert(roomID)
-                        let id = try RoomID(roomID)
-                        presentIDs.insert(id)
-                        if forceAll || summaries[roomID] == nil || changed?.contains(roomID) == true {
-                            toRebuild.append((roomID, id, room))
-                        }
-                    }
-                    if !toRebuild.isEmpty {
-                        // Bounded per-room parallelism (R-19) avoids serial FFI fan-out on large accounts
-                        // without flooding the SDK's SQLite/crypto locks.
-                        let rebuilt = try await Self.rebuildSummaries(
-                            toRebuild, settings: currentSettings, hasRecords: hasRecords, eventTimes: eventTimes)
-                        for (roomID, summary) in rebuilt { summaries[roomID] = summary }
-                    }
-                    summaries = summaries.filter { present.contains($0.key) }
+
+                func emitList() throws(HaloError) {
                     var list: [RoomSummary] = []
+                    list.reserveCapacity(summaries.count)
                     let chosen = filterBox.current
-                    for room in known {
-                        guard let summary = summaries[room.id()], try Self.includes(chosen, summary: summary) else { continue }
-                        list.append(summary)
+                    for summary in summaries.values {
+                        if try Self.includes(chosen, summary: summary) { list.append(summary) }
                     }
                     list.sort(by: Self.order)
                     if let previous = last {
@@ -184,39 +302,94 @@ public final class MatrixRoomListPort: RoomListPort {
                         last = list
                         continuation.yield(.diff(.reset(list)))
                     }
-                    return presentIDs
                 }
-                // Subscribed before the first load: a response that arrives while it runs is buffered, not lost (its rooms
+
+                func publishFullScan(changed: Set<String>?, forceAll: Bool) async throws(HaloError) {
+                    // Fetch `NotificationSettings` per pass so push-rule updates from sync are always visible (S07b, S10).
+                    let currentSettings = await client.getNotificationSettings()
+                    let known = client.rooms().filter { !$0.isSpace() && [.joined, .invited].contains($0.membership()) }
+                    var present: Set<String> = []
+                    var nextPresentIDs: Set<RoomID> = []
+                    var toRebuild: [(roomID: String, id: RoomID, room: Room)] = []
+                    for room in known {
+                        let roomID = room.id()
+                        present.insert(roomID)
+                        let id = try RoomID(roomID)
+                        nextPresentIDs.insert(id)
+                        if forceAll || summaries[roomID] == nil || changed?.contains(roomID) == true {
+                            toRebuild.append((roomID, id, room))
+                        }
+                    }
+                    if !toRebuild.isEmpty {
+                        // Bounded per-room parallelism (R-19) avoids serial FFI fan-out on large accounts
+                        // without flooding the SDK's SQLite/crypto locks.
+                        let rebuilt = try await Self.rebuildSummaries(
+                            toRebuild, settings: currentSettings, hasRecords: hasRecords, eventTimes: eventTimes)
+                        for (roomID, summary) in rebuilt { summaries[roomID] = summary }
+                    }
+                    summaries = summaries.filter { present.contains($0.key) }
+                    presentIDs = nextPresentIDs
+                    try emitList()
+                }
+
+                /// Incremental update using `client.getRoom(roomId:)` only for rooms named by sync (audit P-1):
+                /// avoids scanning all rooms over FFI on every live message.
+                func publishIncremental(changed: Set<String>) async throws(HaloError) {
+                    let currentSettings = await client.getNotificationSettings()
+                    var toRebuild: [(roomID: String, id: RoomID, room: Room)] = []
+                    toRebuild.reserveCapacity(changed.count)
+                    for roomID in changed {
+                        let id = try RoomID(roomID)
+                        let room: Room?
+                        do {
+                            room = try client.getRoom(roomId: roomID)
+                        } catch {
+                            throw ErrorMapper.map(error)
+                        }
+                        if let room, !room.isSpace(), [.joined, .invited].contains(room.membership()) {
+                            presentIDs.insert(id)
+                            toRebuild.append((roomID, id, room))
+                        } else {
+                            summaries.removeValue(forKey: roomID)
+                            presentIDs.remove(id)
+                        }
+                    }
+                    if !toRebuild.isEmpty {
+                        let rebuilt = try await Self.rebuildSummaries(
+                            toRebuild, settings: currentSettings, hasRecords: hasRecords, eventTimes: eventTimes)
+                        for (roomID, summary) in rebuilt { summaries[roomID] = summary }
+                    }
+                    try emitList()
+                }
+
+                // Subscribed before the first load: a response that arrives while it runs is coalesced, not lost (its rooms
                 // would keep their old counts until something else changed in them).
                 let changes = await session.syncChanges()
-                var lastPresent = try await publish(changed: nil, forceAll: true)
-                enum Event: Sendable { case sync(changed: Set<String>, isCatchUp: Bool), refresh }
-                // Sync responses and filter changes feed one loop, so the list is rebuilt one change at a time.
-                let (events, eventContinuation) = AsyncStream<Event>.makeStream(bufferingPolicy: .unbounded)
                 let forward = Task { [weak self] in
                     for await change in changes {
                         if !change.left.isEmpty {
                             let leftIDs = Set(change.left.compactMap { try? RoomID($0) })
                             self?.publishLeft(leftIDs)
                         }
-                        eventContinuation.yield(.sync(changed: change.joined.union(change.invited).union(change.left), isCatchUp: change.isCatchUp))
+                        coalescer.enqueueSync(changed: change.joined.union(change.invited).union(change.left), isCatchUp: change.isCatchUp)
                     }
+                    coalescer.finish()
                 }
-                let refreshes = Task { for await _ in refresh { eventContinuation.yield(.refresh) } }
-                defer { forward.cancel(); refreshes.cancel(); eventContinuation.finish() }
-                for await event in events {
-                    switch event {
-                    case .sync(let changed, let isCatchUp):
-                        // An idle long-poll with no room changes after catch-up needs no 1,000-room FFI scan or diff (M19-7).
-                        if changed.isEmpty && !isCatchUp && last != nil {
-                            continuation.yield(.synced(lastPresent))
-                        } else {
-                            let present = try await publish(changed: changed)
-                            lastPresent = present
-                            continuation.yield(.synced(present))
-                        }
-                    case .refresh:
-                        lastPresent = try await publish(changed: nil, forceAll: true)
+                defer { forward.cancel(); coalescer.finish() }
+                try await publishFullScan(changed: nil, forceAll: true)
+                while let batch = await coalescer.next() {
+                    switch Self.rebuildPlan(batch: batch, hasBaseline: last != nil) {
+                    case .skipIdleSync:
+                        break
+                    case .refilterCached:
+                        try emitList()
+                    case .incremental(let changed):
+                        try await publishIncremental(changed: changed)
+                    case .fullScan(let forceAll, let changed):
+                        try await publishFullScan(changed: changed, forceAll: forceAll)
+                    }
+                    if batch.hasSync {
+                        continuation.yield(.synced(presentIDs))
                     }
                 }
             } catch {
@@ -224,10 +397,10 @@ public final class MatrixRoomListPort: RoomListPort {
             }
             continuation.finish()
         }
-        current.withLock { $0 = Subscription(id: id, refresh: refreshContinuation, filter: filterBox) }
+        current.withLock { $0 = Subscription(id: id, filterRefresh: { coalescer.enqueueFilterRefresh() }, filter: filterBox) }
         continuation.onTermination = { [weak self] _ in
             task.cancel()
-            refreshContinuation.finish()
+            coalescer.finish()
             self?.current.withLock { if $0?.id == id { $0 = nil } }
         }
         return output
@@ -240,7 +413,7 @@ public final class MatrixRoomListPort: RoomListPort {
         guard let subscription = current.withLock({ $0 }) else { throw .internal(code: "NO_ROOM_LIST_SUBSCRIPTION") }
         _ = try Self.kind(for: filter)
         subscription.filter.current = filter
-        subscription.refresh.yield()
+        subscription.filterRefresh()
     }
 
     public func leftRooms() -> AsyncStream<Set<RoomID>> {
@@ -537,14 +710,14 @@ public final class MatrixRoomListPort: RoomListPort {
 }
 
 private final class PushRulesChangeDelegate: NotificationSettingsDelegate {
-    private let refresh: AsyncStream<Void>.Continuation
+    private let onChange: @Sendable () -> Void
 
-    init(refresh: AsyncStream<Void>.Continuation) {
-        self.refresh = refresh
+    init(onChange: @escaping @Sendable () -> Void) {
+        self.onChange = onChange
     }
 
     func settingsDidChange() {
         // Never block the callback thread or call back into the FFI synchronously (AGENTS.md §8).
-        refresh.yield()
+        onChange()
     }
 }
